@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+using System.Linq;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
 
@@ -20,7 +22,18 @@ namespace TcXunit.Parser
             var extendsMatch = ExtendsPattern.Match(declarationText);
             var baseTypeName = extendsMatch.Success ? extendsMatch.Groups["baseType"].Value : null;
 
-            return new PouAst(name, baseTypeName, declarationText, implementationText);
+            var methods = pou.Elements("Method").Select(ParseMethod).ToList();
+
+            return new PouAst(name, baseTypeName, declarationText, implementationText, methods);
+        }
+
+        private static MethodAst ParseMethod(XElement method)
+        {
+            var name = method.Attribute("Name").Value;
+            var declarationText = method.Element("Declaration").Value;
+            var implementationText = method.Element("Implementation").Element("ST").Value;
+
+            return new MethodAst(name, declarationText, implementationText);
         }
     }
 }

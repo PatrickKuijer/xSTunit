@@ -31,6 +31,54 @@ END_VAR]]></Declaration>
             Assert.Contains("FUNCTION_BLOCK FB_AddLrealInt", ast.DeclarationText);
             Assert.Equal("result := lrealValue + TO_LREAL(intValue);", ast.ImplementationText);
             Assert.Null(ast.BaseTypeName);
+            Assert.Empty(ast.Methods);
+        }
+
+        [Fact]
+        public void Parse_FunctionBlockWithMethods_ReadsEachMethodNameDeclarationAndImplementation()
+        {
+            const string xml = @"<?xml version=""1.0"" encoding=""utf-8""?>
+<TcPlcObject Version=""1.1.0.1"">
+  <POU Name=""FB_Counter"" Id=""{a1b2c3d4-0001-4a1a-8b1b-000000000001}"" SpecialFunc=""None"">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_Counter
+VAR
+	value : INT;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[]]></ST>
+    </Implementation>
+    <Method Name=""Increment"" Id=""{a1b2c3d4-0001-4a1a-8b1b-000000000003}"">
+      <Declaration><![CDATA[METHOD PUBLIC Increment
+VAR_INPUT
+	delta : INT := 1;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[value := value + delta;]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name=""GetValue"" Id=""{a1b2c3d4-0001-4a1a-8b1b-000000000005}"">
+      <Declaration><![CDATA[METHOD PUBLIC GetValue : INT
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[GetValue := value;]]></ST>
+      </Implementation>
+    </Method>
+  </POU>
+</TcPlcObject>";
+
+            var ast = TcPouParser.Parse(xml);
+
+            Assert.Equal(2, ast.Methods.Count);
+
+            var increment = ast.Methods[0];
+            Assert.Equal("Increment", increment.Name);
+            Assert.Contains("METHOD PUBLIC Increment", increment.DeclarationText);
+            Assert.Equal("value := value + delta;", increment.ImplementationText);
+
+            var getValue = ast.Methods[1];
+            Assert.Equal("GetValue", getValue.Name);
+            Assert.Equal("GetValue := value;", getValue.ImplementationText);
         }
 
         [Fact]

@@ -30,6 +30,47 @@ END_VAR]]></Declaration>
             Assert.Equal("FB_AddLrealInt", ast.Name);
             Assert.Contains("FUNCTION_BLOCK FB_AddLrealInt", ast.DeclarationText);
             Assert.Equal("result := lrealValue + TO_LREAL(intValue);", ast.ImplementationText);
+            Assert.Null(ast.BaseTypeName);
+        }
+
+        [Fact]
+        public void Parse_ExtendsAnotherFunctionBlock_ReadsBaseTypeName()
+        {
+            const string xml = @"<?xml version=""1.0"" encoding=""utf-8""?>
+<TcPlcObject Version=""1.1.0.1"">
+  <POU Name=""FB_ClampedCounter"" Id=""{a1b2c3d4-0002-4a1a-8b1b-000000000001}"" SpecialFunc=""None"">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_ClampedCounter EXTENDS FB_Counter
+VAR
+	ceiling : INT;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>";
+
+            var ast = TcPouParser.Parse(xml);
+
+            Assert.Equal("FB_ClampedCounter", ast.Name);
+            Assert.Equal("FB_Counter", ast.BaseTypeName);
+        }
+
+        [Fact]
+        public void Parse_ExtendsLibraryQualifiedFunctionBlock_ReadsQualifiedBaseTypeName()
+        {
+            const string xml = @"<?xml version=""1.0"" encoding=""utf-8""?>
+<TcPlcObject Version=""1.1.0.1"">
+  <POU Name=""FB_CounterTests"" Id=""{a1b2c3d4-0003-4a1a-8b1b-000000000001}"" SpecialFunc=""None"">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_CounterTests EXTENDS TcUnit.FB_TestSuite]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>";
+
+            var ast = TcPouParser.Parse(xml);
+
+            Assert.Equal("TcUnit.FB_TestSuite", ast.BaseTypeName);
         }
     }
 }

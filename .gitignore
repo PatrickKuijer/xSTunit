@@ -4,3 +4,7 @@
 *.db
 .beads-credential-key
 .beads/proxieddb/
+
+# .NET build output
+bin/
+obj/

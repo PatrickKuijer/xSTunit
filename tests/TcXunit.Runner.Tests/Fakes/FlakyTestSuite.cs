@@ -2,15 +2,14 @@ using TcXunit.Runner.TcUnitStub;
 
 namespace TcXunit.Runner.Tests.Fakes
 {
-    /// <summary>Deliberately failing suite, used to prove AssertEquals_* failures are captured, not thrown.</summary>
+    /// <summary>Deliberately failing suite, used to prove AssertTrue/AssertEquals_* failures are captured, not thrown.</summary>
     internal sealed class FlakyTestSuite : FB_TestSuite
     {
-        public FlakyTestSuite()
+        protected override void Body()
         {
-            TEST("WrongExpectation", () =>
-            {
-                AssertEquals_INT(1, 2, "intentional mismatch");
-            });
+            TEST("WrongExpectation");
+            AssertEquals_INT(1, 2, "intentional mismatch");
+            TEST_FINISHED();
         }
     }
 }

@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using TcXunit.Runner;
 using TcXunit.Runner.Tests.Fakes;
@@ -6,39 +7,43 @@ using Xunit;
 namespace TcXunit.Runner.Tests
 {
     /// <summary>
-    /// Spike for TcXunit-w5x.7: proves a TcUnit-style suite's TEST() cases can be
-    /// discovered at collection time and surface as individual xUnit Theory rows
-    /// (i.e. individual VS Test Explorer / CI entries), not one lumped test.
+    /// Spike for TcXunit-w5x.7: proves a TcUnit-style suite's TEST()/TEST_FINISHED()
+    /// brackets can be run once and surfaced as individual xUnit Theory rows (i.e.
+    /// individual VS Test Explorer / CI entries), not one lumped test. Case
+    /// identity comes from the TEST() call's string literal, discovered by running
+    /// the suite body — see the real FB_AssertTrueFalse.TcPOU shape referenced in
+    /// the ticket notes.
     /// </summary>
     public class SuiteDiscoverySpikeTests
     {
         public static IEnumerable<object[]> CounterCases()
         {
-            var suite = new CounterTestSuite();
-            foreach (var testCase in SuiteRunner.Discover(suite))
-                yield return new object[] { new ExecutableCase(suite, testCase) };
+            foreach (var result in SuiteRunner.RunAll(new CounterTestSuite()))
+                yield return new object[] { new ExecutableCase(result) };
         }
 
         [Theory]
         [MemberData(nameof(CounterCases))]
         public void TcUnit_case_passes(ExecutableCase executable)
         {
-            var result = SuiteRunner.Run(executable.Suite, executable.Case);
-
-            Assert.True(result.Passed, result.ToString());
+            Assert.True(executable.Result.Passed, executable.Result.ToString());
         }
 
         [Fact]
         public void Failing_assertion_is_captured_not_thrown()
         {
-            var suite = new FlakyTestSuite();
-            var testCase = SuiteRunner.Discover(suite)[0];
+            var results = SuiteRunner.RunAll(new FlakyTestSuite());
 
-            var result = SuiteRunner.Run(suite, testCase);
-
+            var result = Assert.Single(results);
             Assert.False(result.Passed);
             Assert.Single(result.Failures);
             Assert.Contains("intentional mismatch", result.Failures[0].Message);
+        }
+
+        [Fact]
+        public void Repeated_test_name_in_one_pass_is_rejected()
+        {
+            Assert.Throws<NotSupportedException>(() => SuiteRunner.RunAll(new RepeatedTestNameSuite()));
         }
     }
 }

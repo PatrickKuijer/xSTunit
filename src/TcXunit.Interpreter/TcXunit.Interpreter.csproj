@@ -7,7 +7,8 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <InternalsVisibleTo Include="TcXunit.Interpreter" />
+    <ProjectReference Include="..\TcXunit.Parser\TcXunit.Parser.csproj" />
+    <ProjectReference Include="..\TcXunit.Runner\TcXunit.Runner.csproj" />
   </ItemGroup>
 
 </Project>

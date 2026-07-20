@@ -1,3 +1,4 @@
+using System;
 using TcXunit.Parser;
 using Xunit;
 
@@ -119,6 +120,53 @@ END_VAR]]></Declaration>
             var ast = TcPouParser.Parse(xml);
 
             Assert.Equal("TcUnit.FB_TestSuite", ast.BaseTypeName);
+        }
+
+        [Fact]
+        public void Parse_MethodUsingDunderNew_ThrowsRejectedConstructWithDiagnostic()
+        {
+            const string xml = @"<?xml version=""1.0"" encoding=""utf-8""?>
+<TcPlcObject Version=""1.1.0.1"">
+  <POU Name=""FB_DynamicCreator"" Id=""{00000000-0000-0000-0000-000000000001}"" SpecialFunc=""None"">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_DynamicCreator
+VAR
+	pCounter : POINTER TO FB_Counter;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[]]></ST>
+    </Implementation>
+    <Method Name=""CreateCounter"" Id=""{00000000-0000-0000-0000-000000000002}"">
+      <Declaration><![CDATA[METHOD PUBLIC CreateCounter
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[pCounter := __NEW(FB_Counter);]]></ST>
+      </Implementation>
+    </Method>
+  </POU>
+</TcPlcObject>";
+
+            var ex = Assert.Throws<TcPouRejectedException>(() => TcPouParser.Parse(xml));
+
+            Assert.Contains("__NEW", ex.Message);
+            Assert.Contains("CreateCounter", ex.Message);
+        }
+
+        [Fact]
+        public void Parse_MethodCallingTc2System_ThrowsRejectedConstructWithDiagnostic()
+        {
+            const string xml = @"<?xml version=""1.0"" encoding=""utf-8""?>
+<TcPlcObject Version=""1.1.0.1"">
+  <POU Name=""FB_SystemCaller"" Id=""{00000000-0000-0000-0000-000000000003}"" SpecialFunc=""None"">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_SystemCaller]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[Tc2_System.F_GetCurTaskIndex();]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>";
+
+            var ex = Assert.Throws<TcPouRejectedException>(() => TcPouParser.Parse(xml));
+
+            Assert.Contains("Tc2_System", ex.Message);
         }
     }
 }

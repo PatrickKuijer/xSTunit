@@ -66,6 +66,8 @@ namespace TcXunit.Interpreter
                 else if (current == "Loopback")
                 {
                     instance.NativeLoopbackHost = new LoopbackHost();
+                    instance.Fields["LinkUp"] = new Cell { Value = true };
+                    instance.Fields["LastUpdateTime"] = new Cell { Value = 0L };
                 }
                 else
                 {
@@ -138,11 +140,36 @@ namespace TcXunit.Interpreter
                     return null;
                 }
 
-                if (instance.NativeLoopbackHost != null && methodName == "Transmit")
+                if (instance.NativeLoopbackHost != null && IsLoopbackFaultMethod(methodName))
                 {
-                    var sourceCell = ResolveNamedOrPositionalCell("source", 0, positionalArgs, namedArgs, callerFrame);
-                    var sinkCell = ResolveNamedOrPositionalCell("sink", 1, positionalArgs, namedArgs, callerFrame);
-                    instance.NativeLoopbackHost.Transmit(sourceCell, sinkCell);
+                    switch (methodName)
+                    {
+                        case "Transmit":
+                            var sourceCell = ResolveNamedOrPositionalCell("source", 0, positionalArgs, namedArgs, callerFrame);
+                            var sinkCell = ResolveNamedOrPositionalCell("sink", 1, positionalArgs, namedArgs, callerFrame);
+                            instance.NativeLoopbackHost.Transmit(instance, sourceCell, sinkCell, Clock.TotalMs);
+                            break;
+                        case "Drop":
+                            instance.NativeLoopbackHost.Drop(instance);
+                            break;
+                        case "Restore":
+                            instance.NativeLoopbackHost.Restore(instance);
+                            break;
+                        case "Freeze":
+                            instance.NativeLoopbackHost.Freeze(instance);
+                            break;
+                        case "SetDelay":
+                            var n = Convert.ToInt32(Evaluate(ResolveNamedOrPositionalArg("n", 0, positionalArgs, namedArgs), callerFrame));
+                            instance.NativeLoopbackHost.SetDelay(instance, n);
+                            break;
+                        case "Duplicate":
+                            instance.NativeLoopbackHost.Duplicate(instance);
+                            break;
+                        case "Corrupt":
+                            var value = Evaluate(ResolveNamedOrPositionalArg("value", 0, positionalArgs, namedArgs), callerFrame);
+                            instance.NativeLoopbackHost.Corrupt(instance, value);
+                            break;
+                    }
                     return null;
                 }
 
@@ -346,6 +373,28 @@ namespace TcXunit.Interpreter
                 return ResolveCellForLValue(positionalArgs[posIndex], callerFrame);
 
             throw new InvalidOperationException($"Transmit missing required argument '{paramName}'");
+        }
+
+        private static readonly HashSet<string> LoopbackFaultMethods = new HashSet<string>
+        {
+            "Transmit", "Drop", "Restore", "Freeze", "SetDelay", "Duplicate", "Corrupt",
+        };
+
+        private static bool IsLoopbackFaultMethod(string methodName) => LoopbackFaultMethods.Contains(methodName);
+
+        private static Expr ResolveNamedOrPositionalArg(
+            string paramName,
+            int posIndex,
+            IReadOnlyList<Expr> positionalArgs,
+            IReadOnlyList<NamedArg> namedArgs)
+        {
+            var match = namedArgs.FirstOrDefault(a => a.Name == paramName);
+            if (match != null)
+                return match.Value;
+            if (posIndex < positionalArgs.Count)
+                return positionalArgs[posIndex];
+
+            throw new InvalidOperationException($"Loopback fault method missing required argument '{paramName}'");
         }
 
         private Cell ResolveCellForLValue(Expr expr, Frame frame)

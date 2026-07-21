@@ -8,3 +8,6 @@
 # .NET build output
 bin/
 obj/
+
+# Visual Studio
+.vs/

@@ -164,6 +164,12 @@ namespace TcXunit.Interpreter
             if (decl.TypeName == "LREAL")
                 return 0d;
 
+            if (decl.TypeName == "TIME")
+                return 0u;
+
+            if (decl.TypeName == "LTIME")
+                return 0ul;
+
             if (decl.TypeName.StartsWith("POINTER TO") || decl.TypeName.StartsWith("REFERENCE TO"))
                 return null;
 
@@ -256,6 +262,10 @@ namespace TcXunit.Interpreter
                     return r.Value;
                 case LrealLiteralExpr lr:
                     return lr.Value;
+                case TimeLiteralExpr t:
+                    return t.Value;
+                case LtimeLiteralExpr lt:
+                    return lt.Value;
                 case StringLiteralExpr s:
                     return s.Value;
                 case IdentifierExpr id:

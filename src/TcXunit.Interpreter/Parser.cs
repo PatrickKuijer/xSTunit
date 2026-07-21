@@ -221,6 +221,10 @@ namespace TcXunit.Interpreter
                     return new RealLiteralExpr(float.Parse(Advance().Text, CultureInfo.InvariantCulture));
                 case TokenType.LrealLiteral:
                     return new LrealLiteralExpr(double.Parse(Advance().Text, CultureInfo.InvariantCulture));
+                case TokenType.TimeLiteral:
+                    return new TimeLiteralExpr(TimeLiteral.ParseTimeMs(Advance().Text));
+                case TokenType.LtimeLiteral:
+                    return new LtimeLiteralExpr(TimeLiteral.ParseLTimeNs(Advance().Text));
                 case TokenType.StringLiteral:
                     return new StringLiteralExpr(Advance().Text);
                 case TokenType.LParen:

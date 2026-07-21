@@ -6,7 +6,7 @@ namespace TcXunit.Interpreter
 {
     // Tokenizes the ST statement subset the fixture actually uses
     // (TcXunit-w5x.8/.12). No unary minus, no real/string escapes, no
-    // hex/time literals - grow-on-demand as new fixture bodies need them.
+    // hex literals - grow-on-demand as new fixture bodies need them.
     public static class Lexer
     {
         public static List<Token> Tokenize(string text)
@@ -61,6 +61,26 @@ namespace TcXunit.Interpreter
                         ConsumeFraction(text, ref i);
                         var numText = text.Substring(numStart, i - numStart);
                         tokens.Add(new Token(word == "REAL" ? TokenType.RealLiteral : TokenType.LrealLiteral, numText));
+                        continue;
+                    }
+
+                    if ((word == "LTIME" || word == "LT") && i < text.Length && text[i] == '#')
+                    {
+                        i++; // '#'
+                        var durStart = i;
+                        while (i < text.Length && char.IsLetterOrDigit(text[i]))
+                            i++;
+                        tokens.Add(new Token(TokenType.LtimeLiteral, text.Substring(durStart, i - durStart)));
+                        continue;
+                    }
+
+                    if ((word == "TIME" || word == "T") && i < text.Length && text[i] == '#')
+                    {
+                        i++; // '#'
+                        var durStart = i;
+                        while (i < text.Length && char.IsLetterOrDigit(text[i]))
+                            i++;
+                        tokens.Add(new Token(TokenType.TimeLiteral, text.Substring(durStart, i - durStart)));
                         continue;
                     }
 

@@ -6,6 +6,8 @@ namespace TcXunit.Interpreter
         IntLiteral,
         RealLiteral,
         LrealLiteral,
+        TimeLiteral,
+        LtimeLiteral,
         StringLiteral,
         Assign,      // :=
         RefAssign,   // REF=

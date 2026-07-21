@@ -24,6 +24,18 @@ namespace TcXunit.Interpreter
         public LrealLiteralExpr(double value) => Value = value;
     }
 
+    public sealed class TimeLiteralExpr : Expr
+    {
+        public uint Value { get; }
+        public TimeLiteralExpr(uint value) => Value = value;
+    }
+
+    public sealed class LtimeLiteralExpr : Expr
+    {
+        public ulong Value { get; }
+        public LtimeLiteralExpr(ulong value) => Value = value;
+    }
+
     public sealed class StringLiteralExpr : Expr
     {
         public string Value { get; }

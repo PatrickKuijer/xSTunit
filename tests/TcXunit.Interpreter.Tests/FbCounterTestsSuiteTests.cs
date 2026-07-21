@@ -11,14 +11,16 @@ namespace TcXunit.Interpreter.Tests
     // stand-in, and get back TcUnit-shaped pass/fail results.
     public class FbCounterTestsSuiteTests
     {
-        private const string FixturePouDir =
-            @"C:\Git\p_twincat_test_project\TestSolution\TestSolution\PLC1\POUs";
+        private const string FixtureRootDir =
+            @"C:\Git\p_twincat_test_project\TestSolution";
 
         [Fact]
         public void RunSuite_FbCounterTests_AllFourCasesPass()
         {
-            var types = new[] { "FB_Counter.TcPOU", "FB_ClampedCounter.TcPOU", "FB_CounterTests.TcPOU" }
-                .Select(f => TcPouParser.Parse(File.ReadAllText(Path.Combine(FixturePouDir, f))));
+            var wanted = new[] { "FB_Counter.TcPOU", "FB_ClampedCounter.TcPOU", "FB_CounterTests.TcPOU" };
+            var types = Directory.GetFiles(FixtureRootDir, "*.TcPOU", SearchOption.AllDirectories)
+                .Where(f => wanted.Contains(Path.GetFileName(f)))
+                .Select(f => TcPouParser.Parse(File.ReadAllText(f)));
 
             var engine = new Engine(new TypeRegistry(types));
 

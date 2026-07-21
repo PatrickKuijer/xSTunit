@@ -7,7 +7,7 @@ namespace TcXunit.Cli.Tests
     public class CliRunnerTests
     {
         private const string FixturePouDir =
-            @"C:\Git\p_twincat_test_project\TestSolution\TestSolution\PLC1\POUs";
+            @"C:\Git\p_twincat_test_project\TestSolution";
 
         [Fact]
         public void Run_FixtureProject_PrintsFourPassesAndReturnsZero()

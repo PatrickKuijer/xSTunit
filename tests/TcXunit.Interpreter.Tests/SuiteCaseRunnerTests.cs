@@ -7,7 +7,7 @@ namespace TcXunit.Interpreter.Tests
     public class SuiteCaseRunnerTests
     {
         private const string FixturePouDir =
-            @"C:\Git\p_twincat_test_project\TestSolution\TestSolution\PLC1\POUs";
+            @"C:\Git\p_twincat_test_project\TestSolution";
 
         [Fact]
         public void DiscoverCases_FixtureProject_ListsAllFourCasesUnderFbCounterTests()

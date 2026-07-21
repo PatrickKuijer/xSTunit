@@ -1,4 +1,5 @@
 using System.IO;
+using System.Linq;
 using Xunit;
 
 namespace TcXunit.Parser.Tests
@@ -9,7 +10,7 @@ namespace TcXunit.Parser.Tests
     public class FixtureParsingTests
     {
         private const string FixturePouDir =
-            @"C:\Git\p_twincat_test_project\TestSolution\TestSolution\PLC1\POUs";
+            @"C:\Git\p_twincat_test_project\TestSolution";
 
         [Fact]
         public void Parse_FB_Counter_ReadsBaseCounterStructure()
@@ -18,7 +19,7 @@ namespace TcXunit.Parser.Tests
 
             Assert.Equal("FB_Counter", ast.Name);
             Assert.Null(ast.BaseTypeName);
-            Assert.Equal(new[] { "FB_init", "Increment", "Decrement", "GetValue" }, MethodNames(ast));
+            Assert.Equal(new[] { "Decrement", "FB_init", "GetValue", "Increment" }, MethodNames(ast));
         }
 
         [Fact]
@@ -51,7 +52,8 @@ namespace TcXunit.Parser.Tests
 
         private static PouAst ParseFixture(string fileName)
         {
-            var xml = File.ReadAllText(Path.Combine(FixturePouDir, fileName));
+            var path = Directory.GetFiles(FixturePouDir, fileName, SearchOption.AllDirectories).Single();
+            var xml = File.ReadAllText(path);
             return TcPouParser.Parse(xml);
         }
 

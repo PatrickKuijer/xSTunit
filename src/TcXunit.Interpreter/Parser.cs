@@ -7,8 +7,9 @@ namespace TcXunit.Interpreter
     // Recursive-descent parser for the fixture's statement/expression subset
     // (TcXunit-w5x.8/.12): assignment, REF=, IF/ELSE/END_IF, and calls
     // (builtin/self/THIS^/SUPER^/receiver-qualified) with positional or named
-    // args. No chained member access beyond one level, no LHS deref - neither
-    // is exercised by the fixture yet.
+    // args, plus plain .Member field reads (TcXunit-w5x.15.7). No chained
+    // member access beyond one level, no LHS deref - neither is exercised by
+    // the fixture yet.
     public sealed class Parser
     {
         private readonly List<Token> _tokens;
@@ -283,8 +284,10 @@ namespace TcXunit.Interpreter
                 if (Current.Type == TokenType.Dot)
                 {
                     Advance();
-                    var methodName = Expect(TokenType.Identifier).Text;
-                    node = ParseCallArgs(node, methodName);
+                    var memberName = Expect(TokenType.Identifier).Text;
+                    node = Current.Type == TokenType.LParen
+                        ? ParseCallArgs(node, memberName)
+                        : new FieldAccessExpr(node, memberName);
                     continue;
                 }
 

@@ -56,6 +56,19 @@ namespace TcXunit.Interpreter
     {
     }
 
+    // Plain .Member access (no call parens) - reads a field off a receiver
+    // that evaluates to an FbInstance, e.g. fbTon.Q after fbTon(IN:=..).
+    public sealed class FieldAccessExpr : Expr
+    {
+        public Expr Receiver { get; }
+        public string FieldName { get; }
+        public FieldAccessExpr(Expr receiver, string fieldName)
+        {
+            Receiver = receiver;
+            FieldName = fieldName;
+        }
+    }
+
     public sealed class DerefExpr : Expr
     {
         public Expr Inner { get; }

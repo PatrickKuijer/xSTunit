@@ -13,6 +13,13 @@ namespace TcXunit.Interpreter
     {
         private readonly TypeRegistry _registry;
 
+        // Shared process-wide simulated clock (TcXunit-w5x.15.7 / T3 design) -
+        // one Clock for the whole Engine, not per-instance; TON/TOF/FB_Pulse
+        // native hosts read Clock.TotalMs whenever they're invoked.
+        public Clock Clock { get; } = new Clock();
+
+        private static readonly HashSet<string> NativeTimerTypes = new HashSet<string> { "TON", "TOF", "FB_Pulse" };
+
         public Engine(TypeRegistry registry)
         {
             _registry = registry;
@@ -47,7 +54,20 @@ namespace TcXunit.Interpreter
             }
 
             if (nativeBoundaryHit)
-                instance.NativeSuiteHost = new TcUnitSuiteHost();
+            {
+                if (NativeTimerTypes.Contains(current))
+                {
+                    instance.NativeTimerHost = TimerHost.Create(current);
+                    instance.Fields["IN"] = new Cell { Value = false };
+                    instance.Fields["PT"] = new Cell { Value = 0u };
+                    instance.Fields["Q"] = new Cell { Value = false };
+                    instance.Fields["ET"] = new Cell { Value = 0u };
+                }
+                else
+                {
+                    instance.NativeSuiteHost = new TcUnitSuiteHost();
+                }
+            }
 
             for (var i = chain.Count - 1; i >= 0; i--)
             {
@@ -101,6 +121,19 @@ namespace TcXunit.Interpreter
                     return null;
                 }
 
+                // Bare FB invocation, e.g. fbTon(IN:=x, PT:=t) - methodName is
+                // parsed as a call on the current instance with no receiver,
+                // but here it names a field holding another FbInstance to
+                // invoke directly (TcXunit-w5x.15.7's TON/TOF/FB_Pulse hosts).
+                if (instance.Fields.TryGetValue(methodName, out var calleeCell) &&
+                    calleeCell.Value is FbInstance callee &&
+                    callee.NativeTimerHost != null)
+                {
+                    BindTimerInputs(callee, positionalArgs, namedArgs, callerFrame);
+                    callee.NativeTimerHost.Update(callee, Clock.TotalMs);
+                    return null;
+                }
+
                 if (optionalIfMissing)
                     return null;
 
@@ -141,6 +174,25 @@ namespace TcXunit.Interpreter
             }
         }
 
+        // IN/PT bound by position (IEC order) or by name; unset args keep the
+        // timer instance's current field value (e.g. a caller that only ever
+        // passes IN relies on PT staying whatever it was last set to).
+        private static readonly string[] TimerPositionalParams = { "IN", "PT" };
+
+        private void BindTimerInputs(
+            FbInstance callee,
+            IReadOnlyList<Expr> positionalArgs,
+            IReadOnlyList<NamedArg> namedArgs,
+            Frame callerFrame)
+        {
+            for (var i = 0; i < positionalArgs.Count && i < TimerPositionalParams.Length; i++)
+                callee.Fields[TimerPositionalParams[i]].Value = Evaluate(positionalArgs[i], callerFrame);
+
+            foreach (var arg in namedArgs)
+                if (callee.Fields.TryGetValue(arg.Name, out var cell))
+                    cell.Value = Evaluate(arg.Value, callerFrame);
+        }
+
         private void BindParams(
             IReadOnlyList<VarDecl> paramDecls,
             IReadOnlyList<Expr> positionalArgs,
@@ -174,7 +226,7 @@ namespace TcXunit.Interpreter
 
         private object DefaultValue(VarDecl decl, FbInstance owningInstance)
         {
-            if (_registry.Get(decl.TypeName) != null)
+            if (_registry.Get(decl.TypeName) != null || NativeTimerTypes.Contains(decl.TypeName))
                 return NewInstance(decl.TypeName);
 
             if (decl.DefaultValueText != null)
@@ -306,6 +358,13 @@ namespace TcXunit.Interpreter
                     return frame.Instance;
                 case DerefExpr deref:
                     return ((Pointer)Evaluate(deref.Inner, frame)).Target.Value;
+                case FieldAccessExpr fieldAccess:
+                {
+                    var receiver = (FbInstance)Evaluate(fieldAccess.Receiver, frame);
+                    if (!receiver.Fields.TryGetValue(fieldAccess.FieldName, out var cell))
+                        throw new InvalidOperationException($"Unknown field '{fieldAccess.FieldName}' on '{receiver.ActualTypeName}'");
+                    return cell.Value;
+                }
                 case BinaryExpr binary:
                     return EvaluateBinary(binary, frame);
                 case UnaryExpr unary:

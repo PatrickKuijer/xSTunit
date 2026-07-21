@@ -265,6 +265,13 @@ namespace TcXunit.Interpreter
 
         private object DefaultValue(VarDecl decl, FbInstance owningInstance)
         {
+            if (ArrayTypeInfo.IsArrayType(decl.TypeName))
+                return BuildArrayDefault(decl, owningInstance);
+
+            var structAst = _registry.GetStruct(decl.TypeName);
+            if (structAst != null)
+                return BuildStructDefault(structAst, decl.DefaultValueText, owningInstance);
+
             if (_registry.Get(decl.TypeName) != null || NativeTimerTypes.Contains(decl.TypeName) || decl.TypeName == "Loopback")
                 return NewInstance(decl.TypeName);
 
@@ -290,6 +297,84 @@ namespace TcXunit.Interpreter
                 return null;
 
             return 0;
+        }
+
+        // Builds a STRUCT default: every declared field at its own
+        // DefaultValue first, then overlays the struct literal initializer
+        // (if any) on top - unset fields keep the type's default value per
+        // TwinCAT's documented partial-initialization behavior
+        // (TcXunit-w5x.15.6 / T7).
+        private StructInstance BuildStructDefault(StructAst structAst, string literalText, FbInstance owningInstance)
+        {
+            var instance = new StructInstance(structAst.Name);
+            foreach (var field in structAst.Fields)
+                instance.Fields[field.Name] = new Cell { Value = DefaultValue(field, owningInstance) };
+
+            if (literalText != null && Parser.ParseExpression(literalText) is StructLiteralExpr lit)
+                OverlayStruct(instance, lit, new Frame(owningInstance, structAst.Name));
+
+            return instance;
+        }
+
+        // Builds an ARRAY default: every element at the declared element
+        // type's DefaultValue, then overlays the array literal initializer
+        // (if any) positionally - unset trailing elements keep the element
+        // type's default, matching the array literal's own partial-init
+        // shorthand (TcXunit-w5x.15.6).
+        private ArrayValue BuildArrayDefault(VarDecl decl, FbInstance owningInstance)
+        {
+            var (dimensions, elementTypeName) = ArrayTypeInfo.Parse(decl.TypeName);
+            var count = dimensions.Aggregate(1, (acc, d) => acc * (d.Hi - d.Lo + 1));
+            var elementDecl = new VarDecl(null, elementTypeName, null, VarSection.Local);
+
+            var elements = new object[count];
+            for (var i = 0; i < count; i++)
+                elements[i] = DefaultValue(elementDecl, owningInstance);
+
+            var array = new ArrayValue(dimensions, elementTypeName, elements);
+
+            if (decl.DefaultValueText != null && Parser.ParseExpression(decl.DefaultValueText) is ArrayLiteralExpr lit)
+                OverlayArray(array, lit, new Frame(owningInstance, elementTypeName));
+
+            return array;
+        }
+
+        // Applies a struct/array literal's per-field/per-element expression
+        // on top of an already-defaulted value: nested struct/array fields
+        // recurse into the matching overlay so partial initializers compose
+        // (e.g. an ARRAY-of-STRUCT field overriding only some elements).
+        // Anything else is a plain evaluate + assignment-coerce.
+        private object OverlayOrEvaluate(object existingDefault, Expr expr, Frame frame)
+        {
+            if (expr is StructLiteralExpr structLit && existingDefault is StructInstance structInst)
+            {
+                OverlayStruct(structInst, structLit, frame);
+                return structInst;
+            }
+
+            if (expr is ArrayLiteralExpr arrayLit && existingDefault is ArrayValue arrayVal)
+            {
+                OverlayArray(arrayVal, arrayLit, frame);
+                return arrayVal;
+            }
+
+            return CoerceForAssignment(existingDefault, Evaluate(expr, frame));
+        }
+
+        private void OverlayStruct(StructInstance instance, StructLiteralExpr lit, Frame frame)
+        {
+            foreach (var init in lit.FieldInits)
+            {
+                if (!instance.Fields.TryGetValue(init.Name, out var cell))
+                    throw new InvalidOperationException($"Unknown field '{init.Name}' on struct '{instance.TypeName}'");
+                cell.Value = OverlayOrEvaluate(cell.Value, init.Value, frame);
+            }
+        }
+
+        private void OverlayArray(ArrayValue array, ArrayLiteralExpr lit, Frame frame)
+        {
+            for (var i = 0; i < lit.Elements.Count && i < array.Elements.Length; i++)
+                array.Elements[i] = OverlayOrEvaluate(array.Elements[i], lit.Elements[i], frame);
         }
 
         public void ExecuteStatements(IReadOnlyList<Stmt> statements, Frame frame)
@@ -409,14 +494,24 @@ namespace TcXunit.Interpreter
 
             if (expr is FieldAccessExpr fieldAccess)
             {
-                var receiver = (FbInstance)Evaluate(fieldAccess.Receiver, frame);
-                if (!receiver.Fields.TryGetValue(fieldAccess.FieldName, out var cell))
-                    throw new InvalidOperationException($"Unknown field '{fieldAccess.FieldName}' on '{receiver.ActualTypeName}'");
+                var fields = FieldsOf(Evaluate(fieldAccess.Receiver, frame));
+                if (!fields.TryGetValue(fieldAccess.FieldName, out var cell))
+                    throw new InvalidOperationException($"Unknown field '{fieldAccess.FieldName}'");
                 return cell;
             }
 
             throw new NotSupportedException("Only plain identifiers and field access are supported as REF=/ADR()/Transmit() targets in v1");
         }
+
+        // FbInstance and StructInstance are both "named-field container of
+        // Cells" (T7's struct Cell-shape decision) - FieldAccessExpr reads
+        // either the same way.
+        private static Dictionary<string, Cell> FieldsOf(object receiver) => receiver switch
+        {
+            FbInstance fb => fb.Fields,
+            StructInstance st => st.Fields,
+            _ => throw new NotSupportedException($"Cannot access fields on {receiver?.GetType().Name}"),
+        };
 
         public object Evaluate(Expr expr, Frame frame)
         {
@@ -449,10 +544,31 @@ namespace TcXunit.Interpreter
                     return ((Pointer)Evaluate(deref.Inner, frame)).Target.Value;
                 case FieldAccessExpr fieldAccess:
                 {
-                    var receiver = (FbInstance)Evaluate(fieldAccess.Receiver, frame);
-                    if (!receiver.Fields.TryGetValue(fieldAccess.FieldName, out var cell))
-                        throw new InvalidOperationException($"Unknown field '{fieldAccess.FieldName}' on '{receiver.ActualTypeName}'");
+                    var fields = FieldsOf(Evaluate(fieldAccess.Receiver, frame));
+                    if (!fields.TryGetValue(fieldAccess.FieldName, out var cell))
+                        throw new InvalidOperationException($"Unknown field '{fieldAccess.FieldName}'");
                     return cell.Value;
+                }
+                case StructLiteralExpr structLit:
+                {
+                    // No declared struct type is known in a bare expression
+                    // context, so this builds an untyped instance straight
+                    // from the given fields (no default-merge) - the typed,
+                    // default-merging path is BuildStructDefault, used when
+                    // a VarDecl's declared type is a known StructAst.
+                    var instance = new StructInstance(null);
+                    foreach (var init in structLit.FieldInits)
+                        instance.Fields[init.Name] = new Cell { Value = Evaluate(init.Value, frame) };
+                    return instance;
+                }
+                case ArrayLiteralExpr arrayLit:
+                {
+                    // No declared bounds are known in a bare expression
+                    // context, so this defaults to a single 0-based
+                    // dimension sized to the literal - BuildArrayDefault is
+                    // the typed path that overlays onto declared bounds.
+                    var elements = arrayLit.Elements.Select(e => Evaluate(e, frame)).ToArray();
+                    return new ArrayValue(new List<(int, int)> { (0, elements.Length - 1) }, null, elements);
                 }
                 case BinaryExpr binary:
                     return EvaluateBinary(binary, frame);

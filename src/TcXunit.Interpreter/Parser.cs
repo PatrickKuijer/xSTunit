@@ -231,10 +231,14 @@ namespace TcXunit.Interpreter
                 case TokenType.LParen:
                 {
                     Advance();
+                    if (Current.Type == TokenType.Identifier && _tokens[_pos + 1].Type == TokenType.Assign)
+                        return ParseStructLiteral();
                     var inner = ParseExpr();
                     Expect(TokenType.RParen);
                     return inner;
                 }
+                case TokenType.LBracket:
+                    return ParseArrayLiteral();
                 case TokenType.Identifier:
                 {
                     var name = Advance().Text;
@@ -293,6 +297,51 @@ namespace TcXunit.Interpreter
 
                 return node;
             }
+        }
+
+        // LParen already consumed by the caller's lookahead.
+        private Expr ParseStructLiteral()
+        {
+            var fieldInits = new List<NamedArg>();
+            do
+            {
+                var name = Expect(TokenType.Identifier).Text;
+                Expect(TokenType.Assign);
+                fieldInits.Add(new NamedArg(name, ParseExpr()));
+            } while (Current.Type == TokenType.Comma && Advance().Type == TokenType.Comma);
+
+            Expect(TokenType.RParen);
+            return new StructLiteralExpr(fieldInits);
+        }
+
+        // [v0, v1, ...] with the [n(v)] repeat shorthand expanded inline.
+        private Expr ParseArrayLiteral()
+        {
+            Expect(TokenType.LBracket);
+
+            var elements = new List<Expr>();
+            if (Current.Type != TokenType.RBracket)
+            {
+                do
+                {
+                    if (Current.Type == TokenType.IntLiteral && _tokens[_pos + 1].Type == TokenType.LParen)
+                    {
+                        var count = int.Parse(Advance().Text);
+                        Advance(); // (
+                        var value = ParseExpr();
+                        Expect(TokenType.RParen);
+                        for (var i = 0; i < count; i++)
+                            elements.Add(value);
+                    }
+                    else
+                    {
+                        elements.Add(ParseExpr());
+                    }
+                } while (Current.Type == TokenType.Comma && Advance().Type == TokenType.Comma);
+            }
+
+            Expect(TokenType.RBracket);
+            return new ArrayLiteralExpr(elements);
         }
 
         private CallExpr ParseCallArgs(Expr receiver, string methodName)

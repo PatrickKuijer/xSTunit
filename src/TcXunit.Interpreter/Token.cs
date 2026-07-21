@@ -25,6 +25,8 @@ namespace TcXunit.Interpreter
         Semicolon,
         LParen,
         RParen,
+        LBracket,
+        RBracket,
         Eof,
     }
 

@@ -153,6 +153,8 @@ namespace TcXunit.Interpreter
                     case ';': tokens.Add(new Token(TokenType.Semicolon, ";")); i++; continue;
                     case '(': tokens.Add(new Token(TokenType.LParen, "(")); i++; continue;
                     case ')': tokens.Add(new Token(TokenType.RParen, ")")); i++; continue;
+                    case '[': tokens.Add(new Token(TokenType.LBracket, "[")); i++; continue;
+                    case ']': tokens.Add(new Token(TokenType.RBracket, "]")); i++; continue;
                     default:
                         throw new FormatException($"Unexpected character '{c}' at position {i} in: {text}");
                 }

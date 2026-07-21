@@ -99,6 +99,23 @@ namespace TcXunit.Interpreter
         }
     }
 
+    // Struct literal initializer: (field1 := val1, field2 := val2, ...)
+    // (TcXunit-w5x.15.6). Reuses NamedArg for the field-name/value pairs.
+    public sealed class StructLiteralExpr : Expr
+    {
+        public IReadOnlyList<NamedArg> FieldInits { get; }
+        public StructLiteralExpr(IReadOnlyList<NamedArg> fieldInits) => FieldInits = fieldInits;
+    }
+
+    // Array literal initializer: [v0, v1, ...]; the [n(v)] repeat shorthand
+    // is expanded into n copies of v's Expr node at parse time, so Elements
+    // is always the fully-expanded flat element list (TcXunit-w5x.15.6).
+    public sealed class ArrayLiteralExpr : Expr
+    {
+        public IReadOnlyList<Expr> Elements { get; }
+        public ArrayLiteralExpr(IReadOnlyList<Expr> elements) => Elements = elements;
+    }
+
     public sealed class NamedArg
     {
         public string Name { get; }

@@ -5,12 +5,15 @@ namespace TcXunit.Interpreter
 {
     // Parses the raw VAR/VAR_INPUT/VAR_OUTPUT/VAR_IN_OUT declaration text a
     // FUNCTION_BLOCK or METHOD carries in its Declaration CDATA into typed
-    // VarDecl entries. Scoped to the fixture's grammar (TcXunit-w5x.8): single
-    // name per line, no comma lists, no ARRAY/STRUCT types.
+    // VarDecl entries. Also doubles as the STRUCT field-list parser for
+    // StructDeclParser (STRUCT/END_STRUCT toggle the same section state as
+    // VAR/END_VAR, mapped to VarSection.Local - TcXunit-w5x.15.6). Scoped to
+    // the fixture's grammar (TcXunit-w5x.8): single name per line, no comma
+    // lists.
     public static class VarBlockParser
     {
         private static readonly Regex VarLinePattern = new Regex(
-            @"^(?<name>\w+)\s*:\s*(?<type>POINTER TO \w+|REFERENCE TO \w+|\w+)\s*(:=\s*(?<default>.+?))?;$",
+            @"^(?<name>\w+)\s*:\s*(?<type>POINTER TO \w+|REFERENCE TO \w+|ARRAY\s*\[[^\]]+\]\s*OF\s*\w+|\w+)\s*(:=\s*(?<default>.+?))?;$",
             RegexOptions.Compiled);
 
         public static IReadOnlyList<VarDecl> Parse(string declarationText)
@@ -39,6 +42,12 @@ namespace TcXunit.Interpreter
                         currentSection = VarSection.InOut;
                         continue;
                     case "END_VAR":
+                        currentSection = null;
+                        continue;
+                    case "STRUCT":
+                        currentSection = VarSection.Local;
+                        continue;
+                    case "END_STRUCT":
                         currentSection = null;
                         continue;
                 }

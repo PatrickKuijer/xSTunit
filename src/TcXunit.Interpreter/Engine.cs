@@ -94,6 +94,13 @@ namespace TcXunit.Interpreter
 
             if (methodDef == null)
             {
+                if (methodName == "StepCycles" && positionalArgs.Count == 1)
+                {
+                    var cycles = Convert.ToInt32(Evaluate(positionalArgs[0], callerFrame));
+                    StepCycles(instance, cycles);
+                    return null;
+                }
+
                 if (optionalIfMissing)
                     return null;
 
@@ -114,6 +121,24 @@ namespace TcXunit.Interpreter
             ExecuteStatements(Parser.ParseStatements(methodDef.ImplementationText), newFrame);
 
             return newFrame.Locals.TryGetValue(methodName, out var returnCell) ? returnCell.Value : null;
+        }
+
+        // FbInstance.StepCycles(n) - re-invokes the instance's top-level body n
+        // times, reusing the instance's existing Cell state across calls (same
+        // persistence CallMethod relies on). No dt/scheduler: caller controls
+        // ordering across multiple instances by choosing call order.
+        private void StepCycles(FbInstance instance, int cycles)
+        {
+            var def = _registry.Get(instance.ActualTypeName);
+            if (def == null)
+                throw new InvalidOperationException($"Type '{instance.ActualTypeName}' not found for StepCycles");
+
+            var statements = Parser.ParseStatements(def.ImplementationText);
+            for (var i = 0; i < cycles; i++)
+            {
+                var frame = new Frame(instance, instance.ActualTypeName);
+                ExecuteStatements(statements, frame);
+            }
         }
 
         private void BindParams(

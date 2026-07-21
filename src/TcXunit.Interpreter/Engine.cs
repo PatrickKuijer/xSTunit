@@ -273,6 +273,8 @@ namespace TcXunit.Interpreter
                     return ((Pointer)Evaluate(deref.Inner, frame)).Target.Value;
                 case BinaryExpr binary:
                     return EvaluateBinary(binary, frame);
+                case UnaryExpr unary:
+                    return EvaluateUnary(unary, frame);
                 case CallExpr call:
                     return EvaluateCall(call, frame);
                 default:
@@ -280,10 +282,32 @@ namespace TcXunit.Interpreter
             }
         }
 
+        private object EvaluateUnary(UnaryExpr unary, Frame frame)
+        {
+            var value = Evaluate(unary.Operand, frame);
+
+            if (unary.Op == "NOT")
+            {
+                if (value is bool b)
+                    return !b;
+                if (value is int i)
+                    return ~i;
+                throw new NotSupportedException($"Operator 'NOT' requires a BOOL or INT operand, got {value?.GetType().Name}");
+            }
+
+            throw new NotSupportedException($"Unary operator '{unary.Op}' not supported");
+        }
+
         private object EvaluateBinary(BinaryExpr binary, Frame frame)
         {
             var leftVal = Evaluate(binary.Left, frame);
             var rightVal = Evaluate(binary.Right, frame);
+
+            if (binary.Op == "AND" || binary.Op == "OR" || binary.Op == "XOR")
+                return EvaluateBitstring(binary.Op, leftVal, rightVal);
+
+            if (binary.Op == "MOD")
+                return EvaluateMod(leftVal, rightVal);
 
             // INT->REAL->LREAL implicit widening: promote to the widest operand's
             // type for the whole operation, per TwinCAT's "smaller to larger is
@@ -350,6 +374,40 @@ namespace TcXunit.Interpreter
             "<>" => left != right,
             _ => throw new NotSupportedException($"Operator '{op}' not supported"),
         };
+
+        // MOD/AND/OR/XOR are IEC 61131-3 bitstring/logical operators, not numeric
+        // arithmetic - AND/OR/XOR operate on matching BOOL or INT operands; MOD is
+        // integer-only (no REAL/LREAL remainder in the fixture's scope).
+        private static object EvaluateBitstring(string op, object left, object right)
+        {
+            if (left is bool lb && right is bool rb)
+                return op switch
+                {
+                    "AND" => lb && rb,
+                    "OR" => lb || rb,
+                    "XOR" => lb ^ rb,
+                    _ => throw new NotSupportedException($"Operator '{op}' not supported"),
+                };
+
+            if (left is int li && right is int ri)
+                return op switch
+                {
+                    "AND" => li & ri,
+                    "OR" => li | ri,
+                    "XOR" => li ^ ri,
+                    _ => throw new NotSupportedException($"Operator '{op}' not supported"),
+                };
+
+            throw new NotSupportedException($"Operator '{op}' requires matching BOOL or INT operands, got {left?.GetType().Name} and {right?.GetType().Name}");
+        }
+
+        private static object EvaluateMod(object left, object right)
+        {
+            if (left is int li && right is int ri)
+                return li % ri;
+
+            throw new NotSupportedException($"Operator 'MOD' is integer-only, got {left?.GetType().Name} and {right?.GetType().Name}");
+        }
 
         private object EvaluateCall(CallExpr call, Frame frame)
         {

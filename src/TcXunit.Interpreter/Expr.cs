@@ -50,6 +50,17 @@ namespace TcXunit.Interpreter
         public DerefExpr(Expr inner) => Inner = inner;
     }
 
+    public sealed class UnaryExpr : Expr
+    {
+        public string Op { get; }
+        public Expr Operand { get; }
+        public UnaryExpr(string op, Expr operand)
+        {
+            Op = op;
+            Operand = operand;
+        }
+    }
+
     public sealed class BinaryExpr : Expr
     {
         public string Op { get; }

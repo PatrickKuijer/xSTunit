@@ -121,7 +121,40 @@ namespace TcXunit.Interpreter
             return new IfStmt(condition, thenBranch, elseBranch);
         }
 
-        private Expr ParseExpr() => ParseComparison();
+        private Expr ParseExpr() => ParseOr();
+
+        private Expr ParseOr()
+        {
+            var left = ParseXor();
+            while (IsKeyword("OR"))
+            {
+                Advance();
+                left = new BinaryExpr("OR", left, ParseXor());
+            }
+            return left;
+        }
+
+        private Expr ParseXor()
+        {
+            var left = ParseAnd();
+            while (IsKeyword("XOR"))
+            {
+                Advance();
+                left = new BinaryExpr("XOR", left, ParseAnd());
+            }
+            return left;
+        }
+
+        private Expr ParseAnd()
+        {
+            var left = ParseComparison();
+            while (IsKeyword("AND"))
+            {
+                Advance();
+                left = new BinaryExpr("AND", left, ParseComparison());
+            }
+            return left;
+        }
 
         private Expr ParseComparison()
         {
@@ -146,15 +179,36 @@ namespace TcXunit.Interpreter
 
         private Expr ParseAdditive()
         {
-            var left = ParsePostfix(ParsePrimary());
+            var left = ParseMod();
             while (Current.Type == TokenType.Plus || Current.Type == TokenType.Minus)
             {
                 var op = Current.Type == TokenType.Plus ? "+" : "-";
                 Advance();
-                var right = ParsePostfix(ParsePrimary());
+                var right = ParseMod();
                 left = new BinaryExpr(op, left, right);
             }
             return left;
+        }
+
+        private Expr ParseMod()
+        {
+            var left = ParseUnary();
+            while (IsKeyword("MOD"))
+            {
+                Advance();
+                left = new BinaryExpr("MOD", left, ParseUnary());
+            }
+            return left;
+        }
+
+        private Expr ParseUnary()
+        {
+            if (IsKeyword("NOT"))
+            {
+                Advance();
+                return new UnaryExpr("NOT", ParseUnary());
+            }
+            return ParsePostfix(ParsePrimary());
         }
 
         private Expr ParsePrimary()

@@ -4,7 +4,8 @@ namespace TcXunit.Interpreter
 {
     // Native-stub boundary for Loopback (TcXunit-w5x.15.5 / T4 design, fault
     // vocabulary per TcXunit-w5x.15.8 / T5 design): one Loopback instance = one
-    // fixed link. Transmit is a discrete copy (sink.Value = source.Value),
+    // fixed link. Transmit is a discrete copy (sink.Value = source.Value,
+    // per-field cloned for STRUCT/ARRAY payloads via CellCloner - TcXunit-w5x.15.10),
     // called explicitly by the test author - no implicit wiring, no StepCycles
     // hook. One active fault mode at a time - each fault-setting call clears
     // any other pending fault state. LinkUp and LastUpdateTime are published
@@ -102,8 +103,9 @@ namespace TcXunit.Interpreter
 
         private void Deliver(FbInstance instance, Cell sink, object value, long clockTotalMs)
         {
-            sink.Value = value;
-            _lastTransmittedValue = value;
+            var delivered = CellCloner.CloneValue(value);
+            sink.Value = delivered;
+            _lastTransmittedValue = delivered;
             instance.Fields["LastUpdateTime"].Value = clockTotalMs;
         }
 

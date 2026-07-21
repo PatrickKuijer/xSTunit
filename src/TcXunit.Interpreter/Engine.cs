@@ -360,6 +360,9 @@ namespace TcXunit.Interpreter
             if (decl.DefaultValueText != null)
                 return Evaluate(Parser.ParseExpression(decl.DefaultValueText), new Frame(owningInstance, decl.TypeName));
 
+            if (StringTypeInfo.IsStringType(decl.TypeName))
+                return "";
+
             if (decl.TypeName == "BOOL")
                 return false;
 

@@ -85,5 +85,48 @@ namespace TcXunit.Interpreter.Tests
             txFb.Fields["Buffer"].Value = 2;
             Assert.Equal(1, rxFb.Fields["Buffer"].Value); // no aliasing - copy already happened
         }
+
+        // TcXunit-w5x.15.10 / T7: STRUCT payloads must be per-field cloned,
+        // not aliased - mutating the source struct after Transmit must not
+        // be visible through the sink.
+        [Fact]
+        public void Transmit_StructPayload_ClonesFieldsInsteadOfAliasing()
+        {
+            var stPoint = StructDeclParser.Parse(@"TYPE ST_Point :
+STRUCT
+	x : INT;
+END_STRUCT
+END_TYPE");
+            var payload = new PouAst(
+                "FB_Payload",
+                null,
+                "VAR\n\tBuffer : ST_Point;\nEND_VAR",
+                "",
+                new List<MethodAst>());
+            var wrapper = new PouAst(
+                "FB_Wrapper",
+                null,
+                "VAR\n\tfbLink : Loopback;\n\ttxFb : FB_Payload;\n\trxFb : FB_Payload;\nEND_VAR",
+                "",
+                new List<MethodAst>());
+            var engine = new Engine(new TypeRegistry(new[] { payload, wrapper }, new[] { stPoint }));
+
+            var wrapperInstance = engine.NewInstance("FB_Wrapper");
+            var txFb = (FbInstance)wrapperInstance.Fields["txFb"].Value;
+            var rxFb = (FbInstance)wrapperInstance.Fields["rxFb"].Value;
+
+            var sourceStruct = (StructInstance)txFb.Fields["Buffer"].Value;
+            sourceStruct.Fields["x"].Value = 5;
+
+            Transmit(engine, wrapperInstance);
+
+            var sinkStruct = (StructInstance)rxFb.Fields["Buffer"].Value;
+            Assert.Equal(5, sinkStruct.Fields["x"].Value);
+
+            sourceStruct.Fields["x"].Value = 999;
+
+            Assert.Equal(5, sinkStruct.Fields["x"].Value);
+            Assert.NotSame(sourceStruct, sinkStruct);
+        }
     }
 }

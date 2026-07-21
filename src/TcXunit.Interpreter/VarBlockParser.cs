@@ -13,7 +13,7 @@ namespace TcXunit.Interpreter
     public static class VarBlockParser
     {
         private static readonly Regex VarLinePattern = new Regex(
-            @"^(?<name>\w+)\s*:\s*(?<type>POINTER TO \w+|REFERENCE TO \w+|ARRAY\s*\[[^\]]+\]\s*OF\s*\w+|\w+)\s*(:=\s*(?<default>.+?))?;$",
+            @"^(?<name>\w+)\s*:\s*(?<type>POINTER TO \w+|REFERENCE TO \w+|ARRAY\s*\[[^\]]+\]\s*OF\s*\w+|STRING\s*\(\s*\d+\s*\)|\w+)\s*(:=\s*(?<default>.+?))?;$",
             RegexOptions.Compiled);
 
         public static IReadOnlyList<VarDecl> Parse(string declarationText)

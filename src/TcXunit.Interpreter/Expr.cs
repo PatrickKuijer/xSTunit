@@ -12,6 +12,18 @@ namespace TcXunit.Interpreter
         public IntLiteralExpr(int value) => Value = value;
     }
 
+    public sealed class RealLiteralExpr : Expr
+    {
+        public float Value { get; }
+        public RealLiteralExpr(float value) => Value = value;
+    }
+
+    public sealed class LrealLiteralExpr : Expr
+    {
+        public double Value { get; }
+        public LrealLiteralExpr(double value) => Value = value;
+    }
+
     public sealed class StringLiteralExpr : Expr
     {
         public string Value { get; }

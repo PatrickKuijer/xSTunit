@@ -158,6 +158,12 @@ namespace TcXunit.Interpreter
             if (decl.TypeName == "BOOL")
                 return false;
 
+            if (decl.TypeName == "REAL")
+                return 0f;
+
+            if (decl.TypeName == "LREAL")
+                return 0d;
+
             if (decl.TypeName.StartsWith("POINTER TO") || decl.TypeName.StartsWith("REFERENCE TO"))
                 return null;
 
@@ -202,7 +208,29 @@ namespace TcXunit.Interpreter
                 cell = new Cell();
                 frame.Locals[name] = cell;
             }
-            cell.Value = value;
+            cell.Value = CoerceForAssignment(cell.Value, value);
+        }
+
+        // INT->REAL->LREAL widens implicitly on assignment (inferred from the
+        // target cell's current CLR type, since Cell carries no declared-type tag
+        // of its own); the reverse requires an explicit X_TO_Y cast produced by
+        // TryEvaluateCast, which never returns a wider CLR type than the cast
+        // target - so a rejection here means the assignment skipped a cast.
+        private static object CoerceForAssignment(object existing, object incoming)
+        {
+            if (existing is int && incoming is float)
+                throw new InvalidOperationException("Implicit narrowing from REAL to INT is not allowed; use REAL_TO_INT(...)");
+            if (existing is int && incoming is double)
+                throw new InvalidOperationException("Implicit narrowing from LREAL to INT is not allowed; use LREAL_TO_INT(...)");
+            if (existing is float && incoming is double)
+                throw new InvalidOperationException("Implicit narrowing from LREAL to REAL is not allowed; use LREAL_TO_REAL(...)");
+
+            if (existing is float && incoming is int intForFloat)
+                return (float)intForFloat;
+            if (existing is double && (incoming is int || incoming is float))
+                return Convert.ToDouble(incoming);
+
+            return incoming;
         }
 
         private static Cell ResolveCellForLValue(Expr expr, Frame frame)
@@ -224,6 +252,10 @@ namespace TcXunit.Interpreter
             {
                 case IntLiteralExpr i:
                     return i.Value;
+                case RealLiteralExpr r:
+                    return r.Value;
+                case LrealLiteralExpr lr:
+                    return lr.Value;
                 case StringLiteralExpr s:
                     return s.Value;
                 case IdentifierExpr id:
@@ -250,23 +282,74 @@ namespace TcXunit.Interpreter
 
         private object EvaluateBinary(BinaryExpr binary, Frame frame)
         {
-            var left = (int)Evaluate(binary.Left, frame);
-            var right = (int)Evaluate(binary.Right, frame);
+            var leftVal = Evaluate(binary.Left, frame);
+            var rightVal = Evaluate(binary.Right, frame);
 
-            switch (binary.Op)
-            {
-                case "+": return left + right;
-                case "-": return left - right;
-                case "<": return left < right;
-                case ">": return left > right;
-                case "<=": return left <= right;
-                case ">=": return left >= right;
-                case "=": return left == right;
-                case "<>": return left != right;
-                default:
-                    throw new NotSupportedException($"Operator '{binary.Op}' not supported");
-            }
+            // INT->REAL->LREAL implicit widening: promote to the widest operand's
+            // type for the whole operation, per TwinCAT's "smaller to larger is
+            // implicit" arithmetic promotion rule.
+            if (leftVal is double || rightVal is double)
+                return EvaluateNumeric(binary.Op, ToDouble(leftVal), ToDouble(rightVal));
+
+            if (leftVal is float || rightVal is float)
+                return EvaluateNumeric(binary.Op, ToFloat(leftVal), ToFloat(rightVal));
+
+            return EvaluateNumeric(binary.Op, (int)leftVal, (int)rightVal);
         }
+
+        private static double ToDouble(object value) => value switch
+        {
+            double d => d,
+            float f => f,
+            int i => i,
+            _ => throw new NotSupportedException($"Cannot use {value?.GetType().Name} in numeric arithmetic"),
+        };
+
+        private static float ToFloat(object value) => value switch
+        {
+            float f => f,
+            int i => i,
+            _ => throw new NotSupportedException($"Cannot use {value?.GetType().Name} in numeric arithmetic"),
+        };
+
+        private static object EvaluateNumeric(string op, double left, double right) => op switch
+        {
+            "+" => left + right,
+            "-" => left - right,
+            "<" => left < right,
+            ">" => left > right,
+            "<=" => left <= right,
+            ">=" => left >= right,
+            "=" => left == right,
+            "<>" => left != right,
+            _ => throw new NotSupportedException($"Operator '{op}' not supported"),
+        };
+
+        private static object EvaluateNumeric(string op, float left, float right) => op switch
+        {
+            "+" => left + right,
+            "-" => left - right,
+            "<" => left < right,
+            ">" => left > right,
+            "<=" => left <= right,
+            ">=" => left >= right,
+            "=" => left == right,
+            "<>" => left != right,
+            _ => throw new NotSupportedException($"Operator '{op}' not supported"),
+        };
+
+        private static object EvaluateNumeric(string op, int left, int right) => op switch
+        {
+            "+" => left + right,
+            "-" => left - right,
+            "<" => left < right,
+            ">" => left > right,
+            "<=" => left <= right,
+            ">=" => left >= right,
+            "=" => left == right,
+            "<>" => left != right,
+            _ => throw new NotSupportedException($"Operator '{op}' not supported"),
+        };
 
         private object EvaluateCall(CallExpr call, Frame frame)
         {
@@ -274,6 +357,9 @@ namespace TcXunit.Interpreter
             {
                 if (call.MethodName == "ADR")
                     return new Pointer(ResolveCellForLValue(call.PositionalArgs[0], frame));
+
+                if (TryEvaluateCast(call, frame, out var castResult))
+                    return castResult;
 
                 return CallMethod(frame.Instance, call.MethodName, call.PositionalArgs, call.NamedArgs, frame, null);
             }
@@ -289,6 +375,38 @@ namespace TcXunit.Interpreter
 
             var receiverInstance = (FbInstance)Evaluate(call.Receiver, frame);
             return CallMethod(receiverInstance, call.MethodName, call.PositionalArgs, call.NamedArgs, frame, null);
+        }
+
+        private static readonly HashSet<string> IntegerCastTargets = new HashSet<string>
+        {
+            "SINT", "USINT", "INT", "UINT", "DINT", "UDINT", "LINT", "ULINT", "BYTE", "WORD", "DWORD", "LWORD",
+        };
+
+        // Recognizes explicit <from>_TO_<to> conversion calls (e.g. LREAL_TO_INT)
+        // per TwinCAT's narrowing-cast naming convention. Not a real method, so
+        // it's intercepted here before falling through to CallMethod/native-bridge
+        // dispatch.
+        private bool TryEvaluateCast(CallExpr call, Frame frame, out object result)
+        {
+            result = null;
+
+            var separator = call.MethodName.IndexOf("_TO_", StringComparison.Ordinal);
+            if (separator < 0 || call.PositionalArgs.Count != 1)
+                return false;
+
+            var toType = call.MethodName.Substring(separator + 4);
+            var value = Evaluate(call.PositionalArgs[0], frame);
+
+            if (toType == "REAL")
+                result = Convert.ToSingle(value);
+            else if (toType == "LREAL")
+                result = Convert.ToDouble(value);
+            else if (IntegerCastTargets.Contains(toType))
+                result = Convert.ToInt32(value);
+            else
+                return false;
+
+            return true;
         }
     }
 }

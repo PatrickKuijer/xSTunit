@@ -52,6 +52,18 @@ namespace TcXunit.Interpreter
                         continue;
                     }
 
+                    if ((word == "REAL" || word == "LREAL") && i < text.Length && text[i] == '#')
+                    {
+                        i++; // '#'
+                        var numStart = i;
+                        while (i < text.Length && char.IsDigit(text[i]))
+                            i++;
+                        ConsumeFraction(text, ref i);
+                        var numText = text.Substring(numStart, i - numStart);
+                        tokens.Add(new Token(word == "REAL" ? TokenType.RealLiteral : TokenType.LrealLiteral, numText));
+                        continue;
+                    }
+
                     tokens.Add(new Token(TokenType.Identifier, word));
                     continue;
                 }
@@ -61,7 +73,8 @@ namespace TcXunit.Interpreter
                     var start = i;
                     while (i < text.Length && char.IsDigit(text[i]))
                         i++;
-                    tokens.Add(new Token(TokenType.IntLiteral, text.Substring(start, i - start)));
+                    var isReal = ConsumeFraction(text, ref i);
+                    tokens.Add(new Token(isReal ? TokenType.RealLiteral : TokenType.IntLiteral, text.Substring(start, i - start)));
                     continue;
                 }
 
@@ -127,6 +140,39 @@ namespace TcXunit.Interpreter
 
             tokens.Add(new Token(TokenType.Eof, string.Empty));
             return tokens;
+        }
+
+        // Consumes an optional '.digits' fraction and/or '[eE][+-]digits' exponent
+        // starting at i, advancing i past whatever it consumes. Returns true if
+        // anything real-valued (fraction and/or exponent) was found.
+        private static bool ConsumeFraction(string text, ref int i)
+        {
+            var isReal = false;
+
+            if (i + 1 < text.Length && text[i] == '.' && char.IsDigit(text[i + 1]))
+            {
+                isReal = true;
+                i++;
+                while (i < text.Length && char.IsDigit(text[i]))
+                    i++;
+            }
+
+            if (i < text.Length && (text[i] == 'e' || text[i] == 'E'))
+            {
+                var j = i + 1;
+                if (j < text.Length && (text[j] == '+' || text[j] == '-'))
+                    j++;
+                if (j < text.Length && char.IsDigit(text[j]))
+                {
+                    isReal = true;
+                    j++;
+                    while (j < text.Length && char.IsDigit(text[j]))
+                        j++;
+                    i = j;
+                }
+            }
+
+            return isReal;
         }
     }
 }

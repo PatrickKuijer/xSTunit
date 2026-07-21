@@ -58,6 +58,10 @@ This protocol applies when ending a Beads implementation workflow. It is subordi
 <!-- END BEADS INTEGRATION -->
 
 
+## Project Git Policy (overrides Conservative profile above)
+
+On closing a bead (`bd close <id>`), commit the resulting changes with a Conventional Commits message (`feat:`, `fix:`, `chore:`, etc., semver-relevant type). Do NOT push — commit only.
+
 ## Agent skills
 
 ### Issue tracker
@@ -70,18 +74,31 @@ Single-context — CONTEXT.md + docs/adr/ at repo root. See `docs/agents/domain.
 
 ## Build & Test
 
-_Add your build and test commands here_
+Requires .NET SDK (`net8.0` for CLI, `netstandard2.0` for interpreter/runner/parser libs).
 
 ```bash
-# Example:
-# npm install
-# npm test
+dotnet build TcXunit.sln
+dotnet test TcXunit.sln
+dotnet run --project src/TcXunit.Cli -- run <path-to-POUs-directory>
 ```
 
 ## Architecture Overview
 
-_Add a brief overview of your project architecture_
+xUnit-style test runner for TwinCAT/IEC 61131-3 PLC code (TcUnit-inspired). Parses `.TcPOU` XML, interprets ST bodies, reports pass/fail — no TwinCAT runtime needed.
+
+```text
+src/
+  TcXunit.Parser        Parses .TcPOU XML into POU/method AST (TcPouParser)
+  TcXunit.Interpreter    Lexer/Parser/Engine executing ST over Cell-based value model;
+                         TypeRegistry + SuiteDiscovery find suites via EXTENDS ancestry
+                         to TcUnit.FB_TestSuite
+  TcXunit.Runner         TcUnit native-method stub boundary (assertions, suite host)
+  TcXunit.Cli            `tcxunit run <path>` entry point (CliRunner is testable core)
+tests/                  xUnit tests per project, mirroring src/
+```
+
+Exit codes: `0` all pass, `1` any fail, `2` usage/discovery error.
 
 ## Conventions & Patterns
 
-_Add your project-specific conventions here_
+Interpreter is hand-rolled, scoped to what fixtures actually need — extended incrementally, not built to full IEC 61131-3 grammar up front (see comments in `Engine.cs`/`Lexer.cs`). Early/grow-on-demand status; check `.wayfinder/` for in-progress design decisions.

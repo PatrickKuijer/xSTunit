@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 
 namespace TcXunit.Interpreter
 {
@@ -162,6 +163,10 @@ namespace TcXunit.Interpreter
             {
                 case TokenType.IntLiteral:
                     return new IntLiteralExpr(int.Parse(Advance().Text));
+                case TokenType.RealLiteral:
+                    return new RealLiteralExpr(float.Parse(Advance().Text, CultureInfo.InvariantCulture));
+                case TokenType.LrealLiteral:
+                    return new LrealLiteralExpr(double.Parse(Advance().Text, CultureInfo.InvariantCulture));
                 case TokenType.StringLiteral:
                     return new StringLiteralExpr(Advance().Text);
                 case TokenType.LParen:

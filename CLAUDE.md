@@ -58,6 +58,16 @@ This protocol applies when ending a Beads implementation workflow. It is subordi
 <!-- END BEADS INTEGRATION -->
 
 
+## Agent skills
+
+### Issue tracker
+
+Issues tracked in beads (`bd`), a local Dolt DB synced via `refs/dolt/data`. See `docs/agents/issue-tracker.md`.
+
+### Domain docs
+
+Single-context — CONTEXT.md + docs/adr/ at repo root. See `docs/agents/domain.md`.
+
 ## Build & Test
 
 _Add your build and test commands here_

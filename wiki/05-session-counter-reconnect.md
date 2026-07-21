@@ -1,9 +1,10 @@
 # Session/generation-counter reconnect simulation
 
-Status: **built as a pattern** — ticket `TcXunit-w5x.15.11` is open, but
-it's tracked to *demonstrate* this pattern, not to add a new primitive. No
-new API is needed; it composes [Loopback](04-loopback-and-faults.md)'s
-`Drop`/`Restore` with an ordinary `VAR` field on the FB under test.
+Status: **built as a pattern** — demonstrated in
+`tests/TcXunit.Interpreter.Tests/LoopbackReconnectSessionTests.cs`
+(ticket `TcXunit-w5x.15.11`). No new API is needed; it composes
+[Loopback](04-loopback-and-faults.md)'s `Drop`/`Restore` with an ordinary
+`VAR` field on the FB under test.
 
 ## Pattern
 

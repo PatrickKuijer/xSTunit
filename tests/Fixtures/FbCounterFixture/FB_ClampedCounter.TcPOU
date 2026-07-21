@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4026.18">
+  <POU Name="FB_ClampedCounter" Id="{a1b2c3d4-0002-4a1a-8b1b-000000000001}" SpecialFunc="None">
+    <Declaration><![CDATA[(*
+    TcXunit interpreter fixture (TcXunit-w5x.8). Adds a ceiling on top of
+    FB_Counter to exercise EXTENDS, FB_init chaining via SUPER^, THIS^ method
+    calls, and REFERENCE TO in the v1 subset.
+*)
+FUNCTION_BLOCK FB_ClampedCounter EXTENDS FB_Counter
+VAR
+	ceiling : INT;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[]]></ST>
+    </Implementation>
+    <Method Name="FB_init" Id="{a1b2c3d4-0002-4a1a-8b1b-000000000002}">
+      <Declaration><![CDATA[METHOD FB_init
+VAR_INPUT
+	bInitRetains : BOOL;
+	bInCopyCode : BOOL;
+	startValue : INT := 0;
+	ceilingStart : INT := 10;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[SUPER^(bInitRetains := bInitRetains, bInCopyCode := bInCopyCode, startValue := startValue);
+
+ceiling := ceilingStart;]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="Increment" Id="{a1b2c3d4-0002-4a1a-8b1b-000000000003}">
+      <Declaration><![CDATA[METHOD PUBLIC Increment
+VAR_INPUT
+	delta : INT := 1;
+END_VAR
+VAR
+	refCeiling : REFERENCE TO INT;
+	candidate : INT;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[refCeiling REF= ceiling;
+
+candidate := THIS^.GetValue() + delta;
+IF candidate > refCeiling THEN
+	candidate := refCeiling;
+END_IF
+
+SUPER^.Increment(delta := candidate - THIS^.GetValue());]]></ST>
+      </Implementation>
+    </Method>
+  </POU>
+</TcPlcObject>

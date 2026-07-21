@@ -1,0 +1,66 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4026.18">
+  <POU Name="FB_Counter" Id="{a1b2c3d4-0001-4a1a-8b1b-000000000001}" SpecialFunc="None">
+    <Declaration><![CDATA[(*
+    TcXunit interpreter fixture (TcXunit-w5x.8). Base counter: FB_init sets the
+    start value, Increment adds, Decrement clamps at a floor read through a
+    POINTER TO INT to exercise the v1 pointer/ADR subset.
+*)
+FUNCTION_BLOCK FB_Counter
+VAR
+	value : INT;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[]]></ST>
+    </Implementation>
+    <Method Name="Decrement" Id="{a1b2c3d4-0001-4a1a-8b1b-000000000004}">
+      <Declaration><![CDATA[METHOD PUBLIC Decrement
+VAR_INPUT
+	delta : INT := 1;
+END_VAR
+VAR
+	floor : INT := 0;
+	pFloor : POINTER TO INT;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[pFloor := ADR(floor);
+
+IF value - delta < pFloor^ THEN
+	value := pFloor^;
+ELSE
+	value := value - delta;
+END_IF]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="FB_init" Id="{a1b2c3d4-0001-4a1a-8b1b-000000000002}">
+      <Declaration><![CDATA[METHOD FB_init
+VAR_INPUT
+	bInitRetains : BOOL;
+	bInCopyCode : BOOL;
+	startValue : INT := 0;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[value := startValue;]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="GetValue" Id="{a1b2c3d4-0001-4a1a-8b1b-000000000005}">
+      <Declaration><![CDATA[METHOD PUBLIC GetValue : INT
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[GetValue := value;]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="Increment" Id="{a1b2c3d4-0001-4a1a-8b1b-000000000003}">
+      <Declaration><![CDATA[METHOD PUBLIC Increment
+VAR_INPUT
+	delta : INT := 1;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[value := value + delta;]]></ST>
+      </Implementation>
+    </Method>
+  </POU>
+</TcPlcObject>

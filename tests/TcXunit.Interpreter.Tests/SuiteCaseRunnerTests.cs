@@ -6,8 +6,7 @@ namespace TcXunit.Interpreter.Tests
 {
     public class SuiteCaseRunnerTests
     {
-        private const string FixturePouDir =
-            @"C:\Git\p_twincat_test_project\TestSolution";
+        private static readonly string FixturePouDir = TestFixtures.FbCounterFixtureDir();
 
         [Fact]
         public void DiscoverCases_FixtureProject_ListsAllFourCasesUnderFbCounterTests()

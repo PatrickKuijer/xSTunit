@@ -1,5 +1,4 @@
 using System.IO;
-using System.Linq;
 using Xunit;
 
 namespace TcXunit.Parser.Tests
@@ -9,8 +8,7 @@ namespace TcXunit.Parser.Tests
     // gets caught here instead of only in hand-picked snippets.
     public class FixtureParsingTests
     {
-        private const string FixturePouDir =
-            @"C:\Git\p_twincat_test_project\TestSolution";
+        private static readonly string FixturePouDir = TestFixtures.FbCounterFixtureDir();
 
         [Fact]
         public void Parse_FB_Counter_ReadsBaseCounterStructure()
@@ -52,8 +50,7 @@ namespace TcXunit.Parser.Tests
 
         private static PouAst ParseFixture(string fileName)
         {
-            var path = Directory.GetFiles(FixturePouDir, fileName, SearchOption.AllDirectories).Single();
-            var xml = File.ReadAllText(path);
+            var xml = File.ReadAllText(Path.Combine(FixturePouDir, fileName));
             return TcPouParser.Parse(xml);
         }
 

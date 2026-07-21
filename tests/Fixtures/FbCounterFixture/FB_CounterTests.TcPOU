@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4026.18">
+  <POU Name="FB_CounterTests" Id="{a1b2c3d4-0003-4a1a-8b1b-000000000001}" SpecialFunc="None">
+    <Declaration><![CDATA[(*
+    TcXunit interpreter fixture (TcXunit-w5x.8). TcUnit-style suite exercising
+    the interpreter's native-stub TEST()/TEST_FINISHED()/AssertTrue/
+    AssertEquals_INT surface (TcXunit-w5x.7) against FB_Counter and
+    FB_ClampedCounter.
+*)
+FUNCTION_BLOCK FB_CounterTests EXTENDS TcUnit.FB_TestSuite]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[CounterStartsAtZero();
+IncrementAddsDelta();
+DecrementClampsAtZero();
+ClampedCounterIncrementRespectsCeiling();]]></ST>
+    </Implementation>
+    <Method Name="CounterStartsAtZero" Id="{a1b2c3d4-0003-4a1a-8b1b-000000000002}">
+      <Declaration><![CDATA[METHOD PRIVATE CounterStartsAtZero
+VAR
+	counter : FB_Counter;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('CounterStartsAtZero');
+
+AssertEquals_INT(Expected := 0,
+                  Actual := counter.GetValue(),
+                  Message := 'fresh counter');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="IncrementAddsDelta" Id="{a1b2c3d4-0003-4a1a-8b1b-000000000003}">
+      <Declaration><![CDATA[METHOD PRIVATE IncrementAddsDelta
+VAR
+	counter : FB_Counter;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('IncrementAddsDelta');
+
+counter.Increment(delta := 3);
+
+AssertEquals_INT(Expected := 3,
+                  Actual := counter.GetValue(),
+                  Message := 'after Increment(3)');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="DecrementClampsAtZero" Id="{a1b2c3d4-0003-4a1a-8b1b-000000000004}">
+      <Declaration><![CDATA[METHOD PRIVATE DecrementClampsAtZero
+VAR
+	counter : FB_Counter;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('DecrementClampsAtZero');
+
+counter.Decrement(delta := 5);
+
+AssertEquals_INT(Expected := 0,
+                  Actual := counter.GetValue(),
+                  Message := 'Decrement below zero');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="ClampedCounterIncrementRespectsCeiling" Id="{a1b2c3d4-0003-4a1a-8b1b-000000000005}">
+      <Declaration><![CDATA[METHOD PRIVATE ClampedCounterIncrementRespectsCeiling
+VAR
+	counter : FB_ClampedCounter;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('ClampedCounterIncrementRespectsCeiling');
+
+counter.Increment(delta := 999);
+
+AssertTrue(Condition := (counter.GetValue() = 10),
+           Message := 'Increment did not clamp at ceiling');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+  </POU>
+</TcPlcObject>

@@ -1,5 +1,6 @@
 using System.IO;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using TcXunit.Interpreter;
 using TcXunit.Parser;
 using Xunit;
@@ -11,16 +12,13 @@ namespace TcXunit.Interpreter.Tests
     // stand-in, and get back TcUnit-shaped pass/fail results.
     public class FbCounterTestsSuiteTests
     {
-        private const string FixtureRootDir =
-            @"C:\Git\p_twincat_test_project\TestSolution";
+        private static readonly string FixtureDir = TestFixtures.FbCounterFixtureDir();
 
         [Fact]
         public void RunSuite_FbCounterTests_AllFourCasesPass()
         {
             var wanted = new[] { "FB_Counter.TcPOU", "FB_ClampedCounter.TcPOU", "FB_CounterTests.TcPOU" };
-            var types = Directory.GetFiles(FixtureRootDir, "*.TcPOU", SearchOption.AllDirectories)
-                .Where(f => wanted.Contains(Path.GetFileName(f)))
-                .Select(f => TcPouParser.Parse(File.ReadAllText(f)));
+            var types = wanted.Select(f => TcPouParser.Parse(File.ReadAllText(Path.Combine(FixtureDir, f))));
 
             var engine = new Engine(new TypeRegistry(types));
 

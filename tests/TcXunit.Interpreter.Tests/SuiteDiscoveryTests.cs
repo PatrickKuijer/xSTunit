@@ -8,13 +8,12 @@ namespace TcXunit.Interpreter.Tests
 {
     public class SuiteDiscoveryTests
     {
-        private const string FixturePouDir =
-            @"C:\Git\p_twincat_test_project\TestSolution";
+        private static readonly string FixturePouDir = TestFixtures.FbCounterFixtureDir();
 
         [Fact]
         public void FindSuiteTypeNames_FixtureProject_FindsOnlyFbCounterTests()
         {
-            var files = Directory.GetFiles(FixturePouDir, "*.TcPOU", SearchOption.AllDirectories);
+            var files = Directory.GetFiles(FixturePouDir, "*.TcPOU");
             var types = files.Select(f => TcPouParser.Parse(File.ReadAllText(f))).ToList();
             var registry = new TypeRegistry(types);
 

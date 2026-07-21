@@ -6,8 +6,7 @@ namespace TcXunit.Cli.Tests
 {
     public class CliRunnerTests
     {
-        private const string FixturePouDir =
-            @"C:\Git\p_twincat_test_project\TestSolution";
+        private static readonly string FixturePouDir = TestFixtures.FbCounterFixtureDir();
 
         [Fact]
         public void Run_FixtureProject_PrintsFourPassesAndReturnsZero()

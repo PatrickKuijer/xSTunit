@@ -63,6 +63,10 @@ namespace TcXunit.Interpreter
                     instance.Fields["Q"] = new Cell { Value = false };
                     instance.Fields["ET"] = new Cell { Value = 0u };
                 }
+                else if (current == "Loopback")
+                {
+                    instance.NativeLoopbackHost = new LoopbackHost();
+                }
                 else
                 {
                     instance.NativeSuiteHost = new TcUnitSuiteHost();
@@ -131,6 +135,14 @@ namespace TcXunit.Interpreter
                 {
                     BindTimerInputs(callee, positionalArgs, namedArgs, callerFrame);
                     callee.NativeTimerHost.Update(callee, Clock.TotalMs);
+                    return null;
+                }
+
+                if (instance.NativeLoopbackHost != null && methodName == "Transmit")
+                {
+                    var sourceCell = ResolveNamedOrPositionalCell("source", 0, positionalArgs, namedArgs, callerFrame);
+                    var sinkCell = ResolveNamedOrPositionalCell("sink", 1, positionalArgs, namedArgs, callerFrame);
+                    instance.NativeLoopbackHost.Transmit(sourceCell, sinkCell);
                     return null;
                 }
 
@@ -226,7 +238,7 @@ namespace TcXunit.Interpreter
 
         private object DefaultValue(VarDecl decl, FbInstance owningInstance)
         {
-            if (_registry.Get(decl.TypeName) != null || NativeTimerTypes.Contains(decl.TypeName))
+            if (_registry.Get(decl.TypeName) != null || NativeTimerTypes.Contains(decl.TypeName) || decl.TypeName == "Loopback")
                 return NewInstance(decl.TypeName);
 
             if (decl.DefaultValueText != null)
@@ -316,7 +328,27 @@ namespace TcXunit.Interpreter
             return incoming;
         }
 
-        private static Cell ResolveCellForLValue(Expr expr, Frame frame)
+        // source/sink aren't AST method params (Transmit is native, no
+        // VarBlockParser decls to bind against) - resolved by fixed name
+        // first (fbLink.Transmit(source:=..., sink:=...)), falling back to
+        // IEC positional order same as BindParams.
+        private Cell ResolveNamedOrPositionalCell(
+            string paramName,
+            int posIndex,
+            IReadOnlyList<Expr> positionalArgs,
+            IReadOnlyList<NamedArg> namedArgs,
+            Frame callerFrame)
+        {
+            var match = namedArgs.FirstOrDefault(a => a.Name == paramName);
+            if (match != null)
+                return ResolveCellForLValue(match.Value, callerFrame);
+            if (posIndex < positionalArgs.Count)
+                return ResolveCellForLValue(positionalArgs[posIndex], callerFrame);
+
+            throw new InvalidOperationException($"Transmit missing required argument '{paramName}'");
+        }
+
+        private Cell ResolveCellForLValue(Expr expr, Frame frame)
         {
             if (expr is IdentifierExpr id)
             {
@@ -326,7 +358,15 @@ namespace TcXunit.Interpreter
                 return cell;
             }
 
-            throw new NotSupportedException("Only plain identifiers are supported as REF=/ADR() targets in v1");
+            if (expr is FieldAccessExpr fieldAccess)
+            {
+                var receiver = (FbInstance)Evaluate(fieldAccess.Receiver, frame);
+                if (!receiver.Fields.TryGetValue(fieldAccess.FieldName, out var cell))
+                    throw new InvalidOperationException($"Unknown field '{fieldAccess.FieldName}' on '{receiver.ActualTypeName}'");
+                return cell;
+            }
+
+            throw new NotSupportedException("Only plain identifiers and field access are supported as REF=/ADR()/Transmit() targets in v1");
         }
 
         public object Evaluate(Expr expr, Frame frame)

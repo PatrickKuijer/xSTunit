@@ -17,6 +17,11 @@ namespace TcXunit.Interpreter
         // (TcXunit-w5x.15.7's native-stub boundary).
         public TimerHost NativeTimerHost { get; set; }
 
+        // Set when ActualTypeName is the native Loopback type - the native
+        // host backing this instance's Transmit(source, sink) call
+        // (TcXunit-w5x.15.5's native-stub boundary).
+        public LoopbackHost NativeLoopbackHost { get; set; }
+
         public FbInstance(string actualTypeName)
         {
             ActualTypeName = actualTypeName;

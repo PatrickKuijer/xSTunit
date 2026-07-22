@@ -24,6 +24,18 @@ namespace TcXunit.Interpreter
         public void AssertTrueCall(bool condition, string message) =>
             AssertTrue(condition, message);
 
+        public void AssertFalseCall(bool condition, string message) =>
+            AssertFalse(condition, message);
+
+        public void AssertEqualsBool(bool expected, bool actual, string message) =>
+            AssertEquals_BOOL(expected, actual, message);
+
+        public void AssertEqualsString(string expected, string actual, string message) =>
+            AssertEquals_STRING(expected, actual, message);
+
+        public void AssertEqualsReal(double expected, double actual, double delta, string message) =>
+            AssertEquals_REAL(expected, actual, delta, message);
+
         public IReadOnlyList<TestCaseResult> Collect() => Run();
     }
 }

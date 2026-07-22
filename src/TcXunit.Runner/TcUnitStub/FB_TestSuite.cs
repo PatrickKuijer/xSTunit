@@ -59,26 +59,36 @@ namespace TcXunit.Runner.TcUnitStub
         // several failing asserts still fails, but only the first failure's
         // message is ever recorded. Later Fail() calls in the same TEST()
         // bracket are dropped here to match (TcXunit-k28.1).
-        private void Fail(string message)
+        //
+        // Message format mirrors upstream FB_AdsAssertMessageFormatter:
+        // "FAILED TEST '<name>', EXP: <expected>, ACT: <actual>[, MSG: <message>]"
+        // - MSG is only appended when message is non-empty (TcXunit-k28.2).
+        private void Fail(string expected, string actual, string message)
         {
             if (_currentName == null)
                 throw new InvalidOperationException("Assertion called outside a TEST()/TEST_FINISHED() bracket");
 
-            if (_currentFailures.Count == 0)
-                _currentFailures.Add(new AssertionFailure(message));
+            if (_currentFailures.Count > 0)
+                return;
+
+            var formatted = $"FAILED TEST '{_currentName}', EXP: {expected}, ACT: {actual}";
+            if (!string.IsNullOrEmpty(message))
+                formatted += $", MSG: {message}";
+
+            _currentFailures.Add(new AssertionFailure(formatted));
         }
 
-        protected void AssertTrue(bool condition, string message)
-        {
-            if (!condition)
-                Fail(message);
-        }
+        private static string FormatBool(bool value) => value ? "TRUE" : "FALSE";
 
-        protected void AssertFalse(bool condition, string message)
-        {
-            if (condition)
-                Fail(message);
-        }
+        // Upstream delegates both through AssertEquals_BOOL(Expected:=TRUE/
+        // FALSE, Actual:=Condition, Message) rather than failing with just a
+        // bare message, so a failing AssertTrue/AssertFalse carries the same
+        // EXP/ACT detail as any other assert (TcXunit-k28.3).
+        protected void AssertTrue(bool condition, string message) =>
+            AssertEquals_BOOL(true, condition, message);
+
+        protected void AssertFalse(bool condition, string message) =>
+            AssertEquals_BOOL(false, condition, message);
 
         // Upstream operates on IEC 61131-3 INT, a signed 16-bit type - a real
         // INT variable would already be truncated/wrapped to that range by
@@ -91,25 +101,25 @@ namespace TcXunit.Runner.TcUnitStub
             var expectedInt = unchecked((short)expected);
             var actualInt = unchecked((short)actual);
             if (expectedInt != actualInt)
-                Fail($"{message}: expected {expectedInt}, got {actualInt}");
+                Fail(expectedInt.ToString(), actualInt.ToString(), message);
         }
 
         protected void AssertEquals_BOOL(bool expected, bool actual, string message)
         {
             if (expected != actual)
-                Fail($"{message}: expected {expected}, got {actual}");
+                Fail(FormatBool(expected), FormatBool(actual), message);
         }
 
         protected void AssertEquals_STRING(string expected, string actual, string message)
         {
             if (expected != actual)
-                Fail($"{message}: expected '{expected}', got '{actual}'");
+                Fail($"'{expected}'", $"'{actual}'", message);
         }
 
         protected void AssertEquals_REAL(double expected, double actual, double delta, string message)
         {
             if (Math.Abs(expected - actual) > delta)
-                Fail($"{message}: expected {expected} +/- {delta}, got {actual}");
+                Fail($"{expected} +/- {delta}", actual.ToString(), message);
         }
     }
 }

@@ -37,7 +37,7 @@ namespace TcXunit.Runner.Tests
             var result = Assert.Single(results);
             Assert.False(result.Passed);
             Assert.Single(result.Failures);
-            Assert.Contains("intentional mismatch", result.Failures[0].Message);
+            Assert.Equal("FAILED TEST 'WrongExpectation', EXP: 1, ACT: 2, MSG: intentional mismatch", result.Failures[0].Message);
         }
 
         [Fact]
@@ -58,6 +58,20 @@ namespace TcXunit.Runner.Tests
 
             var result = Assert.Single(results);
             Assert.True(result.Passed, result.ToString());
+        }
+
+        [Fact]
+        public void AssertTrueFalse_Failure_ReportsExpectedActualLikeUpstream()
+        {
+            var results = SuiteRunner.RunAll(new AssertTrueFalseFormatTestSuite());
+
+            Assert.Equal(2, results.Count);
+            Assert.Equal(
+                "FAILED TEST 'TrueCheck', EXP: TRUE, ACT: FALSE, MSG: must be true",
+                results[0].Failures[0].Message);
+            Assert.Equal(
+                "FAILED TEST 'FalseCheck', EXP: FALSE, ACT: TRUE",
+                results[1].Failures[0].Message);
         }
 
         [Fact]

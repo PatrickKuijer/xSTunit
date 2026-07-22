@@ -18,6 +18,7 @@ ticket still open, API may shift.
 | [06-state-mirroring-assertions.md](06-state-mirroring-assertions.md) | `AssertConverges` / `AssertConvergesAndLatches` | built |
 | [07-struct-array-and-builders.md](07-struct-array-and-builders.md) | `STRUCT`/`ARRAY` types, struct boundary `Build()` | built |
 | [08-array-indexing-pointers-and-memcpy.md](08-array-indexing-pointers-and-memcpy.md) | `arr[i]`/`arr[i,j]`, `ADR(x) +/- offset`, `MEMCPY`/`MEMSET`/`MEMMOVE` | built |
+| [09-control-flow-statements.md](09-control-flow-statements.md) | `FOR`/`WHILE`/`REPEAT`/`CASE`/`EXIT`, unary minus | built |
 
 ## Quick orientation
 

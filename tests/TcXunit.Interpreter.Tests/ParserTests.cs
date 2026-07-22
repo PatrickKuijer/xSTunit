@@ -11,7 +11,7 @@ namespace TcXunit.Interpreter.Tests
             var stmts = Parser.ParseStatements("value := value + delta;");
 
             var assign = Assert.IsType<AssignStmt>(Assert.Single(stmts));
-            Assert.Equal("value", assign.TargetName);
+            Assert.Equal("value", Assert.IsType<IdentifierExpr>(assign.Target).Name);
             var binary = Assert.IsType<BinaryExpr>(assign.Value);
             Assert.Equal("+", binary.Op);
         }

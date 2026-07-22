@@ -72,7 +72,7 @@ namespace TcXunit.Interpreter
                 Advance();
                 var value = ParseExpr();
                 Expect(TokenType.Semicolon);
-                return new AssignStmt(RequireIdentifierName(target), value);
+                return new AssignStmt(RequireLValue(target), value);
             }
 
             if (Current.Type == TokenType.RefAssign)
@@ -97,6 +97,16 @@ namespace TcXunit.Interpreter
             if (target is IdentifierExpr id)
                 return id.Name;
             throw new FormatException("Assignment target must be a plain identifier in the v1 subset");
+        }
+
+        // Assignment targets: plain identifier, .Member field access, or
+        // [idx] array indexing (any depth/mix of the latter two). No LHS
+        // deref (x^ :=) yet - not exercised by the fixture.
+        private static Expr RequireLValue(Expr target)
+        {
+            if (target is IdentifierExpr || target is FieldAccessExpr || target is IndexExpr)
+                return target;
+            throw new FormatException("Assignment target must be an identifier, field access, or array index in the v1 subset");
         }
 
         private Stmt ParseIf()
@@ -292,6 +302,20 @@ namespace TcXunit.Interpreter
                     node = Current.Type == TokenType.LParen
                         ? ParseCallArgs(node, memberName)
                         : new FieldAccessExpr(node, memberName);
+                    continue;
+                }
+
+                if (Current.Type == TokenType.LBracket)
+                {
+                    Advance();
+                    var indices = new List<Expr> { ParseExpr() };
+                    while (Current.Type == TokenType.Comma)
+                    {
+                        Advance();
+                        indices.Add(ParseExpr());
+                    }
+                    Expect(TokenType.RBracket);
+                    node = new IndexExpr(node, indices);
                     continue;
                 }
 

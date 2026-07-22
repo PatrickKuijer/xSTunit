@@ -473,7 +473,7 @@ namespace TcXunit.Interpreter
             switch (stmt)
             {
                 case AssignStmt assign:
-                    SetVariable(assign.TargetName, Evaluate(assign.Value, frame), frame);
+                    SetLValue(assign.Target, Evaluate(assign.Value, frame), frame);
                     break;
                 case RefAssignStmt refAssign:
                     frame.Locals[refAssign.TargetName] = ResolveCellForLValue(refAssign.Value, frame);
@@ -501,6 +501,58 @@ namespace TcXunit.Interpreter
                 frame.Locals[name] = cell;
             }
             cell.Value = CoerceForAssignment(cell.Value, value);
+        }
+
+        // Assignment-target dispatch: identifiers go through SetVariable (may
+        // implicitly declare a local), field/index targets write directly into
+        // the already-allocated Cell/array slot they resolve to.
+        private void SetLValue(Expr target, object value, Frame frame)
+        {
+            switch (target)
+            {
+                case IdentifierExpr id:
+                    SetVariable(id.Name, value, frame);
+                    break;
+                case FieldAccessExpr fieldAccess:
+                {
+                    var fields = FieldsOf(Evaluate(fieldAccess.Receiver, frame));
+                    if (!fields.TryGetValue(fieldAccess.FieldName, out var cell))
+                        throw new InvalidOperationException($"Unknown field '{fieldAccess.FieldName}'");
+                    cell.Value = CoerceForAssignment(cell.Value, value);
+                    break;
+                }
+                case IndexExpr index:
+                {
+                    var array = (ArrayValue)Evaluate(index.Receiver, frame);
+                    var flat = FlattenIndex(array, index.Indices, frame);
+                    array.Elements[flat] = CoerceForAssignment(array.Elements[flat], value);
+                    break;
+                }
+                default:
+                    throw new NotSupportedException($"Assignment target {target.GetType().Name} not supported");
+            }
+        }
+
+        // Row-major flattening against the array's declared per-dimension
+        // lo..hi bounds, matching ArrayTypeInfo's dimension order.
+        private int FlattenIndex(ArrayValue array, IReadOnlyList<Expr> indexExprs, Frame frame)
+        {
+            if (indexExprs.Count != array.Dimensions.Count)
+                throw new InvalidOperationException(
+                    $"Array has {array.Dimensions.Count} dimension(s) but {indexExprs.Count} index/indices given");
+
+            var flat = 0;
+            for (var d = 0; d < array.Dimensions.Count; d++)
+            {
+                var (lo, hi) = array.Dimensions[d];
+                var idx = (int)Evaluate(indexExprs[d], frame);
+                if (idx < lo || idx > hi)
+                    throw new IndexOutOfRangeException($"Array index {idx} out of bounds [{lo}..{hi}] in dimension {d}");
+
+                var dimSize = hi - lo + 1;
+                flat = flat * dimSize + (idx - lo);
+            }
+            return flat;
         }
 
         // INT->REAL->LREAL widens implicitly on assignment (inferred from the
@@ -627,6 +679,11 @@ namespace TcXunit.Interpreter
                     return frame.Instance;
                 case DerefExpr deref:
                     return ((Pointer)Evaluate(deref.Inner, frame)).Target.Value;
+                case IndexExpr index:
+                {
+                    var array = (ArrayValue)Evaluate(index.Receiver, frame);
+                    return array.Elements[FlattenIndex(array, index.Indices, frame)];
+                }
                 case FieldAccessExpr fieldAccess:
                 {
                     var fields = FieldsOf(Evaluate(fieldAccess.Receiver, frame));

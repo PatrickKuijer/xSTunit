@@ -69,6 +69,20 @@ namespace TcXunit.Interpreter
         }
     }
 
+    // arr[i] or arr[i, j, ...] - Indices.Count matches the array's declared
+    // dimension count; flattened row-major against ArrayValue.Dimensions at
+    // evaluation time (TcXunit-sej.1).
+    public sealed class IndexExpr : Expr
+    {
+        public Expr Receiver { get; }
+        public IReadOnlyList<Expr> Indices { get; }
+        public IndexExpr(Expr receiver, IReadOnlyList<Expr> indices)
+        {
+            Receiver = receiver;
+            Indices = indices;
+        }
+    }
+
     public sealed class DerefExpr : Expr
     {
         public Expr Inner { get; }

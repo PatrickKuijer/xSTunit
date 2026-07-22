@@ -8,11 +8,11 @@ namespace TcXunit.Interpreter
 
     public sealed class AssignStmt : Stmt
     {
-        public string TargetName { get; }
+        public Expr Target { get; }
         public Expr Value { get; }
-        public AssignStmt(string targetName, Expr value)
+        public AssignStmt(Expr target, Expr value)
         {
-            TargetName = targetName;
+            Target = target;
             Value = value;
         }
     }

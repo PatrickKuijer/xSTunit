@@ -685,6 +685,8 @@ namespace TcXunit.Interpreter
                     return lt.Value;
                 case StringLiteralExpr s:
                     return s.Value;
+                case BoolLiteralExpr b:
+                    return b.Value;
                 case IdentifierExpr id:
                 {
                     var cell = frame.ResolveCell(id.Name);

@@ -253,6 +253,12 @@ namespace TcXunit.Interpreter
                 {
                     var name = Advance().Text;
 
+                    if (string.Equals(name, "TRUE", StringComparison.OrdinalIgnoreCase))
+                        return new BoolLiteralExpr(true);
+
+                    if (string.Equals(name, "FALSE", StringComparison.OrdinalIgnoreCase))
+                        return new BoolLiteralExpr(false);
+
                     if (name == "THIS" && Current.Type == TokenType.Caret)
                     {
                         Advance();

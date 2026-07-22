@@ -36,6 +36,12 @@ namespace TcXunit.Interpreter
         public LtimeLiteralExpr(ulong value) => Value = value;
     }
 
+    public sealed class BoolLiteralExpr : Expr
+    {
+        public bool Value { get; }
+        public BoolLiteralExpr(bool value) => Value = value;
+    }
+
     public sealed class StringLiteralExpr : Expr
     {
         public string Value { get; }

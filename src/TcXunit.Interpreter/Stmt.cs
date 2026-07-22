@@ -46,4 +46,85 @@ namespace TcXunit.Interpreter
         public CallExpr Call { get; }
         public ExprStmt(CallExpr call) => Call = call;
     }
+
+    public sealed class ForStmt : Stmt
+    {
+        public string VarName { get; }
+        public Expr From { get; }
+        public Expr To { get; }
+        public Expr Step { get; }
+        public IReadOnlyList<Stmt> Body { get; }
+        public ForStmt(string varName, Expr from, Expr to, Expr step, IReadOnlyList<Stmt> body)
+        {
+            VarName = varName;
+            From = from;
+            To = to;
+            Step = step;
+            Body = body;
+        }
+    }
+
+    public sealed class WhileStmt : Stmt
+    {
+        public Expr Condition { get; }
+        public IReadOnlyList<Stmt> Body { get; }
+        public WhileStmt(Expr condition, IReadOnlyList<Stmt> body)
+        {
+            Condition = condition;
+            Body = body;
+        }
+    }
+
+    public sealed class RepeatStmt : Stmt
+    {
+        public IReadOnlyList<Stmt> Body { get; }
+        public Expr Until { get; }
+        public RepeatStmt(IReadOnlyList<Stmt> body, Expr until)
+        {
+            Body = body;
+            Until = until;
+        }
+    }
+
+    // Single label (constant expr) or a lo..hi range label; To is null for a
+    // single-value label.
+    public sealed class CaseLabel
+    {
+        public Expr From { get; }
+        public Expr To { get; }
+        public bool IsRange => To != null;
+        public CaseLabel(Expr from, Expr to = null)
+        {
+            From = from;
+            To = to;
+        }
+    }
+
+    public sealed class CaseArm
+    {
+        public IReadOnlyList<CaseLabel> Labels { get; }
+        public IReadOnlyList<Stmt> Body { get; }
+        public CaseArm(IReadOnlyList<CaseLabel> labels, IReadOnlyList<Stmt> body)
+        {
+            Labels = labels;
+            Body = body;
+        }
+    }
+
+    public sealed class CaseStmt : Stmt
+    {
+        public Expr Selector { get; }
+        public IReadOnlyList<CaseArm> Arms { get; }
+        public IReadOnlyList<Stmt> ElseBody { get; }
+        public CaseStmt(Expr selector, IReadOnlyList<CaseArm> arms, IReadOnlyList<Stmt> elseBody)
+        {
+            Selector = selector;
+            Arms = arms;
+            ElseBody = elseBody;
+        }
+    }
+
+    public sealed class ExitStmt : Stmt
+    {
+    }
 }

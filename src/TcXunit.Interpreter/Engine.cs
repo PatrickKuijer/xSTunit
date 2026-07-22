@@ -487,10 +487,113 @@ namespace TcXunit.Interpreter
                 case ExprStmt exprStmt:
                     Evaluate(exprStmt.Call, frame);
                     break;
+                case ForStmt forStmt:
+                    ExecuteFor(forStmt, frame);
+                    break;
+                case WhileStmt whileStmt:
+                    ExecuteWhile(whileStmt, frame);
+                    break;
+                case RepeatStmt repeatStmt:
+                    ExecuteRepeat(repeatStmt, frame);
+                    break;
+                case CaseStmt caseStmt:
+                    ExecuteCase(caseStmt, frame);
+                    break;
+                case ExitStmt:
+                    throw new LoopExitSignal();
                 default:
                     throw new NotSupportedException($"Statement type {stmt.GetType().Name} not supported");
             }
         }
+
+        // Internal unwind signal for EXIT (TcXunit-mym.3): caught only by the
+        // nearest enclosing FOR/WHILE/REPEAT's try/catch below, so it passes
+        // straight through any IF/CASE it's lexically nested inside without
+        // being special-cased there.
+        private sealed class LoopExitSignal : Exception
+        {
+        }
+
+        private void ExecuteFor(ForStmt stmt, Frame frame)
+        {
+            var from = Convert.ToInt32(Evaluate(stmt.From, frame));
+            var to = Convert.ToInt32(Evaluate(stmt.To, frame));
+            var step = stmt.Step != null ? Convert.ToInt32(Evaluate(stmt.Step, frame)) : 1;
+
+            if (step == 0)
+                throw new InvalidOperationException("FOR loop step must not be zero");
+
+            try
+            {
+                for (var i = from; step > 0 ? i <= to : i >= to; i += step)
+                {
+                    SetVariable(stmt.VarName, i, frame);
+                    ExecuteStatements(stmt.Body, frame);
+                }
+            }
+            catch (LoopExitSignal)
+            {
+            }
+        }
+
+        private void ExecuteWhile(WhileStmt stmt, Frame frame)
+        {
+            try
+            {
+                while ((bool)Evaluate(stmt.Condition, frame))
+                    ExecuteStatements(stmt.Body, frame);
+            }
+            catch (LoopExitSignal)
+            {
+            }
+        }
+
+        private void ExecuteRepeat(RepeatStmt stmt, Frame frame)
+        {
+            try
+            {
+                do
+                {
+                    ExecuteStatements(stmt.Body, frame);
+                } while (!(bool)Evaluate(stmt.Until, frame));
+            }
+            catch (LoopExitSignal)
+            {
+            }
+        }
+
+        private void ExecuteCase(CaseStmt stmt, Frame frame)
+        {
+            var selectorInt = ToCaseInt(Evaluate(stmt.Selector, frame));
+
+            foreach (var arm in stmt.Arms)
+            {
+                if (arm.Labels.Any(label => CaseLabelMatches(label, selectorInt, frame)))
+                {
+                    ExecuteStatements(arm.Body, frame);
+                    return;
+                }
+            }
+
+            ExecuteStatements(stmt.ElseBody, frame);
+        }
+
+        private bool CaseLabelMatches(CaseLabel label, int selectorInt, Frame frame)
+        {
+            var from = ToCaseInt(Evaluate(label.From, frame));
+            if (!label.IsRange)
+                return from == selectorInt;
+
+            var to = ToCaseInt(Evaluate(label.To, frame));
+            return selectorInt >= from && selectorInt <= to;
+        }
+
+        private static int ToCaseInt(object value) => value switch
+        {
+            int i => i,
+            bool b => b ? 1 : 0,
+            _ => Convert.ToInt32(value),
+        };
 
         private static void SetVariable(string name, object value, Frame frame)
         {
@@ -755,6 +858,18 @@ namespace TcXunit.Interpreter
                 if (value is int i)
                     return ~i;
                 throw new NotSupportedException($"Operator 'NOT' requires a BOOL or INT operand, got {value?.GetType().Name}");
+            }
+
+            if (unary.Op == "-")
+            {
+                switch (value)
+                {
+                    case int i: return -i;
+                    case float f: return -f;
+                    case double d: return -d;
+                    default:
+                        throw new NotSupportedException($"Unary '-' requires a numeric operand, got {value?.GetType().Name}");
+                }
             }
 
             throw new NotSupportedException($"Unary operator '{unary.Op}' not supported");

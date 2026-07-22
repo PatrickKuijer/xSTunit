@@ -11,6 +11,8 @@ namespace TcXunit.Interpreter
         StringLiteral,
         Assign,      // :=
         RefAssign,   // REF=
+        Colon,       // :
+        DotDot,      // ..
         Eq,          // =
         Lt,          // <
         Gt,          // >

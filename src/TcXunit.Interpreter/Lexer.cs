@@ -119,6 +119,20 @@ namespace TcXunit.Interpreter
                     continue;
                 }
 
+                if (c == ':')
+                {
+                    tokens.Add(new Token(TokenType.Colon, ":"));
+                    i++;
+                    continue;
+                }
+
+                if (c == '.' && i + 1 < text.Length && text[i + 1] == '.')
+                {
+                    tokens.Add(new Token(TokenType.DotDot, ".."));
+                    i += 2;
+                    continue;
+                }
+
                 if (c == '<' && i + 1 < text.Length && text[i + 1] == '=')
                 {
                     tokens.Add(new Token(TokenType.Le, "<="));

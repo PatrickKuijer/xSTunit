@@ -52,10 +52,13 @@ namespace TcXunit.Interpreter
         private bool IsKeyword(string keyword) =>
             Current.Type == TokenType.Identifier && Current.Text == keyword;
 
-        private List<Stmt> ParseStatementList()
+        private static readonly HashSet<string> DefaultTerminators = new HashSet<string> { "ELSE", "END_IF" };
+
+        private List<Stmt> ParseStatementList(HashSet<string> terminators = null)
         {
+            terminators = terminators ?? DefaultTerminators;
             var stmts = new List<Stmt>();
-            while (Current.Type != TokenType.Eof && !IsKeyword("ELSE") && !IsKeyword("END_IF"))
+            while (Current.Type != TokenType.Eof && !(Current.Type == TokenType.Identifier && terminators.Contains(Current.Text)))
                 stmts.Add(ParseStatement());
             return stmts;
         }
@@ -64,6 +67,25 @@ namespace TcXunit.Interpreter
         {
             if (IsKeyword("IF"))
                 return ParseIf();
+
+            if (IsKeyword("FOR"))
+                return ParseFor();
+
+            if (IsKeyword("WHILE"))
+                return ParseWhile();
+
+            if (IsKeyword("REPEAT"))
+                return ParseRepeat();
+
+            if (IsKeyword("CASE"))
+                return ParseCase();
+
+            if (IsKeyword("EXIT"))
+            {
+                Advance();
+                Expect(TokenType.Semicolon);
+                return new ExitStmt();
+            }
 
             var target = ParsePostfix(ParsePrimary());
 
@@ -130,6 +152,167 @@ namespace TcXunit.Interpreter
             Advance();
 
             return new IfStmt(condition, thenBranch, elseBranch);
+        }
+
+        private Stmt ParseFor()
+        {
+            Advance(); // FOR
+            var varName = Expect(TokenType.Identifier).Text;
+            Expect(TokenType.Assign);
+            var from = ParseExpr();
+
+            if (!IsKeyword("TO"))
+                throw new FormatException("Expected TO");
+            Advance();
+            var to = ParseExpr();
+
+            Expr step = null;
+            if (IsKeyword("BY"))
+            {
+                Advance();
+                step = ParseExpr();
+            }
+
+            if (!IsKeyword("DO"))
+                throw new FormatException("Expected DO");
+            Advance();
+
+            var body = ParseStatementList(new HashSet<string> { "END_FOR" });
+
+            if (!IsKeyword("END_FOR"))
+                throw new FormatException("Expected END_FOR");
+            Advance();
+
+            return new ForStmt(varName, from, to, step, body);
+        }
+
+        private Stmt ParseWhile()
+        {
+            Advance(); // WHILE
+            var condition = ParseExpr();
+
+            if (!IsKeyword("DO"))
+                throw new FormatException("Expected DO");
+            Advance();
+
+            var body = ParseStatementList(new HashSet<string> { "END_WHILE" });
+
+            if (!IsKeyword("END_WHILE"))
+                throw new FormatException("Expected END_WHILE");
+            Advance();
+
+            return new WhileStmt(condition, body);
+        }
+
+        private Stmt ParseRepeat()
+        {
+            Advance(); // REPEAT
+            var body = ParseStatementList(new HashSet<string> { "UNTIL" });
+
+            if (!IsKeyword("UNTIL"))
+                throw new FormatException("Expected UNTIL");
+            Advance();
+            var until = ParseExpr();
+
+            if (!IsKeyword("END_REPEAT"))
+                throw new FormatException("Expected END_REPEAT");
+            Advance();
+
+            return new RepeatStmt(body, until);
+        }
+
+        private Stmt ParseCase()
+        {
+            Advance(); // CASE
+            var selector = ParseExpr();
+
+            if (!IsKeyword("OF"))
+                throw new FormatException("Expected OF");
+            Advance();
+
+            var arms = new List<CaseArm>();
+            var elseBody = new List<Stmt>();
+
+            while (!IsKeyword("END_CASE") && Current.Type != TokenType.Eof)
+            {
+                if (IsKeyword("ELSE"))
+                {
+                    Advance();
+                    elseBody = ParseCaseBody();
+                    break;
+                }
+
+                var labels = ParseCaseLabelList();
+                Expect(TokenType.Colon);
+                var body = ParseCaseBody();
+                arms.Add(new CaseArm(labels, body));
+            }
+
+            if (!IsKeyword("END_CASE"))
+                throw new FormatException("Expected END_CASE");
+            Advance();
+
+            return new CaseStmt(selector, arms, elseBody);
+        }
+
+        private List<Stmt> ParseCaseBody()
+        {
+            var stmts = new List<Stmt>();
+            while (Current.Type != TokenType.Eof && !IsCaseArmBoundary())
+                stmts.Add(ParseStatement());
+            return stmts;
+        }
+
+        private List<CaseLabel> ParseCaseLabelList()
+        {
+            var labels = new List<CaseLabel>();
+            do
+            {
+                var from = ParseExpr();
+                Expr to = null;
+                if (Current.Type == TokenType.DotDot)
+                {
+                    Advance();
+                    to = ParseExpr();
+                }
+                labels.Add(new CaseLabel(from, to));
+            } while (Current.Type == TokenType.Comma && Advance().Type == TokenType.Comma);
+            return labels;
+        }
+
+        // Lookahead-only check for "does the current position start a new
+        // CASE arm's label list (label[, label...]:)" without consuming any
+        // tokens - distinguishes a label boundary from an ordinary statement
+        // (assignment/call), which never has a bare ':' immediately after a
+        // comma-separated run of literals/identifiers.
+        private bool IsCaseArmBoundary()
+        {
+            if (IsKeyword("ELSE") || IsKeyword("END_CASE"))
+                return true;
+
+            var p = _pos;
+            while (true)
+            {
+                if (_tokens[p].Type != TokenType.IntLiteral && _tokens[p].Type != TokenType.Identifier)
+                    return false;
+                p++;
+
+                if (_tokens[p].Type == TokenType.DotDot)
+                {
+                    p++;
+                    if (_tokens[p].Type != TokenType.IntLiteral && _tokens[p].Type != TokenType.Identifier)
+                        return false;
+                    p++;
+                }
+
+                if (_tokens[p].Type == TokenType.Comma)
+                {
+                    p++;
+                    continue;
+                }
+
+                return _tokens[p].Type == TokenType.Colon;
+            }
         }
 
         private Expr ParseExpr() => ParseOr();
@@ -218,6 +401,11 @@ namespace TcXunit.Interpreter
             {
                 Advance();
                 return new UnaryExpr("NOT", ParseUnary());
+            }
+            if (Current.Type == TokenType.Minus)
+            {
+                Advance();
+                return new UnaryExpr("-", ParseUnary());
             }
             return ParsePostfix(ParsePrimary());
         }

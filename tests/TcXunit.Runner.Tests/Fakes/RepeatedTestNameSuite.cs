@@ -2,7 +2,7 @@ using TcXunit.Runner.TcUnitStub;
 
 namespace TcXunit.Runner.Tests.Fakes
 {
-    /// <summary>Calls TEST() with the same name twice in one pass — real TcUnit relies on PLC-cyclic re-entry to make this valid; v1 doesn't support that, so it should be rejected rather than silently misreported.</summary>
+    /// <summary>Calls TEST() with the same name twice within the same cycle (CurrentCycle never advances) — a genuine duplicate test name, not cyclic re-declaration, so it's rejected (TcXunit-k28.5).</summary>
     internal sealed class RepeatedTestNameSuite : FB_TestSuite
     {
         protected override void Body()

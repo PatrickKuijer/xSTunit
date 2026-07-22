@@ -79,5 +79,15 @@ namespace TcXunit.Runner.Tests
         {
             Assert.Throws<NotSupportedException>(() => SuiteRunner.RunAll(new RepeatedTestNameSuite()));
         }
+
+        [Fact]
+        public void Repeated_test_name_in_a_later_cycle_re_attaches_instead_of_throwing()
+        {
+            var results = SuiteRunner.RunAll(new CyclicRedeclarationTestSuite());
+
+            var result = Assert.Single(results);
+            Assert.Equal("SameName", result.Name);
+            Assert.True(result.Passed, result.ToString());
+        }
     }
 }

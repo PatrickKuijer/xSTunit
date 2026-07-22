@@ -8,9 +8,15 @@ namespace TcXunit.Runner.TcUnitStub
     /// TEST('name') / TEST_FINISHED() imperatively inside its cyclic body — the
     /// case list isn't known ahead of time, it's discovered by running the body
     /// (see TcXunit-w5x.7 item 3, grounded against real TcUnit-Verifier suites).
-    /// v1 runs the body once per suite instead of PLC-cyclically; a repeated
-    /// TEST() name in one pass means the suite needs cyclic semantics v1 doesn't
-    /// support, so it's rejected rather than silently misreported.
+    /// Duplicate-name detection is keyed off CurrentCycle, mirroring upstream's
+    /// CycleCount-keyed TestCycleCountIndex[] comparison in AddTest: a repeat
+    /// TEST('X') in the SAME cycle is a real duplicate (error); a repeat in a
+    /// LATER cycle is the normal cyclic re-declaration flow and re-attaches to
+    /// the existing test instead (TcXunit-k28.5). No runner today advances
+    /// CurrentCycle (single pass per suite, always 0), so this is currently
+    /// behavior-identical to always erroring on a repeat name; it's structured
+    /// so a future multi-cycle runner can drive re-declaration without further
+    /// changes here.
     /// </summary>
     public abstract class FB_TestSuite
     {
@@ -19,21 +25,29 @@ namespace TcXunit.Runner.TcUnitStub
         // resolve 'X' by name after it completes.
         private sealed class TestRecord
         {
-            public TestRecord(string name)
+            public TestRecord(string name, int cycleIndex)
             {
                 Name = name;
                 Failures = new List<AssertionFailure>();
+                LastCycleIndex = cycleIndex;
             }
 
             public string Name { get; }
             public List<AssertionFailure> Failures { get; }
             public int? OrderNumber { get; set; }
             public bool Finished { get; set; }
+            public int LastCycleIndex { get; set; }
         }
 
         private readonly List<TestCaseResult> _finished = new List<TestCaseResult>();
         private readonly Dictionary<string, TestRecord> _records = new Dictionary<string, TestRecord>();
         private string _currentName;
+
+        // Cycle index the suite is currently executing at. Defaults to 0 to
+        // match today's single-pass runner; a future multi-cycle runner would
+        // advance this between passes (TcXunit-k28.5, out-of-scope multi-cycle
+        // loop tracked separately).
+        protected int CurrentCycle { get; set; }
 
         // Mirrors upstream's per-suite NumberOfOrderedTests / CurrentlyRunningOrderedTestInTestSuite.
         // Order numbers and the "whose turn is it" counter both start at 1.
@@ -57,11 +71,20 @@ namespace TcXunit.Runner.TcUnitStub
             if (_currentName != null)
                 throw new InvalidOperationException($"TEST('{name}') called before TEST_FINISHED() for '{_currentName}'");
 
-            if (_records.ContainsKey(name))
-                throw new NotSupportedException(
-                    $"TEST('{name}') called twice in one pass — cyclic/stateful test suites aren't supported in v1");
+            if (_records.TryGetValue(name, out var existing))
+            {
+                if (existing.LastCycleIndex == CurrentCycle)
+                    throw new NotSupportedException(
+                        $"TEST('{name}') called twice in the same cycle — this is a real duplicate test name");
 
-            _records[name] = new TestRecord(name);
+                // Re-declaration in a later cycle: re-attach to the existing
+                // test rather than erroring, matching upstream AddTest.
+                existing.LastCycleIndex = CurrentCycle;
+                _currentName = name;
+                return;
+            }
+
+            _records[name] = new TestRecord(name, CurrentCycle);
             _currentName = name;
         }
 
@@ -72,7 +95,7 @@ namespace TcXunit.Runner.TcUnitStub
         {
             if (!_records.TryGetValue(name, out var record))
             {
-                record = new TestRecord(name) { OrderNumber = _nextOrderNumber++ };
+                record = new TestRecord(name, CurrentCycle) { OrderNumber = _nextOrderNumber++ };
                 _records[name] = record;
             }
 
@@ -129,8 +152,17 @@ namespace TcXunit.Runner.TcUnitStub
 
         private void FinishRecord(TestRecord record)
         {
+            // A re-declared test (TEST('X') again in a later cycle) can finish
+            // more than once across cycles; replace its prior result rather
+            // than appending a second entry for the same name (TcXunit-k28.5).
+            var previousIndex = _finished.FindIndex(r => r.Name == record.Name);
+            var result = new TestCaseResult(record.Name, record.Failures);
+            if (previousIndex >= 0)
+                _finished[previousIndex] = result;
+            else
+                _finished.Add(result);
+
             record.Finished = true;
-            _finished.Add(new TestCaseResult(record.Name, record.Failures));
 
             if (record.OrderNumber.HasValue && record.OrderNumber.Value == _currentOrderedTurn)
                 _currentOrderedTurn++;

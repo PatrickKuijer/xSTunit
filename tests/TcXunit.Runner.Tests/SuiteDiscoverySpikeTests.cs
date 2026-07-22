@@ -52,6 +52,15 @@ namespace TcXunit.Runner.Tests
         }
 
         [Fact]
+        public void AssertEqualsInt_ValuesThatCollideAsSigned16Bit_ComparesEqual()
+        {
+            var results = SuiteRunner.RunAll(new Int16WraparoundTestSuite());
+
+            var result = Assert.Single(results);
+            Assert.True(result.Passed, result.ToString());
+        }
+
+        [Fact]
         public void Repeated_test_name_in_one_pass_is_rejected()
         {
             Assert.Throws<NotSupportedException>(() => SuiteRunner.RunAll(new RepeatedTestNameSuite()));

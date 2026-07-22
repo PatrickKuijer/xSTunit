@@ -80,10 +80,18 @@ namespace TcXunit.Runner.TcUnitStub
                 Fail(message);
         }
 
+        // Upstream operates on IEC 61131-3 INT, a signed 16-bit type - a real
+        // INT variable would already be truncated/wrapped to that range by
+        // the time it reaches this assert. Params stay C# int (the rest of
+        // this codebase has no narrower INT representation), but the compare
+        // wraps both operands to 16 bits first so out-of-range values that
+        // would collide as INT compare equal here too (TcXunit-k28.4).
         protected void AssertEquals_INT(int expected, int actual, string message)
         {
-            if (expected != actual)
-                Fail($"{message}: expected {expected}, got {actual}");
+            var expectedInt = unchecked((short)expected);
+            var actualInt = unchecked((short)actual);
+            if (expectedInt != actualInt)
+                Fail($"{message}: expected {expectedInt}, got {actualInt}");
         }
 
         protected void AssertEquals_BOOL(bool expected, bool actual, string message)

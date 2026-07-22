@@ -1,14 +1,11 @@
 # State-mirroring assertions: AssertConverges / AssertConvergesAndLatches
 
-Status: **pending** — ticket `TcXunit-w5x.15.9` still open (ready, not
-started as of 2026-07-21). Nothing below exists in the interpreter yet;
-this page documents the *design* from `TcXunit-w5x.15`'s spec so you know
-the intended shape while writing fixtures that will need it. Don't ship a
-fixture that depends on this working until the ticket closes — for now,
-hand-roll the polling loop with [StepCycles](02-step-cycles.md) if you
-need this today.
+Status: **built**. Source: `Engine.AssertConverges`/`AssertConvergesAndLatches`
+in `src/TcXunit.Interpreter/Engine.cs`, dispatched as a native call
+(same boundary as `StepCycles`) when a suite/fixture calls either name
+with 4 positional args. Landed `TcXunit-w5x.15.9`.
 
-## Intended shape
+## Shape
 
 ```
 AssertConverges(master, proxy, fieldNames, maxCycles);
@@ -19,9 +16,12 @@ AssertConverges(master, proxy, fieldNames, maxCycles);
   to `maxCycles`.
 - Compares the named fields (`fieldNames`, string-keyed) between `master`
   and `proxy` after each iteration.
-- On convergence within `maxCycles`: passes.
-- On non-convergence: throws with a per-field diff of master vs. proxy
-  final values — not a bare pass/fail.
+- On convergence within `maxCycles`: passes (returns normally).
+- On non-convergence: throws `ConvergenceAssertionException` with a
+  per-field diff of master vs. proxy final values — not a bare pass/fail,
+  and not a queued `TcUnit`-style `TEST_FINISHED()` failure. This is an
+  immediate exception, so it aborts the test method it's called from
+  rather than letting later asserts in the same `TEST()` bracket run.
 
 ```
 AssertConvergesAndLatches(master, proxy, fieldNames, maxCycles);
@@ -31,6 +31,11 @@ AssertConvergesAndLatches(master, proxy, fieldNames, maxCycles);
   "flips exactly once and stays latched" barrier pattern — e.g. a
   registration/sync flag that should go `FALSE -> TRUE` exactly once and
   never flip back.
+- Once fields converge, they must stay converged every remaining cycle up
+  to `maxCycles`; diverging again after latching throws
+  `ConvergenceAssertionException` with the cycle it latched at and the
+  cycle it diverged again at. Never converging within `maxCycles` also
+  throws.
 
 ## Known scope limits (by design, not a gap to work around)
 
@@ -39,18 +44,5 @@ AssertConvergesAndLatches(master, proxy, fieldNames, maxCycles);
   test needs them — don't expect this to generalize to N instances.
 - No whole-struct diff and no caller-supplied comparison predicate — it's
   string-keyed field lookup through existing `FbInstance` field access.
-
-## Hand-rolled equivalent until this lands
-
-```
-FOR i := 1 TO maxCycles DO
-    master.StepCycles(1);
-    proxy.StepCycles(1);
-    IF master.SomeField = proxy.SomeField THEN
-        converged := TRUE;
-        EXIT;
-    END_IF
-END_FOR
-
-AssertTrue(Condition := converged, Message := 'master/proxy did not converge');
-```
+- `master`/`proxy`/`fieldNames`/`maxCycles` are positional-only (no named
+  args) — the dispatcher matches on `positionalArgs.Count == 4`.

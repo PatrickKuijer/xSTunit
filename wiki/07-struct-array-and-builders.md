@@ -1,15 +1,12 @@
 # STRUCT/ARRAY types + struct boundary builder
 
-Status: **pending** — `TcXunit-w5x.15.6` (STRUCT/ARRAY type) and
-`TcXunit-w5x.15.10` (boundary builder + `Transmit` struct clone) are both
-open. `.15.10` is blocked on `.15.6`. Neither exists in the interpreter
-today (no `TYPE ... STRUCT ... END_STRUCT`, no `ARRAY[..]`, no struct
-literals) — fixtures needing multi-field wire payloads can't be written
-yet. This page documents the design so you can plan fixture shape now.
+Status: **built**. `TcXunit-w5x.15.6` (STRUCT/ARRAY type) and
+`TcXunit-w5x.15.10` (boundary builder + `Transmit` struct clone) both
+landed. Source: `StructDeclParser.cs`, `ArrayTypeInfo.cs`,
+`StructBoundaryBuilder.cs`, `IecNumericBounds.cs`, `StringTypeInfo.cs`,
+`CellCloner.cs` in `src/TcXunit.Interpreter`.
 
 ## STRUCT/ARRAY (15.6)
-
-Intended grammar:
 
 ```
 TYPE ST_Payload :
@@ -21,49 +18,62 @@ END_STRUCT
 END_TYPE
 ```
 
-Struct literal: `(Id := 1, Value := 3.5, Flags := [TRUE, FALSE, FALSE, FALSE])`.
-Array literal: `[v0, v1, ...]`, with `[n(v)]` repeat shorthand for `n`
-copies of `v`.
-
-Runtime representation: a struct value is a `Dictionary<string, Cell>`
-mirroring `FbInstance.Fields` — same field-access pattern as an FB
-instance, just without a method table.
+- Struct literal: `(Id := 1, Value := 3.5)` — evaluates to a
+  `StructInstance`; unlisted fields keep their type default.
+- Array literal: `[v0, v1, ...]`, with `[n(v)]` repeat shorthand for `n`
+  copies of `v` (e.g. `[2(10), 2(20)]` -> `[10, 10, 20, 20]`). Array
+  literals used as a `VAR` default overlay the given values and leave the
+  rest at the element type's default (`buf : ARRAY[1..4] OF INT :=
+  [10, 20];` -> `[10, 20, 0, 0]`).
+- Multi-dim: `ARRAY[1..2,1..3] OF INT` — indexed `grid[2,1]`, flattened
+  row-major internally.
+- Field/element access: `pos.x`, `pos.x := 7`, `buf[2]`, `buf[2] := 99`,
+  `grid[2,1] := 42` — both read and write, including nested (`ARRAY OF
+  ST_Point` defaults each element to the struct's own default).
+- Runtime representation: a struct value is a `StructInstance` wrapping a
+  `Dictionary<string, Cell>` mirroring `FbInstance.Fields` — same
+  field-access pattern as an FB instance, just without a method table. An
+  array value is an `ArrayValue` with `Dimensions` + a flat `Elements[]`.
 
 ## Struct boundary builder (15.10)
 
-Intended shape:
-
+```csharp
+var builder = new StructBoundaryBuilder(registry);
+var instance = builder.Build("ST_Payload", (Field: "Id", Boundary: Boundary.Max));
 ```
-Build(structTypeName, overrides);
-```
 
-- Pure introspection over the `STRUCT` type's declared fields — no
-  per-struct registration.
-- Every field defaults to an in-range value; only fields named in
-  `overrides` get pushed to a boundary value. Single-field sweep is the
-  default; simultaneous multi-field boundaries are explicit opt-in via
-  `overrides`.
+Not exposed as an ST-callable native method yet — it's a C#-side helper
+(`StructBoundaryBuilder.Build`) for building test-data `StructInstance`s
+from a struct type name plus field overrides.
+
+- Pure introspection over the `STRUCT` type's declared fields via
+  `TypeRegistry.GetStruct` — no per-struct registration.
+- Every field defaults to an in-range value (`InRangeDefault`); only
+  fields named in `overrides` get pushed to `Boundary.Min`/`Boundary.Max`.
+  Single-field sweep is the default; simultaneous multi-field boundaries
+  are explicit opt-in via multiple `overrides` entries.
 - Boundary meaning per field kind:
-  - Numeric: IEC 61131-3 documented min/max for the declared type.
-  - `STRING`: empty and max-length (`STRING(n)` declared length, or
-    TwinCAT's 80-char default when undeclared).
-  - `ARRAY`: no runtime-variable size in IEC 61131-3, so "empty"/"max
-    count" boundaries only apply to an *explicit* array/count-field
-    pairing you declare yourself — never inferred from naming.
+  - Numeric: IEC 61131-3 documented min/max for the declared type, from
+    `IecNumericBounds` (`SINT`/`USINT`/`BYTE`/`INT`/`UINT`/`WORD`/`DINT`
+    as C# `int`; `UDINT`/`DWORD`/`LINT`/`ULINT`/`LWORD`/`REAL`/`LREAL` as
+    their natural wider CLR type).
+  - `STRING`: `Boundary.Min` -> `""`; `Boundary.Max` -> a string of the
+    declared `STRING(n)` length (or TwinCAT's 80-char default when
+    undeclared), via `StringTypeInfo.ParseLength`.
+  - Nested `STRUCT`/`ARRAY` fields and unnamed fields recurse into their
+    own in-range default — arrays fill every element at its element
+    type's in-range default.
+  - `ARRAY` fields themselves have no scalar boundary (fixed size at
+    declaration) — targeting an array field in `overrides` throws
+    `NotSupportedException`. Target a paired count/length field instead
+    if your struct models that pattern explicitly.
+- Unknown struct type or unknown field name in `overrides` throws
+  `InvalidOperationException`.
 
 ## Transmit struct clone (also 15.10)
 
-Today's [`Loopback.Transmit`](04-loopback-and-faults.md) does
-`sink.Value = source.Value` — fine for scalars, but that would alias a
-struct's backing dictionary rather than copy it. Once 15.10 lands,
-`Transmit` switches to a per-field clone for `STRUCT` payloads (new `Cell`
-per field, values copied) to preserve the loopback's copy-not-alias
-contract. Don't transmit struct-typed fields through `Loopback` until this
-ticket closes — scalar fields work today, struct fields don't yet.
-
-## Until these land
-
-Wire-payload fixtures are limited to individual scalar fields per
-`Transmit` call (as in `LoopbackFaultTests`'s `FB_Payload { Buffer : INT }`
-example) — model a payload as several scalar `VAR` fields plus several
-`Transmit` calls rather than one struct field, until 15.6/15.10 close.
+[`Loopback.Transmit`](04-loopback-and-faults.md) does a per-field clone
+(`CellCloner`) for `STRUCT`/`ARRAY` payloads — new `Cell`s, values
+copied — rather than aliasing the source's backing dictionary/array, so
+the loopback's copy-not-alias contract holds for struct- and
+array-typed fields too, not just scalars.

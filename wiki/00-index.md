@@ -2,20 +2,22 @@
 
 How to write `.TcPOU` test fixtures against TcXunit's simulated-PLC-testing
 primitives. Grounded in `src/TcXunit.Interpreter` and the existing xUnit
-tests/fixtures as of 2026-07-21 (epic `TcXunit-w5x.15`).
+tests/fixtures as of 2026-07-22 (epics `TcXunit-w5x.15`, `TcXunit-sej`,
+`TcXunit-k28`).
 
 Status legend: **built** = usable in a fixture today. **pending** = spec'd,
 ticket still open, API may shift.
 
 | Page | Primitive | Status |
 |---|---|---|
-| [01-test-suite-basics.md](01-test-suite-basics.md) | `EXTENDS TcUnit.FB_TestSuite`, `TEST()`/`TEST_FINISHED()`/`Assert*` | built |
+| [01-test-suite-basics.md](01-test-suite-basics.md) | `EXTENDS TcUnit.FB_TestSuite`, `TEST()`/`TEST_FINISHED()`/`TEST_ORDERED()`/`TEST_FINISHED_NAMED()`/`IS_TEST_FINISHED()`/`Assert*` | built |
 | [02-step-cycles.md](02-step-cycles.md) | `FbInstance.StepCycles(n)` | built |
 | [03-simulated-clock-and-timers.md](03-simulated-clock-and-timers.md) | `Engine.Clock.Advance(dt)`, `TON`/`TOF`/`FB_Pulse` | built |
 | [04-loopback-and-faults.md](04-loopback-and-faults.md) | `Loopback` FB: `Transmit`, `Drop`/`Restore`/`Freeze`/`SetDelay`/`Duplicate`/`Corrupt`, `LinkUp`/`LastUpdateTime` | built |
 | [05-session-counter-reconnect.md](05-session-counter-reconnect.md) | Reconnect pattern via ordinary VAR counter + Drop/Restore | built (pattern only, no new primitive) |
-| [06-state-mirroring-assertions.md](06-state-mirroring-assertions.md) | `AssertConverges` / `AssertConvergesAndLatches` | **pending** — `TcXunit-w5x.15.9` |
-| [07-struct-array-and-builders.md](07-struct-array-and-builders.md) | `STRUCT`/`ARRAY` types, struct boundary `Build()` | **pending** — `TcXunit-w5x.15.6` / `.15.10` |
+| [06-state-mirroring-assertions.md](06-state-mirroring-assertions.md) | `AssertConverges` / `AssertConvergesAndLatches` | built |
+| [07-struct-array-and-builders.md](07-struct-array-and-builders.md) | `STRUCT`/`ARRAY` types, struct boundary `Build()` | built |
+| [08-array-indexing-pointers-and-memcpy.md](08-array-indexing-pointers-and-memcpy.md) | `arr[i]`/`arr[i,j]`, `ADR(x) +/- offset`, `MEMCPY`/`MEMSET`/`MEMMOVE` | built |
 
 ## Quick orientation
 

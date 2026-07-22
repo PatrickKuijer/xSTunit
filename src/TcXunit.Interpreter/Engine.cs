@@ -817,6 +817,78 @@ namespace TcXunit.Interpreter
             return new Pointer(new ArrayElementCell(aec.Array, newIndex));
         }
 
+        // MEMCPY/MEMSET/MEMMOVE (TcXunit-sej.3): dest/src must be pointers to
+        // an array element (see ResolveCellForAdr/ArrayElementCell) - this is
+        // the POINTER TO BYTE over ARRAY OF BYTE buffer-packing case these
+        // intrinsics exist for. n counts elements (== bytes for a BYTE/SINT/
+        // USINT-element array); out-of-range access throws naturally via the
+        // backing Elements[] indexer.
+        private Pointer RequirePointerArg(CallExpr call, int index, Frame frame)
+        {
+            var value = Evaluate(call.PositionalArgs[index], frame);
+            if (!(value is Pointer ptr))
+                throw new InvalidOperationException(
+                    $"{call.MethodName} argument {index} must be a POINTER TO BYTE (e.g. ADR(buf) or ADR(buf[i])), got {value?.GetType().Name}");
+            return ptr;
+        }
+
+        private static (ArrayValue Array, int Index) RequireArrayElement(Pointer ptr, string methodName, string paramName)
+        {
+            if (!(ptr.Target is ArrayElementCell aec))
+                throw new NotSupportedException(
+                    $"{methodName} '{paramName}' pointer must target an array element (e.g. ADR(buf) or ADR(buf[i])) - " +
+                    "byte-offset into a scalar or STRUCT interior isn't modeled.");
+            return (aec.Array, aec.Index);
+        }
+
+        // MEMCPY (overlapSafe: false) copies forward regardless of overlap,
+        // same as the C intrinsic it mirrors. MEMMOVE (overlapSafe: true)
+        // detects a forward overlap (dest inside [src, src+count) on the same
+        // backing array) and copies backward instead, so a "shift buffer
+        // down after consuming its head" pattern doesn't clobber source
+        // elements before they're read.
+        private static Pointer MemCopy(Pointer dest, Pointer src, int count, bool overlapSafe)
+        {
+            if (count < 0)
+                throw new ArgumentOutOfRangeException(nameof(count), "MEMCPY/MEMMOVE count must be >= 0");
+
+            var methodName = overlapSafe ? "MEMMOVE" : "MEMCPY";
+            var (destArray, destIndex) = RequireArrayElement(dest, methodName, "destAddr");
+            var (srcArray, srcIndex) = RequireArrayElement(src, methodName, "srcAddr");
+
+            var backward = overlapSafe
+                && ReferenceEquals(destArray, srcArray)
+                && destIndex > srcIndex
+                && destIndex < srcIndex + count;
+
+            if (backward)
+            {
+                for (var i = count - 1; i >= 0; i--)
+                    destArray.Elements[destIndex + i] = srcArray.Elements[srcIndex + i];
+            }
+            else
+            {
+                for (var i = 0; i < count; i++)
+                    destArray.Elements[destIndex + i] = srcArray.Elements[srcIndex + i];
+            }
+
+            return dest;
+        }
+
+        private static Pointer MemSet(Pointer dest, object value, int count)
+        {
+            if (count < 0)
+                throw new ArgumentOutOfRangeException(nameof(count), "MEMSET count must be >= 0");
+
+            var (destArray, destIndex) = RequireArrayElement(dest, "MEMSET", "destAddr");
+            var lowByte = Convert.ToInt32(value) & 0xFF;
+
+            for (var i = 0; i < count; i++)
+                destArray.Elements[destIndex + i] = lowByte;
+
+            return dest;
+        }
+
         private static double ToDouble(object value) => value switch
         {
             double d => d,
@@ -911,6 +983,19 @@ namespace TcXunit.Interpreter
             {
                 if (call.MethodName == "ADR")
                     return new Pointer(ResolveCellForAdr(call.PositionalArgs[0], frame));
+
+                if (call.MethodName == "MEMCPY" || call.MethodName == "MEMMOVE")
+                    return MemCopy(
+                        RequirePointerArg(call, 0, frame),
+                        RequirePointerArg(call, 1, frame),
+                        (int)Evaluate(call.PositionalArgs[2], frame),
+                        overlapSafe: call.MethodName == "MEMMOVE");
+
+                if (call.MethodName == "MEMSET")
+                    return MemSet(
+                        RequirePointerArg(call, 0, frame),
+                        Evaluate(call.PositionalArgs[1], frame),
+                        (int)Evaluate(call.PositionalArgs[2], frame));
 
                 if (TryEvaluateCast(call, frame, out var castResult))
                     return castResult;

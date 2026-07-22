@@ -54,12 +54,18 @@ namespace TcXunit.Runner.TcUnitStub
             _currentFailures = null;
         }
 
+        // Upstream FB_Test.SetAssertionMessage()/SetAssertionType() only set
+        // AssertionMessage/AssertionType 'if not already set' - a test with
+        // several failing asserts still fails, but only the first failure's
+        // message is ever recorded. Later Fail() calls in the same TEST()
+        // bracket are dropped here to match (TcXunit-k28.1).
         private void Fail(string message)
         {
             if (_currentName == null)
                 throw new InvalidOperationException("Assertion called outside a TEST()/TEST_FINISHED() bracket");
 
-            _currentFailures.Add(new AssertionFailure(message));
+            if (_currentFailures.Count == 0)
+                _currentFailures.Add(new AssertionFailure(message));
         }
 
         protected void AssertTrue(bool condition, string message)

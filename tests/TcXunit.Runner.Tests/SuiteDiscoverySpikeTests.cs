@@ -41,6 +41,17 @@ namespace TcXunit.Runner.Tests
         }
 
         [Fact]
+        public void Multiple_failing_asserts_in_one_test_keeps_only_first_failure()
+        {
+            var results = SuiteRunner.RunAll(new MultiFailureTestSuite());
+
+            var result = Assert.Single(results);
+            Assert.False(result.Passed);
+            Assert.Single(result.Failures);
+            Assert.Contains("first mismatch", result.Failures[0].Message);
+        }
+
+        [Fact]
         public void Repeated_test_name_in_one_pass_is_rejected()
         {
             Assert.Throws<NotSupportedException>(() => SuiteRunner.RunAll(new RepeatedTestNameSuite()));

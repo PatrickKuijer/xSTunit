@@ -637,7 +637,26 @@ namespace TcXunit.Interpreter
                 return cell;
             }
 
-            throw new NotSupportedException("Only plain identifiers and field access are supported as REF=/ADR()/Transmit() targets in v1");
+            if (expr is IndexExpr index)
+            {
+                var array = (ArrayValue)Evaluate(index.Receiver, frame);
+                return new ArrayElementCell(array, FlattenIndex(array, index.Indices, frame));
+            }
+
+            throw new NotSupportedException("Only plain identifiers, field access, and array indexing are supported as REF=/ADR()/Transmit() targets in v1");
+        }
+
+        // ADR() target resolution: same as ResolveCellForLValue, except a bare
+        // array (identifier or field, no index) decays to the address of its
+        // first element - ADR(arr) means "address of arr[lowbound]" in IEC
+        // 61131-3, and only an element-targeting Cell can be pointer-arithmetic'd
+        // (see EvaluateBinary's Pointer +/- handling, TcXunit-sej.2).
+        private Cell ResolveCellForAdr(Expr expr, Frame frame)
+        {
+            var cell = ResolveCellForLValue(expr, frame);
+            if (!(cell is ArrayElementCell) && cell.Value is ArrayValue array)
+                return new ArrayElementCell(array, 0);
+            return cell;
         }
 
         // FbInstance and StructInstance are both "named-field container of
@@ -744,6 +763,9 @@ namespace TcXunit.Interpreter
             var leftVal = Evaluate(binary.Left, frame);
             var rightVal = Evaluate(binary.Right, frame);
 
+            if ((binary.Op == "+" || binary.Op == "-") && (leftVal is Pointer || rightVal is Pointer))
+                return EvaluatePointerArithmetic(binary.Op, leftVal, rightVal);
+
             if (binary.Op == "AND" || binary.Op == "OR" || binary.Op == "XOR")
                 return EvaluateBitstring(binary.Op, leftVal, rightVal);
 
@@ -760,6 +782,39 @@ namespace TcXunit.Interpreter
                 return EvaluateNumeric(binary.Op, ToFloat(leftVal), ToFloat(rightVal));
 
             return EvaluateNumeric(binary.Op, (int)leftVal, (int)rightVal);
+        }
+
+        // ADR(x) +/- offset: offset moves in whole array elements, not raw
+        // bytes - correct as literal byte arithmetic when the pointee is a
+        // BYTE/SINT/USINT array (the buffer-packing case MEMCPY/MEMSET/MEMMOVE
+        // exist for), an approximation for wider element types. Only pointers
+        // whose target is an array element (ArrayElementCell, including the
+        // ADR(arr)-decays-to-element-0 case) support arithmetic - a pointer to
+        // a scalar or whole STRUCT has no element to step through, and this
+        // interpreter has no byte-level STRUCT layout model (flagged gap,
+        // TcXunit-sej.2).
+        private static object EvaluatePointerArithmetic(string op, object leftVal, object rightVal)
+        {
+            if (op == "-" && leftVal is Pointer && rightVal is Pointer)
+                throw new NotSupportedException("Pointer-minus-pointer is not supported");
+
+            var (ptr, offsetVal) = leftVal is Pointer p ? (p, rightVal) : ((Pointer)rightVal, leftVal);
+            var delta = (int)offsetVal;
+            if (op == "-")
+                delta = -delta;
+
+            if (!(ptr.Target is ArrayElementCell aec))
+                throw new NotSupportedException(
+                    "Pointer arithmetic (ADR(x) +/- offset) is only supported when the pointer targets an " +
+                    "array element (e.g. ADR(byteBuf) or ADR(byteBuf[i])); byte-offset into a scalar or " +
+                    "the interior of a STRUCT is not modeled.");
+
+            var newIndex = aec.Index + delta;
+            if (newIndex < 0 || newIndex >= aec.Array.Elements.Length)
+                throw new IndexOutOfRangeException(
+                    $"Pointer arithmetic moved index to {newIndex}, out of bounds [0..{aec.Array.Elements.Length - 1}]");
+
+            return new Pointer(new ArrayElementCell(aec.Array, newIndex));
         }
 
         private static double ToDouble(object value) => value switch
@@ -855,7 +910,7 @@ namespace TcXunit.Interpreter
             if (call.Receiver == null)
             {
                 if (call.MethodName == "ADR")
-                    return new Pointer(ResolveCellForLValue(call.PositionalArgs[0], frame));
+                    return new Pointer(ResolveCellForAdr(call.PositionalArgs[0], frame));
 
                 if (TryEvaluateCast(call, frame, out var castResult))
                     return castResult;

@@ -14,10 +14,31 @@ namespace TcXunit.Runner.TcUnitStub
     /// </summary>
     public abstract class FB_TestSuite
     {
+        // A test's in-progress record, keyed by name. Kept around after
+        // finishing (rather than removed) so IS_TEST_FINISHED('X') can still
+        // resolve 'X' by name after it completes.
+        private sealed class TestRecord
+        {
+            public TestRecord(string name)
+            {
+                Name = name;
+                Failures = new List<AssertionFailure>();
+            }
+
+            public string Name { get; }
+            public List<AssertionFailure> Failures { get; }
+            public int? OrderNumber { get; set; }
+            public bool Finished { get; set; }
+        }
+
         private readonly List<TestCaseResult> _finished = new List<TestCaseResult>();
-        private readonly HashSet<string> _seenNames = new HashSet<string>();
+        private readonly Dictionary<string, TestRecord> _records = new Dictionary<string, TestRecord>();
         private string _currentName;
-        private List<AssertionFailure> _currentFailures;
+
+        // Mirrors upstream's per-suite NumberOfOrderedTests / CurrentlyRunningOrderedTestInTestSuite.
+        // Order numbers and the "whose turn is it" counter both start at 1.
+        private int _nextOrderNumber = 1;
+        private int _currentOrderedTurn = 1;
 
         protected abstract void Body();
 
@@ -36,12 +57,34 @@ namespace TcXunit.Runner.TcUnitStub
             if (_currentName != null)
                 throw new InvalidOperationException($"TEST('{name}') called before TEST_FINISHED() for '{_currentName}'");
 
-            if (!_seenNames.Add(name))
+            if (_records.ContainsKey(name))
                 throw new NotSupportedException(
                     $"TEST('{name}') called twice in one pass — cyclic/stateful test suites aren't supported in v1");
 
+            _records[name] = new TestRecord(name);
             _currentName = name;
-            _currentFailures = new List<AssertionFailure>();
+        }
+
+        // Declares (or re-attaches to) an ordered test. Returns TRUE only when
+        // it's currently this test's turn and it hasn't finished yet - matching
+        // upstream TEST_ORDERED() semantics for a single-pass run (TcXunit-k28.7).
+        protected bool TEST_ORDERED(string name)
+        {
+            if (!_records.TryGetValue(name, out var record))
+            {
+                record = new TestRecord(name) { OrderNumber = _nextOrderNumber++ };
+                _records[name] = record;
+            }
+
+            if (record.OrderNumber != _currentOrderedTurn || record.Finished)
+                return false;
+
+            if (_currentName != null)
+                throw new InvalidOperationException(
+                    $"TEST_ORDERED('{name}') called before TEST_FINISHED() for '{_currentName}'");
+
+            _currentName = name;
+            return true;
         }
 
         protected void TEST_FINISHED()
@@ -49,9 +92,48 @@ namespace TcXunit.Runner.TcUnitStub
             if (_currentName == null)
                 throw new InvalidOperationException("TEST_FINISHED() called with no matching TEST()");
 
-            _finished.Add(new TestCaseResult(_currentName, _currentFailures));
+            FinishRecord(_records[_currentName]);
             _currentName = null;
-            _currentFailures = null;
+        }
+
+        // Finishes a named test regardless of which test is "current" (used
+        // by multi-cycle/async test bodies). Unlike TEST_FINISHED(), an
+        // unknown name fails fast rather than upstream's log-and-abort
+        // mechanic, which TcXunit has no equivalent for (TcXunit-k28.7).
+        protected void TEST_FINISHED_NAMED(string name)
+        {
+            if (!_records.TryGetValue(name, out var record))
+                throw new InvalidOperationException(
+                    $"TEST_FINISHED_NAMED('{name}') called for a test never declared with TEST()/TEST_ORDERED()");
+
+            if (record.Finished)
+                return;
+
+            FinishRecord(record);
+            if (_currentName == name)
+                _currentName = null;
+        }
+
+        // Polls whether a named test in this suite has finished. Unlike
+        // upstream (whose Tests[] scan silently returns FALSE for an unknown
+        // name), an unknown name fails fast here to surface suite-authoring
+        // typos (TcXunit-k28.7).
+        protected bool IS_TEST_FINISHED(string name)
+        {
+            if (!_records.TryGetValue(name, out var record))
+                throw new InvalidOperationException(
+                    $"IS_TEST_FINISHED('{name}') called for a test never declared with TEST()/TEST_ORDERED()");
+
+            return record.Finished;
+        }
+
+        private void FinishRecord(TestRecord record)
+        {
+            record.Finished = true;
+            _finished.Add(new TestCaseResult(record.Name, record.Failures));
+
+            if (record.OrderNumber.HasValue && record.OrderNumber.Value == _currentOrderedTurn)
+                _currentOrderedTurn++;
         }
 
         // Upstream FB_Test.SetAssertionMessage()/SetAssertionType() only set
@@ -68,14 +150,15 @@ namespace TcXunit.Runner.TcUnitStub
             if (_currentName == null)
                 throw new InvalidOperationException("Assertion called outside a TEST()/TEST_FINISHED() bracket");
 
-            if (_currentFailures.Count > 0)
+            var failures = _records[_currentName].Failures;
+            if (failures.Count > 0)
                 return;
 
             var formatted = $"FAILED TEST '{_currentName}', EXP: {expected}, ACT: {actual}";
             if (!string.IsNullOrEmpty(message))
                 formatted += $", MSG: {message}";
 
-            _currentFailures.Add(new AssertionFailure(formatted));
+            failures.Add(new AssertionFailure(formatted));
         }
 
         private static string FormatBool(bool value) => value ? "TRUE" : "FALSE";

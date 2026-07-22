@@ -16,7 +16,13 @@ namespace TcXunit.Interpreter
 
         public void Test(string name) => TEST(name);
 
+        public bool TestOrdered(string name) => TEST_ORDERED(name);
+
         public void TestFinished() => TEST_FINISHED();
+
+        public void TestFinishedNamed(string name) => TEST_FINISHED_NAMED(name);
+
+        public bool IsTestFinished(string name) => IS_TEST_FINISHED(name);
 
         public void AssertEqualsInt(int expected, int actual, string message) =>
             AssertEquals_INT(expected, actual, message);

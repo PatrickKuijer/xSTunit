@@ -55,7 +55,24 @@ namespace TcXunit.Interpreter
         private static TypeRegistry BuildRegistry(string pouDirectory, out List<string> typeNames)
         {
             var pouFiles = Directory.GetFiles(pouDirectory, "*.TcPOU", SearchOption.AllDirectories);
-            var types = pouFiles.Select(f => TcPouParser.Parse(File.ReadAllText(f))).ToList();
+            var types = new List<PouAst>();
+
+            foreach (var file in pouFiles)
+            {
+                try
+                {
+                    types.Add(TcPouParser.Parse(File.ReadAllText(file)));
+                }
+                catch (TcPouRejectedException)
+                {
+                    // Skip POUs outside TcXunit's v1 parse subset (e.g. production
+                    // code using Tc2_System) instead of failing the entire scan
+                    // (PLC-b62). A suite that actually depends on a skipped POU
+                    // will still fail clearly at run time with an unresolved-type
+                    // error; suites that don't need it can run unaffected.
+                }
+            }
+
             typeNames = types.Select(t => t.Name).ToList();
             return new TypeRegistry(types);
         }

@@ -52,7 +52,9 @@ namespace TcXunit.Interpreter
                     pos++;
                 var unit = text.Substring(unitStart, pos - unitStart);
 
-                var segmentIndex = Array.FindIndex(segments, s => s.Unit == unit);
+                var segmentIndex = Array.FindIndex(
+                    segments,
+                    s => string.Equals(s.Unit, unit, StringComparison.OrdinalIgnoreCase));
                 if (segmentIndex < 0 || segmentIndex <= lastSegmentIndex)
                     throw new FormatException($"Unexpected or out-of-order unit '{unit}' in TIME literal '{text}'");
 

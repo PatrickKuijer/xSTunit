@@ -1,3 +1,7 @@
+> **ARCHIVED — historical snapshot, not a live tracker.** This is a point-in-time status
+> briefing; current status lives in beads (`bd show TcXunit-w5x.15`, `bd show TcXunit-k28`).
+> Do not treat this file as an open issue list. Moved here from `.handoff/` on 2026-07-23.
+
 # TcXunit Handoff — for b_beckhoff_framework repo team
 
 Date: 2026-07-21

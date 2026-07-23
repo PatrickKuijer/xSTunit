@@ -30,32 +30,56 @@ namespace TcXunit.Interpreter
                 case "IS_TEST_FINISHED":
                     return host.IsTestFinished(ResolveTestName(positional, named));
                 case "AssertEquals_INT":
-                    host.AssertEqualsInt((int)named["Expected"], (int)named["Actual"], (string)named["Message"]);
-                    return null;
+                    {
+                        var args = ResolveArgs(IntAssertParamNames, positional, named);
+                        host.AssertEqualsInt((int)args["Expected"], (int)args["Actual"], (string)args["Message"]);
+                        return null;
+                    }
                 case "AssertTrue":
-                    host.AssertTrueCall((bool)named["Condition"], (string)named["Message"]);
-                    return null;
+                    {
+                        var args = ResolveArgs(ConditionAssertParamNames, positional, named);
+                        host.AssertTrueCall((bool)args["Condition"], (string)args["Message"]);
+                        return null;
+                    }
                 case "AssertFalse":
-                    host.AssertFalseCall((bool)named["Condition"], (string)named["Message"]);
-                    return null;
+                    {
+                        var args = ResolveArgs(ConditionAssertParamNames, positional, named);
+                        host.AssertFalseCall((bool)args["Condition"], (string)args["Message"]);
+                        return null;
+                    }
                 case "AssertEquals_BOOL":
-                    host.AssertEqualsBool((bool)named["Expected"], (bool)named["Actual"], (string)named["Message"]);
-                    return null;
+                    {
+                        var args = ResolveArgs(BoolAssertParamNames, positional, named);
+                        host.AssertEqualsBool((bool)args["Expected"], (bool)args["Actual"], (string)args["Message"]);
+                        return null;
+                    }
                 case "AssertEquals_STRING":
-                    host.AssertEqualsString((string)named["Expected"], (string)named["Actual"], (string)named["Message"]);
-                    return null;
+                    {
+                        var args = ResolveArgs(StringAssertParamNames, positional, named);
+                        host.AssertEqualsString((string)args["Expected"], (string)args["Actual"], (string)args["Message"]);
+                        return null;
+                    }
                 case "AssertEquals_REAL":
-                    host.AssertEqualsReal(
-                        Convert.ToDouble(named["Expected"]),
-                        Convert.ToDouble(named["Actual"]),
-                        Convert.ToDouble(named["Delta"]),
-                        (string)named["Message"]);
-                    return null;
+                    {
+                        var args = ResolveArgs(RealAssertParamNames, positional, named);
+                        host.AssertEqualsReal(
+                            Convert.ToDouble(args["Expected"]),
+                            Convert.ToDouble(args["Actual"]),
+                            Convert.ToDouble(args["Delta"]),
+                            (string)args["Message"]);
+                        return null;
+                    }
                 default:
                     throw new NotSupportedException(
                         $"TcUnit native call '{methodName}' isn't supported yet (grow-on-demand, TcXunit-w5x.12).");
             }
         }
+
+        private static readonly string[] ConditionAssertParamNames = { "Condition", "Message" };
+        private static readonly string[] IntAssertParamNames = { "Expected", "Actual", "Message" };
+        private static readonly string[] BoolAssertParamNames = { "Expected", "Actual", "Message" };
+        private static readonly string[] StringAssertParamNames = { "Expected", "Actual", "Message" };
+        private static readonly string[] RealAssertParamNames = { "Expected", "Actual", "Delta", "Message" };
 
         // TEST_ORDERED/TEST_FINISHED_NAMED/IS_TEST_FINISHED take a single
         // TestName input in upstream - accept it either positionally or by
@@ -65,6 +89,31 @@ namespace TcXunit.Interpreter
             if (named.TryGetValue("TestName", out var byName))
                 return (string)byName;
             return (string)positional[0];
+        }
+
+        // TcXunit-bda: Assert*/AssertEquals_* calls are native intrinsics
+        // like MEMCPY/MEMSET (no VarBlockParser decls for BindParams to
+        // reconcile named args against - see Engine.ResolveIntrinsicArgs),
+        // so real ST callers that pass args positionally (e.g.
+        // AssertTrue(cond, 'msg')) hit named[...] directly and throw
+        // KeyNotFoundException. Resolve each declared param by name first,
+        // falling back to positional args in left-to-right order for
+        // params not given by name (mirrors BindParams' shared posIndex).
+        private static IReadOnlyDictionary<string, object> ResolveArgs(
+            IReadOnlyList<string> paramNamesInDeclOrder,
+            IReadOnlyList<object> positional,
+            IReadOnlyDictionary<string, object> named)
+        {
+            var resolved = new Dictionary<string, object>();
+            var posIndex = 0;
+            foreach (var paramName in paramNamesInDeclOrder)
+            {
+                if (named.TryGetValue(paramName, out var value))
+                    resolved[paramName] = value;
+                else if (posIndex < positional.Count)
+                    resolved[paramName] = positional[posIndex++];
+            }
+            return resolved;
         }
     }
 }

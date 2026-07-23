@@ -1,3 +1,8 @@
+> **ARCHIVED — historical snapshot, not a live tracker.** This doc's requirements were
+> fully absorbed into beads epic `TcXunit-w5x.15` (closed) — run `bd show TcXunit-w5x.15`
+> for current status. Do not treat this file as an open issue list; beads is the single
+> source of truth. Moved here from `.handoff/` on 2026-07-23.
+
 # Handoff: TcXunit capability requirements from PLC framework repo
 
 **Date:** 2026-07-21

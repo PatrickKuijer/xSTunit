@@ -50,3 +50,4 @@
 {"id":"int-e1b21cbb12d4eedcdf0f79e331e40264","kind":"field_change","created_at":"2026-07-23T12:21:50.1698696Z","actor":"Patrick de Kuijer","issue_id":"TcXunit-dem","extra":{"field":"status","new_value":"closed","old_value":"open","reason":"Closed"}}
 {"id":"int-a4ff5b8831c468a59d2fbf4959391935","kind":"field_change","created_at":"2026-07-23T12:32:44.6945009Z","actor":"Patrick de Kuijer","issue_id":"TcXunit-z1l","extra":{"field":"priority","new_value":"1","old_value":"2"}}
 {"id":"int-1682f3488aa57ce7a4807b767154bfaf","kind":"field_change","created_at":"2026-07-23T13:44:50.8090362Z","actor":"Patrick de Kuijer","issue_id":"TcXunit-z1l","extra":{"field":"status","new_value":"closed","old_value":"open","reason":"Closed"}}
+{"id":"int-53ce19d4c80d30f5054e4df62058208b","kind":"field_change","created_at":"2026-07-23T13:59:42.6197423Z","actor":"Patrick de Kuijer","issue_id":"TcXunit-o59","extra":{"field":"status","new_value":"closed","old_value":"open","reason":"Closed"}}

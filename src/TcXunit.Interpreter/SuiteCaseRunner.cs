@@ -25,9 +25,14 @@ namespace TcXunit.Interpreter
     // to fetch one case's result on demand.
     public static class SuiteCaseRunner
     {
+        // Synthetic case name used for POUs that couldn't be parsed at all
+        // (PLC-cta): surfaced as a failing case named after the POU file
+        // rather than being silently dropped from discovery.
+        private const string ParseErrorCaseName = "(parse error)";
+
         public static IReadOnlyList<SuiteCase> DiscoverCases(string pouDirectory)
         {
-            var registry = BuildRegistry(pouDirectory, out var typeNames);
+            var registry = BuildRegistry(pouDirectory, out var typeNames, out var skipped);
             var engine = new Engine(registry);
             var suiteNames = SuiteDiscovery.FindSuiteTypeNames(registry, typeNames);
 
@@ -36,12 +41,23 @@ namespace TcXunit.Interpreter
                 foreach (var result in engine.RunSuite(suiteName))
                     cases.Add(new SuiteCase(suiteName, result.Name));
 
+            foreach (var skip in skipped)
+                cases.Add(new SuiteCase(skip.FileKey, ParseErrorCaseName));
+
             return cases;
         }
 
         public static TestCaseResult RunCase(string pouDirectory, string suiteName, string caseName)
         {
-            var registry = BuildRegistry(pouDirectory, out _);
+            var registry = BuildRegistry(pouDirectory, out _, out var skipped);
+
+            if (caseName == ParseErrorCaseName)
+            {
+                var skip = skipped.FirstOrDefault(s => s.FileKey == suiteName);
+                if (skip.FileKey != null)
+                    return new TestCaseResult(caseName, new[] { new AssertionFailure(skip.Message) });
+            }
+
             var engine = new Engine(registry);
             var results = engine.RunSuite(suiteName);
 
@@ -52,10 +68,24 @@ namespace TcXunit.Interpreter
             return match;
         }
 
-        private static TypeRegistry BuildRegistry(string pouDirectory, out List<string> typeNames)
+        private readonly struct SkippedPou
+        {
+            public SkippedPou(string fileKey, string message)
+            {
+                FileKey = fileKey;
+                Message = message;
+            }
+
+            public string FileKey { get; }
+            public string Message { get; }
+        }
+
+        private static TypeRegistry BuildRegistry(
+            string pouDirectory, out List<string> typeNames, out List<SkippedPou> skipped)
         {
             var pouFiles = Directory.GetFiles(pouDirectory, "*.TcPOU", SearchOption.AllDirectories);
             var types = new List<PouAst>();
+            skipped = new List<SkippedPou>();
 
             foreach (var file in pouFiles)
             {
@@ -63,13 +93,16 @@ namespace TcXunit.Interpreter
                 {
                     types.Add(TcPouParser.Parse(File.ReadAllText(file)));
                 }
-                catch (TcPouRejectedException)
+                catch (TcPouRejectedException ex)
                 {
                     // Skip POUs outside TcXunit's v1 parse subset (e.g. production
                     // code using Tc2_System) instead of failing the entire scan
-                    // (PLC-b62). A suite that actually depends on a skipped POU
-                    // will still fail clearly at run time with an unresolved-type
-                    // error; suites that don't need it can run unaffected.
+                    // (PLC-b62), but surface each as its own failing case (PLC-cta)
+                    // instead of silently vanishing from discovery. A suite that
+                    // actually depends on a skipped POU will still fail clearly at
+                    // run time with an unresolved-type error; suites that don't
+                    // need it can run unaffected.
+                    skipped.Add(new SkippedPou(Path.GetFileNameWithoutExtension(file), ex.Message));
                 }
             }
 

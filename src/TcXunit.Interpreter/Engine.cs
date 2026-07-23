@@ -19,6 +19,7 @@ namespace TcXunit.Interpreter
         public Clock Clock { get; } = new Clock();
 
         private static readonly HashSet<string> NativeTimerTypes = new HashSet<string> { "TON", "TOF", "FB_Pulse" };
+        private static readonly HashSet<string> NativeEdgeTriggerTypes = new HashSet<string> { "R_TRIG", "F_TRIG" };
 
         public Engine(TypeRegistry registry)
         {
@@ -74,6 +75,12 @@ namespace TcXunit.Interpreter
                     instance.NativeLoopbackHost = new LoopbackHost();
                     instance.Fields["LinkUp"] = new Cell { Value = true };
                     instance.Fields["LastUpdateTime"] = new Cell { Value = 0L };
+                }
+                else if (NativeEdgeTriggerTypes.Contains(current))
+                {
+                    instance.NativeEdgeTriggerHost = EdgeTriggerHost.Create(current);
+                    instance.Fields["CLK"] = new Cell { Value = false };
+                    instance.Fields["Q"] = new Cell { Value = false };
                 }
                 else
                 {
@@ -172,6 +179,19 @@ namespace TcXunit.Interpreter
                     return null;
                 }
 
+                // Bare invocation of a native R_TRIG/F_TRIG, e.g.
+                // fbTrig(CLK:=x) - same precedent as the native-timer
+                // bare-invoke above, but the host only tracks CLK->Q (no
+                // PT/ET, no clock dependency).
+                if (TryResolveCalleeCell(callerFrame, instance, methodName, out var edgeCalleeCell) &&
+                    edgeCalleeCell.Value is FbInstance edgeCallee &&
+                    edgeCallee.NativeEdgeTriggerHost != null)
+                {
+                    BindEdgeTriggerInputs(edgeCallee, positionalArgs, namedArgs, callerFrame);
+                    edgeCallee.NativeEdgeTriggerHost.Update(edgeCallee);
+                    return null;
+                }
+
                 // Bare invocation of an ordinary interpreted (non-native) FB
                 // field or method-local var, e.g. sfbLoopback(ibEnable := TRUE)
                 // - generalizes the native-timer bare-invoke above: bind
@@ -182,6 +202,7 @@ namespace TcXunit.Interpreter
                     interpretedCallee.NativeTimerHost == null &&
                     interpretedCallee.NativeLoopbackHost == null &&
                     interpretedCallee.NativeSuiteHost == null &&
+                    interpretedCallee.NativeEdgeTriggerHost == null &&
                     _registry.Get(interpretedCallee.ActualTypeName) != null)
                 {
                     InvokeFbInstance(interpretedCallee, positionalArgs, namedArgs, callerFrame);
@@ -376,6 +397,24 @@ namespace TcXunit.Interpreter
                     cell.Value = Evaluate(arg.Value, callerFrame);
         }
 
+        // R_TRIG/F_TRIG have a single VAR_INPUT (CLK), bound by position or
+        // by name same as BindTimerInputs.
+        private static readonly string[] EdgeTriggerPositionalParams = { "CLK" };
+
+        private void BindEdgeTriggerInputs(
+            FbInstance callee,
+            IReadOnlyList<Expr> positionalArgs,
+            IReadOnlyList<NamedArg> namedArgs,
+            Frame callerFrame)
+        {
+            for (var i = 0; i < positionalArgs.Count && i < EdgeTriggerPositionalParams.Length; i++)
+                callee.Fields[EdgeTriggerPositionalParams[i]].Value = Evaluate(positionalArgs[i], callerFrame);
+
+            foreach (var arg in namedArgs)
+                if (callee.Fields.TryGetValue(arg.Name, out var cell))
+                    cell.Value = Evaluate(arg.Value, callerFrame);
+        }
+
         // Fields materialized at NewInstance() time (VAR_INPUT/VAR_OUTPUT/
         // VAR_IN_OUT alongside VAR/Local) - the set that must persist across
         // calls/StepCycles and be visible to dot-access (TcXunit-0v1).
@@ -481,7 +520,7 @@ namespace TcXunit.Interpreter
             if (structAst != null)
                 return BuildStructDefault(structAst, decl.DefaultValueText, owningInstance);
 
-            if (_registry.Get(decl.TypeName) != null || NativeTimerTypes.Contains(decl.TypeName) || decl.TypeName == "Loopback")
+            if (_registry.Get(decl.TypeName) != null || NativeTimerTypes.Contains(decl.TypeName) || decl.TypeName == "Loopback" || NativeEdgeTriggerTypes.Contains(decl.TypeName))
                 return NewInstance(decl.TypeName);
 
             if (decl.DefaultValueText != null)
@@ -971,6 +1010,20 @@ namespace TcXunit.Interpreter
                 }
                 case FieldAccessExpr fieldAccess:
                 {
+                    // Type.Member where Type names a built-in enum rather
+                    // than a variable (e.g. TcEventSeverity.Warning) -
+                    // resolve the member's underlying value directly,
+                    // bypassing the variable/field lookup below (which
+                    // would otherwise throw on the receiver identifier).
+                    if (fieldAccess.Receiver is IdentifierExpr enumTypeId &&
+                        frame.ResolveCell(enumTypeId.Name) == null &&
+                        BuiltinEnums.Types.TryGetValue(enumTypeId.Name, out var enumMembers))
+                    {
+                        if (!enumMembers.TryGetValue(fieldAccess.FieldName, out var enumValue))
+                            throw new InvalidOperationException($"Unknown enum member '{enumTypeId.Name}.{fieldAccess.FieldName}'");
+                        return enumValue;
+                    }
+
                     var fields = FieldsOf(Evaluate(fieldAccess.Receiver, frame));
                     if (!fields.TryGetValue(fieldAccess.FieldName, out var cell))
                         throw new InvalidOperationException($"Unknown field '{fieldAccess.FieldName}'");

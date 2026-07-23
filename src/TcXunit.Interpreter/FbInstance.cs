@@ -22,6 +22,11 @@ namespace TcXunit.Interpreter
         // (TcXunit-w5x.15.5's native-stub boundary).
         public LoopbackHost NativeLoopbackHost { get; set; }
 
+        // Set when ActualTypeName is a native edge-trigger type (R_TRIG/
+        // F_TRIG) - the native host backing this instance's CLK->Q behavior
+        // (TcXunit-f6b's native-stub boundary).
+        public EdgeTriggerHost NativeEdgeTriggerHost { get; set; }
+
         public FbInstance(string actualTypeName)
         {
             ActualTypeName = actualTypeName;

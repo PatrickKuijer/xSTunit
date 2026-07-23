@@ -1324,6 +1324,8 @@ namespace TcXunit.Interpreter
         {
             "+" => left + right,
             "-" => left - right,
+            "*" => left * right,
+            "/" => left / right,
             "<" => left < right,
             ">" => left > right,
             "<=" => left <= right,
@@ -1337,6 +1339,8 @@ namespace TcXunit.Interpreter
         {
             "+" => left + right,
             "-" => left - right,
+            "*" => left * right,
+            "/" => left / right,
             "<" => left < right,
             ">" => left > right,
             "<=" => left <= right,
@@ -1350,6 +1354,8 @@ namespace TcXunit.Interpreter
         {
             "+" => left + right,
             "-" => left - right,
+            "*" => left * right,
+            "/" => left / right,
             "<" => left < right,
             ">" => left > right,
             "<=" => left <= right,

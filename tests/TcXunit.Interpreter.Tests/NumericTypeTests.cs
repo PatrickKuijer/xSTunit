@@ -90,6 +90,46 @@ namespace TcXunit.Interpreter.Tests
         }
 
         [Fact]
+        public void Evaluate_IntTimesInt_Multiplies()
+        {
+            var engine = NewEngine();
+            var result = engine.Evaluate(Parser.ParseExpression("3 * 4"), NewFrame());
+
+            Assert.IsType<int>(result);
+            Assert.Equal(12, (int)result);
+        }
+
+        [Fact]
+        public void Evaluate_IntDividedByInt_TruncatesTowardZero()
+        {
+            var engine = NewEngine();
+            var result = engine.Evaluate(Parser.ParseExpression("7 / 2"), NewFrame());
+
+            Assert.IsType<int>(result);
+            Assert.Equal(3, (int)result);
+        }
+
+        [Fact]
+        public void Evaluate_LrealTimesLreal_Multiplies()
+        {
+            var engine = NewEngine();
+            var result = engine.Evaluate(Parser.ParseExpression("LREAL#2.5 * LREAL#2.0"), NewFrame());
+
+            Assert.IsType<double>(result);
+            Assert.Equal(5.0d, (double)result);
+        }
+
+        [Fact]
+        public void Evaluate_RealDividedByReal_Divides()
+        {
+            var engine = NewEngine();
+            var result = engine.Evaluate(Parser.ParseExpression("REAL#5.0 / REAL#2.0"), NewFrame());
+
+            Assert.IsType<float>(result);
+            Assert.Equal(2.5f, (float)result);
+        }
+
+        [Fact]
         public void Evaluate_IntToRealCast_ProducesFloat()
         {
             var engine = NewEngine();

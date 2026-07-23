@@ -49,8 +49,7 @@ namespace TcXunit.Cli.Tests
       <Implementation>
         <ST><![CDATA[TEST('ThisThrows');
 
-AssertTrue(Condition := (2 * 3 = 6),
-           Message := 'unsupported multiply operator');
+ThisMethodDoesNotExist();
 
 TEST_FINISHED();]]></ST>
       </Implementation>

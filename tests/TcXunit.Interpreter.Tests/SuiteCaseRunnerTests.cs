@@ -186,6 +186,40 @@ END_TYPE]]></Declaration>
             }
         }
 
+        private const string MalformedXmlDut = @"<?xml version=""1.0"" encoding=""utf-8""?>
+<TcPlcObject Version=""1.1.0.1"" ProductVersion=""3.1.4026.18"">
+  <DUT Name=""ST_Broken"" Id=""{a1b2c3d4-0005-4a1a-8b1b-0000000000ff}"">
+    <Declaration><![CDATA[TYPE ST_Broken :
+STRUCT
+	value : INT;
+END_STRUCT
+END_TYPE]]></Declaration>
+</TcPlcObject>";
+
+        [Fact]
+        public void DiscoverCases_MalformedTcDutFile_DoesNotAbortRegistryBuild()
+        {
+            var tempDir = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "tcxunit-" + Guid.NewGuid()));
+            try
+            {
+                foreach (var file in Directory.GetFiles(FixturePouDir, "*.TcPOU"))
+                    File.Copy(file, Path.Combine(tempDir.FullName, Path.GetFileName(file)));
+                File.WriteAllText(Path.Combine(tempDir.FullName, "ST_Broken.TcDUT"), MalformedXmlDut);
+
+                var cases = SuiteCaseRunner.DiscoverCases(tempDir.FullName);
+
+                // The malformed .TcDUT must not throw out of registry build; the
+                // rest of the directory's suites still run normally.
+                Assert.Contains(
+                    cases,
+                    c => c.SuiteName == "FB_CounterTests" && c.CaseName == "IncrementAddsDelta");
+            }
+            finally
+            {
+                Directory.Delete(tempDir.FullName, recursive: true);
+            }
+        }
+
         private static void CopyFixtureFile(string destDir, string fileName) =>
             File.Copy(Path.Combine(FixturePouDir, fileName), Path.Combine(destDir, fileName));
 

@@ -158,12 +158,49 @@ namespace TcXunit.Interpreter
             // only, no model for merging in the base type's fields yet); both
             // fall back to their prior (unsupported) behavior rather than
             // failing registry build for every suite.
-            var structTypesWithFiles = MultiDirectoryPouLoader.FindDutFiles(pouDirectories)
-                .Select(file => new { FilePath = file, Dut = TcDutParser.Parse(File.ReadAllText(file)) })
-                .Where(x => x.Dut.DeclarationText.Contains("STRUCT"))
-                .Select(x => new { x.FilePath, Struct = StructDeclParser.Parse(x.Dut.DeclarationText) })
-                .Where(x => x.Struct.Name != null)
-                .ToList();
+            var structTypesWithFiles = new List<(string FilePath, StructAst Struct)>();
+            foreach (var file in MultiDirectoryPouLoader.FindDutFiles(pouDirectories))
+            {
+                DutAst dut;
+                try
+                {
+                    dut = TcDutParser.Parse(File.ReadAllText(file));
+                }
+                catch (Exception ex) when (ex is XmlException || ex is NullReferenceException)
+                {
+                    // Same rationale as the .TcPOU isolation above (TcXunit-022):
+                    // a structurally unexpected .TcDUT file (malformed XML,
+                    // missing DUT/Declaration element) must not abort registry
+                    // build for the whole directory. Keyed by full file path
+                    // for the same collision-avoidance reason as the POU skip
+                    // path (TcXunit-pvp).
+                    skipped.Add(new SkippedPou(
+                        file,
+                        $"Failed to parse '{Path.GetFileName(file)}': {ex.Message}"));
+                    continue;
+                }
+
+                if (!dut.DeclarationText.Contains("STRUCT"))
+                    continue;
+
+                StructAst structAst;
+                try
+                {
+                    structAst = StructDeclParser.Parse(dut.DeclarationText);
+                }
+                catch (Exception ex) when (ex is XmlException || ex is NullReferenceException)
+                {
+                    skipped.Add(new SkippedPou(
+                        file,
+                        $"Failed to parse '{Path.GetFileName(file)}': {ex.Message}"));
+                    continue;
+                }
+
+                if (structAst.Name == null)
+                    continue;
+
+                structTypesWithFiles.Add((file, structAst));
+            }
 
             // Fail fast and loud on duplicate STRUCT type names across the
             // merged set (TcXunit-dvd), mirroring the POU duplicate check

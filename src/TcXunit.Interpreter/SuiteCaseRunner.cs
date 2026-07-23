@@ -119,7 +119,22 @@ namespace TcXunit.Interpreter
 
             var types = loaded.Select(l => l.Pou).ToList();
             typeNames = types.Select(t => t.Name).ToList();
-            return new TypeRegistry(types);
+
+            // .TcDUT STRUCT types (e.g. HMI-mirror structs referenced by
+            // production FBs) - ENUM/alias/union DUTs are skipped since
+            // StructDeclParser has no model for them yet, as are STRUCT DUTs
+            // using "TYPE X EXTENDS Base:" (struct inheritance - own fields
+            // only, no model for merging in the base type's fields yet); both
+            // fall back to their prior (unsupported) behavior rather than
+            // failing registry build for every suite.
+            var structTypes = MultiDirectoryPouLoader.FindDutFiles(pouDirectories)
+                .Select(file => TcDutParser.Parse(File.ReadAllText(file)))
+                .Where(dut => dut.DeclarationText.Contains("STRUCT"))
+                .Select(dut => StructDeclParser.Parse(dut.DeclarationText))
+                .Where(structAst => structAst.Name != null)
+                .ToList();
+
+            return new TypeRegistry(types, structTypes);
         }
     }
 }

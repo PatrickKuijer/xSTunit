@@ -32,6 +32,14 @@ namespace TcXunit.Parser
                 .SelectMany(dir => Directory.GetFiles(dir, "*.TcPOU", SearchOption.AllDirectories))
                 .ToList();
 
+        // .TcDUT files declare STRUCT/ENUM/alias types (TcXunit-w5x.15.6's
+        // struct-DUT gap) - globbed separately from *.TcPOU since they use a
+        // different root XML element (<DUT> vs <POU>).
+        public static IReadOnlyList<string> FindDutFiles(IReadOnlyList<string> pouDirectories) =>
+            pouDirectories
+                .SelectMany(dir => Directory.GetFiles(dir, "*.TcDUT", SearchOption.AllDirectories))
+                .ToList();
+
         // Globs and parses every *.TcPOU file across all given directories.
         // Parse failures (TcPouRejectedException) propagate to the caller
         // uncaught; callers that need to skip-and-report unparseable POUs

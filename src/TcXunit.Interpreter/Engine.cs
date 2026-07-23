@@ -1003,6 +1003,10 @@ namespace TcXunit.Interpreter
             if ((binary.Op == "+" || binary.Op == "-") && (leftVal is Pointer || rightVal is Pointer))
                 return EvaluatePointerArithmetic(binary.Op, leftVal, rightVal);
 
+            if ((binary.Op == "=" || binary.Op == "<>") &&
+                (leftVal is Pointer || rightVal is Pointer || leftVal == null || rightVal == null))
+                return EvaluatePointerEquality(binary.Op, leftVal, rightVal);
+
             if (binary.Op == "AND" || binary.Op == "OR" || binary.Op == "XOR")
                 return EvaluateBitstring(binary.Op, leftVal, rightVal);
 
@@ -1052,6 +1056,45 @@ namespace TcXunit.Interpreter
                     $"Pointer arithmetic moved index to {newIndex}, out of bounds [0..{aec.Array.Elements.Length - 1}]");
 
             return new Pointer(new ArrayElementCell(aec.Array, newIndex));
+        }
+
+        // Pointer '='/'<>' comparison (TcXunit-dur): the standard IEC 61131-3
+        // null-pointer-check idiom is 'IF ipSrc = 0 THEN'. An unbound/default
+        // POINTER TO x Cell holds C# null (see DefaultValue), never int 0, so
+        // the null side of the comparison is a null reference, not a numeric
+        // zero - but the literal on the other side is still the int 0. Two
+        // real (ADR-bound) pointers are compared by target-Cell identity;
+        // a bound pointer is never "null"/zero, so it compares unequal to
+        // both null and any int literal.
+        private static object EvaluatePointerEquality(string op, object leftVal, object rightVal)
+        {
+            bool equal;
+            if (leftVal is Pointer leftPtr && rightVal is Pointer rightPtr)
+                equal = PointerTargetsEqual(leftPtr.Target, rightPtr.Target);
+            else if (leftVal is Pointer || rightVal is Pointer)
+                equal = false;
+            else if (leftVal == null && rightVal == null)
+                equal = true;
+            else if (leftVal == null)
+                equal = rightVal is int rightInt && rightInt == 0;
+            else
+                equal = leftVal is int leftInt && leftInt == 0;
+
+            return op == "=" ? equal : !equal;
+        }
+
+        // ADR(x) builds a fresh ArrayElementCell wrapper on every call
+        // (TcXunit-sej.2), so two pointers to the "same" element are two
+        // distinct ArrayElementCell instances - compare the underlying
+        // ArrayValue + Index instead of Cell reference identity for that
+        // case; fall back to reference equality for a plain scalar/struct
+        // field Cell (ADR(x) on those returns the actual field Cell).
+        private static bool PointerTargetsEqual(Cell left, Cell right)
+        {
+            if (left is ArrayElementCell leftAec && right is ArrayElementCell rightAec)
+                return ReferenceEquals(leftAec.Array, rightAec.Array) && leftAec.Index == rightAec.Index;
+
+            return ReferenceEquals(left, right);
         }
 
         // MEMCPY/MEMSET/MEMMOVE (TcXunit-sej.3): dest/src must be pointers to

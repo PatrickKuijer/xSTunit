@@ -257,7 +257,16 @@ namespace TcXunit.Interpreter
             for (var i = 0; i < cycles; i++)
             {
                 var frame = new Frame(instance, instance.ActualTypeName);
-                ExecuteStatements(statements, frame);
+                try
+                {
+                    ExecuteStatements(statements, frame);
+                }
+                catch (MethodReturnSignal)
+                {
+                    // A top-level RETURN inside the FB's cyclic body only ends
+                    // this cycle; it must not unwind into whatever ST call
+                    // (e.g. a TcUnit test method) invoked StepCycles.
+                }
             }
         }
 

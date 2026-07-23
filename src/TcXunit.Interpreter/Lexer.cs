@@ -104,6 +104,16 @@ namespace TcXunit.Interpreter
                     i++;
                     while (i < text.Length && text[i] != '\'')
                     {
+                        if (text[i] == '$' && i + 1 < text.Length)
+                        {
+                            var escaped = TryConsumeDollarEscape(text, ref i);
+                            if (escaped.HasValue)
+                            {
+                                sb.Append(escaped.Value);
+                                continue;
+                            }
+                        }
+
                         sb.Append(text[i]);
                         i++;
                     }
@@ -154,6 +164,13 @@ namespace TcXunit.Interpreter
                     continue;
                 }
 
+                if (c == '=' && i + 1 < text.Length && text[i + 1] == '>')
+                {
+                    tokens.Add(new Token(TokenType.Arrow, "=>"));
+                    i += 2;
+                    continue;
+                }
+
                 switch (c)
                 {
                     case '=': tokens.Add(new Token(TokenType.Eq, "=")); i++; continue;
@@ -161,6 +178,8 @@ namespace TcXunit.Interpreter
                     case '>': tokens.Add(new Token(TokenType.Gt, ">")); i++; continue;
                     case '+': tokens.Add(new Token(TokenType.Plus, "+")); i++; continue;
                     case '-': tokens.Add(new Token(TokenType.Minus, "-")); i++; continue;
+                    case '*': tokens.Add(new Token(TokenType.Asterisk, "*")); i++; continue;
+                    case '/': tokens.Add(new Token(TokenType.Slash, "/")); i++; continue;
                     case '^': tokens.Add(new Token(TokenType.Caret, "^")); i++; continue;
                     case '.': tokens.Add(new Token(TokenType.Dot, ".")); i++; continue;
                     case ',': tokens.Add(new Token(TokenType.Comma, ",")); i++; continue;
@@ -176,6 +195,32 @@ namespace TcXunit.Interpreter
 
             tokens.Add(new Token(TokenType.Eof, string.Empty));
             return tokens;
+        }
+
+        // Recognizes IEC 61131-3 '$'-escape sequences inside single-quoted STRING
+        // literals (e.g. $$ -> '$', $' -> '\''). On a match, advances i past the
+        // escape sequence and returns the decoded character; returns null (and
+        // leaves i untouched) if text[i..] is not a recognized escape, so the
+        // caller falls back to treating '$' as a literal character.
+        private static char? TryConsumeDollarEscape(string text, ref int i)
+        {
+            var next = text[i + 1];
+            char? decoded = next switch
+            {
+                '$' => '$',
+                '\'' => '\'',
+                'L' or 'l' => '\n',
+                'N' or 'n' => '\n',
+                'P' or 'p' => '\f',
+                'R' or 'r' => '\r',
+                'T' or 't' => '\t',
+                _ => (char?)null,
+            };
+
+            if (decoded.HasValue)
+                i += 2;
+
+            return decoded;
         }
 
         // Consumes an optional '.digits' fraction and/or '[eE][+-]digits' exponent

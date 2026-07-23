@@ -108,5 +108,87 @@ namespace TcXunit.Interpreter.Tests
             Assert.Equal("refCeiling", refAssign.TargetName);
             Assert.IsType<IdentifierExpr>(refAssign.Value);
         }
+
+        [Fact]
+        public void ParseExpression_Multiply_ProducesBinaryExprWithMultiplyOp()
+        {
+            var expr = Parser.ParseExpression("a * b");
+
+            var binary = Assert.IsType<BinaryExpr>(expr);
+            Assert.Equal("*", binary.Op);
+            Assert.Equal("a", Assert.IsType<IdentifierExpr>(binary.Left).Name);
+            Assert.Equal("b", Assert.IsType<IdentifierExpr>(binary.Right).Name);
+        }
+
+        [Fact]
+        public void ParseExpression_Divide_ProducesBinaryExprWithDivideOp()
+        {
+            var expr = Parser.ParseExpression("a / b");
+
+            var binary = Assert.IsType<BinaryExpr>(expr);
+            Assert.Equal("/", binary.Op);
+        }
+
+        [Fact]
+        public void ParseExpression_MultiplyBindsTighterThanAdditive_ProducesExpectedTree()
+        {
+            // a + b * c should parse as a + (b * c)
+            var expr = Parser.ParseExpression("a + b * c");
+
+            var add = Assert.IsType<BinaryExpr>(expr);
+            Assert.Equal("+", add.Op);
+            Assert.Equal("a", Assert.IsType<IdentifierExpr>(add.Left).Name);
+            var mul = Assert.IsType<BinaryExpr>(add.Right);
+            Assert.Equal("*", mul.Op);
+        }
+
+        [Fact]
+        public void ParseExpression_MultiplyAndModSamePrecedence_ProcessedLeftToRight()
+        {
+            // a * b MOD c should parse as (a * b) MOD c
+            var expr = Parser.ParseExpression("a * b MOD c");
+
+            var mod = Assert.IsType<BinaryExpr>(expr);
+            Assert.Equal("MOD", mod.Op);
+            var mul = Assert.IsType<BinaryExpr>(mod.Left);
+            Assert.Equal("*", mul.Op);
+        }
+
+        [Fact]
+        public void ParseExpression_CallMultipliedByField_ParsesWithoutError()
+        {
+            var expr = Parser.ParseExpression(
+                "LWORD_TO_LREAL(FinishedAt - StartedAt) * GVL_TcUnit.HundredNanosecondToSecond");
+
+            var mul = Assert.IsType<BinaryExpr>(expr);
+            Assert.Equal("*", mul.Op);
+            Assert.IsType<CallExpr>(mul.Left);
+            Assert.IsType<FieldAccessExpr>(mul.Right);
+        }
+
+        [Fact]
+        public void ParseStatements_CallWithOutputArg_ProducesNamedArgWithoutError()
+        {
+            var stmts = Parser.ParseStatements(
+                "AssertResults.ReportResult(AlreadyReported => AlreadyReported);");
+
+            var exprStmt = Assert.IsType<ExprStmt>(Assert.Single(stmts));
+            var namedArg = Assert.Single(exprStmt.Call.NamedArgs);
+            Assert.Equal("AlreadyReported", namedArg.Name);
+            Assert.True(namedArg.IsOutput);
+            Assert.Equal("AlreadyReported", Assert.IsType<IdentifierExpr>(namedArg.Value).Name);
+        }
+
+        [Fact]
+        public void ParseStatements_CallMixingInputAndOutputArgs_ProducesBothNamedArgKinds()
+        {
+            var stmts = Parser.ParseStatements(
+                "AssertResults.ReportResult(TestName := testName, AlreadyReported => AlreadyReported);");
+
+            var exprStmt = Assert.IsType<ExprStmt>(Assert.Single(stmts));
+            Assert.Equal(2, exprStmt.Call.NamedArgs.Count);
+            Assert.False(exprStmt.Call.NamedArgs[0].IsOutput);
+            Assert.True(exprStmt.Call.NamedArgs[1].IsOutput);
+        }
     }
 }

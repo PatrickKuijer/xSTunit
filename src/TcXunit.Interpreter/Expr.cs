@@ -140,10 +140,19 @@ namespace TcXunit.Interpreter
     {
         public string Name { get; }
         public Expr Value { get; }
-        public NamedArg(string name, Expr value)
+
+        // True for "Name => expr" VAR_OUTPUT-binding syntax (TcXunit-mym.5),
+        // false for the ordinary "Name := expr" VAR_INPUT/VAR_IN_OUT form.
+        // BindParams only consults NamedArgs for Input/InOut params, so an
+        // output-bound arg is inert downstream until output semantics are
+        // actually needed.
+        public bool IsOutput { get; }
+
+        public NamedArg(string name, Expr value, bool isOutput = false)
         {
             Name = name;
             Value = value;
+            IsOutput = isOutput;
         }
     }
 

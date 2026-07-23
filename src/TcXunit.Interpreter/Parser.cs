@@ -416,10 +416,17 @@ namespace TcXunit.Interpreter
         private Expr ParseMod()
         {
             var left = ParseUnary();
-            while (IsKeyword("MOD"))
+            while (IsKeyword("MOD") || Current.Type == TokenType.Asterisk || Current.Type == TokenType.Slash)
             {
+                string op;
+                if (Current.Type == TokenType.Asterisk)
+                    op = "*";
+                else if (Current.Type == TokenType.Slash)
+                    op = "/";
+                else
+                    op = "MOD";
                 Advance();
-                left = new BinaryExpr("MOD", left, ParseUnary());
+                left = new BinaryExpr(op, left, ParseUnary());
             }
             return left;
         }
@@ -607,6 +614,17 @@ namespace TcXunit.Interpreter
                         var argName = Advance().Text;
                         Advance(); // :=
                         named.Add(new NamedArg(argName, ParseExpr()));
+                    }
+                    else if (Current.Type == TokenType.Identifier && _tokens[_pos + 1].Type == TokenType.Arrow)
+                    {
+                        // Name => expr: VAR_OUTPUT binding syntax. Nothing in
+                        // the interpreter consumes output-parameter semantics
+                        // yet (TcXunit-mym.5) - recorded as a named arg with
+                        // IsOutput set so BindParams' Input/InOut-only lookup
+                        // continues to ignore it, matching real ST semantics.
+                        var argName = Advance().Text;
+                        Advance(); // =>
+                        named.Add(new NamedArg(argName, ParseExpr(), isOutput: true));
                     }
                     else
                     {

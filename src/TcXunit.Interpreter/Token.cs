@@ -21,6 +21,9 @@ namespace TcXunit.Interpreter
         Ne,          // <>
         Plus,
         Minus,
+        Asterisk,    // *
+        Slash,       // /
+        Arrow,       // => (VAR_OUTPUT call-arg binding)
         Caret,       // ^
         Dot,
         Comma,

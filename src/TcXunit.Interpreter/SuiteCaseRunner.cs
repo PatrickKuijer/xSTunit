@@ -117,16 +117,28 @@ namespace TcXunit.Interpreter
                     // actually depends on a skipped POU will still fail clearly at
                     // run time with an unresolved-type error; suites that don't
                     // need it can run unaffected.
-                    skipped.Add(new SkippedPou(Path.GetFileNameWithoutExtension(file), ex.Message));
+                    //
+                    // Keyed by the full file path (TcXunit-pvp), not the bare
+                    // filename: two merged directories (e.g. a Source PLC
+                    // project and a Tests PLC project) can each contain a
+                    // same-named rejected POU, and a bare-filename key would
+                    // collide, producing duplicate SuiteCase entries and
+                    // letting RunCase's lookup silently resolve to whichever
+                    // file happened to be parsed first. The full path is also
+                    // surfaced as the synthetic case's SuiteName, so the
+                    // failing file is unambiguous to the user.
+                    skipped.Add(new SkippedPou(file, ex.Message));
                 }
                 catch (Exception ex) when (ex is XmlException || ex is NullReferenceException)
                 {
                     // Same rationale as above (PLC-b62/TcXunit-swk): a structurally
                     // unexpected POU (malformed XML, missing Declaration/Implementation/ST,
                     // an interface-only POU, or a GVL/DUT file caught by the *.TcPOU glob)
-                    // must not abort discovery for the whole directory either.
+                    // must not abort discovery for the whole directory either. Keyed
+                    // by full file path for the same collision-avoidance reason as
+                    // above (TcXunit-pvp).
                     skipped.Add(new SkippedPou(
-                        Path.GetFileNameWithoutExtension(file),
+                        file,
                         $"Failed to parse '{Path.GetFileName(file)}': {ex.Message}"));
                 }
             }

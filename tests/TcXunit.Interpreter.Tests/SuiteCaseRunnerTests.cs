@@ -128,6 +128,51 @@ END_VAR]]></Declaration>
             File.Copy(Path.Combine(FixturePouDir, fileName), Path.Combine(destDir, fileName));
 
         [Fact]
+        public void DiscoverCases_SameNamedRejectedPouInTwoDirectories_SurfacesBothWithoutCollision()
+        {
+            var dirA = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "tcxunit-rejA-" + Guid.NewGuid()));
+            var dirB = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "tcxunit-rejB-" + Guid.NewGuid()));
+            try
+            {
+                CopyFixtureFile(dirA.FullName, "FB_CounterTests.TcPOU");
+                CopyFixtureFile(dirA.FullName, "FB_Counter.TcPOU");
+                CopyFixtureFile(dirA.FullName, "FB_ClampedCounter.TcPOU");
+                File.WriteAllText(Path.Combine(dirA.FullName, "FB_Unsupported.TcPOU"), RejectedPou);
+                File.WriteAllText(Path.Combine(dirB.FullName, "FB_Unsupported.TcPOU"), RejectedPou);
+
+                var cases = SuiteCaseRunner.DiscoverCases(new[] { dirA.FullName, dirB.FullName });
+
+                var skippedCases = cases.Where(c => c.CaseName == "(parse error)").ToList();
+
+                // Two same-named rejected POUs across the two directories must
+                // surface as two distinct SuiteCase entries (unique full-path
+                // keys), not collapse into one ambiguous duplicate.
+                Assert.Equal(2, skippedCases.Count);
+                Assert.Equal(skippedCases.Select(c => c.SuiteName).Distinct().Count(), skippedCases.Count);
+
+                var expectedPathA = Path.Combine(dirA.FullName, "FB_Unsupported.TcPOU");
+                var expectedPathB = Path.Combine(dirB.FullName, "FB_Unsupported.TcPOU");
+                Assert.Contains(skippedCases, c => c.SuiteName == expectedPathA);
+                Assert.Contains(skippedCases, c => c.SuiteName == expectedPathB);
+
+                var resultA = SuiteCaseRunner.RunCase(
+                    new[] { dirA.FullName, dirB.FullName }, expectedPathA, "(parse error)");
+                var resultB = SuiteCaseRunner.RunCase(
+                    new[] { dirA.FullName, dirB.FullName }, expectedPathB, "(parse error)");
+
+                Assert.False(resultA.Passed);
+                Assert.False(resultB.Passed);
+                Assert.Contains("Tc2_System", resultA.ToString());
+                Assert.Contains("Tc2_System", resultB.ToString());
+            }
+            finally
+            {
+                Directory.Delete(dirA.FullName, recursive: true);
+                Directory.Delete(dirB.FullName, recursive: true);
+            }
+        }
+
+        [Fact]
         public void DiscoverCases_UnparseablePou_SurfacesAsFailingCaseInsteadOfVanishing()
         {
             var tempDir = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "tcxunit-" + Guid.NewGuid()));
@@ -139,9 +184,11 @@ END_VAR]]></Declaration>
 
                 var cases = SuiteCaseRunner.DiscoverCases(tempDir.FullName);
 
-                Assert.Contains(cases, c => c.SuiteName == "FB_Unsupported" && c.CaseName == "(parse error)");
+                var skippedCase = Assert.Single(
+                    cases, c => c.CaseName == "(parse error)" && c.SuiteName.Contains("FB_Unsupported"));
+                Assert.Equal(Path.Combine(tempDir.FullName, "FB_Unsupported.TcPOU"), skippedCase.SuiteName);
 
-                var result = SuiteCaseRunner.RunCase(tempDir.FullName, "FB_Unsupported", "(parse error)");
+                var result = SuiteCaseRunner.RunCase(tempDir.FullName, skippedCase.SuiteName, "(parse error)");
 
                 Assert.False(result.Passed);
                 Assert.Contains("Tc2_System", result.ToString());
@@ -191,7 +238,8 @@ END_VAR]]></Declaration>
 
                 var cases = SuiteCaseRunner.DiscoverCases(tempDir.FullName);
 
-                Assert.Contains(cases, c => c.SuiteName == "FB_Broken" && c.CaseName == "(parse error)");
+                Assert.Contains(
+                    cases, c => c.SuiteName.Contains("FB_Broken") && c.CaseName == "(parse error)");
                 Assert.Contains(
                     cases,
                     c => c.SuiteName == "FB_CounterTests" && c.CaseName == "IncrementAddsDelta");
@@ -214,7 +262,8 @@ END_VAR]]></Declaration>
 
                 var cases = SuiteCaseRunner.DiscoverCases(tempDir.FullName);
 
-                Assert.Contains(cases, c => c.SuiteName == "FB_NoBody" && c.CaseName == "(parse error)");
+                Assert.Contains(
+                    cases, c => c.SuiteName.Contains("FB_NoBody") && c.CaseName == "(parse error)");
                 Assert.Contains(
                     cases,
                     c => c.SuiteName == "FB_CounterTests" && c.CaseName == "IncrementAddsDelta");

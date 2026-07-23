@@ -91,5 +91,37 @@ namespace TcXunit.Interpreter.Tests
             var nested = (FbInstance)instance.Fields["sfbAdder"].Value;
             Assert.Equal(2, nested.Fields["Sum"].Value);
         }
+
+        // Real-world repro (TcXunit-996 follow-up): a TcUnit TEST case with a
+        // METHOD-local VAR of a nested FB type (not a top-level FB field) that
+        // bare-invokes it, e.g. FB_DigitalInputFilterTests declaring
+        // `sfbDigitalInput : FB_DigitalInputFilter` inside the METHOD and
+        // calling `sfbDigitalInput()`. The local var lives in the calling
+        // Frame's Locals, not the suite instance's Fields, so bare-invocation
+        // dispatch must also check the caller frame's locals, not just
+        // instance.Fields.
+        [Fact]
+        public void BareInvocation_OfMethodLocalFbVar_BindsAndRunsInsteadOfFallingThroughToNative()
+        {
+            var adder = new PouAst(
+                "FB_Adder",
+                null,
+                "VAR_INPUT\n\tA : INT;\n\tB : INT;\nEND_VAR\nVAR_OUTPUT\n\tSum : INT;\nEND_VAR",
+                "Sum := A + B;",
+                new List<MethodAst>());
+
+            var method = new MethodAst(
+                "DoAdd",
+                "METHOD PRIVATE DoAdd\nVAR\n\tsfbAdder : FB_Adder;\nEND_VAR",
+                "sfbAdder(4, 5);");
+
+            var outer = new PouAst("FB_Outer", null, "", "", new List<MethodAst> { method });
+
+            var engine = new Engine(new TypeRegistry(new[] { adder, outer }));
+            var instance = engine.NewInstance("FB_Outer");
+
+            engine.CallMethod(instance, "DoAdd", new Expr[0], new NamedArg[0], null, null);
+        }
     }
 }
+

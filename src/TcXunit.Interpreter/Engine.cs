@@ -157,7 +157,13 @@ namespace TcXunit.Interpreter
                 // parsed as a call on the current instance with no receiver,
                 // but here it names a field holding another FbInstance to
                 // invoke directly (TcXunit-w5x.15.7's TON/TOF/FB_Pulse hosts).
-                if (instance.Fields.TryGetValue(methodName, out var calleeCell) &&
+                // The FB-typed variable may be a top-level instance field, or
+                // a METHOD-local VAR (e.g. a TEST case declaring
+                // `sfbDigitalInput : FB_DigitalInputFilter` and calling
+                // sfbDigitalInput()) - the latter lives in the caller frame's
+                // Locals, not instance.Fields, so check both (locals take
+                // precedence, mirroring Frame.ResolveCell).
+                if (TryResolveCalleeCell(callerFrame, instance, methodName, out var calleeCell) &&
                     calleeCell.Value is FbInstance callee &&
                     callee.NativeTimerHost != null)
                 {
@@ -167,11 +173,11 @@ namespace TcXunit.Interpreter
                 }
 
                 // Bare invocation of an ordinary interpreted (non-native) FB
-                // field, e.g. sfbLoopback(ibEnable := TRUE) - generalizes the
-                // native-timer bare-invoke above: bind VAR_INPUT/VAR_IN_OUT
-                // args into the callee's persisted Fields, then run its
-                // top-level body once (TcXunit-0v1).
-                if (instance.Fields.TryGetValue(methodName, out var interpretedCalleeCell) &&
+                // field or method-local var, e.g. sfbLoopback(ibEnable := TRUE)
+                // - generalizes the native-timer bare-invoke above: bind
+                // VAR_INPUT/VAR_IN_OUT args into the callee's persisted
+                // Fields, then run its top-level body once (TcXunit-0v1).
+                if (TryResolveCalleeCell(callerFrame, instance, methodName, out var interpretedCalleeCell) &&
                     interpretedCalleeCell.Value is FbInstance interpretedCallee &&
                     interpretedCallee.NativeTimerHost == null &&
                     interpretedCallee.NativeLoopbackHost == null &&
@@ -241,6 +247,19 @@ namespace TcXunit.Interpreter
             }
 
             return newFrame.Locals.TryGetValue(methodName, out var returnCell) ? returnCell.Value : null;
+        }
+
+        // Resolves a bare-invocation callee cell by name, checking the caller
+        // frame's Locals (METHOD-local VARs) before the instance's persisted
+        // Fields (top-level VARs) - mirrors Frame.ResolveCell's precedence.
+        // callerFrame is null for a few top-level entry points (e.g. FB_init),
+        // so only instance.Fields applies there.
+        private static bool TryResolveCalleeCell(Frame callerFrame, FbInstance instance, string name, out Cell cell)
+        {
+            if (callerFrame != null && callerFrame.Locals.TryGetValue(name, out cell))
+                return true;
+
+            return instance.Fields.TryGetValue(name, out cell);
         }
 
         // FbInstance.StepCycles(n) - re-invokes the instance's top-level body n

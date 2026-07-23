@@ -87,6 +87,13 @@ namespace TcXunit.Interpreter
                 return new ExitStmt();
             }
 
+            if (IsKeyword("RETURN"))
+            {
+                Advance();
+                Expect(TokenType.Semicolon);
+                return new ReturnStmt();
+            }
+
             var target = ParsePostfix(ParsePrimary());
 
             if (Current.Type == TokenType.Assign)

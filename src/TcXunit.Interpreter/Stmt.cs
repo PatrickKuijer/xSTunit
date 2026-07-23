@@ -127,4 +127,8 @@ namespace TcXunit.Interpreter
     public sealed class ExitStmt : Stmt
     {
     }
+
+    public sealed class ReturnStmt : Stmt
+    {
+    }
 }

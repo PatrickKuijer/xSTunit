@@ -30,7 +30,13 @@ namespace TcXunit.Interpreter
             var instance = NewInstance(suiteTypeName);
             var def = _registry.Get(suiteTypeName);
             var frame = new Frame(instance, suiteTypeName);
-            ExecuteStatements(Parser.ParseStatements(def.ImplementationText), frame);
+            try
+            {
+                ExecuteStatements(Parser.ParseStatements(def.ImplementationText), frame);
+            }
+            catch (MethodReturnSignal)
+            {
+            }
             return instance.NativeSuiteHost.Collect();
         }
 
@@ -204,7 +210,13 @@ namespace TcXunit.Interpreter
             var paramDecls = VarBlockParser.Parse(methodDef.DeclarationText);
             BindParams(paramDecls, positionalArgs, namedArgs, callerFrame, newFrame);
 
-            ExecuteStatements(Parser.ParseStatements(methodDef.ImplementationText), newFrame);
+            try
+            {
+                ExecuteStatements(Parser.ParseStatements(methodDef.ImplementationText), newFrame);
+            }
+            catch (MethodReturnSignal)
+            {
+            }
 
             return newFrame.Locals.TryGetValue(methodName, out var returnCell) ? returnCell.Value : null;
         }
@@ -501,6 +513,8 @@ namespace TcXunit.Interpreter
                     break;
                 case ExitStmt:
                     throw new LoopExitSignal();
+                case ReturnStmt:
+                    throw new MethodReturnSignal();
                 default:
                     throw new NotSupportedException($"Statement type {stmt.GetType().Name} not supported");
             }
@@ -511,6 +525,14 @@ namespace TcXunit.Interpreter
         // straight through any IF/CASE it's lexically nested inside without
         // being special-cased there.
         private sealed class LoopExitSignal : Exception
+        {
+        }
+
+        // Internal unwind signal for RETURN (TcXunit-mym.2): caught only at
+        // CallMethod's and RunSuite's top-level ExecuteStatements call, so it
+        // passes straight through any IF/FOR/WHILE/etc it's lexically nested
+        // inside without being special-cased there.
+        private sealed class MethodReturnSignal : Exception
         {
         }
 

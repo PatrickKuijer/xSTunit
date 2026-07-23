@@ -95,6 +95,37 @@ namespace TcXunit.Cli.Tests
             }
         }
 
+        [Fact]
+        public void Run_PouOutsideParseSubset_ReturnsTwoAndPrintsClearError()
+        {
+            var dir = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "tcxunit-cli-rejected-" + Guid.NewGuid()));
+            try
+            {
+                File.WriteAllText(Path.Combine(dir.FullName, "FB_UsesTc2System.TcPOU"), RejectedPouXml);
+
+                var output = new StringWriter();
+
+                var exitCode = CliRunner.Run(new[] { dir.FullName }, output);
+
+                Assert.Equal(2, exitCode);
+                Assert.Contains("Tc2_System", output.ToString());
+            }
+            finally
+            {
+                Directory.Delete(dir.FullName, recursive: true);
+            }
+        }
+
+        private const string RejectedPouXml = @"<?xml version=""1.0"" encoding=""utf-8""?>
+<TcPlcObject Version=""1.1.0.1"">
+  <POU Name=""FB_UsesTc2System"" Id=""{00000000-0000-0000-0000-0000000000ba}"" SpecialFunc=""None"">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_UsesTc2System]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[Tc2_System.SOME_FUNCTION();]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>";
+
         private static void CopyFixtureFile(string destDir, string fileName) =>
             File.Copy(Path.Combine(FixturePouDir, fileName), Path.Combine(destDir, fileName));
 

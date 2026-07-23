@@ -38,6 +38,11 @@ namespace TcXunit.Cli
                 output.WriteLine($"error: {ex.Message}");
                 return 2;
             }
+            catch (TcPouRejectedException ex)
+            {
+                output.WriteLine($"error: {ex.Message}");
+                return 2;
+            }
 
             var types = loaded.Select(l => l.Pou).ToList();
             var registry = new TypeRegistry(types);

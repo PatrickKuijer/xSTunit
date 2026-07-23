@@ -84,7 +84,13 @@ namespace TcXunit.Interpreter
             for (var i = chain.Count - 1; i >= 0; i--)
             {
                 var def = _registry.Get(chain[i]);
-                foreach (var decl in VarBlockParser.Parse(def.DeclarationText).Where(d => d.Section == VarSection.Local))
+                // VAR_INPUT/VAR_OUTPUT/VAR_IN_OUT sections must persist as
+                // instance Fields alongside VAR (Local), same as the
+                // hardcoded native timer/loopback IN/PT/Q/ET fields above -
+                // otherwise dot-access and StepCycles-internal references to
+                // a nested FB's own inputs/outputs never resolve
+                // (TcXunit-0v1).
+                foreach (var decl in VarBlockParser.Parse(def.DeclarationText).Where(IsPersistedField))
                     instance.Fields[decl.Name] = new Cell { Value = DefaultValue(decl, instance) };
             }
 
@@ -157,6 +163,22 @@ namespace TcXunit.Interpreter
                 {
                     BindTimerInputs(callee, positionalArgs, namedArgs, callerFrame);
                     callee.NativeTimerHost.Update(callee, Clock.TotalMs);
+                    return null;
+                }
+
+                // Bare invocation of an ordinary interpreted (non-native) FB
+                // field, e.g. sfbLoopback(ibEnable := TRUE) - generalizes the
+                // native-timer bare-invoke above: bind VAR_INPUT/VAR_IN_OUT
+                // args into the callee's persisted Fields, then run its
+                // top-level body once (TcXunit-0v1).
+                if (instance.Fields.TryGetValue(methodName, out var interpretedCalleeCell) &&
+                    interpretedCalleeCell.Value is FbInstance interpretedCallee &&
+                    interpretedCallee.NativeTimerHost == null &&
+                    interpretedCallee.NativeLoopbackHost == null &&
+                    interpretedCallee.NativeSuiteHost == null &&
+                    _registry.Get(interpretedCallee.ActualTypeName) != null)
+                {
+                    InvokeFbInstance(interpretedCallee, positionalArgs, namedArgs, callerFrame);
                     return null;
                 }
 
@@ -324,6 +346,71 @@ namespace TcXunit.Interpreter
             foreach (var arg in namedArgs)
                 if (callee.Fields.TryGetValue(arg.Name, out var cell))
                     cell.Value = Evaluate(arg.Value, callerFrame);
+        }
+
+        // Fields materialized at NewInstance() time (VAR_INPUT/VAR_OUTPUT/
+        // VAR_IN_OUT alongside VAR/Local) - the set that must persist across
+        // calls/StepCycles and be visible to dot-access (TcXunit-0v1).
+        private static bool IsPersistedField(VarDecl decl) =>
+            decl.Section == VarSection.Local ||
+            decl.Section == VarSection.Input ||
+            decl.Section == VarSection.Output ||
+            decl.Section == VarSection.InOut;
+
+        // Declared VAR_INPUT/VAR_IN_OUT params for a bare-invoked interpreted
+        // FB, in base-to-derived declaration order (matches IEC positional
+        // arg order and the Fields-materialization loop in NewInstance).
+        private List<VarDecl> GetOwnInputDecls(FbInstance instance)
+        {
+            var chain = new List<string>();
+            var current = instance.ActualTypeName;
+            while (current != null)
+            {
+                var def = _registry.Get(current);
+                if (def == null)
+                    break;
+                chain.Add(current);
+                current = def.BaseTypeName;
+            }
+
+            var result = new List<VarDecl>();
+            for (var i = chain.Count - 1; i >= 0; i--)
+            {
+                var def = _registry.Get(chain[i]);
+                result.AddRange(VarBlockParser.Parse(def.DeclarationText)
+                    .Where(d => d.Section == VarSection.Input || d.Section == VarSection.InOut));
+            }
+            return result;
+        }
+
+        // Generalizes BindTimerInputs beyond the native TON/TOF/FB_Pulse
+        // boundary: binds bare-invocation args into the callee's persisted
+        // Fields by name or IEC positional order, then runs the callee's own
+        // top-level body once (TcXunit-0v1).
+        private void InvokeFbInstance(
+            FbInstance callee,
+            IReadOnlyList<Expr> positionalArgs,
+            IReadOnlyList<NamedArg> namedArgs,
+            Frame callerFrame)
+        {
+            var inputDecls = GetOwnInputDecls(callee);
+
+            for (var i = 0; i < positionalArgs.Count && i < inputDecls.Count; i++)
+                callee.Fields[inputDecls[i].Name].Value = Evaluate(positionalArgs[i], callerFrame);
+
+            foreach (var arg in namedArgs)
+                if (callee.Fields.TryGetValue(arg.Name, out var cell))
+                    cell.Value = Evaluate(arg.Value, callerFrame);
+
+            var def = _registry.Get(callee.ActualTypeName);
+            var calleeFrame = new Frame(callee, callee.ActualTypeName);
+            try
+            {
+                ExecuteStatements(Parser.ParseStatements(def.ImplementationText), calleeFrame);
+            }
+            catch (MethodReturnSignal)
+            {
+            }
         }
 
         private void BindParams(

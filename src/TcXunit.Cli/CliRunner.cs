@@ -45,7 +45,28 @@ namespace TcXunit.Cli
             }
 
             var types = loaded.Select(l => l.Pou).ToList();
-            var registry = new TypeRegistry(types);
+
+            // .TcDUT STRUCT types (TcXunit-9li): shared with SuiteCaseRunner
+            // via DutStructLoader so `tcxunit run` resolves STRUCT-typed DUTs
+            // the same way Test Explorer discovery does, instead of silently
+            // failing to resolve any suite/FB that depends on one. Per-file
+            // parse failures are isolated the same resilient way
+            // DutStructLoader isolates them for SuiteCaseRunner (unsupported
+            // DUT kinds are skipped, not fatal); a duplicate STRUCT name
+            // across files is a hard error, same as a duplicate POU type
+            // name above.
+            IReadOnlyList<StructAst> structTypes;
+            try
+            {
+                structTypes = DutStructLoader.Load(args, out _);
+            }
+            catch (DuplicateStructTypeException ex)
+            {
+                output.WriteLine($"error: {ex.Message}");
+                return 2;
+            }
+
+            var registry = new TypeRegistry(types, structTypes);
             var suiteNames = SuiteDiscovery.FindSuiteTypeNames(registry, types.Select(t => t.Name));
 
             if (suiteNames.Count == 0)

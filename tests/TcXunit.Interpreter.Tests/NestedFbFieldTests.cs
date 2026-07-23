@@ -92,6 +92,22 @@ namespace TcXunit.Interpreter.Tests
             Assert.Equal(2, nested.Fields["Sum"].Value);
         }
 
+        // TcXunit-21j: named args must only bind against the callee's own
+        // VAR_INPUT/VAR_IN_OUT decls (mirrors BindParams), not the full
+        // Fields set, else a named arg can silently clobber VAR_OUTPUT/Local
+        // state before the body ever runs.
+        [Fact]
+        public void BareInvocation_NamedArgTargetingVarOutput_DoesNotOverwriteIt()
+        {
+            var engine = NewEngine("sfbAdder(A := 1, B := 2, Sum := 999);");
+            var instance = engine.NewInstance("FB_Outer");
+
+            engine.CallMethod(instance, "StepCycles", new Expr[] { new IntLiteralExpr(1) }, new NamedArg[0], null, null);
+
+            var nested = (FbInstance)instance.Fields["sfbAdder"].Value;
+            Assert.Equal(3, nested.Fields["Sum"].Value);
+        }
+
         // Real-world repro (TcXunit-996 follow-up): a TcUnit TEST case with a
         // METHOD-local VAR of a nested FB type (not a top-level FB field) that
         // bare-invokes it, e.g. FB_DigitalInputFilterTests declaring

@@ -466,7 +466,7 @@ namespace TcXunit.Interpreter
                 callee.Fields[inputDecls[i].Name].Value = Evaluate(positionalArgs[i], callerFrame);
 
             foreach (var arg in namedArgs)
-                if (callee.Fields.TryGetValue(arg.Name, out var cell))
+                if (inputDecls.Any(d => d.Name == arg.Name) && callee.Fields.TryGetValue(arg.Name, out var cell))
                     cell.Value = Evaluate(arg.Value, callerFrame);
 
             var def = _registry.Get(callee.ActualTypeName);

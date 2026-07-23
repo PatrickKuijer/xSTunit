@@ -603,7 +603,19 @@ namespace TcXunit.Interpreter
                     SetLValue(assign.Target, Evaluate(assign.Value, frame), frame);
                     break;
                 case RefAssignStmt refAssign:
-                    frame.Locals[refAssign.TargetName] = ResolveCellForLValue(refAssign.Value, frame);
+                    // Method-local REFERENCE TO vars are pre-populated into
+                    // frame.Locals by BindParams, so a hit there means the
+                    // target is genuinely local. Otherwise, if it names an
+                    // instance field (e.g. declared in the FB's VAR block),
+                    // write through to instance.Fields so the binding
+                    // persists across calls (TcXunit-t6p) - Frame is
+                    // per-call and would otherwise silently drop it.
+                    if (!frame.Locals.ContainsKey(refAssign.TargetName) &&
+                        frame.Instance != null &&
+                        frame.Instance.Fields.ContainsKey(refAssign.TargetName))
+                        frame.Instance.Fields[refAssign.TargetName] = ResolveCellForLValue(refAssign.Value, frame);
+                    else
+                        frame.Locals[refAssign.TargetName] = ResolveCellForLValue(refAssign.Value, frame);
                     break;
                 case IfStmt ifStmt:
                     if ((bool)Evaluate(ifStmt.Condition, frame))

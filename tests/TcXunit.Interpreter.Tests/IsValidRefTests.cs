@@ -87,5 +87,32 @@ namespace TcXunit.Interpreter.Tests
 
             Assert.Equal(expectedFlag, instance.Fields["flag"].Value);
         }
+
+        [Fact]
+        public void IsValidRef_ReferenceBoundInOneCall_PersistsAcrossLaterCall()
+        {
+            // TcXunit-t6p: the FB_SFC2 pattern binds an instance-level
+            // REFERENCE TO once (e.g. in a setter) and guards on it in a
+            // later, separate method call - the binding must survive past
+            // the Frame that performed the REF=, not just within it.
+            var bindMethod = new MethodAst("Bind", "METHOD Bind", "refInt REF= target;");
+            var checkMethod = new MethodAst(
+                "Check",
+                "METHOD Check : BOOL",
+                "Check := __ISVALIDREF(refInt);");
+            var pou = new PouAst(
+                "FB_Guard",
+                null,
+                "VAR\n\ttarget : INT := 5;\n\trefInt : REFERENCE TO INT;\nEND_VAR",
+                "",
+                new List<MethodAst> { bindMethod, checkMethod });
+            var engine = new Engine(new TypeRegistry(new[] { pou }));
+            var instance = engine.NewInstance("FB_Guard");
+
+            engine.CallMethod(instance, "Bind", new Expr[0], new NamedArg[0], null, null);
+            var result = engine.CallMethod(instance, "Check", new Expr[0], new NamedArg[0], null, null);
+
+            Assert.Equal(true, result);
+        }
     }
 }

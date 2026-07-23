@@ -1042,6 +1042,12 @@ namespace TcXunit.Interpreter
             if (binary.Op == "MOD")
                 return EvaluateMod(leftVal, rightVal);
 
+            // BOOL only supports equality/inequality in IEC 61131-3 (no
+            // ordering, no arithmetic) - handle it here so it doesn't fall
+            // through to the int cast below.
+            if (leftVal is bool lbEq && rightVal is bool rbEq && (binary.Op == "=" || binary.Op == "<>"))
+                return binary.Op == "=" ? lbEq == rbEq : lbEq != rbEq;
+
             // INT->REAL->LREAL implicit widening: promote to the widest operand's
             // type for the whole operation, per TwinCAT's "smaller to larger is
             // implicit" arithmetic promotion rule.

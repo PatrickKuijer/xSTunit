@@ -52,7 +52,7 @@ namespace TcXunit.Interpreter
         private bool IsKeyword(string keyword) =>
             Current.Type == TokenType.Identifier && Current.Text == keyword;
 
-        private static readonly HashSet<string> DefaultTerminators = new HashSet<string> { "ELSE", "END_IF" };
+        private static readonly HashSet<string> DefaultTerminators = new HashSet<string> { "ELSIF", "ELSE", "END_IF" };
 
         private List<Stmt> ParseStatementList(HashSet<string> terminators = null)
         {
@@ -147,7 +147,29 @@ namespace TcXunit.Interpreter
             Advance();
 
             var thenBranch = ParseStatementList();
+            return ParseIfTail(condition, thenBranch);
+        }
+
+        // Handles the ELSIF/ELSE/END_IF tail of an IF. An ELSIF...THEN chain
+        // is represented as a nested IfStmt in the Else branch (each ELSIF
+        // recurses here for its own tail), so the engine needs no changes -
+        // it already executes IfStmt.Else via ExecuteStatements recursively.
+        private Stmt ParseIfTail(Expr condition, List<Stmt> thenBranch)
+        {
             var elseBranch = new List<Stmt>();
+            if (IsKeyword("ELSIF"))
+            {
+                Advance();
+                var elsifCondition = ParseExpr();
+                if (!IsKeyword("THEN"))
+                    throw new FormatException("Expected THEN");
+                Advance();
+
+                var elsifThen = ParseStatementList();
+                elseBranch = new List<Stmt> { ParseIfTail(elsifCondition, elsifThen) };
+                return new IfStmt(condition, thenBranch, elseBranch);
+            }
+
             if (IsKeyword("ELSE"))
             {
                 Advance();

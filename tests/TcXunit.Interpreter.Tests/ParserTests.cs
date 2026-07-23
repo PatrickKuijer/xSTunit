@@ -33,6 +33,34 @@ namespace TcXunit.Interpreter.Tests
         }
 
         [Fact]
+        public void ParseStatements_IfElsif_ProducesNestedIfStmtChain()
+        {
+            var stmts = Parser.ParseStatements(
+                "IF a THEN\n" +
+                "\tx := 1;\n" +
+                "ELSIF b THEN\n" +
+                "\tx := 2;\n" +
+                "ELSIF c THEN\n" +
+                "\tx := 3;\n" +
+                "ELSE\n" +
+                "\tx := 4;\n" +
+                "END_IF");
+
+            var outer = Assert.IsType<IfStmt>(Assert.Single(stmts));
+            Assert.Equal("a", Assert.IsType<IdentifierExpr>(outer.Condition).Name);
+            Assert.Single(outer.Then);
+
+            var elsif1 = Assert.IsType<IfStmt>(Assert.Single(outer.Else));
+            Assert.Equal("b", Assert.IsType<IdentifierExpr>(elsif1.Condition).Name);
+            Assert.Single(elsif1.Then);
+
+            var elsif2 = Assert.IsType<IfStmt>(Assert.Single(elsif1.Else));
+            Assert.Equal("c", Assert.IsType<IdentifierExpr>(elsif2.Condition).Name);
+            Assert.Single(elsif2.Then);
+            Assert.Single(elsif2.Else);
+        }
+
+        [Fact]
         public void ParseStatements_SuperInitCall_ProducesExprStmtCallingFbInit()
         {
             var stmts = Parser.ParseStatements(

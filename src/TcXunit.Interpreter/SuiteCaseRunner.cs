@@ -30,9 +30,12 @@ namespace TcXunit.Interpreter
         // rather than being silently dropped from discovery.
         private const string ParseErrorCaseName = "(parse error)";
 
-        public static IReadOnlyList<SuiteCase> DiscoverCases(string pouDirectory)
+        public static IReadOnlyList<SuiteCase> DiscoverCases(string pouDirectory) =>
+            DiscoverCases(new[] { pouDirectory });
+
+        public static IReadOnlyList<SuiteCase> DiscoverCases(IReadOnlyList<string> pouDirectories)
         {
-            var registry = BuildRegistry(pouDirectory, out var typeNames, out var skipped);
+            var registry = BuildRegistry(pouDirectories, out var typeNames, out var skipped);
             var engine = new Engine(registry);
             var suiteNames = SuiteDiscovery.FindSuiteTypeNames(registry, typeNames);
 
@@ -47,9 +50,12 @@ namespace TcXunit.Interpreter
             return cases;
         }
 
-        public static TestCaseResult RunCase(string pouDirectory, string suiteName, string caseName)
+        public static TestCaseResult RunCase(string pouDirectory, string suiteName, string caseName) =>
+            RunCase(new[] { pouDirectory }, suiteName, caseName);
+
+        public static TestCaseResult RunCase(IReadOnlyList<string> pouDirectories, string suiteName, string caseName)
         {
-            var registry = BuildRegistry(pouDirectory, out _, out var skipped);
+            var registry = BuildRegistry(pouDirectories, out _, out var skipped);
 
             if (caseName == ParseErrorCaseName)
             {
@@ -81,17 +87,17 @@ namespace TcXunit.Interpreter
         }
 
         private static TypeRegistry BuildRegistry(
-            string pouDirectory, out List<string> typeNames, out List<SkippedPou> skipped)
+            IReadOnlyList<string> pouDirectories, out List<string> typeNames, out List<SkippedPou> skipped)
         {
-            var pouFiles = Directory.GetFiles(pouDirectory, "*.TcPOU", SearchOption.AllDirectories);
-            var types = new List<PouAst>();
+            var pouFiles = MultiDirectoryPouLoader.FindPouFiles(pouDirectories);
+            var loaded = new List<LoadedPou>();
             skipped = new List<SkippedPou>();
 
             foreach (var file in pouFiles)
             {
                 try
                 {
-                    types.Add(TcPouParser.Parse(File.ReadAllText(file)));
+                    loaded.Add(new LoadedPou(TcPouParser.Parse(File.ReadAllText(file)), file));
                 }
                 catch (TcPouRejectedException ex)
                 {
@@ -106,6 +112,12 @@ namespace TcXunit.Interpreter
                 }
             }
 
+            // Fail fast and loud on duplicate type names across the merged set
+            // (TcXunit-98e.1) before any suite runs, distinct from the per-file
+            // skip/report path above.
+            MultiDirectoryPouLoader.CheckForDuplicates(loaded);
+
+            var types = loaded.Select(l => l.Pou).ToList();
             typeNames = types.Select(t => t.Name).ToList();
             return new TypeRegistry(types);
         }

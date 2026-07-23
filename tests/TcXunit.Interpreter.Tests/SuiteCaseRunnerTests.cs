@@ -49,6 +49,63 @@ END_VAR]]></Declaration>
         }
 
         [Fact]
+        public void DiscoverCases_SuiteAndFbInSeparateDirectories_DiscoversAcrossBoth()
+        {
+            var sourceDir = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "tcxunit-source-" + Guid.NewGuid()));
+            var testsDir = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "tcxunit-tests-" + Guid.NewGuid()));
+            try
+            {
+                CopyFixtureFile(sourceDir.FullName, "FB_Counter.TcPOU");
+                CopyFixtureFile(sourceDir.FullName, "FB_ClampedCounter.TcPOU");
+                CopyFixtureFile(testsDir.FullName, "FB_CounterTests.TcPOU");
+
+                var cases = SuiteCaseRunner.DiscoverCases(new[] { sourceDir.FullName, testsDir.FullName });
+
+                Assert.Equal(
+                    new[]
+                    {
+                        ("FB_CounterTests", "CounterStartsAtZero"),
+                        ("FB_CounterTests", "IncrementAddsDelta"),
+                        ("FB_CounterTests", "DecrementClampsAtZero"),
+                        ("FB_CounterTests", "ClampedCounterIncrementRespectsCeiling"),
+                    },
+                    cases.Select(c => (c.SuiteName, c.CaseName)));
+
+                var result = SuiteCaseRunner.RunCase(
+                    new[] { sourceDir.FullName, testsDir.FullName }, "FB_CounterTests", "IncrementAddsDelta");
+                Assert.True(result.Passed, result.ToString());
+            }
+            finally
+            {
+                Directory.Delete(sourceDir.FullName, recursive: true);
+                Directory.Delete(testsDir.FullName, recursive: true);
+            }
+        }
+
+        [Fact]
+        public void DiscoverCases_DuplicateTypeNameAcrossDirectories_ThrowsDuplicatePouTypeException()
+        {
+            var dirA = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "tcxunit-dupA-" + Guid.NewGuid()));
+            var dirB = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "tcxunit-dupB-" + Guid.NewGuid()));
+            try
+            {
+                CopyFixtureFile(dirA.FullName, "FB_Counter.TcPOU");
+                CopyFixtureFile(dirB.FullName, "FB_Counter.TcPOU");
+
+                Assert.Throws<TcXunit.Parser.DuplicatePouTypeException>(
+                    () => SuiteCaseRunner.DiscoverCases(new[] { dirA.FullName, dirB.FullName }));
+            }
+            finally
+            {
+                Directory.Delete(dirA.FullName, recursive: true);
+                Directory.Delete(dirB.FullName, recursive: true);
+            }
+        }
+
+        private static void CopyFixtureFile(string destDir, string fileName) =>
+            File.Copy(Path.Combine(FixturePouDir, fileName), Path.Combine(destDir, fileName));
+
+        [Fact]
         public void DiscoverCases_UnparseablePou_SurfacesAsFailingCaseInsteadOfVanishing()
         {
             var tempDir = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "tcxunit-" + Guid.NewGuid()));

@@ -871,6 +871,17 @@ namespace TcXunit.Interpreter
             return cell;
         }
 
+        // __ISVALIDREF(ref): TwinCAT intrinsic returning TRUE when a REFERENCE
+        // TO variable currently aliases a valid target, FALSE when unassigned.
+        // An unbound REFERENCE TO defaults to a null-valued Cell (DefaultValue
+        // returns null for REFERENCE TO/POINTER TO), while a REF=-bound
+        // reference aliases the target's own Cell (whose value is the FB/struct
+        // /scalar it points at) - so a non-null resolved value maps to "valid".
+        private bool IsValidRef(Expr expr, Frame frame)
+        {
+            return ResolveCellForLValue(expr, frame).Value != null;
+        }
+
         // FbInstance and StructInstance are both "named-field container of
         // Cells" (T7's struct Cell-shape decision) - FieldAccessExpr reads
         // either the same way.
@@ -1209,6 +1220,9 @@ namespace TcXunit.Interpreter
             {
                 if (call.MethodName == "ADR")
                     return new Pointer(ResolveCellForAdr(call.PositionalArgs[0], frame));
+
+                if (call.MethodName == "__ISVALIDREF")
+                    return IsValidRef(call.PositionalArgs[0], frame);
 
                 if (call.MethodName == "MEMCPY" || call.MethodName == "MEMMOVE")
                     return MemCopy(

@@ -70,13 +70,14 @@ namespace TcXunit.Interpreter
             return result;
         }
 
-        // Strips a trailing "// ..." line comment, ignoring "//" that appears
-        // inside a single- or double-quoted string literal (e.g. a STRING
-        // default value containing "//"). TcXunit-dem.
+        // Strips a trailing "// ..." line comment or "(* ... *)" block
+        // comment, ignoring "//", "(*" and "*)" that appear inside a
+        // single- or double-quoted string literal (e.g. a STRING default
+        // value containing those sequences). TcXunit-dem, TcXunit-n3w.
         private static string StripTrailingComment(string line)
         {
             char? quoteChar = null;
-            for (var i = 0; i < line.Length - 1; i++)
+            for (var i = 0; i < line.Length; i++)
             {
                 var c = line[i];
                 if (quoteChar != null)
@@ -92,7 +93,11 @@ namespace TcXunit.Interpreter
                     continue;
                 }
 
-                if (c == '/' && line[i + 1] == '/')
+                if (i < line.Length - 1 && c == '/' && line[i + 1] == '/')
+                    return line.Substring(0, i);
+
+                if (i < line.Length - 1 && c == '(' && line[i + 1] == '*'
+                    && line.IndexOf("*)", i + 2, System.StringComparison.Ordinal) >= 0)
                     return line.Substring(0, i);
             }
 

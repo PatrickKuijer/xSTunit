@@ -123,5 +123,51 @@ END_VAR";
             var url = Assert.Single(vars);
             Assert.Equal("'http://example.com'", url.DefaultValueText);
         }
+
+        [Fact]
+        public void Parse_TrailingBlockComment_IsStrippedAndDeclarationIsKept()
+        {
+            const string declaration = @"FUNCTION_BLOCK FB_TcpDataLoopback
+VAR_OUTPUT
+	obOk : BOOL; (* TRUE while enabled *)
+END_VAR";
+
+            var vars = VarBlockParser.Parse(declaration);
+
+            var obOk = Assert.Single(vars);
+            Assert.Equal("obOk", obOk.Name);
+            Assert.Equal("BOOL", obOk.TypeName);
+            Assert.Equal(VarSection.Output, obOk.Section);
+            Assert.Null(obOk.DefaultValueText);
+        }
+
+        [Fact]
+        public void Parse_TrailingBlockComment_WithDefaultValue_IsStrippedAndDefaultKept()
+        {
+            const string declaration = @"FUNCTION_BLOCK FB_Counter
+VAR
+	value : INT := 5; (* seed value *)
+END_VAR";
+
+            var vars = VarBlockParser.Parse(declaration);
+
+            var value = Assert.Single(vars);
+            Assert.Equal("value", value.Name);
+            Assert.Equal("5", value.DefaultValueText);
+        }
+
+        [Fact]
+        public void Parse_StringDefaultContainingBlockCommentMarkers_IsNotTreatedAsComment()
+        {
+            const string declaration = @"FUNCTION_BLOCK FB_Counter
+VAR
+	note : STRING(80) := 'see (* details *) here'; (* trailing note *)
+END_VAR";
+
+            var vars = VarBlockParser.Parse(declaration);
+
+            var note = Assert.Single(vars);
+            Assert.Equal("'see (* details *) here'", note.DefaultValueText);
+        }
     }
 }

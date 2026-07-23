@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using TcXunit.Interpreter;
@@ -14,25 +15,37 @@ namespace TcXunit.Cli
         {
             if (args.Length == 0)
             {
-                output.WriteLine("usage: tcxunit run <path-to-POUs-directory>");
+                output.WriteLine("usage: tcxunit run <path-to-POUs-directory> [<path-to-POUs-directory> ...]");
                 return 2;
             }
 
-            var path = args[0];
-            if (!Directory.Exists(path))
+            foreach (var path in args)
             {
-                output.WriteLine($"error: path does not exist: {path}");
+                if (!Directory.Exists(path))
+                {
+                    output.WriteLine($"error: path does not exist: {path}");
+                    return 2;
+                }
+            }
+
+            IReadOnlyList<LoadedPou> loaded;
+            try
+            {
+                loaded = MultiDirectoryPouLoader.Load(args);
+            }
+            catch (DuplicatePouTypeException ex)
+            {
+                output.WriteLine($"error: {ex.Message}");
                 return 2;
             }
 
-            var pouFiles = Directory.GetFiles(path, "*.TcPOU", SearchOption.AllDirectories);
-            var types = pouFiles.Select(f => TcPouParser.Parse(File.ReadAllText(f))).ToList();
+            var types = loaded.Select(l => l.Pou).ToList();
             var registry = new TypeRegistry(types);
             var suiteNames = SuiteDiscovery.FindSuiteTypeNames(registry, types.Select(t => t.Name));
 
             if (suiteNames.Count == 0)
             {
-                output.WriteLine($"error: no TcUnit suites found under {path}");
+                output.WriteLine($"error: no TcUnit suites found under {string.Join(", ", args)}");
                 return 2;
             }
 

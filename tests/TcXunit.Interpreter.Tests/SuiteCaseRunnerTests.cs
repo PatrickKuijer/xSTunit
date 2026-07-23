@@ -153,6 +153,33 @@ END_VAR]]></Declaration>
         }
 
         [Fact]
+        public void RunCase_ParseErrorCaseWithNoMatchingSkipEntry_ThrowsInvalidOperationExceptionNotNullReference()
+        {
+            var tempDir = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "tcxunit-" + Guid.NewGuid()));
+            try
+            {
+                foreach (var file in Directory.GetFiles(FixturePouDir, "*.TcPOU"))
+                    File.Copy(file, Path.Combine(tempDir.FullName, Path.GetFileName(file)));
+                File.WriteAllText(Path.Combine(tempDir.FullName, "FB_Unsupported.TcPOU"), RejectedPou);
+
+                // Stale/mismatched pair: caseName is the parse-error sentinel but
+                // suiteName does not match any entry in the current skip set
+                // (e.g. the skip set changed between DiscoverCases and RunCase).
+                // suiteName was never added to the TypeRegistry, so falling
+                // through to engine.RunSuite would previously throw a
+                // NullReferenceException instead of a clear diagnostic.
+                var ex = Assert.Throws<InvalidOperationException>(
+                    () => SuiteCaseRunner.RunCase(tempDir.FullName, "FB_DoesNotExist", "(parse error)"));
+
+                Assert.Contains("FB_DoesNotExist", ex.Message);
+            }
+            finally
+            {
+                Directory.Delete(tempDir.FullName, recursive: true);
+            }
+        }
+
+        [Fact]
         public void DiscoverCases_MalformedXmlPou_SurfacesAsFailingCaseInsteadOfAbortingScan()
         {
             var tempDir = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "tcxunit-" + Guid.NewGuid()));

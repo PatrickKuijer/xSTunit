@@ -63,6 +63,14 @@ namespace TcXunit.Interpreter
                 var skip = skipped.FirstOrDefault(s => s.FileKey == suiteName);
                 if (skip.FileKey != null)
                     return new TestCaseResult(caseName, new[] { new AssertionFailure(skip.Message) });
+
+                // No matching skip entry (e.g. a stale suite/case pair from an
+                // earlier discovery, or the skip set changed between
+                // DiscoverCases and RunCase calls): suiteName was never added
+                // to the TypeRegistry (it failed to parse), so falling through
+                // to engine.RunSuite would dereference a null type definition.
+                // Throw the same not-found error used below instead.
+                throw new InvalidOperationException($"Case '{caseName}' not found in suite '{suiteName}'");
             }
 
             var engine = new Engine(registry);

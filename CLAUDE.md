@@ -70,7 +70,7 @@ Issues tracked in beads (`bd`), a local Dolt DB synced via `refs/dolt/data`. See
 
 ### Domain docs
 
-Single-context — CONTEXT.md + docs/adr/ at repo root. See `docs/agents/domain.md`.
+No CONTEXT.md or docs/adr/ exist yet in this repo. See `docs/agents/domain.md` for how to consume them once present.
 
 ## Build & Test
 
@@ -79,7 +79,7 @@ Requires .NET SDK (`net8.0` for CLI, `netstandard2.0` for interpreter/runner/par
 ```bash
 dotnet build TcXunit.sln
 dotnet test TcXunit.sln
-dotnet run --project src/TcXunit.Cli -- run <path-to-POUs-directory>
+dotnet run --project src/TcXunit.Cli -- <path-to-POUs-directory>
 ```
 
 ## Architecture Overview
@@ -93,7 +93,7 @@ src/
                          TypeRegistry + SuiteDiscovery find suites via EXTENDS ancestry
                          to TcUnit.FB_TestSuite
   TcXunit.Runner         TcUnit native-method stub boundary (assertions, suite host)
-  TcXunit.Cli            `tcxunit run <path>` entry point (CliRunner is testable core)
+  TcXunit.Cli            `tcxunit <path>` entry point (CliRunner is testable core)
 tests/                  xUnit tests per project, mirroring src/
 ```
 
@@ -101,4 +101,4 @@ Exit codes: `0` all pass, `1` any fail, `2` usage/discovery error.
 
 ## Conventions & Patterns
 
-Interpreter is hand-rolled, scoped to what fixtures actually need — extended incrementally, not built to full IEC 61131-3 grammar up front (see comments in `Engine.cs`/`Lexer.cs`). Early/grow-on-demand status; check `.wayfinder/` for in-progress design decisions.
+Interpreter is hand-rolled, scoped to what fixtures actually need — extended incrementally, not built to full IEC 61131-3 grammar up front (see comments in `Engine.cs`/`Lexer.cs`). Early/grow-on-demand status; check `wiki/` for in-progress design decisions.

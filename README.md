@@ -8,7 +8,7 @@ PLC/TwinCAT codebases typically have no automated test harness: everything is va
 
 ## Status
 
-Early / grow-on-demand. The parser and interpreter cover only the constructs exercised by the current fixtures — not the full IEC 61131-3 grammar. See `.wayfinder/` for in-progress design decisions (simulated clock, transport loopback, fault injection, state-mirroring assertions, struct/array support, etc.) that extend this toward full framework-testing capability.
+Early / grow-on-demand. The parser and interpreter cover only the constructs exercised by the current fixtures — not the full IEC 61131-3 grammar. See `wiki/` for in-progress design decisions (simulated clock, transport loopback, fault injection, state-mirroring assertions, struct/array support, etc.) that extend this toward full framework-testing capability.
 
 ## Architecture
 
@@ -19,7 +19,7 @@ src/
                          a Cell-based value model; TypeRegistry + SuiteDiscovery find
                          suites by walking EXTENDS ancestry to TcUnit.FB_TestSuite
   TcXunit.Runner         TcUnit native-method stub boundary (assertions, suite host)
-  TcXunit.Cli            `tcxunit run <path>` entry point (CliRunner is the testable core)
+  TcXunit.Cli            `tcxunit <path>` entry point (CliRunner is the testable core)
 tests/                  xUnit tests per project, mirroring src/
 ```
 
@@ -37,10 +37,10 @@ dotnet test TcXunit.sln
 ## Usage
 
 ```bash
-dotnet run --project src/TcXunit.Cli -- run <path-to-POUs-directory>
+dotnet run --project src/TcXunit.Cli -- <path-to-POUs-directory>
 ```
 
-Scans `<path>` recursively for `*.TcPOU` files, finds any FB type that extends `TcUnit.FB_TestSuite` (directly or transitively), and runs its test methods. Exit code is `0` if all tests pass, `1` if any fail, `2` on usage/discovery errors.
+Scans `<path>` recursively for `*.TcPOU` files, finds any FB type that extends `TcUnit.FB_TestSuite` (directly or transitively), and runs its test methods. Exit code is `0` if all tests pass, `1` if any fail, `2` on usage/discovery errors. Multiple directory args are supported: TcXunit unions the POU sets from each, and errors out if duplicate type names collide across directories.
 
 ## Issue tracking
 

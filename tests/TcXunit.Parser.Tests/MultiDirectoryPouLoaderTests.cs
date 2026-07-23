@@ -67,6 +67,29 @@ namespace TcXunit.Parser.Tests
             Assert.Contains(pathB, ex.FilePaths);
         }
 
+        [Fact]
+        public void Load_SameDirectoryPassedTwice_DoesNotThrowAndHasNoDuplicateEntries()
+        {
+            WritePou(_dirA, "FB_One.TcPOU", "FB_One");
+
+            var loaded = MultiDirectoryPouLoader.Load(new[] { _dirA, _dirA });
+
+            Assert.Single(loaded);
+            Assert.Equal("FB_One", loaded[0].Pou.Name);
+        }
+
+        [Fact]
+        public void Load_NestedInputDirectory_DoesNotThrowAndHasNoDuplicateEntries()
+        {
+            var subDir = Directory.CreateDirectory(Path.Combine(_dirA, "Nested")).FullName;
+            WritePou(subDir, "FB_One.TcPOU", "FB_One");
+
+            var loaded = MultiDirectoryPouLoader.Load(new[] { _dirA, subDir });
+
+            Assert.Single(loaded);
+            Assert.Equal("FB_One", loaded[0].Pou.Name);
+        }
+
         private static string CreateTempDir() =>
             Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "tcxunit-multidir-" + Guid.NewGuid())).FullName;
 

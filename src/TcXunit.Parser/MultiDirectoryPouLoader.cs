@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -28,16 +29,27 @@ namespace TcXunit.Parser
     public static class MultiDirectoryPouLoader
     {
         public static IReadOnlyList<string> FindPouFiles(IReadOnlyList<string> pouDirectories) =>
-            pouDirectories
-                .SelectMany(dir => Directory.GetFiles(dir, "*.TcPOU", SearchOption.AllDirectories))
-                .ToList();
+            DeduplicatePaths(
+                pouDirectories
+                    .SelectMany(dir => Directory.GetFiles(dir, "*.TcPOU", SearchOption.AllDirectories)));
 
         // .TcDUT files declare STRUCT/ENUM/alias types (TcXunit-w5x.15.6's
         // struct-DUT gap) - globbed separately from *.TcPOU since they use a
         // different root XML element (<DUT> vs <POU>).
         public static IReadOnlyList<string> FindDutFiles(IReadOnlyList<string> pouDirectories) =>
-            pouDirectories
-                .SelectMany(dir => Directory.GetFiles(dir, "*.TcDUT", SearchOption.AllDirectories))
+            DeduplicatePaths(
+                pouDirectories
+                    .SelectMany(dir => Directory.GetFiles(dir, "*.TcDUT", SearchOption.AllDirectories)));
+
+        // Normalizes each path (Path.GetFullPath) and de-duplicates
+        // case-insensitively so overlapping input directories (same
+        // directory passed twice, one nested inside another, or differing
+        // only by casing/trailing slash) behave as a true union rather than
+        // producing the same on-disk file more than once.
+        private static IReadOnlyList<string> DeduplicatePaths(IEnumerable<string> files) =>
+            files
+                .Select(Path.GetFullPath)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToList();
 
         // Globs and parses every *.TcPOU file across all given directories.

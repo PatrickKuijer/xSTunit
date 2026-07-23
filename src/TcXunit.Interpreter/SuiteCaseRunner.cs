@@ -158,12 +158,25 @@ namespace TcXunit.Interpreter
             // only, no model for merging in the base type's fields yet); both
             // fall back to their prior (unsupported) behavior rather than
             // failing registry build for every suite.
-            var structTypes = MultiDirectoryPouLoader.FindDutFiles(pouDirectories)
-                .Select(file => TcDutParser.Parse(File.ReadAllText(file)))
-                .Where(dut => dut.DeclarationText.Contains("STRUCT"))
-                .Select(dut => StructDeclParser.Parse(dut.DeclarationText))
-                .Where(structAst => structAst.Name != null)
+            var structTypesWithFiles = MultiDirectoryPouLoader.FindDutFiles(pouDirectories)
+                .Select(file => new { FilePath = file, Dut = TcDutParser.Parse(File.ReadAllText(file)) })
+                .Where(x => x.Dut.DeclarationText.Contains("STRUCT"))
+                .Select(x => new { x.FilePath, Struct = StructDeclParser.Parse(x.Dut.DeclarationText) })
+                .Where(x => x.Struct.Name != null)
                 .ToList();
+
+            // Fail fast and loud on duplicate STRUCT type names across the
+            // merged set (TcXunit-dvd), mirroring the POU duplicate check
+            // above: two .TcDUT files declaring the same STRUCT name must not
+            // silently let the later-loaded one win in TypeRegistry.
+            var duplicateStruct = structTypesWithFiles
+                .GroupBy(x => x.Struct.Name)
+                .FirstOrDefault(g => g.Count() > 1);
+            if (duplicateStruct != null)
+                throw new DuplicateStructTypeException(
+                    duplicateStruct.Key, duplicateStruct.Select(x => x.FilePath).ToList());
+
+            var structTypes = structTypesWithFiles.Select(x => x.Struct).ToList();
 
             return new TypeRegistry(types, structTypes);
         }

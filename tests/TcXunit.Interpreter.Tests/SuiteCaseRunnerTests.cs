@@ -45,6 +45,17 @@ END_VAR]]></Declaration>
   </POU>
 </TcPlcObject>";
 
+        private static string StructDutXml(string typeName, string fieldDecl) => $@"<?xml version=""1.0"" encoding=""utf-8""?>
+<TcPlcObject Version=""1.1.0.1"" ProductVersion=""3.1.4026.18"">
+  <DUT Name=""{typeName}"" Id=""{{a1b2c3d4-0004-4a1a-8b1b-0000000000ff}}"">
+    <Declaration><![CDATA[TYPE {typeName} :
+STRUCT
+	{fieldDecl} : INT;
+END_STRUCT
+END_TYPE]]></Declaration>
+  </DUT>
+</TcPlcObject>";
+
         [Fact]
         public void DiscoverCases_FixtureProject_ListsAllFourCasesUnderFbCounterTests()
         {
@@ -116,6 +127,57 @@ END_VAR]]></Declaration>
 
                 Assert.Throws<TcXunit.Parser.DuplicatePouTypeException>(
                     () => SuiteCaseRunner.DiscoverCases(new[] { dirA.FullName, dirB.FullName }));
+            }
+            finally
+            {
+                Directory.Delete(dirA.FullName, recursive: true);
+                Directory.Delete(dirB.FullName, recursive: true);
+            }
+        }
+
+        [Fact]
+        public void DiscoverCases_DuplicateStructTypeNameAcrossDirectories_ThrowsDuplicateStructTypeException()
+        {
+            var dirA = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "tcxunit-dutdupA-" + Guid.NewGuid()));
+            var dirB = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "tcxunit-dutdupB-" + Guid.NewGuid()));
+            try
+            {
+                var pathA = Path.Combine(dirA.FullName, "ST_Shared.TcDUT");
+                var pathB = Path.Combine(dirB.FullName, "ST_Shared.TcDUT");
+                File.WriteAllText(pathA, StructDutXml("ST_Shared", "fieldA"));
+                File.WriteAllText(pathB, StructDutXml("ST_Shared", "fieldB"));
+
+                var ex = Assert.Throws<DuplicateStructTypeException>(
+                    () => SuiteCaseRunner.DiscoverCases(new[] { dirA.FullName, dirB.FullName }));
+
+                Assert.Equal("ST_Shared", ex.TypeName);
+                Assert.Contains(pathA, ex.FilePaths);
+                Assert.Contains(pathB, ex.FilePaths);
+                Assert.Contains("ST_Shared", ex.Message);
+                Assert.Contains(pathA, ex.Message);
+                Assert.Contains(pathB, ex.Message);
+            }
+            finally
+            {
+                Directory.Delete(dirA.FullName, recursive: true);
+                Directory.Delete(dirB.FullName, recursive: true);
+            }
+        }
+
+        [Fact]
+        public void DiscoverCases_SingleStructTypeNameAcrossDirectories_DoesNotThrow()
+        {
+            var dirA = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "tcxunit-dutokA-" + Guid.NewGuid()));
+            var dirB = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "tcxunit-dutokB-" + Guid.NewGuid()));
+            try
+            {
+                File.WriteAllText(Path.Combine(dirA.FullName, "ST_Shared.TcDUT"), StructDutXml("ST_Shared", "fieldA"));
+
+                var cases = SuiteCaseRunner.DiscoverCases(new[] { dirA.FullName, dirB.FullName });
+
+                // No suites declared, but the DUT must have parsed without
+                // triggering the duplicate-struct check.
+                Assert.Empty(cases);
             }
             finally
             {

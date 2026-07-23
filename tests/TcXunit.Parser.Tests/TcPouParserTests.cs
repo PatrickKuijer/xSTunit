@@ -123,6 +123,42 @@ END_VAR]]></Declaration>
         }
 
         [Fact]
+        public void Parse_ExtendsWithAbstractQualifier_ReadsBaseTypeName()
+        {
+            const string xml = @"<?xml version=""1.0"" encoding=""utf-8""?>
+<TcPlcObject Version=""1.1.0.1"">
+  <POU Name=""FB_UnitProdModuleBase"" Id=""{a1b2c3d4-0004-4a1a-8b1b-000000000001}"" SpecialFunc=""None"">
+    <Declaration><![CDATA[FUNCTION_BLOCK ABSTRACT FB_UnitProdModuleBase EXTENDS FB_UnitModuleBase]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>";
+
+            var ast = TcPouParser.Parse(xml);
+
+            Assert.Equal("FB_UnitModuleBase", ast.BaseTypeName);
+        }
+
+        [Fact]
+        public void Parse_ExtendsWithFinalQualifier_ReadsBaseTypeName()
+        {
+            const string xml = @"<?xml version=""1.0"" encoding=""utf-8""?>
+<TcPlcObject Version=""1.1.0.1"">
+  <POU Name=""FB_SealedCounter"" Id=""{a1b2c3d4-0005-4a1a-8b1b-000000000001}"" SpecialFunc=""None"">
+    <Declaration><![CDATA[FUNCTION_BLOCK FINAL FB_SealedCounter EXTENDS FB_Counter]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>";
+
+            var ast = TcPouParser.Parse(xml);
+
+            Assert.Equal("FB_Counter", ast.BaseTypeName);
+        }
+
+        [Fact]
         public void Parse_MethodUsingDunderNew_ThrowsRejectedConstructWithDiagnostic()
         {
             const string xml = @"<?xml version=""1.0"" encoding=""utf-8""?>

@@ -8,7 +8,7 @@ namespace TcXunit.Parser
     public static class TcPouParser
     {
         private static readonly Regex ExtendsPattern = new Regex(
-            @"FUNCTION_BLOCK\s+\S+\s+EXTENDS\s+(?<baseType>[\w.]+)",
+            @"FUNCTION_BLOCK(?:\s+(?:ABSTRACT|FINAL))*\s+\S+\s+EXTENDS\s+(?<baseType>[\w.]+)",
             RegexOptions.Compiled);
 
         private static readonly (Regex Pattern, string ConstructName)[] RejectedConstructs =

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Xml;
 using TcXunit.Parser;
 using TcXunit.Runner.TcUnitStub;
 
@@ -109,6 +110,16 @@ namespace TcXunit.Interpreter
                     // run time with an unresolved-type error; suites that don't
                     // need it can run unaffected.
                     skipped.Add(new SkippedPou(Path.GetFileNameWithoutExtension(file), ex.Message));
+                }
+                catch (Exception ex) when (ex is XmlException || ex is NullReferenceException)
+                {
+                    // Same rationale as above (PLC-b62/TcXunit-swk): a structurally
+                    // unexpected POU (malformed XML, missing Declaration/Implementation/ST,
+                    // an interface-only POU, or a GVL/DUT file caught by the *.TcPOU glob)
+                    // must not abort discovery for the whole directory either.
+                    skipped.Add(new SkippedPou(
+                        Path.GetFileNameWithoutExtension(file),
+                        $"Failed to parse '{Path.GetFileName(file)}': {ex.Message}"));
                 }
             }
 

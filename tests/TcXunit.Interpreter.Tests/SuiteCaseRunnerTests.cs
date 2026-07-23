@@ -23,6 +23,28 @@ END_VAR]]></Declaration>
   </POU>
 </TcPlcObject>";
 
+        private const string MalformedXmlPou = @"<?xml version=""1.0"" encoding=""utf-8""?>
+<TcPlcObject Version=""1.1.0.1"" ProductVersion=""3.1.4026.18"">
+  <POU Name=""FB_Broken"" Id=""{a1b2c3d4-0002-4a1a-8b1b-0000000000ff}"" SpecialFunc=""None"">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_Broken
+VAR
+	value : INT;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[value := 1;]]></ST>
+    </Implementation>
+</TcPlcObject>";
+
+        private const string MissingStBodyPou = @"<?xml version=""1.0"" encoding=""utf-8""?>
+<TcPlcObject Version=""1.1.0.1"" ProductVersion=""3.1.4026.18"">
+  <POU Name=""FB_NoBody"" Id=""{a1b2c3d4-0003-4a1a-8b1b-0000000000ff}"" SpecialFunc=""None"">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_NoBody
+VAR
+	value : INT;
+END_VAR]]></Declaration>
+  </POU>
+</TcPlcObject>";
+
         [Fact]
         public void DiscoverCases_FixtureProject_ListsAllFourCasesUnderFbCounterTests()
         {
@@ -123,6 +145,52 @@ END_VAR]]></Declaration>
 
                 Assert.False(result.Passed);
                 Assert.Contains("Tc2_System", result.ToString());
+            }
+            finally
+            {
+                Directory.Delete(tempDir.FullName, recursive: true);
+            }
+        }
+
+        [Fact]
+        public void DiscoverCases_MalformedXmlPou_SurfacesAsFailingCaseInsteadOfAbortingScan()
+        {
+            var tempDir = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "tcxunit-" + Guid.NewGuid()));
+            try
+            {
+                foreach (var file in Directory.GetFiles(FixturePouDir, "*.TcPOU"))
+                    File.Copy(file, Path.Combine(tempDir.FullName, Path.GetFileName(file)));
+                File.WriteAllText(Path.Combine(tempDir.FullName, "FB_Broken.TcPOU"), MalformedXmlPou);
+
+                var cases = SuiteCaseRunner.DiscoverCases(tempDir.FullName);
+
+                Assert.Contains(cases, c => c.SuiteName == "FB_Broken" && c.CaseName == "(parse error)");
+                Assert.Contains(
+                    cases,
+                    c => c.SuiteName == "FB_CounterTests" && c.CaseName == "IncrementAddsDelta");
+            }
+            finally
+            {
+                Directory.Delete(tempDir.FullName, recursive: true);
+            }
+        }
+
+        [Fact]
+        public void DiscoverCases_PouMissingStBody_SurfacesAsFailingCaseInsteadOfAbortingScan()
+        {
+            var tempDir = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "tcxunit-" + Guid.NewGuid()));
+            try
+            {
+                foreach (var file in Directory.GetFiles(FixturePouDir, "*.TcPOU"))
+                    File.Copy(file, Path.Combine(tempDir.FullName, Path.GetFileName(file)));
+                File.WriteAllText(Path.Combine(tempDir.FullName, "FB_NoBody.TcPOU"), MissingStBodyPou);
+
+                var cases = SuiteCaseRunner.DiscoverCases(tempDir.FullName);
+
+                Assert.Contains(cases, c => c.SuiteName == "FB_NoBody" && c.CaseName == "(parse error)");
+                Assert.Contains(
+                    cases,
+                    c => c.SuiteName == "FB_CounterTests" && c.CaseName == "IncrementAddsDelta");
             }
             finally
             {

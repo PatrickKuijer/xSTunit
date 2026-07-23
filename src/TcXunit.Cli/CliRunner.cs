@@ -56,7 +56,20 @@ namespace TcXunit.Cli
 
             foreach (var suiteName in suiteNames)
             {
-                foreach (var result in engine.RunSuite(suiteName))
+                IReadOnlyList<TcXunit.Runner.TcUnitStub.TestCaseResult> results;
+                try
+                {
+                    results = engine.RunSuite(suiteName);
+                }
+                catch (Exception ex)
+                {
+                    output.WriteLine($"{suiteName}: FAIL ({ex.Message})");
+                    failCount++;
+                    anyFailed = true;
+                    continue;
+                }
+
+                foreach (var result in results)
                 {
                     output.WriteLine(result.ToString());
                     if (result.Passed)

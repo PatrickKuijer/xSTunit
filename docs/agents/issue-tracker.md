@@ -31,3 +31,12 @@ Run `bd show <id>`.
 ## Pull requests as a triage surface
 
 Not applicable — this repo has no external-PR triage flow through beads.
+
+## Historical planning artifacts (not live trackers)
+
+This repo previously used a `.wayfinder/` planning map (`/grilling` + `/domain-modeling`
+workflow) to design the simulated-PLC-testing capability spec. That map is closed and
+deleted — its full content lives in beads epic `TcXunit-w5x.15` (`bd show TcXunit-w5x.15`).
+Point-in-time cross-repo briefing docs are archived under `docs/handoff-archive/` (also
+superseded by beads). If you spot a `.wayfinder/` or `.handoff/` folder again, check beads
+first — do not treat either as a second live tracker.

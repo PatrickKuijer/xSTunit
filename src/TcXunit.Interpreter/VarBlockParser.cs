@@ -23,7 +23,7 @@ namespace TcXunit.Interpreter
 
             foreach (var rawLine in declarationText.Split('\n'))
             {
-                var line = rawLine.Trim();
+                var line = StripTrailingComment(rawLine.Trim()).Trim();
                 if (line.Length == 0)
                     continue;
 
@@ -68,6 +68,35 @@ namespace TcXunit.Interpreter
             }
 
             return result;
+        }
+
+        // Strips a trailing "// ..." line comment, ignoring "//" that appears
+        // inside a single- or double-quoted string literal (e.g. a STRING
+        // default value containing "//"). TcXunit-dem.
+        private static string StripTrailingComment(string line)
+        {
+            char? quoteChar = null;
+            for (var i = 0; i < line.Length - 1; i++)
+            {
+                var c = line[i];
+                if (quoteChar != null)
+                {
+                    if (c == quoteChar)
+                        quoteChar = null;
+                    continue;
+                }
+
+                if (c == '\'' || c == '"')
+                {
+                    quoteChar = c;
+                    continue;
+                }
+
+                if (c == '/' && line[i + 1] == '/')
+                    return line.Substring(0, i);
+            }
+
+            return line;
         }
     }
 }

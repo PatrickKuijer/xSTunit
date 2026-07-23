@@ -143,5 +143,56 @@ namespace TcXunit.Interpreter.Tests
             Assert.Throws<NotSupportedException>(() =>
                 engine.Evaluate(Parser.ParseExpression("MEMCPY(ADR(count), ADR(src), 2)"), frame));
         }
+
+        // TcXunit-996: destAddr/srcAddr passed by name (a legal ST calling
+        // convention) must resolve by name, not fall through to indexing
+        // PositionalArgs (which only holds the trailing positional n here).
+        [Fact]
+        public void Memcpy_WithNamedDestAndSrcArgs_ResolvesByName()
+        {
+            var (engine, instance, frame) = NewHolder(
+                "VAR\n\tsrc : ARRAY[0..3] OF BYTE := [1, 2, 3, 4];\n\tdst : ARRAY[0..3] OF BYTE;\nEND_VAR");
+
+            engine.Evaluate(Parser.ParseExpression("MEMCPY(destAddr := ADR(dst), srcAddr := ADR(src), 3)"), frame);
+
+            var dst = (ArrayValue)instance.Fields["dst"].Value;
+            Assert.Equal(new object[] { 1, 2, 3, 0 }, dst.Elements);
+        }
+
+        [Fact]
+        public void Memmove_WithNamedDestAndSrcArgs_ResolvesByName()
+        {
+            var (engine, instance, frame) = NewHolder(
+                "VAR\n\tbuf : ARRAY[0..4] OF BYTE := [1, 2, 3, 4, 5];\nEND_VAR");
+
+            engine.Evaluate(Parser.ParseExpression("MEMMOVE(destAddr := ADR(buf) + 1, srcAddr := ADR(buf), 3)"), frame);
+
+            var buf = (ArrayValue)instance.Fields["buf"].Value;
+            Assert.Equal(new object[] { 1, 1, 2, 3, 5 }, buf.Elements);
+        }
+
+        [Fact]
+        public void Memset_WithNamedDestAndValueArgs_ResolvesByName()
+        {
+            var (engine, instance, frame) = NewHolder(
+                "VAR\n\tdst : ARRAY[0..2] OF BYTE;\nEND_VAR");
+
+            engine.Evaluate(Parser.ParseExpression("MEMSET(destAddr := ADR(dst), value := 9, n := 3)"), frame);
+
+            var dst = (ArrayValue)instance.Fields["dst"].Value;
+            Assert.Equal(new object[] { 9, 9, 9 }, dst.Elements);
+        }
+
+        [Fact]
+        public void Memcpy_AllNamedArgsInAnyOrder_ResolvesByName()
+        {
+            var (engine, instance, frame) = NewHolder(
+                "VAR\n\tsrc : ARRAY[0..3] OF BYTE := [1, 2, 3, 4];\n\tdst : ARRAY[0..3] OF BYTE;\nEND_VAR");
+
+            engine.Evaluate(Parser.ParseExpression("MEMCPY(n := 3, srcAddr := ADR(src), destAddr := ADR(dst))"), frame);
+
+            var dst = (ArrayValue)instance.Fields["dst"].Value;
+            Assert.Equal(new object[] { 1, 2, 3, 0 }, dst.Elements);
+        }
     }
 }

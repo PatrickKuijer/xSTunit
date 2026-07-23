@@ -201,14 +201,14 @@ namespace TcXunit.Interpreter
                             instance.NativeLoopbackHost.Freeze(instance);
                             break;
                         case "SetDelay":
-                            var n = Convert.ToInt32(Evaluate(ResolveNamedOrPositionalArg("n", 0, positionalArgs, namedArgs), callerFrame));
+                            var n = Convert.ToInt32(Evaluate(ResolveNamedOrPositionalArg("SetDelay", "n", 0, positionalArgs, namedArgs), callerFrame));
                             instance.NativeLoopbackHost.SetDelay(instance, n);
                             break;
                         case "Duplicate":
                             instance.NativeLoopbackHost.Duplicate(instance);
                             break;
                         case "Corrupt":
-                            var value = Evaluate(ResolveNamedOrPositionalArg("value", 0, positionalArgs, namedArgs), callerFrame);
+                            var value = Evaluate(ResolveNamedOrPositionalArg("Corrupt", "value", 0, positionalArgs, namedArgs), callerFrame);
                             instance.NativeLoopbackHost.Corrupt(instance, value);
                             break;
                     }
@@ -817,6 +817,7 @@ namespace TcXunit.Interpreter
         private static bool IsLoopbackFaultMethod(string methodName) => LoopbackFaultMethods.Contains(methodName);
 
         private static Expr ResolveNamedOrPositionalArg(
+            string methodName,
             string paramName,
             int posIndex,
             IReadOnlyList<Expr> positionalArgs,
@@ -828,7 +829,7 @@ namespace TcXunit.Interpreter
             if (posIndex < positionalArgs.Count)
                 return positionalArgs[posIndex];
 
-            throw new InvalidOperationException($"Loopback fault method missing required argument '{paramName}'");
+            throw new InvalidOperationException($"{methodName} missing required argument '{paramName}'");
         }
 
         private Cell ResolveCellForLValue(Expr expr, Frame frame)
@@ -1103,12 +1104,48 @@ namespace TcXunit.Interpreter
         // intrinsics exist for. n counts elements (== bytes for a BYTE/SINT/
         // USINT-element array); out-of-range access throws naturally via the
         // backing Elements[] indexer.
-        private Pointer RequirePointerArg(CallExpr call, int index, Frame frame)
+        //
+        // TcXunit-996: these are native intrinsics (no VarBlockParser decls
+        // to bind against, unlike FB/method calls), so named args aren't
+        // reconciled by BindParams - resolve each declared param (destAddr/
+        // srcAddr/value/n) by name first (e.g. MEMCPY(destAddr := ipDst,
+        // srcAddr := ipSrc, inSrcSize)), consuming PositionalArgs in
+        // left-to-right order only for params *not* given by name (mirrors
+        // BindParams' shared posIndex - a positional arg's PositionalArgs
+        // slot depends on how many preceding params were named, not on the
+        // param's declared signature position).
+        private static IReadOnlyDictionary<string, Expr> ResolveIntrinsicArgs(
+            IReadOnlyList<string> paramNamesInDeclOrder,
+            IReadOnlyList<Expr> positionalArgs,
+            IReadOnlyList<NamedArg> namedArgs)
         {
-            var value = Evaluate(call.PositionalArgs[index], frame);
+            var resolved = new Dictionary<string, Expr>();
+            var posIndex = 0;
+            foreach (var paramName in paramNamesInDeclOrder)
+            {
+                var match = namedArgs.FirstOrDefault(a => a.Name == paramName);
+                if (match != null)
+                    resolved[paramName] = match.Value;
+                else if (posIndex < positionalArgs.Count)
+                    resolved[paramName] = positionalArgs[posIndex++];
+            }
+            return resolved;
+        }
+
+        private static Expr RequireIntrinsicArg(string methodName, string paramName, IReadOnlyDictionary<string, Expr> args)
+        {
+            if (args.TryGetValue(paramName, out var value))
+                return value;
+
+            throw new InvalidOperationException($"{methodName} missing required argument '{paramName}'");
+        }
+
+        private Pointer RequirePointerArg(string methodName, string paramName, IReadOnlyDictionary<string, Expr> args, Frame frame)
+        {
+            var value = Evaluate(RequireIntrinsicArg(methodName, paramName, args), frame);
             if (!(value is Pointer ptr))
                 throw new InvalidOperationException(
-                    $"{call.MethodName} argument {index} must be a POINTER TO BYTE (e.g. ADR(buf) or ADR(buf[i])), got {value?.GetType().Name}");
+                    $"{methodName} argument '{paramName}' must be a POINTER TO BYTE (e.g. ADR(buf) or ADR(buf[i])), got {value?.GetType().Name}");
             return ptr;
         }
 
@@ -1268,17 +1305,23 @@ namespace TcXunit.Interpreter
                     return IsValidRef(call.PositionalArgs[0], frame);
 
                 if (call.MethodName == "MEMCPY" || call.MethodName == "MEMMOVE")
+                {
+                    var args = ResolveIntrinsicArgs(new[] { "destAddr", "srcAddr", "n" }, call.PositionalArgs, call.NamedArgs);
                     return MemCopy(
-                        RequirePointerArg(call, 0, frame),
-                        RequirePointerArg(call, 1, frame),
-                        (int)Evaluate(call.PositionalArgs[2], frame),
+                        RequirePointerArg(call.MethodName, "destAddr", args, frame),
+                        RequirePointerArg(call.MethodName, "srcAddr", args, frame),
+                        (int)Evaluate(RequireIntrinsicArg(call.MethodName, "n", args), frame),
                         overlapSafe: call.MethodName == "MEMMOVE");
+                }
 
                 if (call.MethodName == "MEMSET")
+                {
+                    var args = ResolveIntrinsicArgs(new[] { "destAddr", "value", "n" }, call.PositionalArgs, call.NamedArgs);
                     return MemSet(
-                        RequirePointerArg(call, 0, frame),
-                        Evaluate(call.PositionalArgs[1], frame),
-                        (int)Evaluate(call.PositionalArgs[2], frame));
+                        RequirePointerArg(call.MethodName, "destAddr", args, frame),
+                        Evaluate(RequireIntrinsicArg(call.MethodName, "value", args), frame),
+                        (int)Evaluate(RequireIntrinsicArg(call.MethodName, "n", args), frame));
+                }
 
                 if (TryEvaluateCast(call, frame, out var castResult))
                     return castResult;

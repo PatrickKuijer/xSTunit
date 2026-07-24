@@ -42,8 +42,28 @@ namespace TcXunit.Interpreter
 
             var cases = new List<SuiteCase>();
             foreach (var suiteName in suiteNames)
-                foreach (var result in engine.RunSuite(suiteName))
+            {
+                IReadOnlyList<TestCaseResult> results;
+                try
+                {
+                    results = engine.RunSuite(suiteName);
+                }
+                catch (Exception)
+                {
+                    // A suite whose transitive default-value building hits an
+                    // interpreter gap (e.g. TcXunit-654's unresolved
+                    // constant-expression array bound) must not abort
+                    // discovery for every *other* suite in the solution-wide
+                    // scan (PLC-b62-style fix, extended to runtime failures
+                    // rather than just parse failures). Surfaced as its own
+                    // failing synthetic case instead.
+                    cases.Add(new SuiteCase(suiteName, ParseErrorCaseName));
+                    continue;
+                }
+
+                foreach (var result in results)
                     cases.Add(new SuiteCase(suiteName, result.Name));
+            }
 
             foreach (var skip in skipped)
                 cases.Add(new SuiteCase(skip.FileKey, ParseErrorCaseName));
@@ -63,6 +83,20 @@ namespace TcXunit.Interpreter
                 var skip = skipped.FirstOrDefault(s => s.FileKey == suiteName);
                 if (skip.FileKey != null)
                     return new TestCaseResult(caseName, new[] { new AssertionFailure(skip.Message) });
+
+                // Not a parse-level skip: re-attempt the suite run so a
+                // runtime failure (e.g. TcXunit-654) surfaces the same
+                // synthetic failing case DiscoverCases reported, rather than
+                // falling through to "case not found" for what is actually a
+                // known-bad suite.
+                try
+                {
+                    new Engine(registry).RunSuite(suiteName);
+                }
+                catch (Exception ex)
+                {
+                    return new TestCaseResult(caseName, new[] { new AssertionFailure(ex.Message) });
+                }
 
                 // No matching skip entry (e.g. a stale suite/case pair from an
                 // earlier discovery, or the skip set changed between

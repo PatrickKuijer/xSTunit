@@ -97,5 +97,72 @@ namespace TcXunit.Interpreter.Tests
 
             Assert.Equal(7, frame.Locals["result"].Value);
         }
+
+        // TcXunit-09s: an unqualified (bare) reference to a GVL constant
+        // must resolve via the same _globals lookup as GvlName.Member,
+        // not just via frame.ResolveCell.
+        [Fact]
+        public void UnqualifiedRead_GvlConstant_ResolvesWithoutGvlPrefix()
+        {
+            var gvl = new GvlAst("cFramework", "VAR_GLOBAL CONSTANT\n\tMAX_UNITS : UINT := 16;\nEND_VAR");
+            var engine = NewEngine("", new[] { gvl });
+            var instance = engine.NewInstance("FB_Suite");
+            var frame = new Frame(instance, "FB_Suite");
+
+            engine.ExecuteStatements(Parser.ParseStatements("result := MAX_UNITS;"), frame);
+
+            Assert.Equal(16, frame.Locals["result"].Value);
+        }
+
+        // Mirrors the reported repro: one GVL's default-value expression
+        // references another GVL's constant unqualified, evaluated eagerly
+        // in Engine's constructor while building _globals.
+        [Fact]
+        public void UnqualifiedRead_GvlConstant_ResolvesFromAnotherGvlDuringConstruction()
+        {
+            var cGvl = new GvlAst("cFramework", "VAR_GLOBAL CONSTANT\n\tTCP_MESSAGE_SIZE : UINT := 16;\nEND_VAR");
+            var gGvl = new GvlAst("gFrameworkTemp", "VAR_GLOBAL\n\tbufferSize : UINT := TCP_MESSAGE_SIZE;\nEND_VAR");
+            var engine = NewEngine("", new[] { cGvl, gGvl });
+            var instance = engine.NewInstance("FB_Suite");
+            var frame = new Frame(instance, "FB_Suite");
+
+            engine.ExecuteStatements(Parser.ParseStatements("result := gFrameworkTemp.bufferSize;"), frame);
+
+            Assert.Equal(16, frame.Locals["result"].Value);
+        }
+
+        // Same as above but declared in the opposite GVL order, so the
+        // referencing GVL is registered before the GVL that defines the
+        // constant it depends on.
+        [Fact]
+        public void UnqualifiedRead_GvlConstant_ResolvesRegardlessOfGvlRegistrationOrder()
+        {
+            var gGvl = new GvlAst("gFrameworkTemp", "VAR_GLOBAL\n\tbufferSize : UINT := TCP_MESSAGE_SIZE;\nEND_VAR");
+            var cGvl = new GvlAst("cFramework", "VAR_GLOBAL CONSTANT\n\tTCP_MESSAGE_SIZE : UINT := 16;\nEND_VAR");
+            var engine = NewEngine("", new[] { gGvl, cGvl });
+            var instance = engine.NewInstance("FB_Suite");
+            var frame = new Frame(instance, "FB_Suite");
+
+            engine.ExecuteStatements(Parser.ParseStatements("result := gFrameworkTemp.bufferSize;"), frame);
+
+            Assert.Equal(16, frame.Locals["result"].Value);
+        }
+
+        // A single GVL whose default-value expression throws (unresolvable
+        // reference) must not prevent other GVLs from being constructed -
+        // Engine's constructor should skip just the bad GVL/decl.
+        [Fact]
+        public void ConstructionResilience_BadGvlDefaultDoesNotBlockOtherGvls()
+        {
+            var badGvl = new GvlAst("gBad", "VAR_GLOBAL\n\tbroken : UINT := NOT_A_REAL_CONSTANT;\nEND_VAR");
+            var goodGvl = new GvlAst("gGood", "VAR_GLOBAL\n\tcount : INT := 5;\nEND_VAR");
+            var engine = NewEngine("", new[] { badGvl, goodGvl });
+            var instance = engine.NewInstance("FB_Suite");
+            var frame = new Frame(instance, "FB_Suite");
+
+            engine.ExecuteStatements(Parser.ParseStatements("result := gGood.count;"), frame);
+
+            Assert.Equal(5, frame.Locals["result"].Value);
+        }
     }
 }

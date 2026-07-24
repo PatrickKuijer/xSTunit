@@ -33,12 +33,55 @@ namespace TcXunit.Interpreter
         {
             _registry = registry;
 
+            // Two-pass construction (TcXunit-09s): every GVL's Cells are
+            // allocated and registered in _globals *before* any default
+            // value is computed, so a default-value expression that refers
+            // to another GVL's (or its own GVL's) member - qualified or
+            // unqualified - always finds a Cell to resolve against,
+            // regardless of GvlNames iteration order.
             foreach (var gvlName in _registry.GvlNames)
             {
                 var fields = new Dictionary<string, Cell>();
                 foreach (var decl in _registry.GetGvlDecls(gvlName))
-                    fields[decl.Name] = new Cell { Value = DefaultValue(decl, null) };
+                    fields[decl.Name] = new Cell();
                 _globals[gvlName] = fields;
+            }
+
+            // A single GVL decl whose default-value expression can't be
+            // resolved (e.g. a forward reference to another GVL's constant
+            // that hasn't been computed yet, or a genuinely unknown
+            // identifier) is retried in later passes rather than aborting
+            // construction for every other GVL/suite - mirrors
+            // SuiteCaseRunner's per-suite discovery isolation (TcXunit-654).
+            // Cross-GVL constant references can appear in either
+            // registration order (TcXunit-09s): a forward reference doesn't
+            // throw (the referenced Cell already exists from the
+            // allocation pass above, just still holding its null default),
+            // it silently reads a not-yet-computed value - so convergence
+            // can't be detected from exceptions alone. Instead, every decl
+            // is recomputed on every pass (idempotent: default-value
+            // expressions are side-effect-free reads of constants/literals)
+            // for up to one pass per decl, an upper bound on the longest
+            // possible dependency chain; anything still throwing after that
+            // is a genuinely unresolvable reference and keeps its
+            // zero-initialized (null) value.
+            var allDecls = new List<(string GvlName, VarDecl Decl)>();
+            foreach (var gvlName in _registry.GvlNames)
+                foreach (var decl in _registry.GetGvlDecls(gvlName))
+                    allDecls.Add((gvlName, decl));
+
+            for (var pass = 0; pass < allDecls.Count; pass++)
+            {
+                foreach (var (gvlName, decl) in allDecls)
+                {
+                    try
+                    {
+                        _globals[gvlName][decl.Name].Value = DefaultValue(decl, null);
+                    }
+                    catch (Exception)
+                    {
+                    }
+                }
             }
         }
 
@@ -940,7 +983,7 @@ namespace TcXunit.Interpreter
             if (expr is IdentifierExpr id)
             {
                 var cell = frame.ResolveCell(id.Name);
-                if (cell == null)
+                if (cell == null && !TryResolveGlobalCell(id.Name, out cell))
                     throw new InvalidOperationException($"Unknown variable '{id.Name}'");
                 return cell;
             }
@@ -1019,6 +1062,26 @@ namespace TcXunit.Interpreter
             return false;
         }
 
+        // TcXunit-09s: a bare (unqualified) identifier that isn't a local/
+        // instance field may still be a GVL member referenced without its
+        // GvlName. prefix - legal IEC 61131-3 (global scope is visible
+        // everywhere), and something TryGetGvlFields doesn't cover since it
+        // only handles the qualified GvlName.Member shape. Searches every
+        // registered GVL's field dictionary for a matching name; first match
+        // wins (no cross-GVL name-collision detection, same level of rigor
+        // as the rest of v1).
+        private bool TryResolveGlobalCell(string name, out Cell cell)
+        {
+            foreach (var fields in _globals.Values)
+            {
+                if (fields.TryGetValue(name, out cell))
+                    return true;
+            }
+
+            cell = null;
+            return false;
+        }
+
         public object Evaluate(Expr expr, Frame frame)
         {
             switch (expr)
@@ -1040,7 +1103,7 @@ namespace TcXunit.Interpreter
                 case IdentifierExpr id:
                 {
                     var cell = frame.ResolveCell(id.Name);
-                    if (cell == null)
+                    if (cell == null && !TryResolveGlobalCell(id.Name, out cell))
                         throw new InvalidOperationException($"Unknown variable '{id.Name}'");
                     return cell.Value;
                 }

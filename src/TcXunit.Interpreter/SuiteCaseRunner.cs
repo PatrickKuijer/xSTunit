@@ -193,7 +193,17 @@ namespace TcXunit.Interpreter
             var structTypes = DutStructLoader.Load(pouDirectories, out var dutSkipped);
             skipped.AddRange(dutSkipped.Select(s => new SkippedPou(s.FilePath, s.Message)));
 
-            return new TypeRegistry(types, structTypes);
+            // .TcGVL global variable lists (TcXunit-71o), shared with
+            // CliRunner via GvlLoader for the same reason DUT struct types
+            // are shared above - both entry points must resolve GVLs
+            // identically. A duplicate GVL name is a hard error (mirrors
+            // MultiDirectoryPouLoader.CheckForDuplicates above), not
+            // isolated per-file like parse failures, since it can't be
+            // attributed to a single suite.
+            var gvls = GvlLoader.Load(pouDirectories, out var gvlSkipped);
+            skipped.AddRange(gvlSkipped.Select(s => new SkippedPou(s.FilePath, s.Message)));
+
+            return new TypeRegistry(types, structTypes, gvls);
         }
     }
 }

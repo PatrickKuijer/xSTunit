@@ -66,7 +66,21 @@ namespace TcXunit.Cli
                 return 2;
             }
 
-            var registry = new TypeRegistry(types, structTypes);
+            // .TcGVL global variable lists (TcXunit-71o): shared with
+            // SuiteCaseRunner via GvlLoader, same resilient/fail-fast shape
+            // as DutStructLoader above.
+            IReadOnlyList<GvlAst> gvls;
+            try
+            {
+                gvls = GvlLoader.Load(args, out _);
+            }
+            catch (DuplicateGvlNameException ex)
+            {
+                output.WriteLine($"error: {ex.Message}");
+                return 2;
+            }
+
+            var registry = new TypeRegistry(types, structTypes, gvls);
             var suiteNames = SuiteDiscovery.FindSuiteTypeNames(registry, types.Select(t => t.Name));
 
             if (suiteNames.Count == 0)

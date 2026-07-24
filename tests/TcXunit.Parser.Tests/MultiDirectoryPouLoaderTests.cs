@@ -90,6 +90,19 @@ namespace TcXunit.Parser.Tests
             Assert.Equal("FB_One", loaded[0].Pou.Name);
         }
 
+        [Fact]
+        public void FindGvlFiles_FindsTcGvlFilesAcrossDirectoriesButNotTcPouOrTcDut()
+        {
+            var gvlPath = Path.Combine(_dirA, "gFoo.TcGVL");
+            File.WriteAllText(gvlPath, "not real xml, just needs to exist for globbing");
+            WritePou(_dirA, "FB_One.TcPOU", "FB_One");
+            File.WriteAllText(Path.Combine(_dirA, "ST_Foo.TcDUT"), "not real xml either");
+
+            var found = MultiDirectoryPouLoader.FindGvlFiles(new[] { _dirA, _dirB });
+
+            Assert.Equal(new[] { gvlPath }, found);
+        }
+
         private static string CreateTempDir() =>
             Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "tcxunit-multidir-" + Guid.NewGuid())).FullName;
 

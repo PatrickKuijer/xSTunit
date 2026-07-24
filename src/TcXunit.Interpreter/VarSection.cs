@@ -6,5 +6,6 @@ namespace TcXunit.Interpreter
         Input,
         Output,
         InOut,
+        Global,
     }
 }

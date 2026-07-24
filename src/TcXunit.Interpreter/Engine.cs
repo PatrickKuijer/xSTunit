@@ -13,6 +13,14 @@ namespace TcXunit.Interpreter
     {
         private readonly TypeRegistry _registry;
 
+        // One Cell-backed field dictionary per registered GVL, keyed by GVL
+        // name (TcXunit-71o) - built once at construction (not lazily per
+        // access) since default-value construction can itself recurse into
+        // NewInstance/other GVLs' struct types via _registry, same as
+        // instance Fields. No TwinCAT GVL init-cycle/task-binding semantics
+        // are modeled, just zero-initialized storage per declared type.
+        private readonly Dictionary<string, Dictionary<string, Cell>> _globals = new Dictionary<string, Dictionary<string, Cell>>();
+
         // Shared process-wide simulated clock (TcXunit-w5x.15.7 / T3 design) -
         // one Clock for the whole Engine, not per-instance; TON/TOF/FB_Pulse
         // native hosts read Clock.TotalMs whenever they're invoked.
@@ -24,6 +32,14 @@ namespace TcXunit.Interpreter
         public Engine(TypeRegistry registry)
         {
             _registry = registry;
+
+            foreach (var gvlName in _registry.GvlNames)
+            {
+                var fields = new Dictionary<string, Cell>();
+                foreach (var decl in _registry.GetGvlDecls(gvlName))
+                    fields[decl.Name] = new Cell { Value = DefaultValue(decl, null) };
+                _globals[gvlName] = fields;
+            }
         }
 
         public IReadOnlyList<TestCaseResult> RunSuite(string suiteTypeName)
@@ -806,6 +822,14 @@ namespace TcXunit.Interpreter
                     break;
                 case FieldAccessExpr fieldAccess:
                 {
+                    if (TryGetGvlFields(fieldAccess, frame, out var gvlFields))
+                    {
+                        if (!gvlFields.TryGetValue(fieldAccess.FieldName, out var gvlCell))
+                            throw new InvalidOperationException($"Unknown field '{fieldAccess.FieldName}'");
+                        gvlCell.Value = CoerceForAssignment(gvlCell.Value, value);
+                        break;
+                    }
+
                     var fields = FieldsOf(Evaluate(fieldAccess.Receiver, frame));
                     if (!fields.TryGetValue(fieldAccess.FieldName, out var cell))
                         throw new InvalidOperationException($"Unknown field '{fieldAccess.FieldName}'");
@@ -923,6 +947,13 @@ namespace TcXunit.Interpreter
 
             if (expr is FieldAccessExpr fieldAccess)
             {
+                if (TryGetGvlFields(fieldAccess, frame, out var gvlFields))
+                {
+                    if (!gvlFields.TryGetValue(fieldAccess.FieldName, out var gvlCell))
+                        throw new InvalidOperationException($"Unknown field '{fieldAccess.FieldName}'");
+                    return gvlCell;
+                }
+
                 var fields = FieldsOf(Evaluate(fieldAccess.Receiver, frame));
                 if (!fields.TryGetValue(fieldAccess.FieldName, out var cell))
                     throw new InvalidOperationException($"Unknown field '{fieldAccess.FieldName}'");
@@ -971,6 +1002,22 @@ namespace TcXunit.Interpreter
             StructInstance st => st.Fields,
             _ => throw new NotSupportedException($"Cannot access fields on {receiver?.GetType().Name}"),
         };
+
+        // A FieldAccessExpr's receiver is a bare GVL name (e.g.
+        // gFrameworkTemp.stMachine) rather than a variable/field in scope
+        // (TcXunit-71o) - checked the same way as the BuiltinEnums.Types
+        // check above: only when the identifier doesn't already resolve as
+        // a local/instance field, so a same-named local/field always wins.
+        private bool TryGetGvlFields(FieldAccessExpr fieldAccess, Frame frame, out Dictionary<string, Cell> fields)
+        {
+            if (fieldAccess.Receiver is IdentifierExpr gvlId &&
+                frame.ResolveCell(gvlId.Name) == null &&
+                _globals.TryGetValue(gvlId.Name, out fields))
+                return true;
+
+            fields = null;
+            return false;
+        }
 
         public object Evaluate(Expr expr, Frame frame)
         {
@@ -1022,6 +1069,17 @@ namespace TcXunit.Interpreter
                         if (!enumMembers.TryGetValue(fieldAccess.FieldName, out var enumValue))
                             throw new InvalidOperationException($"Unknown enum member '{enumTypeId.Name}.{fieldAccess.FieldName}'");
                         return enumValue;
+                    }
+
+                    // GvlName.field where GvlName isn't a variable/field in
+                    // scope but a registered GVL (TcXunit-71o) - same
+                    // "receiver identifier doesn't resolve as a variable"
+                    // shape as the enum check above.
+                    if (TryGetGvlFields(fieldAccess, frame, out var gvlFields))
+                    {
+                        if (!gvlFields.TryGetValue(fieldAccess.FieldName, out var gvlCell))
+                            throw new InvalidOperationException($"Unknown field '{fieldAccess.FieldName}'");
+                        return gvlCell.Value;
                     }
 
                     var fields = FieldsOf(Evaluate(fieldAccess.Receiver, frame));

@@ -169,5 +169,42 @@ END_VAR";
             var note = Assert.Single(vars);
             Assert.Equal("'see (* details *) here'", note.DefaultValueText);
         }
+
+        // TcXunit-71o: a GVL's VAR_GLOBAL block, with leading {attribute
+        // ...} pragma lines (ignored since no section is open yet) and no
+        // trailing modifier.
+        [Fact]
+        public void Parse_VarGlobalBlockWithAttributePragmas_ReadsGlobalSection()
+        {
+            const string declaration = @"{attribute 'qualified_only'}
+{attribute 'global_init_slot' := '49989'}
+VAR_GLOBAL
+	stMachine : uMachine;
+	stUnit : uUnit;
+END_VAR";
+
+            var vars = VarBlockParser.Parse(declaration);
+
+            Assert.Equal(new[] { "stMachine", "stUnit" }, vars.Select(v => v.Name));
+            Assert.All(vars, v => Assert.Equal(VarSection.Global, v.Section));
+        }
+
+        [Theory]
+        [InlineData("VAR_GLOBAL")]
+        [InlineData("VAR_GLOBAL CONSTANT")]
+        [InlineData("VAR_GLOBAL RETAIN PERSISTENT")]
+        public void Parse_VarGlobalWithModifiers_ReadsGlobalSection(string header)
+        {
+            var declaration = $@"{header}
+	value : UINT := 16;
+END_VAR";
+
+            var vars = VarBlockParser.Parse(declaration);
+
+            var value = Assert.Single(vars);
+            Assert.Equal("value", value.Name);
+            Assert.Equal(VarSection.Global, value.Section);
+            Assert.Equal("16", value.DefaultValueText);
+        }
     }
 }

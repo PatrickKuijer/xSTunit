@@ -41,6 +41,14 @@ namespace TcXunit.Parser
                 pouDirectories
                     .SelectMany(dir => Directory.GetFiles(dir, "*.TcDUT", SearchOption.AllDirectories)));
 
+        // .TcGVL files declare GVL (global variable list) types (TcXunit-71o)
+        // - globbed separately from *.TcPOU/*.TcDUT since they use their own
+        // root XML element (<GVL> vs <POU>/<DUT>).
+        public static IReadOnlyList<string> FindGvlFiles(IReadOnlyList<string> pouDirectories) =>
+            DeduplicatePaths(
+                pouDirectories
+                    .SelectMany(dir => Directory.GetFiles(dir, "*.TcGVL", SearchOption.AllDirectories)));
+
         // Normalizes each path (Path.GetFullPath) and de-duplicates
         // case-insensitively so overlapping input directories (same
         // directory passed twice, one nested inside another, or differing

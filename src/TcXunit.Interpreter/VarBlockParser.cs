@@ -52,6 +52,19 @@ namespace TcXunit.Interpreter
                         continue;
                 }
 
+                // A GVL's VAR_GLOBAL header, optionally followed by
+                // CONSTANT/RETAIN/PERSISTENT modifiers on the same line
+                // (e.g. "VAR_GLOBAL CONSTANT", "VAR_GLOBAL RETAIN
+                // PERSISTENT") - TcXunit-71o. Modifiers don't affect
+                // default-value construction (no TwinCAT retain/persistence
+                // semantics are modeled), only which section a field lands
+                // in.
+                if (line == "VAR_GLOBAL" || line.StartsWith("VAR_GLOBAL "))
+                {
+                    currentSection = VarSection.Global;
+                    continue;
+                }
+
                 if (currentSection == null)
                     continue;
 

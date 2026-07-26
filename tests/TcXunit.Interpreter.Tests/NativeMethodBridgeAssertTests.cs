@@ -118,6 +118,28 @@ namespace TcXunit.Interpreter.Tests
         }
 
         [Fact]
+        public void RunSuite_AssertEqualsBool_PositionalArgs_ReachableThroughInterpreter()
+        {
+            var engine = NewSuiteEngine(
+                "TEST('t');\n" +
+                "AssertEquals_BOOL((1 = 1), (1 = 1), 'ok');\n" +
+                "TEST_FINISHED();");
+
+            Assert.True(Assert.Single(engine.RunSuite("FB_MySuite")).Passed);
+        }
+
+        [Fact]
+        public void RunSuite_AssertEqualsString_PositionalArgs_ReachableThroughInterpreter()
+        {
+            var engine = NewSuiteEngine(
+                "TEST('t');\n" +
+                "AssertEquals_STRING('abc', 'abc', 'ok');\n" +
+                "TEST_FINISHED();");
+
+            Assert.True(Assert.Single(engine.RunSuite("FB_MySuite")).Passed);
+        }
+
+        [Fact]
         public void RunSuite_AssertTrue_MixedNamedAndPositionalArgs_ReachableThroughInterpreter()
         {
             var engine = NewSuiteEngine(

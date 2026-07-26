@@ -194,5 +194,37 @@ namespace TcXunit.Interpreter.Tests
             var dst = (ArrayValue)instance.Fields["dst"].Value;
             Assert.Equal(new object[] { 1, 2, 3, 0 }, dst.Elements);
         }
+
+        // TcXunit-1hc: RequireIntrinsicArg reports the missing parameter by
+        // name (not by positional index) when neither a named nor enough
+        // positional args are supplied.
+        [Fact]
+        public void Memcpy_MissingNArgument_ThrowsWithParamNameInMessage()
+        {
+            var (engine, instance, frame) = NewHolder(
+                "VAR\n\tsrc : ARRAY[0..3] OF BYTE := [1, 2, 3, 4];\n\tdst : ARRAY[0..3] OF BYTE;\nEND_VAR");
+
+            var ex = Assert.Throws<InvalidOperationException>(() =>
+                engine.Evaluate(Parser.ParseExpression("MEMCPY(ADR(dst), ADR(src))"), frame));
+
+            Assert.Equal("MEMCPY missing required argument 'n'", ex.Message);
+        }
+
+        // TcXunit-1hc: RequirePointerArg rejects a resolved, non-missing arg
+        // that isn't a Pointer (e.g. a plain INT passed where ADR(...) was
+        // expected), reporting the offending param name and value type.
+        [Fact]
+        public void Memcpy_NamedDestArgNotAPointer_ThrowsMustBePointerToByte()
+        {
+            var (engine, instance, frame) = NewHolder(
+                "VAR\n\tsrc : ARRAY[0..1] OF BYTE := [1, 2];\nEND_VAR");
+
+            var ex = Assert.Throws<InvalidOperationException>(() =>
+                engine.Evaluate(Parser.ParseExpression("MEMCPY(destAddr := 5, srcAddr := ADR(src), n := 2)"), frame));
+
+            Assert.Equal(
+                "MEMCPY argument 'destAddr' must be a POINTER TO BYTE (e.g. ADR(buf) or ADR(buf[i])), got Int32",
+                ex.Message);
+        }
     }
 }

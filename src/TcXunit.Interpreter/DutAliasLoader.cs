@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text.RegularExpressions;
-using System.Xml;
 using TcXunit.Parser;
 
 namespace TcXunit.Interpreter
@@ -87,15 +86,10 @@ namespace TcXunit.Interpreter
 
             foreach (var file in MultiDirectoryPouLoader.FindDutFiles(pouDirectories))
             {
-                DutAst dut;
-                try
+                if (!StructuralParseGuard.TryParseOrSkip(
+                        file, () => TcDutParser.Parse(File.ReadAllText(file)), out var dut, out var skip))
                 {
-                    dut = TcDutParser.Parse(File.ReadAllText(file));
-                }
-                catch (Exception ex) when (ex is XmlException || ex is NullReferenceException)
-                {
-                    skipped.Add(new SkippedFile(
-                        file, $"Failed to parse '{Path.GetFileName(file)}': {ex.Message}"));
+                    skipped.Add(skip);
                     continue;
                 }
 

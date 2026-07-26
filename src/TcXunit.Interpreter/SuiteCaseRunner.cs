@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Xml;
 using TcXunit.Parser;
 using TcXunit.Runner.TcUnitStub;
 
@@ -135,7 +134,18 @@ namespace TcXunit.Interpreter
             {
                 try
                 {
-                    loaded.Add(new LoadedPou(TcPouParser.Parse(File.ReadAllText(file)), file));
+                    // Same rationale as the TcPouRejectedException catch below
+                    // (PLC-b62/TcXunit-swk): a structurally unexpected POU
+                    // (malformed XML, missing Declaration/Implementation/ST,
+                    // an interface-only POU, or a GVL/DUT file caught by the
+                    // *.TcPOU glob) must not abort discovery for the whole
+                    // directory either. Keyed by full file path for the same
+                    // collision-avoidance reason as below (TcXunit-pvp).
+                    if (StructuralParseGuard.TryParseOrSkip(
+                            file, () => TcPouParser.Parse(File.ReadAllText(file)), out var pou, out var skip))
+                        loaded.Add(new LoadedPou(pou, file));
+                    else
+                        skipped.Add(skip);
                 }
                 catch (TcPouRejectedException ex)
                 {
@@ -157,18 +167,6 @@ namespace TcXunit.Interpreter
                     // surfaced as the synthetic case's SuiteName, so the
                     // failing file is unambiguous to the user.
                     skipped.Add(new SkippedFile(file, ex.Message));
-                }
-                catch (Exception ex) when (ex is XmlException || ex is NullReferenceException)
-                {
-                    // Same rationale as above (PLC-b62/TcXunit-swk): a structurally
-                    // unexpected POU (malformed XML, missing Declaration/Implementation/ST,
-                    // an interface-only POU, or a GVL/DUT file caught by the *.TcPOU glob)
-                    // must not abort discovery for the whole directory either. Keyed
-                    // by full file path for the same collision-avoidance reason as
-                    // above (TcXunit-pvp).
-                    skipped.Add(new SkippedFile(
-                        file,
-                        $"Failed to parse '{Path.GetFileName(file)}': {ex.Message}"));
                 }
             }
 

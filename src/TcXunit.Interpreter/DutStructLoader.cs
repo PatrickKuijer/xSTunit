@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
-using System.Xml;
 using TcXunit.Parser;
 
 namespace TcXunit.Interpreter
@@ -73,33 +72,23 @@ namespace TcXunit.Interpreter
 
             foreach (var file in MultiDirectoryPouLoader.FindDutFiles(pouDirectories))
             {
-                DutAst dut;
-                try
+                // A structurally unexpected .TcDUT file (malformed XML,
+                // missing DUT/Declaration element) must not abort registry
+                // build for the whole directory (TcXunit-022).
+                if (!StructuralParseGuard.TryParseOrSkip(
+                        file, () => TcDutParser.Parse(File.ReadAllText(file)), out var dut, out var dutSkip))
                 {
-                    dut = TcDutParser.Parse(File.ReadAllText(file));
-                }
-                catch (Exception ex) when (ex is XmlException || ex is NullReferenceException)
-                {
-                    // A structurally unexpected .TcDUT file (malformed XML,
-                    // missing DUT/Declaration element) must not abort
-                    // registry build for the whole directory (TcXunit-022).
-                    skipped.Add(new SkippedFile(
-                        file, $"Failed to parse '{Path.GetFileName(file)}': {ex.Message}"));
+                    skipped.Add(dutSkip);
                     continue;
                 }
 
                 if (!IsStructDeclaration(dut.DeclarationText))
                     continue;
 
-                StructAst structAst;
-                try
+                if (!StructuralParseGuard.TryParseOrSkip(
+                        file, () => StructDeclParser.Parse(dut.DeclarationText), out var structAst, out var structSkip))
                 {
-                    structAst = StructDeclParser.Parse(dut.DeclarationText);
-                }
-                catch (Exception ex) when (ex is XmlException || ex is NullReferenceException)
-                {
-                    skipped.Add(new SkippedFile(
-                        file, $"Failed to parse '{Path.GetFileName(file)}': {ex.Message}"));
+                    skipped.Add(structSkip);
                     continue;
                 }
 

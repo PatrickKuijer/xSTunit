@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Xml;
 using TcXunit.Parser;
 
 namespace TcXunit.Interpreter
@@ -23,15 +22,10 @@ namespace TcXunit.Interpreter
 
             foreach (var file in MultiDirectoryPouLoader.FindGvlFiles(pouDirectories))
             {
-                GvlAst gvl;
-                try
+                if (!StructuralParseGuard.TryParseOrSkip(
+                        file, () => TcGvlParser.Parse(File.ReadAllText(file)), out var gvl, out var skip))
                 {
-                    gvl = TcGvlParser.Parse(File.ReadAllText(file));
-                }
-                catch (Exception ex) when (ex is XmlException || ex is NullReferenceException)
-                {
-                    skipped.Add(new SkippedFile(
-                        file, $"Failed to parse '{Path.GetFileName(file)}': {ex.Message}"));
+                    skipped.Add(skip);
                     continue;
                 }
 

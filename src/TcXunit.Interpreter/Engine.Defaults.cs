@@ -68,7 +68,8 @@ namespace TcXunit.Interpreter
         // shorthand (TcXunit-w5x.15.6).
         private ArrayValue BuildArrayDefault(VarDecl decl, FbInstance owningInstance)
         {
-            var (dimensions, elementTypeName) = ArrayTypeInfo.Parse(decl.TypeName);
+            var (dimensions, elementTypeName) = ArrayTypeInfo.Parse(
+                decl.TypeName, boundText => ResolveArrayBound(boundText, owningInstance));
             var count = dimensions.Aggregate(1, (acc, d) => acc * (d.Hi - d.Lo + 1));
             var elementDecl = new VarDecl(null, elementTypeName, null, VarSection.Local);
 
@@ -82,6 +83,23 @@ namespace TcXunit.Interpreter
                 OverlayArray(array, lit, new Frame(owningInstance, elementTypeName));
 
             return array;
+        }
+
+        // Resolves a non-literal ARRAY bound (e.g. a GVL-qualified constant
+        // like "cTcpDataServerClient.MAX_REMOTE_UNITS") through the normal
+        // Evaluate() path (TcXunit-654): array bounds are IEC 61131-3
+        // constant expressions, not just bare integer literals, but they're
+        // parsed from a raw type-name string at VarDecl/DefaultValue time -
+        // outside the AST's normal expression positions - so ArrayTypeInfo
+        // can't evaluate them itself. owningInstance may be null (e.g. while
+        // computing a GVL's own default values at Engine construction, or a
+        // top-level suite field with no enclosing instance yet); Evaluate's
+        // GVL lookup (TryGetGvlFields/TryResolveGlobalCell) doesn't need a
+        // non-null Frame.Instance, only DeclaringTypeName-free global scope.
+        private int ResolveArrayBound(string boundText, FbInstance owningInstance)
+        {
+            var value = Evaluate(Parser.ParseExpression(boundText), new Frame(owningInstance, null));
+            return Convert.ToInt32(value);
         }
 
         // Applies a struct/array literal's per-field/per-element expression

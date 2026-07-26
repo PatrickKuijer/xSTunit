@@ -16,7 +16,16 @@ namespace TcXunit.Interpreter
         public static bool IsArrayType(string typeName) =>
             typeName != null && typeName.TrimStart().StartsWith("ARRAY", StringComparison.Ordinal);
 
-        public static (IReadOnlyList<(int Lo, int Hi)> Dimensions, string ElementTypeName) Parse(string typeName)
+        // resolveBound resolves a non-literal bound expression's text (e.g.
+        // "cTcpDataServerClient.MAX_REMOTE_UNITS") to its integer value.
+        // IEC 61131-3 array bounds are constant expressions, not just bare
+        // integer literals (TcXunit-654) - callers with an Engine/Frame
+        // context to evaluate such expressions against (e.g. GVL-qualified
+        // constants) pass a resolver; callers without one (e.g.
+        // StructBoundaryBuilder, which runs before any Engine exists) pass
+        // null and keep the original literal-only behavior.
+        public static (IReadOnlyList<(int Lo, int Hi)> Dimensions, string ElementTypeName) Parse(
+            string typeName, Func<string, int> resolveBound = null)
         {
             var match = Pattern.Match(typeName.Trim());
             if (!match.Success)
@@ -24,16 +33,27 @@ namespace TcXunit.Interpreter
 
             var dims = match.Groups["dims"].Value
                 .Split(',')
-                .Select(ParseDim)
+                .Select(dimText => ParseDim(dimText, resolveBound))
                 .ToList();
 
             return (dims, match.Groups["elementType"].Value.Trim());
         }
 
-        private static (int Lo, int Hi) ParseDim(string dimText)
+        private static (int Lo, int Hi) ParseDim(string dimText, Func<string, int> resolveBound)
         {
             var parts = dimText.Split(new[] { ".." }, StringSplitOptions.None);
-            return (int.Parse(parts[0].Trim()), int.Parse(parts[1].Trim()));
+            return (ResolveBound(parts[0].Trim(), resolveBound), ResolveBound(parts[1].Trim(), resolveBound));
+        }
+
+        private static int ResolveBound(string boundText, Func<string, int> resolveBound)
+        {
+            if (int.TryParse(boundText, out var literal))
+                return literal;
+
+            if (resolveBound != null)
+                return resolveBound(boundText);
+
+            throw new FormatException($"The input string '{boundText}' was not in a correct format");
         }
     }
 }

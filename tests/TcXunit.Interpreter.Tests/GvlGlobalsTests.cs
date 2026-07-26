@@ -148,6 +148,52 @@ namespace TcXunit.Interpreter.Tests
             Assert.Equal(16, frame.Locals["result"].Value);
         }
 
+        // TcXunit-654: ARRAY bounds are IEC 61131-3 constant expressions, so
+        // a GVL-qualified constant (e.g. cTcpDataServerClient.MAX_REMOTE_UNITS,
+        // mirroring the reported repro) is legal as a bound and must resolve
+        // through the normal GVL lookup rather than crashing ArrayTypeInfo's
+        // raw int.Parse with a FormatException.
+        [Fact]
+        public void NewInstance_ArrayFieldBoundByGvlQualifiedConstant_BuildsArrayOfDeclaredLength()
+        {
+            var gvl = new GvlAst("cTcpDataServerClient", "VAR_GLOBAL CONSTANT\n\tMAX_REMOTE_UNITS : UINT := 10;\nEND_VAR");
+            var fb = new PouAst(
+                "FB_Holder",
+                null,
+                "VAR\n\taUnits : ARRAY[1..cTcpDataServerClient.MAX_REMOTE_UNITS] OF INT;\nEND_VAR",
+                "",
+                new List<MethodAst>());
+            var engine = new Engine(new TypeRegistry(new[] { fb }, null, new[] { gvl }));
+
+            var instance = engine.NewInstance("FB_Holder");
+            var aUnits = Assert.IsType<ArrayValue>(instance.Fields["aUnits"].Value);
+
+            Assert.Equal(10, aUnits.Elements.Length);
+            Assert.All(aUnits.Elements, e => Assert.Equal(0, e));
+        }
+
+        // Same shape, but the array is a STRUCT field (matching the reported
+        // repro's BuildStructDefault call chain: a DUT field whose array
+        // bound is a GVL-qualified constant, defaulted while building an
+        // enclosing struct's defaults rather than an FB's own fields).
+        [Fact]
+        public void NewInstance_StructFieldArrayBoundByGvlQualifiedConstant_BuildsArrayOfDeclaredLength()
+        {
+            var gvl = new GvlAst("cTcpDataServerClient", "VAR_GLOBAL CONSTANT\n\tMAX_REMOTE_UNITS : UINT := 10;\nEND_VAR");
+            var structAst = new StructAst("uRemoteMachine", new[]
+            {
+                new VarDecl("aUnits", "ARRAY[1..cTcpDataServerClient.MAX_REMOTE_UNITS] OF INT", null, VarSection.Local),
+            });
+            var fb = new PouAst("FB_Holder", null, "VAR\n\tmachine : uRemoteMachine;\nEND_VAR", "", new List<MethodAst>());
+            var engine = new Engine(new TypeRegistry(new[] { fb }, new[] { structAst }, new[] { gvl }));
+
+            var instance = engine.NewInstance("FB_Holder");
+            var machine = Assert.IsType<StructInstance>(instance.Fields["machine"].Value);
+            var aUnits = Assert.IsType<ArrayValue>(machine.Fields["aUnits"].Value);
+
+            Assert.Equal(10, aUnits.Elements.Length);
+        }
+
         // A single GVL whose default-value expression throws (unresolvable
         // reference) must not prevent other GVLs from being constructed -
         // Engine's constructor should skip just the bad GVL/decl.

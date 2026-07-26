@@ -7,6 +7,19 @@ namespace TcXunit.Interpreter
         public string ActualTypeName { get; }
         public Dictionary<string, Cell> Fields { get; } = new Dictionary<string, Cell>();
 
+        // Declared IEC type text (e.g. "REFERENCE TO INT") for each entry in
+        // Fields, indexed by name - populated once at NewInstance time and
+        // never touched afterward. Fields itself gets its entry *replaced*
+        // wholesale by a REF= binding (Engine.ExecuteStatement's
+        // RefAssignStmt case aliases the field directly onto the target's
+        // Cell, TcXunit-t6p), which would otherwise erase the field's own
+        // declared type in favor of whatever it now points at. __ISVALIDREF
+        // (TcXunit-6lh) needs the former, not the latter, to validate that
+        // the *name being asked about* was actually declared REFERENCE TO/
+        // POINTER TO - so this side table is the source of truth instead of
+        // Cell.DeclaredTypeName for instance fields.
+        public Dictionary<string, string> FieldTypeNames { get; } = new Dictionary<string, string>();
+
         // Set when ActualTypeName's ancestry reaches TcUnit.FB_TestSuite - the
         // native C# stub instance backing TEST()/AssertEquals_INT()/etc for this
         // instance (TcXunit-w5x.7's native-stub boundary).

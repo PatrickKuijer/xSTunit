@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using TcXunit.Interpreter;
 using TcXunit.Parser;
@@ -113,6 +114,40 @@ namespace TcXunit.Interpreter.Tests
             var result = engine.CallMethod(instance, "Check", new Expr[0], new NamedArg[0], null, null);
 
             Assert.Equal(true, result);
+        }
+
+        [Fact]
+        public void IsValidRef_PlainIntVariable_Throws()
+        {
+            // TcXunit-6lh: __ISVALIDREF is only meaningful on POINTER TO/
+            // REFERENCE TO variables. A plain INT always has a non-null
+            // DefaultValue (0), so without a declared-type check this would
+            // silently evaluate to TRUE instead of surfacing the misuse -
+            // exactly the kind of copy-paste/typo mistake in test ST code
+            // this framework exists to catch.
+            var (engine, _, frame) = NewHolder("VAR\n\tplainInt : INT;\nEND_VAR");
+
+            var ex = Assert.Throws<InvalidOperationException>(
+                () => engine.Evaluate(Parser.ParseExpression("__ISVALIDREF(plainInt)"), frame));
+
+            Assert.Contains("__ISVALIDREF", ex.Message);
+            Assert.Contains("POINTER TO", ex.Message);
+            Assert.Contains("REFERENCE TO", ex.Message);
+        }
+
+        [Fact]
+        public void IsValidRef_PlainFbInstanceField_Throws()
+        {
+            // Same misuse, but on an FB instance field rather than a scalar -
+            // e.g. __ISVALIDREF(machine) where machine should have been
+            // declared REFERENCE TO/POINTER TO but is a plain FB instance
+            // (using the native TON type as a stand-in FB instance field).
+            var (engine, _, frame) = NewHolder("VAR\n\tmachine : TON;\nEND_VAR");
+
+            var ex = Assert.Throws<InvalidOperationException>(
+                () => engine.Evaluate(Parser.ParseExpression("__ISVALIDREF(machine)"), frame));
+
+            Assert.Contains("__ISVALIDREF", ex.Message);
         }
     }
 }

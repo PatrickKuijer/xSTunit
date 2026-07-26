@@ -95,9 +95,67 @@ namespace TcXunit.Interpreter
         // returns null for REFERENCE TO/POINTER TO), while a REF=-bound
         // reference aliases the target's own Cell (whose value is the FB/struct
         // /scalar it points at) - so a non-null resolved value maps to "valid".
+        //
+        // __ISVALIDREF only makes sense on a POINTER TO/REFERENCE TO variable
+        // (TcXunit-6lh): every other declared type's DefaultValue is non-null
+        // (0, FALSE, a constructed FbInstance/StructInstance, ...), so without
+        // this check a copy-paste/typo mistake in test ST code - passing a
+        // plain variable instead of a reference/pointer - would silently
+        // evaluate to TRUE instead of surfacing the misuse, exactly the kind
+        // of bug this framework exists to catch. Mirrors the "must be a
+        // POINTER TO BYTE" argument-type validation in RequirePointerArg.
         private bool IsValidRef(Expr expr, Frame frame)
         {
-            return ResolveCellForLValue(expr, frame).Value != null;
+            var cell = ResolveCellForLValue(expr, frame);
+            var typeName = ResolveDeclaredTypeName(expr, frame);
+            if (typeName == null ||
+                !(typeName.StartsWith("POINTER TO") || typeName.StartsWith("REFERENCE TO")))
+            {
+                throw new InvalidOperationException(
+                    $"__ISVALIDREF requires a POINTER TO or REFERENCE TO variable, but got " +
+                    $"'{typeName ?? "unknown"}'");
+            }
+
+            return cell.Value != null;
+        }
+
+        // Declared IEC type text of the *name* an expression refers to - not
+        // to be confused with ResolveCellForLValue's resolved Cell, which
+        // for a REF=-bound REFERENCE TO/POINTER TO variable is the *target's*
+        // Cell (aliasing, TcXunit-t6p) and so no longer carries the
+        // reference variable's own declared type. Locals/instance fields
+        // consult the FieldTypeNames/LocalTypeNames side tables (populated
+        // once at declaration time, immune to later REF= aliasing);
+        // GVL members and STRUCT fields are never REF= targets (the parser
+        // only accepts a bare identifier as a REF= target), so their Cell's
+        // DeclaredTypeName is always trustworthy.
+        private string ResolveDeclaredTypeName(Expr expr, Frame frame)
+        {
+            if (expr is IdentifierExpr id)
+            {
+                if (frame.LocalTypeNames.TryGetValue(id.Name, out var localType))
+                    return localType;
+                if (frame.Instance != null && frame.Instance.FieldTypeNames.TryGetValue(id.Name, out var fieldType))
+                    return fieldType;
+                if (TryResolveGlobalCell(id.Name, out var globalCell))
+                    return globalCell.DeclaredTypeName;
+                return null;
+            }
+
+            if (expr is FieldAccessExpr fieldAccess)
+            {
+                if (TryGetGvlFields(fieldAccess, frame, out var gvlFields))
+                    return gvlFields.TryGetValue(fieldAccess.FieldName, out var gvlCell) ? gvlCell.DeclaredTypeName : null;
+
+                var receiver = Evaluate(fieldAccess.Receiver, frame);
+                if (receiver is FbInstance fb)
+                    return fb.FieldTypeNames.TryGetValue(fieldAccess.FieldName, out var fbFieldType) ? fbFieldType : null;
+
+                var fields = FieldsOf(receiver);
+                return fields.TryGetValue(fieldAccess.FieldName, out var fieldCell) ? fieldCell.DeclaredTypeName : null;
+            }
+
+            return null;
         }
 
         // FbInstance and StructInstance are both "named-field container of

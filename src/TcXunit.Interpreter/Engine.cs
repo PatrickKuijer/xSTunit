@@ -43,7 +43,7 @@ namespace TcXunit.Interpreter
             {
                 var fields = new Dictionary<string, Cell>();
                 foreach (var decl in _registry.GetGvlDecls(gvlName))
-                    fields[decl.Name] = new Cell();
+                    fields[decl.Name] = new Cell { DeclaredTypeName = decl.TypeName };
                 _globals[gvlName] = fields;
             }
 
@@ -157,7 +157,10 @@ namespace TcXunit.Interpreter
                 // a nested FB's own inputs/outputs never resolve
                 // (TcXunit-0v1).
                 foreach (var decl in VarBlockParser.Parse(def.DeclarationText).Where(IsPersistedField))
-                    instance.Fields[decl.Name] = new Cell { Value = DefaultValue(decl, instance) };
+                {
+                    instance.Fields[decl.Name] = new Cell { Value = DefaultValue(decl, instance), DeclaredTypeName = decl.TypeName };
+                    instance.FieldTypeNames[decl.Name] = decl.TypeName;
+                }
             }
 
             CallMethod(instance, "FB_init", Array.Empty<Expr>(), Array.Empty<NamedArg>(), null, null, optionalIfMissing: true);

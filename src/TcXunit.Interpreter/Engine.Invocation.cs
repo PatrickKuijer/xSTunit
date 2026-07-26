@@ -304,7 +304,8 @@ namespace TcXunit.Interpreter
                     value = DefaultValue(decl, newFrame.Instance);
                 }
 
-                newFrame.Locals[decl.Name] = new Cell { Value = value };
+                newFrame.Locals[decl.Name] = new Cell { Value = value, DeclaredTypeName = decl.TypeName };
+                newFrame.LocalTypeNames[decl.Name] = decl.TypeName;
             }
         }
     }

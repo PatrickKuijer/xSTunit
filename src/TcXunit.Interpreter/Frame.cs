@@ -13,6 +13,16 @@ namespace TcXunit.Interpreter
         public Dictionary<string, Cell> Locals { get; } = new Dictionary<string, Cell>();
         public string DeclaringTypeName { get; }
 
+        // Declared IEC type text for each entry in Locals, indexed by name -
+        // populated once by BindParams and never touched afterward, same
+        // rationale as FbInstance.FieldTypeNames: a REF= binding of a
+        // method-local REFERENCE TO/POINTER TO replaces its Locals[name]
+        // Cell wholesale with the target's own Cell (Engine.ExecuteStatement's
+        // RefAssignStmt case), so Cell.DeclaredTypeName after that reflects
+        // the target, not the local's own declaration. __ISVALIDREF
+        // (TcXunit-6lh) needs this table instead.
+        public Dictionary<string, string> LocalTypeNames { get; } = new Dictionary<string, string>();
+
         public Frame(FbInstance instance, string declaringTypeName)
         {
             Instance = instance;

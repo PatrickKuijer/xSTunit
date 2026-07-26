@@ -239,5 +239,93 @@ namespace TcXunit.Interpreter.Tests
                 "END_FOR", "count");
             Assert.Equal(4, count);
         }
+
+        // --- IF/ELSIF execution -------------------------------------------------
+
+        private const string ElsifChainBody =
+            "branch := 0;\n" +
+            "IF a THEN\n" +
+            "\tbranch := 1;\n" +
+            "ELSIF b THEN\n" +
+            "\tbranch := 2;\n" +
+            "ELSIF c THEN\n" +
+            "\tbranch := 3;\n" +
+            "ELSE\n" +
+            "\tbranch := 4;\n" +
+            "END_IF";
+
+        [Theory]
+        [InlineData(true, true, true, 1)]   // first condition true short-circuits later branches
+        [InlineData(false, true, true, 2)]  // first ELSIF matches, remaining branches skipped
+        [InlineData(false, false, true, 3)] // second ELSIF matches
+        [InlineData(false, false, false, 4)] // falls through to trailing ELSE
+        public void ExecuteIfElsif_ChainWithElse_RunsOnlyFirstTrueBranch(bool a, bool b, bool c, int expectedBranch)
+        {
+            var engine = NewEngine();
+            var frame = NewFrame();
+            frame.Locals["a"] = new Cell { Value = a };
+            frame.Locals["b"] = new Cell { Value = b };
+            frame.Locals["c"] = new Cell { Value = c };
+
+            engine.ExecuteStatements(Parser.ParseStatements(ElsifChainBody), frame);
+
+            Assert.Equal(expectedBranch, frame.Locals["branch"].Value);
+        }
+
+        [Fact]
+        public void ExecuteIfElsif_NoMatchNoTrailingElse_DoesNothing()
+        {
+            var body =
+                "branch := 0;\n" +
+                "IF a THEN\n" +
+                "\tbranch := 1;\n" +
+                "ELSIF b THEN\n" +
+                "\tbranch := 2;\n" +
+                "ELSIF c THEN\n" +
+                "\tbranch := 3;\n" +
+                "END_IF";
+
+            var engine = NewEngine();
+            var frame = NewFrame();
+            frame.Locals["a"] = new Cell { Value = false };
+            frame.Locals["b"] = new Cell { Value = false };
+            frame.Locals["c"] = new Cell { Value = false };
+
+            engine.ExecuteStatements(Parser.ParseStatements(body), frame);
+
+            Assert.Equal(0, frame.Locals["branch"].Value);
+        }
+
+        [Fact]
+        public void ExecuteIfElsif_OnlySelectedBranchSideEffectRuns()
+        {
+            var body =
+                "aRan := 0;\n" +
+                "bRan := 0;\n" +
+                "cRan := 0;\n" +
+                "elseRan := 0;\n" +
+                "IF a THEN\n" +
+                "\taRan := aRan + 1;\n" +
+                "ELSIF b THEN\n" +
+                "\tbRan := bRan + 1;\n" +
+                "ELSIF c THEN\n" +
+                "\tcRan := cRan + 1;\n" +
+                "ELSE\n" +
+                "\telseRan := elseRan + 1;\n" +
+                "END_IF";
+
+            var engine = NewEngine();
+            var frame = NewFrame();
+            frame.Locals["a"] = new Cell { Value = false };
+            frame.Locals["b"] = new Cell { Value = false };
+            frame.Locals["c"] = new Cell { Value = true };
+
+            engine.ExecuteStatements(Parser.ParseStatements(body), frame);
+
+            Assert.Equal(0, frame.Locals["aRan"].Value);
+            Assert.Equal(0, frame.Locals["bRan"].Value);
+            Assert.Equal(1, frame.Locals["cRan"].Value);
+            Assert.Equal(0, frame.Locals["elseRan"].Value);
+        }
     }
 }

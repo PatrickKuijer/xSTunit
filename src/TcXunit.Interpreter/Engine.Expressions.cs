@@ -221,11 +221,21 @@ namespace TcXunit.Interpreter
             else if (leftVal == null && rightVal == null)
                 equal = true;
             else if (leftVal == null)
-                equal = rightVal is int rightInt && rightInt == 0;
+                equal = IsNumericZero(rightVal);
             else
-                equal = leftVal is int leftInt && leftInt == 0;
+                equal = IsNumericZero(leftVal);
 
             return op == "=" ? equal : !equal;
+        }
+
+        // A pointer compared to any numeric-zero literal - int (BYTE/WORD/
+        // DINT/etc.), REAL (float), or LREAL (double) - is the null-check
+        // idiom regardless of the literal's numeric type (TcXunit-3zc).
+        private static bool IsNumericZero(object val)
+        {
+            return (val is int i && i == 0)
+                || (val is float f && f == 0f)
+                || (val is double d && d == 0d);
         }
 
         // ADR(x) builds a fresh ArrayElementCell wrapper on every call

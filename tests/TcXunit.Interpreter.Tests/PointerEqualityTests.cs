@@ -39,6 +39,24 @@ namespace TcXunit.Interpreter.Tests
         }
 
         [Fact]
+        public void UnboundPointer_ComparedToRealZero_IsEqual()
+        {
+            var (engine, instance, frame) = NewHolder("VAR\n\tp : POINTER TO BYTE;\nEND_VAR");
+
+            Assert.True((bool)engine.Evaluate(Parser.ParseExpression("p = 0.0"), frame));
+            Assert.False((bool)engine.Evaluate(Parser.ParseExpression("p <> 0.0"), frame));
+        }
+
+        [Fact]
+        public void UnboundPointer_ComparedToLrealZero_IsEqual()
+        {
+            var (engine, instance, frame) = NewHolder("VAR\n\tp : POINTER TO BYTE;\nEND_VAR");
+
+            Assert.True((bool)engine.Evaluate(Parser.ParseExpression("p = LREAL#0.0"), frame));
+            Assert.False((bool)engine.Evaluate(Parser.ParseExpression("p <> LREAL#0.0"), frame));
+        }
+
+        [Fact]
         public void TwoPointersToSameTarget_AreEqual()
         {
             var (engine, instance, frame) = NewHolder("VAR\n\tbuf : ARRAY[0..3] OF BYTE := [1,2,3,4];\n\tp1 : POINTER TO BYTE;\n\tp2 : POINTER TO BYTE;\nEND_VAR");

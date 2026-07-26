@@ -124,24 +124,12 @@ namespace TcXunit.Interpreter
             return match;
         }
 
-        private readonly struct SkippedPou
-        {
-            public SkippedPou(string fileKey, string message)
-            {
-                FileKey = fileKey;
-                Message = message;
-            }
-
-            public string FileKey { get; }
-            public string Message { get; }
-        }
-
         private static TypeRegistry BuildRegistry(
-            IReadOnlyList<string> pouDirectories, out List<string> typeNames, out List<SkippedPou> skipped)
+            IReadOnlyList<string> pouDirectories, out List<string> typeNames, out List<SkippedFile> skipped)
         {
             var pouFiles = MultiDirectoryPouLoader.FindPouFiles(pouDirectories);
             var loaded = new List<LoadedPou>();
-            skipped = new List<SkippedPou>();
+            skipped = new List<SkippedFile>();
 
             foreach (var file in pouFiles)
             {
@@ -168,7 +156,7 @@ namespace TcXunit.Interpreter
                     // file happened to be parsed first. The full path is also
                     // surfaced as the synthetic case's SuiteName, so the
                     // failing file is unambiguous to the user.
-                    skipped.Add(new SkippedPou(file, ex.Message));
+                    skipped.Add(new SkippedFile(file, ex.Message));
                 }
                 catch (Exception ex) when (ex is XmlException || ex is NullReferenceException)
                 {
@@ -178,7 +166,7 @@ namespace TcXunit.Interpreter
                     // must not abort discovery for the whole directory either. Keyed
                     // by full file path for the same collision-avoidance reason as
                     // above (TcXunit-pvp).
-                    skipped.Add(new SkippedPou(
+                    skipped.Add(new SkippedFile(
                         file,
                         $"Failed to parse '{Path.GetFileName(file)}': {ex.Message}"));
                 }
@@ -206,7 +194,7 @@ namespace TcXunit.Interpreter
                 }
                 catch (TcXunit.Parser.DuplicatePouTypeException ex)
                 {
-                    skipped.Add(new SkippedPou(ex.TypeName, ex.Message));
+                    skipped.Add(new SkippedFile(ex.TypeName, ex.Message));
                     loaded.RemoveAll(l => l.Pou.Name == ex.TypeName);
                 }
             }
@@ -223,7 +211,7 @@ namespace TcXunit.Interpreter
             try
             {
                 structTypes = DutStructLoader.Load(pouDirectories, out var dutSkipped);
-                skipped.AddRange(dutSkipped.Select(s => new SkippedPou(s.FilePath, s.Message)));
+                skipped.AddRange(dutSkipped);
             }
             catch (DuplicateStructTypeException ex)
             {
@@ -236,14 +224,14 @@ namespace TcXunit.Interpreter
                 // time via the existing unresolved-type path, and the
                 // duplicate itself is surfaced as its own synthetic case.
                 structTypes = Array.Empty<StructAst>();
-                skipped.Add(new SkippedPou(ex.TypeName, ex.Message));
+                skipped.Add(new SkippedFile(ex.TypeName, ex.Message));
             }
 
             // ALIAS .TcDUT definitions (TcXunit-6hg, e.g. T_MaxString ->
             // STRING(255)), shared with CliRunner via DutAliasLoader for the
             // same reason DUT struct types/GVLs are shared above.
             var aliases = DutAliasLoader.Load(pouDirectories, out var aliasSkipped);
-            skipped.AddRange(aliasSkipped.Select(s => new SkippedPou(s.FilePath, s.Message)));
+            skipped.AddRange(aliasSkipped);
 
             // .TcGVL global variable lists (TcXunit-71o), shared with
             // CliRunner via GvlLoader for the same reason DUT struct types
@@ -257,12 +245,12 @@ namespace TcXunit.Interpreter
             try
             {
                 gvls = GvlLoader.Load(pouDirectories, out var gvlSkipped);
-                skipped.AddRange(gvlSkipped.Select(s => new SkippedPou(s.FilePath, s.Message)));
+                skipped.AddRange(gvlSkipped);
             }
             catch (DuplicateGvlNameException ex)
             {
                 gvls = Array.Empty<GvlAst>();
-                skipped.Add(new SkippedPou(ex.GvlName, ex.Message));
+                skipped.Add(new SkippedFile(ex.GvlName, ex.Message));
             }
 
             return new TypeRegistry(types, structTypes, gvls, aliases);

@@ -79,21 +79,6 @@ namespace TcXunit.Interpreter
             return false;
         }
 
-        // A .TcDUT file that couldn't be parsed at all. Mirrors
-        // DutStructLoader.SkippedFile's shape so callers can fold these in
-        // directly alongside other skipped-DUT reporting.
-        public readonly struct SkippedFile
-        {
-            public SkippedFile(string filePath, string message)
-            {
-                FilePath = filePath;
-                Message = message;
-            }
-
-            public string FilePath { get; }
-            public string Message { get; }
-        }
-
         public static IReadOnlyDictionary<string, string> Load(
             IReadOnlyList<string> pouDirectories, out List<SkippedFile> skipped)
         {

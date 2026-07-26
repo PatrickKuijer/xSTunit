@@ -15,18 +15,6 @@ namespace TcXunit.Interpreter
     // .TcGVL file must not abort registry build for the whole directory.
     public static class GvlLoader
     {
-        public readonly struct SkippedFile
-        {
-            public SkippedFile(string filePath, string message)
-            {
-                FilePath = filePath;
-                Message = message;
-            }
-
-            public string FilePath { get; }
-            public string Message { get; }
-        }
-
         public static IReadOnlyList<GvlAst> Load(
             IReadOnlyList<string> pouDirectories, out List<SkippedFile> skipped)
         {

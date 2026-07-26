@@ -65,22 +65,6 @@ namespace TcXunit.Interpreter
             return false;
         }
 
-        // A .TcDUT file that couldn't be parsed at all, or whose declaration
-        // isn't a STRUCT this parser understands. Mirrors SuiteCaseRunner's
-        // SkippedPou shape so callers that already track skipped POUs can
-        // fold these in directly.
-        public readonly struct SkippedFile
-        {
-            public SkippedFile(string filePath, string message)
-            {
-                FilePath = filePath;
-                Message = message;
-            }
-
-            public string FilePath { get; }
-            public string Message { get; }
-        }
-
         public static IReadOnlyList<StructAst> Load(
             IReadOnlyList<string> pouDirectories, out List<SkippedFile> skipped)
         {

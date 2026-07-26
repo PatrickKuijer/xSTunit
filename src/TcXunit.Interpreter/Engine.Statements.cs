@@ -225,31 +225,11 @@ namespace TcXunit.Interpreter
             return flat;
         }
 
-        // INT->REAL->LREAL widens implicitly on assignment (inferred from the
-        // target cell's current CLR type, since Cell carries no declared-type tag
-        // of its own); the reverse requires an explicit X_TO_Y cast produced by
-        // TryEvaluateCast, which never returns a wider CLR type than the cast
-        // target - so a rejection here means the assignment skipped a cast.
-        private static object CoerceForAssignment(object existing, object incoming)
-        {
-            if (existing is int && incoming is float)
-                throw new InvalidOperationException("Implicit narrowing from REAL to INT is not allowed; use REAL_TO_INT(...)");
-            if (existing is int && incoming is double)
-                throw new InvalidOperationException("Implicit narrowing from LREAL to INT is not allowed; use LREAL_TO_INT(...)");
-            if (existing is float && incoming is double)
-                throw new InvalidOperationException("Implicit narrowing from LREAL to REAL is not allowed; use LREAL_TO_REAL(...)");
-
-            if (existing is float && incoming is int intForFloat)
-                return (float)intForFloat;
-            if (existing is double && (incoming is int || incoming is float))
-                return Convert.ToDouble(incoming);
-            // UDINT/DWORD/LINT cells box as long (TcXunit-6af.1); an int literal/
-            // expression assigned into one must widen the same way REAL/LREAL do
-            // above, or the cell would silently narrow back to int.
-            if (existing is long && incoming is int intForLong)
-                return (long)intForLong;
-
-            return incoming;
-        }
+        // Delegates to NumericCoercion (TcXunit-6af.2), the shared promotion/
+        // narrowing rule also used by Engine.Expressions.cs's EvaluateBinary -
+        // this used to reimplement the same rule independently by inspecting
+        // the CLR type already sitting in the Cell.
+        private static object CoerceForAssignment(object existing, object incoming) =>
+            NumericCoercion.CoerceForAssignment(existing, incoming);
     }
 }

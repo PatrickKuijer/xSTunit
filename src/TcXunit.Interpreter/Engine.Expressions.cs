@@ -171,22 +171,18 @@ namespace TcXunit.Interpreter
                     $"Operator '{binary.Op}' is not supported between {leftVal?.GetType().Name ?? "null"} and " +
                     $"{rightVal?.GetType().Name ?? "null"}; BOOL only supports '=' and '<>' against another BOOL");
 
-            // INT->REAL->LREAL implicit widening: promote to the widest operand's
-            // type for the whole operation, per TwinCAT's "smaller to larger is
+            // INT->LONG->REAL->LREAL implicit widening: promote both operands to
+            // their common arithmetic type, per TwinCAT's "smaller to larger is
             // implicit" arithmetic promotion rule.
-            if (leftVal is double || rightVal is double)
-                return EvaluateNumeric(binary.Op, ToDouble(leftVal), ToDouble(rightVal));
-
-            if (leftVal is float || rightVal is float)
-                return EvaluateNumeric(binary.Op, ToFloat(leftVal), ToFloat(rightVal));
-
-            // UDINT/DWORD/LINT (TcXunit-6af.1) box as C# long, wider than the
-            // plain int path below - widen both operands the same way REAL/
-            // LREAL do above, rather than let the final int cast throw.
-            if (leftVal is long || rightVal is long)
-                return EvaluateNumeric(binary.Op, ToLong(leftVal), ToLong(rightVal));
-
-            return EvaluateNumeric(binary.Op, (int)leftVal, (int)rightVal);
+            var (promotedLeft, promotedRight) = NumericCoercion.Promote(leftVal, rightVal);
+            return promotedLeft switch
+            {
+                double dl => EvaluateNumeric(binary.Op, dl, (double)promotedRight),
+                float fl => EvaluateNumeric(binary.Op, fl, (float)promotedRight),
+                long ll => EvaluateNumeric(binary.Op, ll, (long)promotedRight),
+                int il => EvaluateNumeric(binary.Op, il, (int)promotedRight),
+                _ => throw new NotSupportedException($"Cannot use {promotedLeft?.GetType().Name} in numeric arithmetic"),
+            };
         }
 
         // ADR(x) +/- offset: offset moves in whole array elements, not raw
@@ -379,28 +375,6 @@ namespace TcXunit.Interpreter
             return dest;
         }
 
-        private static double ToDouble(object value) => value switch
-        {
-            double d => d,
-            float f => f,
-            int i => i,
-            _ => throw new NotSupportedException($"Cannot use {value?.GetType().Name} in numeric arithmetic"),
-        };
-
-        private static float ToFloat(object value) => value switch
-        {
-            float f => f,
-            int i => i,
-            _ => throw new NotSupportedException($"Cannot use {value?.GetType().Name} in numeric arithmetic"),
-        };
-
-        private static long ToLong(object value) => value switch
-        {
-            long l => l,
-            int i => i,
-            _ => throw new NotSupportedException($"Cannot use {value?.GetType().Name} in numeric arithmetic"),
-        };
-
         private static object EvaluateNumeric(string op, double left, double right) => op switch
         {
             "+" => left + right,
@@ -487,9 +461,9 @@ namespace TcXunit.Interpreter
             if ((left is long || right is long) && (left is long || left is int) && (right is long || right is int))
                 return op switch
                 {
-                    "AND" => ToLong(left) & ToLong(right),
-                    "OR" => ToLong(left) | ToLong(right),
-                    "XOR" => ToLong(left) ^ ToLong(right),
+                    "AND" => NumericCoercion.ToLong(left) & NumericCoercion.ToLong(right),
+                    "OR" => NumericCoercion.ToLong(left) | NumericCoercion.ToLong(right),
+                    "XOR" => NumericCoercion.ToLong(left) ^ NumericCoercion.ToLong(right),
                     _ => throw new NotSupportedException($"Operator '{op}' not supported"),
                 };
 
@@ -502,7 +476,7 @@ namespace TcXunit.Interpreter
                 return li % ri;
 
             if ((left is long || right is long) && (left is long || left is int) && (right is long || right is int))
-                return ToLong(left) % ToLong(right);
+                return NumericCoercion.ToLong(left) % NumericCoercion.ToLong(right);
 
             throw new NotSupportedException($"Operator 'MOD' is integer-only, got {left?.GetType().Name} and {right?.GetType().Name}");
         }

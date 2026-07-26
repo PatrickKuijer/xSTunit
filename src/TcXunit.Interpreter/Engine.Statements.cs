@@ -243,6 +243,11 @@ namespace TcXunit.Interpreter
                 return (float)intForFloat;
             if (existing is double && (incoming is int || incoming is float))
                 return Convert.ToDouble(incoming);
+            // UDINT/DWORD/LINT cells box as long (TcXunit-6af.1); an int literal/
+            // expression assigned into one must widen the same way REAL/LREAL do
+            // above, or the cell would silently narrow back to int.
+            if (existing is long && incoming is int intForLong)
+                return (long)intForLong;
 
             return incoming;
         }

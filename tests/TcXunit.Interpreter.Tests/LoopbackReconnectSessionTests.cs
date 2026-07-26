@@ -65,8 +65,8 @@ namespace TcXunit.Interpreter.Tests
                 new Frame(wrapper, "FB_Wrapper"),
                 null);
 
-        private static int ReregistrationCount(FbInstance wrapper) =>
-            (int)Controller(wrapper).Fields["ReregistrationCount"].Value;
+        private static long ReregistrationCount(FbInstance wrapper) =>
+            (long)Controller(wrapper).Fields["ReregistrationCount"].Value;
 
         [Fact]
         public void BriefBlip_GenerationUnchanged_DoesNotCountAsReconnect()
@@ -79,7 +79,7 @@ namespace TcXunit.Interpreter.Tests
             Fault(engine, wrapper, "Restore");
             Poll(engine, wrapper);
 
-            Assert.Equal(0, ReregistrationCount(wrapper));
+            Assert.Equal(0L, ReregistrationCount(wrapper));
         }
 
         [Fact]
@@ -91,11 +91,11 @@ namespace TcXunit.Interpreter.Tests
 
             Fault(engine, wrapper, "Drop");
             Poll(engine, wrapper);
-            controller.Fields["Generation"].Value = (int)controller.Fields["Generation"].Value + 1;
+            controller.Fields["Generation"].Value = (long)controller.Fields["Generation"].Value + 1;
             Fault(engine, wrapper, "Restore");
             Poll(engine, wrapper);
 
-            Assert.Equal(1, ReregistrationCount(wrapper));
+            Assert.Equal(1L, ReregistrationCount(wrapper));
         }
     }
 }

@@ -225,5 +225,31 @@ namespace TcXunit.Interpreter.Tests
             Assert.IsType<double>(instance.Fields["lrValue"].Value);
             Assert.Equal(0d, instance.Fields["lrValue"].Value);
         }
+
+        // TcXunit-6af.1: struct-field UDINT and FB-field UDINT must agree on
+        // CLR representation - both go through IecNumericType now instead of
+        // each defaulting path (Engine.BuildStructDefault vs. Engine.NewInstance)
+        // re-deriving its own answer.
+        [Fact]
+        public void NewInstance_UdintField_AgreesWithStructFieldOnClrRepresentation()
+        {
+            var structAst = StructDeclParser.Parse(
+                "TYPE ST_Udint :\nSTRUCT\n\tvalue : UDINT;\nEND_STRUCT\nEND_TYPE");
+            var pou = new PouAst(
+                "FB_Udint",
+                null,
+                "VAR\n\tvalue : UDINT;\n\ts : ST_Udint;\nEND_VAR",
+                "",
+                new List<MethodAst>());
+
+            var engine = new Engine(new TypeRegistry(new[] { pou }, new[] { structAst }));
+            var fbInstance = engine.NewInstance("FB_Udint");
+            var structInstance = (StructInstance)fbInstance.Fields["s"].Value;
+
+            Assert.IsType<long>(fbInstance.Fields["value"].Value);
+            Assert.Equal(fbInstance.Fields["value"].Value.GetType(), structInstance.Fields["value"].Value.GetType());
+            Assert.Equal(0L, fbInstance.Fields["value"].Value);
+            Assert.Equal(0L, structInstance.Fields["value"].Value);
+        }
     }
 }

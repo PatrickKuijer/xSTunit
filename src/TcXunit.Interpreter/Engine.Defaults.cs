@@ -33,12 +33,6 @@ namespace TcXunit.Interpreter
             if (typeName == "BOOL")
                 return false;
 
-            if (typeName == "REAL")
-                return 0f;
-
-            if (typeName == "LREAL")
-                return 0d;
-
             if (typeName == "TIME")
                 return 0u;
 
@@ -47,6 +41,9 @@ namespace TcXunit.Interpreter
 
             if (typeName.StartsWith("POINTER TO") || typeName.StartsWith("REFERENCE TO"))
                 return null;
+
+            if (IecNumericType.TryGetDefault(typeName, out var numericDefault))
+                return numericDefault;
 
             return 0;
         }

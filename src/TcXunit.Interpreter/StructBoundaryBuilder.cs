@@ -70,14 +70,8 @@ namespace TcXunit.Interpreter
             if (typeName == "BOOL")
                 return false;
 
-            if (typeName == "REAL")
-                return 0f;
-
-            if (typeName == "LREAL")
-                return 0d;
-
-            if (IecNumericBounds.TryGetBounds(typeName, out var bounds))
-                return ZeroLike(bounds.Min);
+            if (IecNumericType.TryGetDefault(typeName, out var numericDefault))
+                return numericDefault;
 
             return 0;
         }
@@ -92,7 +86,7 @@ namespace TcXunit.Interpreter
                 return boundary == Boundary.Min ? "" : new string('X', length);
             }
 
-            if (IecNumericBounds.TryGetBounds(typeName, out var bounds))
+            if (IecNumericType.TryGetBounds(typeName, out var bounds))
                 return boundary == Boundary.Min ? bounds.Min : bounds.Max;
 
             throw new NotSupportedException(
@@ -112,16 +106,6 @@ namespace TcXunit.Interpreter
                 elements[i] = InRangeDefault(elementDecl);
 
             return new ArrayValue(dimensions, elementTypeName, elements);
-        }
-
-        private static object ZeroLike(object min)
-        {
-            switch (min)
-            {
-                case long _: return 0L;
-                case ulong _: return 0UL;
-                default: return 0;
-            }
         }
     }
 }

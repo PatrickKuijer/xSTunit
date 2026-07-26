@@ -3,7 +3,7 @@
 Status: **built**. `TcXunit-w5x.15.6` (STRUCT/ARRAY type) and
 `TcXunit-w5x.15.10` (boundary builder + `Transmit` struct clone) both
 landed. Source: `StructDeclParser.cs`, `ArrayTypeInfo.cs`,
-`StructBoundaryBuilder.cs`, `IecNumericBounds.cs`, `StringTypeInfo.cs`,
+`StructBoundaryBuilder.cs`, `IecNumericType.cs`, `StringTypeInfo.cs`,
 `CellCloner.cs` in `src/TcXunit.Interpreter`.
 
 ## STRUCT/ARRAY (15.6)
@@ -54,7 +54,7 @@ from a struct type name plus field overrides.
   are explicit opt-in via multiple `overrides` entries.
 - Boundary meaning per field kind:
   - Numeric: IEC 61131-3 documented min/max for the declared type, from
-    `IecNumericBounds` (`SINT`/`USINT`/`BYTE`/`INT`/`UINT`/`WORD`/`DINT`
+    `IecNumericType` (`SINT`/`USINT`/`BYTE`/`INT`/`UINT`/`WORD`/`DINT`
     as C# `int`; `UDINT`/`DWORD`/`LINT`/`ULINT`/`LWORD`/`REAL`/`LREAL` as
     their natural wider CLR type).
   - `STRING`: `Boundary.Min` -> `""`; `Boundary.Max` -> a string of the

@@ -54,6 +54,24 @@ namespace TcXunit.Interpreter.Tests
         }
 
         [Fact]
+        public void ParseExpression_TimeLiteralWithUppercaseUnits_MatchesLowercaseEquivalent()
+        {
+            var expr = Parser.ParseExpression("T#25MS");
+
+            var time = Assert.IsType<TimeLiteralExpr>(expr);
+            Assert.Equal(25u, time.Value);
+        }
+
+        [Fact]
+        public void ParseExpression_TimeLiteralWithMixedCaseUnits_MatchesLowercaseEquivalent()
+        {
+            var expr = Parser.ParseExpression("T#1S500Ms");
+
+            var time = Assert.IsType<TimeLiteralExpr>(expr);
+            Assert.Equal(1500u, time.Value);
+        }
+
+        [Fact]
         public void ParseExpression_LtimePrefixLiteral_ProducesLtimeLiteralExprInNanoseconds()
         {
             var expr = Parser.ParseExpression("LTIME#1s2us44ns");
@@ -69,6 +87,15 @@ namespace TcXunit.Interpreter.Tests
 
             var ltime = Assert.IsType<LtimeLiteralExpr>(expr);
             Assert.Equal(15_003ul, ltime.Value);
+        }
+
+        [Fact]
+        public void ParseExpression_LtimeLiteralWithUppercaseUnits_MatchesLowercaseEquivalent()
+        {
+            var expr = Parser.ParseExpression("LTIME#1S2US44NS");
+
+            var ltime = Assert.IsType<LtimeLiteralExpr>(expr);
+            Assert.Equal(1_000_002_044ul, ltime.Value);
         }
 
         [Fact]

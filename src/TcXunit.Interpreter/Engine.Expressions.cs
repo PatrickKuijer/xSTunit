@@ -180,6 +180,7 @@ namespace TcXunit.Interpreter
                 double dl => EvaluateNumeric(binary.Op, dl, (double)promotedRight),
                 float fl => EvaluateNumeric(binary.Op, fl, (float)promotedRight),
                 long ll => EvaluateNumeric(binary.Op, ll, (long)promotedRight),
+                ulong ul => EvaluateNumeric(binary.Op, ul, (ulong)promotedRight),
                 int il => EvaluateNumeric(binary.Op, il, (int)promotedRight),
                 _ => throw new NotSupportedException($"Cannot use {promotedLeft?.GetType().Name} in numeric arithmetic"),
             };
@@ -422,6 +423,21 @@ namespace TcXunit.Interpreter
             _ => throw new NotSupportedException($"Operator '{op}' not supported"),
         };
 
+        private static object EvaluateNumeric(string op, ulong left, ulong right) => op switch
+        {
+            "+" => left + right,
+            "-" => left - right,
+            "*" => left * right,
+            "/" => left / right,
+            "<" => left < right,
+            ">" => left > right,
+            "<=" => left <= right,
+            ">=" => left >= right,
+            "=" => left == right,
+            "<>" => left != right,
+            _ => throw new NotSupportedException($"Operator '{op}' not supported"),
+        };
+
         private static object EvaluateNumeric(string op, int left, int right) => op switch
         {
             "+" => left + right,
@@ -469,6 +485,15 @@ namespace TcXunit.Interpreter
                     _ => throw new NotSupportedException($"Operator '{op}' not supported"),
                 };
 
+            if ((left is ulong || right is ulong) && (left is ulong || left is int) && (right is ulong || right is int))
+                return op switch
+                {
+                    "AND" => NumericCoercion.ToULong(left) & NumericCoercion.ToULong(right),
+                    "OR" => NumericCoercion.ToULong(left) | NumericCoercion.ToULong(right),
+                    "XOR" => NumericCoercion.ToULong(left) ^ NumericCoercion.ToULong(right),
+                    _ => throw new NotSupportedException($"Operator '{op}' not supported"),
+                };
+
             throw new NotSupportedException($"Operator '{op}' requires matching BOOL or INT operands, got {left?.GetType().Name} and {right?.GetType().Name}");
         }
 
@@ -479,6 +504,9 @@ namespace TcXunit.Interpreter
 
             if ((left is long || right is long) && (left is long || left is int) && (right is long || right is int))
                 return NumericCoercion.ToLong(left) % NumericCoercion.ToLong(right);
+
+            if ((left is ulong || right is ulong) && (left is ulong || left is int) && (right is ulong || right is int))
+                return NumericCoercion.ToULong(left) % NumericCoercion.ToULong(right);
 
             throw new NotSupportedException($"Operator 'MOD' is integer-only, got {left?.GetType().Name} and {right?.GetType().Name}");
         }

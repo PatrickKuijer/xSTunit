@@ -26,6 +26,15 @@ namespace TcXunit.Interpreter
             if (left is long || right is long)
                 return (ToLong(left), ToLong(right));
 
+            // ULINT/LWORD cells box as ulong (TcXunit-6af.1), same tier as
+            // LINT/UDINT/DWORD's long - kept as its own branch rather than
+            // folded into the long branch above because long and ulong don't
+            // implicitly mix (ToLong/ToULong each only accept int alongside
+            // their own type), matching the deliberate long+float/double
+            // non-mixing above.
+            if (left is ulong || right is ulong)
+                return (ToULong(left), ToULong(right));
+
             return ((int)left, (int)right);
         }
 
@@ -48,6 +57,19 @@ namespace TcXunit.Interpreter
         {
             long l => l,
             int i => i,
+            _ => throw new NotSupportedException($"Cannot use {value?.GetType().Name} in numeric arithmetic"),
+        };
+
+        // A negative int has no unsigned 64-bit representation - reject it
+        // explicitly rather than silently wrapping it into a huge ulong via
+        // an unchecked cast (an int literal/expression combined with a
+        // ULINT/LWORD operand is only meaningful when it's non-negative).
+        public static ulong ToULong(object value) => value switch
+        {
+            ulong ul => ul,
+            int i when i >= 0 => (ulong)i,
+            int negative => throw new NotSupportedException(
+                $"Cannot widen negative value {negative} to an unsigned 64-bit type (ULINT/LWORD)"),
             _ => throw new NotSupportedException($"Cannot use {value?.GetType().Name} in numeric arithmetic"),
         };
 
@@ -74,6 +96,18 @@ namespace TcXunit.Interpreter
             // literal/expression assigned into one must widen the same way.
             if (existing is long && incoming is int intForLong)
                 return (long)intForLong;
+            // ULINT/LWORD cells box as ulong (TcXunit-6af.1); mirror the long
+            // case above, but reject a negative incoming int explicitly
+            // (InvalidOperationException, matching this method's other
+            // rejections above) instead of silently wrapping it via a cast -
+            // a negative int has no unsigned 64-bit representation.
+            if (existing is ulong && incoming is int intForULong)
+            {
+                if (intForULong < 0)
+                    throw new InvalidOperationException(
+                        $"Cannot assign negative value {intForULong} to a ULINT/LWORD (unsigned 64-bit) variable");
+                return (ulong)intForULong;
+            }
 
             return incoming;
         }

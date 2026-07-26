@@ -251,5 +251,109 @@ namespace TcXunit.Interpreter.Tests
             Assert.Equal(0L, fbInstance.Fields["value"].Value);
             Assert.Equal(0L, structInstance.Fields["value"].Value);
         }
+
+        // TcXunit-6af.6: ULINT/LWORD box as ulong via the same IecNumericType
+        // table LINT/UDINT/DWORD use for long - verify the default CLR
+        // representation, then exercise arithmetic/bitstring/MOD/assignment
+        // through the actual interpreter to confirm the ulong-widening added
+        // alongside the long-widening in TcXunit-6af.1 works end-to-end.
+        [Fact]
+        public void NewInstance_UlintField_DefaultsToZeroUlong()
+        {
+            var pou = new PouAst(
+                "FB_Ulint",
+                null,
+                "VAR\n\tvalue : ULINT;\nEND_VAR",
+                "",
+                new List<MethodAst>());
+
+            var engine = new Engine(new TypeRegistry(new[] { pou }));
+            var instance = engine.NewInstance("FB_Ulint");
+
+            Assert.IsType<ulong>(instance.Fields["value"].Value);
+            Assert.Equal(0UL, instance.Fields["value"].Value);
+        }
+
+        [Fact]
+        public void ExecuteStatements_UlintFieldPlusIntLiteral_WidensAndAdds()
+        {
+            var pou = new PouAst(
+                "FB_Ulint",
+                null,
+                "VAR\n\tvalue : ULINT;\nEND_VAR",
+                "",
+                new List<MethodAst>());
+
+            var engine = new Engine(new TypeRegistry(new[] { pou }));
+            var instance = engine.NewInstance("FB_Ulint");
+            var frame = new Frame(instance, "FB_Ulint");
+
+            engine.ExecuteStatements(Parser.ParseStatements("value := value + 1;"), frame);
+
+            Assert.IsType<ulong>(instance.Fields["value"].Value);
+            Assert.Equal(1UL, instance.Fields["value"].Value);
+        }
+
+        [Fact]
+        public void ExecuteStatements_UlintFieldAndIntLiteral_ComputesBitwiseAnd()
+        {
+            var pou = new PouAst(
+                "FB_Ulint",
+                null,
+                "VAR\n\tvalue : ULINT;\nEND_VAR",
+                "",
+                new List<MethodAst>());
+
+            var engine = new Engine(new TypeRegistry(new[] { pou }));
+            var instance = engine.NewInstance("FB_Ulint");
+            instance.Fields["value"].Value = 0xFFUL;
+            var frame = new Frame(instance, "FB_Ulint");
+
+            engine.ExecuteStatements(Parser.ParseStatements("value := value AND 15;"), frame);
+
+            Assert.IsType<ulong>(instance.Fields["value"].Value);
+            Assert.Equal(0x0FUL, instance.Fields["value"].Value);
+        }
+
+        [Fact]
+        public void ExecuteStatements_UlintFieldModIntLiteral_ComputesRemainder()
+        {
+            var pou = new PouAst(
+                "FB_Ulint",
+                null,
+                "VAR\n\tvalue : ULINT;\nEND_VAR",
+                "",
+                new List<MethodAst>());
+
+            var engine = new Engine(new TypeRegistry(new[] { pou }));
+            var instance = engine.NewInstance("FB_Ulint");
+            instance.Fields["value"].Value = 10UL;
+            var frame = new Frame(instance, "FB_Ulint");
+
+            engine.ExecuteStatements(Parser.ParseStatements("value := value MOD 3;"), frame);
+
+            Assert.IsType<ulong>(instance.Fields["value"].Value);
+            Assert.Equal(1UL, instance.Fields["value"].Value);
+        }
+
+        [Fact]
+        public void ExecuteStatements_AssignIntLiteralIntoUlintField_Widens()
+        {
+            var pou = new PouAst(
+                "FB_Ulint",
+                null,
+                "VAR\n\tvalue : ULINT;\nEND_VAR",
+                "",
+                new List<MethodAst>());
+
+            var engine = new Engine(new TypeRegistry(new[] { pou }));
+            var instance = engine.NewInstance("FB_Ulint");
+            var frame = new Frame(instance, "FB_Ulint");
+
+            engine.ExecuteStatements(Parser.ParseStatements("value := 5;"), frame);
+
+            Assert.IsType<ulong>(instance.Fields["value"].Value);
+            Assert.Equal(5UL, instance.Fields["value"].Value);
+        }
     }
 }

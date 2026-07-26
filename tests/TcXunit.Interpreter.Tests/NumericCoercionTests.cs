@@ -91,6 +91,59 @@ namespace TcXunit.Interpreter.Tests
         }
 
         [Fact]
+        public void Promote_IntAndULong_WidensBothToULong()
+        {
+            var (left, right) = NumericCoercion.Promote(1, 2UL);
+
+            Assert.IsType<ulong>(left);
+            Assert.IsType<ulong>(right);
+            Assert.Equal(1UL, left);
+            Assert.Equal(2UL, right);
+        }
+
+        // long and ulong have no IEC widening rule defined between them - a
+        // ULINT/LWORD (ulong) can't mix with a LINT/UDINT/DWORD (long)
+        // without an explicit cast, mirroring long+float/double above.
+        [Fact]
+        public void Promote_LongAndULong_Throws()
+        {
+            Assert.Throws<NotSupportedException>(() => NumericCoercion.Promote(1L, 2UL));
+        }
+
+        [Fact]
+        public void ToULong_Int_Widens()
+        {
+            Assert.Equal(5UL, NumericCoercion.ToULong(5));
+        }
+
+        [Fact]
+        public void ToULong_NegativeInt_Throws()
+        {
+            Assert.Throws<NotSupportedException>(() => NumericCoercion.ToULong(-1));
+        }
+
+        [Fact]
+        public void ToULong_UnsupportedType_Throws()
+        {
+            Assert.Throws<NotSupportedException>(() => NumericCoercion.ToULong(5f));
+        }
+
+        [Fact]
+        public void CoerceForAssignment_ULongExistingIntIncoming_WidensToULong()
+        {
+            var result = NumericCoercion.CoerceForAssignment(0UL, 5);
+
+            Assert.IsType<ulong>(result);
+            Assert.Equal(5UL, result);
+        }
+
+        [Fact]
+        public void CoerceForAssignment_ULongExistingNegativeIntIncoming_Throws()
+        {
+            Assert.Throws<InvalidOperationException>(() => NumericCoercion.CoerceForAssignment(0UL, -1));
+        }
+
+        [Fact]
         public void CoerceForAssignment_IntExistingFloatIncoming_ThrowsNarrowingError()
         {
             Assert.Throws<InvalidOperationException>(() => NumericCoercion.CoerceForAssignment(0, 1.5f));

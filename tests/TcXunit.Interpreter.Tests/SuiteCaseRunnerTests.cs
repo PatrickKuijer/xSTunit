@@ -116,8 +116,14 @@ END_TYPE]]></Declaration>
         }
 
         [Fact]
-        public void DiscoverCases_DuplicateTypeNameAcrossDirectories_ThrowsDuplicatePouTypeException()
+        public void DiscoverCases_DuplicateTypeNameAcrossDirectories_DoesNotThrowAndSurfacesAsFailingCase()
         {
+            // TcXunit-qxp.1: a duplicate POU type name across merged
+            // directories must not crash discovery of every other suite in
+            // the scan (unlike CliRunner.Run, which can afford to abort the
+            // whole process) - it must be reported the same way other
+            // structural discovery failures in this file are, as a synthetic
+            // failing case.
             var dirA = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "tcxunit-dupA-" + Guid.NewGuid()));
             var dirB = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "tcxunit-dupB-" + Guid.NewGuid()));
             try
@@ -125,8 +131,15 @@ END_TYPE]]></Declaration>
                 CopyFixtureFile(dirA.FullName, "FB_Counter.TcPOU");
                 CopyFixtureFile(dirB.FullName, "FB_Counter.TcPOU");
 
-                Assert.Throws<TcXunit.Parser.DuplicatePouTypeException>(
-                    () => SuiteCaseRunner.DiscoverCases(new[] { dirA.FullName, dirB.FullName }));
+                var cases = SuiteCaseRunner.DiscoverCases(new[] { dirA.FullName, dirB.FullName });
+
+                var skip = Assert.Single(cases, c => c.SuiteName == "FB_Counter" && c.CaseName == "(parse error)");
+
+                var result = SuiteCaseRunner.RunCase(
+                    new[] { dirA.FullName, dirB.FullName }, skip.SuiteName, skip.CaseName);
+                Assert.False(result.Passed);
+                Assert.Contains("duplicate POU type", result.ToString());
+                Assert.Contains("FB_Counter", result.ToString());
             }
             finally
             {
@@ -136,8 +149,12 @@ END_TYPE]]></Declaration>
         }
 
         [Fact]
-        public void DiscoverCases_DuplicateStructTypeNameAcrossDirectories_ThrowsDuplicateStructTypeException()
+        public void DiscoverCases_DuplicateStructTypeNameAcrossDirectories_DoesNotThrowAndSurfacesAsFailingCase()
         {
+            // TcXunit-qxp.1: same rationale as the POU duplicate case above -
+            // a duplicate STRUCT name must not crash discovery of every other
+            // suite; it must surface as its own synthetic failing case
+            // instead.
             var dirA = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "tcxunit-dutdupA-" + Guid.NewGuid()));
             var dirB = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "tcxunit-dutdupB-" + Guid.NewGuid()));
             try
@@ -146,16 +163,72 @@ END_TYPE]]></Declaration>
                 var pathB = Path.Combine(dirB.FullName, "ST_Shared.TcDUT");
                 File.WriteAllText(pathA, StructDutXml("ST_Shared", "fieldA"));
                 File.WriteAllText(pathB, StructDutXml("ST_Shared", "fieldB"));
+                foreach (var file in Directory.GetFiles(FixturePouDir, "*.TcPOU"))
+                    File.Copy(file, Path.Combine(dirA.FullName, Path.GetFileName(file)));
 
-                var ex = Assert.Throws<DuplicateStructTypeException>(
-                    () => SuiteCaseRunner.DiscoverCases(new[] { dirA.FullName, dirB.FullName }));
+                var cases = SuiteCaseRunner.DiscoverCases(new[] { dirA.FullName, dirB.FullName });
 
-                Assert.Equal("ST_Shared", ex.TypeName);
-                Assert.Contains(pathA, ex.FilePaths);
-                Assert.Contains(pathB, ex.FilePaths);
-                Assert.Contains("ST_Shared", ex.Message);
-                Assert.Contains(pathA, ex.Message);
-                Assert.Contains(pathB, ex.Message);
+                var skip = Assert.Single(cases, c => c.SuiteName == "ST_Shared" && c.CaseName == "(parse error)");
+
+                var result = SuiteCaseRunner.RunCase(
+                    new[] { dirA.FullName, dirB.FullName }, skip.SuiteName, skip.CaseName);
+                Assert.False(result.Passed);
+                Assert.Contains("duplicate STRUCT type", result.ToString());
+                Assert.Contains("ST_Shared", result.ToString());
+
+                // Unrelated suites in the merged set must still be
+                // discoverable/runnable despite the STRUCT-name conflict.
+                Assert.Contains(
+                    cases,
+                    c => c.SuiteName == "FB_CounterTests" && c.CaseName == "CounterStartsAtZero");
+            }
+            finally
+            {
+                Directory.Delete(dirA.FullName, recursive: true);
+                Directory.Delete(dirB.FullName, recursive: true);
+            }
+        }
+
+        private static string GvlXml(string gvlName, string varName) => $@"<?xml version=""1.0"" encoding=""utf-8""?>
+<TcPlcObject Version=""1.1.0.1"">
+  <GVL Name=""{gvlName}"" Id=""{{a1b2c3d4-0006-4a1a-8b1b-0000000000ff}}"">
+    <Declaration><![CDATA[VAR_GLOBAL
+	{varName} : INT;
+END_VAR]]></Declaration>
+  </GVL>
+</TcPlcObject>";
+
+        [Fact]
+        public void DiscoverCases_DuplicateGvlNameAcrossDirectories_DoesNotThrowAndSurfacesAsFailingCase()
+        {
+            // TcXunit-qxp.1: same rationale as the POU/STRUCT duplicate cases
+            // above - a duplicate GVL name must not crash discovery of every
+            // other suite; it must surface as its own synthetic failing case
+            // instead.
+            var dirA = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "tcxunit-gvldupA-" + Guid.NewGuid()));
+            var dirB = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "tcxunit-gvldupB-" + Guid.NewGuid()));
+            try
+            {
+                File.WriteAllText(Path.Combine(dirA.FullName, "gShared.TcGVL"), GvlXml("gShared", "fieldA"));
+                File.WriteAllText(Path.Combine(dirB.FullName, "gShared.TcGVL"), GvlXml("gShared", "fieldB"));
+                foreach (var file in Directory.GetFiles(FixturePouDir, "*.TcPOU"))
+                    File.Copy(file, Path.Combine(dirA.FullName, Path.GetFileName(file)));
+
+                var cases = SuiteCaseRunner.DiscoverCases(new[] { dirA.FullName, dirB.FullName });
+
+                var skip = Assert.Single(cases, c => c.SuiteName == "gShared" && c.CaseName == "(parse error)");
+
+                var result = SuiteCaseRunner.RunCase(
+                    new[] { dirA.FullName, dirB.FullName }, skip.SuiteName, skip.CaseName);
+                Assert.False(result.Passed);
+                Assert.Contains("duplicate GVL", result.ToString());
+                Assert.Contains("gShared", result.ToString());
+
+                // Unrelated suites in the merged set must still be
+                // discoverable/runnable despite the GVL-name conflict.
+                Assert.Contains(
+                    cases,
+                    c => c.SuiteName == "FB_CounterTests" && c.CaseName == "CounterStartsAtZero");
             }
             finally
             {

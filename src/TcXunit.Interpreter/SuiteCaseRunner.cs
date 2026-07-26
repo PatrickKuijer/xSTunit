@@ -184,10 +184,32 @@ namespace TcXunit.Interpreter
                 }
             }
 
-            // Fail fast and loud on duplicate type names across the merged set
-            // (TcXunit-98e.1) before any suite runs, distinct from the per-file
-            // skip/report path above.
-            MultiDirectoryPouLoader.CheckForDuplicates(loaded);
+            // Detect duplicate type names across the merged set (TcXunit-98e.1)
+            // before any suite runs, distinct from the per-file skip/report
+            // path above. Unlike CliRunner.Run (which can afford to abort the
+            // entire process on a hard error), BuildRegistry backs Test
+            // Explorer discovery across a whole solution-wide scan: letting
+            // DuplicatePouTypeException/DuplicateStructTypeException/
+            // DuplicateGvlNameException propagate here would crash discovery
+            // of every *other* suite too (TcXunit-qxp.1). Each duplicate is
+            // instead reported as its own synthetic failing case (keyed by
+            // the conflicting type/STRUCT/GVL name, since - same as the
+            // comments below already noted - it can't be attributed to a
+            // single file), and the offending names are dropped from the
+            // merged set so unrelated suites still resolve normally.
+            while (true)
+            {
+                try
+                {
+                    MultiDirectoryPouLoader.CheckForDuplicates(loaded);
+                    break;
+                }
+                catch (TcXunit.Parser.DuplicatePouTypeException ex)
+                {
+                    skipped.Add(new SkippedPou(ex.TypeName, ex.Message));
+                    loaded.RemoveAll(l => l.Pou.Name == ex.TypeName);
+                }
+            }
 
             var types = loaded.Select(l => l.Pou).ToList();
             typeNames = types.Select(t => t.Name).ToList();
@@ -197,18 +219,45 @@ namespace TcXunit.Interpreter
             // (TcXunit-9li) so both entry points resolve STRUCT-typed DUTs
             // identically. Keyed by full file path for the same
             // collision-avoidance reason as the POU skip path (TcXunit-pvp).
-            var structTypes = DutStructLoader.Load(pouDirectories, out var dutSkipped);
-            skipped.AddRange(dutSkipped.Select(s => new SkippedPou(s.FilePath, s.Message)));
+            IReadOnlyList<StructAst> structTypes;
+            try
+            {
+                structTypes = DutStructLoader.Load(pouDirectories, out var dutSkipped);
+                skipped.AddRange(dutSkipped.Select(s => new SkippedPou(s.FilePath, s.Message)));
+            }
+            catch (DuplicateStructTypeException ex)
+            {
+                // Same rationale as the POU duplicate handling above
+                // (TcXunit-qxp.1): DutStructLoader has no API to re-load
+                // "everything except this name" (it re-scans directories from
+                // scratch), so on a duplicate the whole STRUCT category is
+                // dropped for this registry build; any suite that actually
+                // depends on a STRUCT-typed DUT still fails clearly at run
+                // time via the existing unresolved-type path, and the
+                // duplicate itself is surfaced as its own synthetic case.
+                structTypes = Array.Empty<StructAst>();
+                skipped.Add(new SkippedPou(ex.TypeName, ex.Message));
+            }
 
             // .TcGVL global variable lists (TcXunit-71o), shared with
             // CliRunner via GvlLoader for the same reason DUT struct types
             // are shared above - both entry points must resolve GVLs
-            // identically. A duplicate GVL name is a hard error (mirrors
-            // MultiDirectoryPouLoader.CheckForDuplicates above), not
-            // isolated per-file like parse failures, since it can't be
-            // attributed to a single suite.
-            var gvls = GvlLoader.Load(pouDirectories, out var gvlSkipped);
-            skipped.AddRange(gvlSkipped.Select(s => new SkippedPou(s.FilePath, s.Message)));
+            // identically. A duplicate GVL name can't be attributed to a
+            // single suite (mirrors MultiDirectoryPouLoader.CheckForDuplicates
+            // above), but per TcXunit-qxp.1 must still not crash discovery of
+            // every other suite - handled the same way as the STRUCT
+            // duplicate case above.
+            IReadOnlyList<GvlAst> gvls;
+            try
+            {
+                gvls = GvlLoader.Load(pouDirectories, out var gvlSkipped);
+                skipped.AddRange(gvlSkipped.Select(s => new SkippedPou(s.FilePath, s.Message)));
+            }
+            catch (DuplicateGvlNameException ex)
+            {
+                gvls = Array.Empty<GvlAst>();
+                skipped.Add(new SkippedPou(ex.GvlName, ex.Message));
+            }
 
             return new TypeRegistry(types, structTypes, gvls);
         }

@@ -176,9 +176,19 @@ namespace TcXunit.Interpreter
         // Fields (top-level VARs) - mirrors Frame.ResolveCell's precedence.
         // callerFrame is null for a few top-level entry points (e.g. FB_init),
         // so only instance.Fields applies there.
+        //
+        // The Locals-before-Fields precedence is only valid for a genuine
+        // bare/self invocation, where instance is the same FbInstance as
+        // callerFrame.Instance (call.Receiver is null/ThisRefExpr/
+        // SuperRefExpr in EvaluateCall). For an explicit non-self receiver
+        // (someObj.Foo()), instance is the receiver's own FbInstance, which
+        // may differ from callerFrame.Instance - in that case the caller's
+        // locals are irrelevant scope and must not be consulted, or a
+        // same-named local in the calling METHOD could shadow/hijack
+        // resolution of a call meant for the receiver (TcXunit-3zk).
         private static bool TryResolveCalleeCell(Frame callerFrame, FbInstance instance, string name, out Cell cell)
         {
-            if (callerFrame != null && callerFrame.Locals.TryGetValue(name, out cell))
+            if (callerFrame != null && instance == callerFrame.Instance && callerFrame.Locals.TryGetValue(name, out cell))
                 return true;
 
             return instance.Fields.TryGetValue(name, out cell);

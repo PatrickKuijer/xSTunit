@@ -96,6 +96,51 @@ namespace TcXunit.Cli.Tests
         }
 
         [Fact]
+        public void Run_LaterArgMissingPath_ReturnsTwoAndNamesThatPath()
+        {
+            // The path-existence loop in CliRunner.Run walks all of args, not
+            // just args[0] (b22ecd27). A single-missing-path test can't tell
+            // a "check args[0] only" regression from a "check every arg"
+            // implementation, since both behave identically when args has
+            // one element. This exercises a valid first directory alongside
+            // an invalid second one, and asserts the second (missing) path
+            // is the one named in the error.
+            var missingPath = Path.Combine(Path.GetTempPath(), "tcxunit-cli-missing-" + Guid.NewGuid());
+
+            var output = new StringWriter();
+
+            var exitCode = CliRunner.Run(new[] { FixturePouDir, missingPath }, output);
+
+            Assert.Equal(2, exitCode);
+            var text = output.ToString();
+            Assert.Contains("does not exist", text);
+            Assert.Contains(missingPath, text);
+        }
+
+        [Fact]
+        public void Run_SameDirectoryPassedTwice_DeduplicatesAndPassesAllFour()
+        {
+            // Locks in current behavior (coverage-only, TcXunit-drc): passing
+            // the same directory twice does NOT double-parse its files and
+            // does NOT trip DuplicatePouTypeException. MultiDirectoryPouLoader
+            // normalizes/de-duplicates the resolved file paths
+            // (DeduplicatePaths, 70f3196) before parsing, so repeating an
+            // input directory is a no-op union with itself, identical to
+            // passing it once. If a future change reintroduces per-file
+            // duplication for repeated input directories, this test should
+            // start failing (or start reporting duplicate-type errors)
+            // instead of silently passing.
+            var output = new StringWriter();
+
+            var exitCode = CliRunner.Run(new[] { FixturePouDir, FixturePouDir }, output);
+
+            Assert.Equal(0, exitCode);
+            var text = output.ToString();
+            Assert.Equal(4, CountOccurrences(text, "PASS"));
+            Assert.DoesNotContain("FAIL", text);
+        }
+
+        [Fact]
         public void Run_SuiteDependsOnStructTypeFromTcDutFile_ResolvesAndPasses()
         {
             // TcXunit-9li: `tcxunit run` previously built its TypeRegistry with

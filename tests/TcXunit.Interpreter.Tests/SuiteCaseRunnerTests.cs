@@ -259,6 +259,97 @@ END_VAR]]></Declaration>
             }
         }
 
+        private const string PointDutXml = @"<?xml version=""1.0"" encoding=""utf-8""?>
+<TcPlcObject Version=""1.1.0.1"" ProductVersion=""3.1.4026.18"">
+  <DUT Name=""ST_Point"" Id=""{a1b2c3d4-0007-4a1a-8b1b-0000000000ff}"">
+    <Declaration><![CDATA[TYPE ST_Point :
+STRUCT
+	x : INT;
+	y : INT;
+END_STRUCT
+END_TYPE]]></Declaration>
+  </DUT>
+</TcPlcObject>";
+
+        private const string LineDutXml = @"<?xml version=""1.0"" encoding=""utf-8""?>
+<TcPlcObject Version=""1.1.0.1"" ProductVersion=""3.1.4026.18"">
+  <DUT Name=""ST_Line"" Id=""{a1b2c3d4-0008-4a1a-8b1b-0000000000ff}"">
+    <Declaration><![CDATA[TYPE ST_Line :
+STRUCT
+	start : ST_Point;
+	stop : ST_Point;
+END_STRUCT
+END_TYPE]]></Declaration>
+  </DUT>
+</TcPlcObject>";
+
+        private const string LineTestsPouXml = @"<?xml version=""1.0"" encoding=""utf-8""?>
+<TcPlcObject Version=""1.1.0.1"" ProductVersion=""3.1.4026.18"">
+  <POU Name=""FB_LineTests"" Id=""{a1b2c3d4-0009-4a1a-8b1b-0000000000ff}"" SpecialFunc=""None"">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_LineTests EXTENDS TcUnit.FB_TestSuite]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[NestedFieldAccessOnDutStructWorks();]]></ST>
+    </Implementation>
+    <Method Name=""NestedFieldAccessOnDutStructWorks"" Id=""{a1b2c3d4-0009-4a1a-8b1b-000000000002}"">
+      <Declaration><![CDATA[METHOD PRIVATE NestedFieldAccessOnDutStructWorks
+VAR
+	line : ST_Line;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('NestedFieldAccessOnDutStructWorks');
+
+line.start.x := 3;
+line.start.y := 4;
+line.stop.x := 30;
+
+AssertEquals_INT(Expected := 7,
+                  Actual := line.start.x + line.start.y,
+                  Message := 'DUT struct field access');
+
+AssertEquals_INT(Expected := 30,
+                  Actual := line.stop.x,
+                  Message := 'nested struct-of-struct DUT field access');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+  </POU>
+</TcPlcObject>";
+
+        [Fact]
+        public void DiscoverCases_TcDutStructType_ResolvesAndSupportsNestedFieldAccess()
+        {
+            // Regression test for the bug fixed alongside DutStructLoader's
+            // STRUCT-DUT wiring: before that fix, a VAR of a struct type only
+            // declared via a .TcDUT file was unresolved in TypeRegistry and
+            // defaulted to Int32 0, so any field access on it (even
+            // "line.start.x") threw "Cannot access fields on Int32" instead
+            // of resolving through TypeRegistry.GetStruct.
+            var tempDir = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "tcxunit-dutfields-" + Guid.NewGuid()));
+            try
+            {
+                File.WriteAllText(Path.Combine(tempDir.FullName, "ST_Point.TcDUT"), PointDutXml);
+                File.WriteAllText(Path.Combine(tempDir.FullName, "ST_Line.TcDUT"), LineDutXml);
+                File.WriteAllText(Path.Combine(tempDir.FullName, "FB_LineTests.TcPOU"), LineTestsPouXml);
+
+                var cases = SuiteCaseRunner.DiscoverCases(tempDir.FullName);
+
+                Assert.Equal(
+                    new[] { ("FB_LineTests", "NestedFieldAccessOnDutStructWorks") },
+                    cases.Select(c => (c.SuiteName, c.CaseName)));
+
+                var result = SuiteCaseRunner.RunCase(
+                    tempDir.FullName, "FB_LineTests", "NestedFieldAccessOnDutStructWorks");
+
+                Assert.True(result.Passed, result.ToString());
+            }
+            finally
+            {
+                Directory.Delete(tempDir.FullName, recursive: true);
+            }
+        }
+
         private const string MalformedXmlDut = @"<?xml version=""1.0"" encoding=""utf-8""?>
 <TcPlcObject Version=""1.1.0.1"" ProductVersion=""3.1.4026.18"">
   <DUT Name=""ST_Broken"" Id=""{a1b2c3d4-0005-4a1a-8b1b-0000000000ff}"">

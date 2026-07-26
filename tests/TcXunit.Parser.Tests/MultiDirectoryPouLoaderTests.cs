@@ -103,6 +103,55 @@ namespace TcXunit.Parser.Tests
             Assert.Equal(new[] { gvlPath }, found);
         }
 
+        [Fact]
+        public void FindDutFiles_FindsTcDutFilesAcrossDirectoriesButNotTcPouOrTcGvl()
+        {
+            var dutPath = Path.Combine(_dirA, "ST_Foo.TcDUT");
+            File.WriteAllText(dutPath, "not real xml, just needs to exist for globbing");
+            WritePou(_dirA, "FB_One.TcPOU", "FB_One");
+            File.WriteAllText(Path.Combine(_dirA, "gFoo.TcGVL"), "not real xml either");
+
+            var found = MultiDirectoryPouLoader.FindDutFiles(new[] { _dirA, _dirB });
+
+            Assert.Equal(new[] { dutPath }, found);
+        }
+
+        [Fact]
+        public void FindDutFiles_MergesAcrossTwoDirectories()
+        {
+            var pathA = Path.Combine(_dirA, "ST_One.TcDUT");
+            var pathB = Path.Combine(_dirB, "ST_Two.TcDUT");
+            File.WriteAllText(pathA, "not real xml, just needs to exist for globbing");
+            File.WriteAllText(pathB, "not real xml, just needs to exist for globbing");
+
+            var found = MultiDirectoryPouLoader.FindDutFiles(new[] { _dirA, _dirB });
+
+            Assert.Equal(new[] { pathA, pathB }, found.OrderBy(f => f));
+        }
+
+        [Fact]
+        public void FindDutFiles_SameDirectoryPassedTwice_DoesNotThrowAndHasNoDuplicateEntries()
+        {
+            var path = Path.Combine(_dirA, "ST_One.TcDUT");
+            File.WriteAllText(path, "not real xml, just needs to exist for globbing");
+
+            var found = MultiDirectoryPouLoader.FindDutFiles(new[] { _dirA, _dirA });
+
+            Assert.Equal(new[] { path }, found);
+        }
+
+        [Fact]
+        public void FindDutFiles_NestedInputDirectory_DoesNotThrowAndHasNoDuplicateEntries()
+        {
+            var subDir = Directory.CreateDirectory(Path.Combine(_dirA, "Nested")).FullName;
+            var path = Path.Combine(subDir, "ST_One.TcDUT");
+            File.WriteAllText(path, "not real xml, just needs to exist for globbing");
+
+            var found = MultiDirectoryPouLoader.FindDutFiles(new[] { _dirA, subDir });
+
+            Assert.Equal(new[] { path }, found);
+        }
+
         private static string CreateTempDir() =>
             Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "tcxunit-multidir-" + Guid.NewGuid())).FullName;
 

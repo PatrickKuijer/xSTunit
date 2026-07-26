@@ -116,6 +116,37 @@ END_TYPE";
         }
 
         [Fact]
+        public void Load_ExtendsStructDut_IsSkippedNotRegisteredAsStruct()
+        {
+            // TcXunit-2h4: "TYPE X EXTENDS Base :" STRUCT DUTs (struct
+            // inheritance) have no field-merging model yet. IsStructDeclaration
+            // still returns true for these (the EXTENDS group is optional in
+            // TypeHeaderPattern) - the actual skip happens one step later, in
+            // Load, because StructDeclParser.TypeNamePattern requires "TYPE
+            // Name :" with nothing between the name and the colon, so it
+            // can't match the "EXTENDS Base" text and leaves StructAst.Name
+            // null, which Load treats as skip-and-continue.
+            var tempDir = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "tcxunit-extendsstruct-" + Guid.NewGuid()));
+            try
+            {
+                const string declaration = "TYPE FB_ExtendedThing EXTENDS FB_Base :\nSTRUCT\n\tx : REAL;\nEND_STRUCT\nEND_TYPE";
+                File.WriteAllText(Path.Combine(tempDir.FullName, "FB_ExtendedThing.TcDUT"), DutXml("FB_ExtendedThing", declaration));
+
+                Assert.True(DutStructLoader.IsStructDeclaration(declaration));
+
+                var structTypes = DutStructLoader.Load(new[] { tempDir.FullName }, out var skipped);
+
+                Assert.Empty(structTypes);
+                Assert.Empty(skipped);
+                Assert.DoesNotContain("FB_ExtendedThing", structTypes.Select(s => s.Name));
+            }
+            finally
+            {
+                Directory.Delete(tempDir.FullName, recursive: true);
+            }
+        }
+
+        [Fact]
         public void Load_ActualStructDut_IsRegistered()
         {
             var tempDir = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "tcxunit-realstruct-" + Guid.NewGuid()));

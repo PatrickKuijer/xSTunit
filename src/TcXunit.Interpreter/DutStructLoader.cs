@@ -129,12 +129,11 @@ namespace TcXunit.Interpreter
             // merged set (TcXunit-dvd): two .TcDUT files declaring the same
             // STRUCT name must not silently let the later-loaded one win in
             // TypeRegistry.
-            var duplicateStruct = structTypesWithFiles
-                .GroupBy(x => x.Struct.Name)
-                .FirstOrDefault(g => g.Count() > 1);
-            if (duplicateStruct != null)
-                throw new DuplicateStructTypeException(
-                    duplicateStruct.Key, duplicateStruct.Select(x => x.FilePath).ToList());
+            DuplicateNameDetector.ThrowIfDuplicate(
+                structTypesWithFiles,
+                x => x.Struct.Name,
+                x => x.FilePath,
+                (name, filePaths) => new DuplicateStructTypeException(name, filePaths));
 
             return structTypesWithFiles.Select(x => x.Struct).ToList();
         }

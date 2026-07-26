@@ -54,12 +54,11 @@ namespace TcXunit.Interpreter
             // set, same rationale as DuplicateStructTypeException/
             // DuplicatePouTypeException: a duplicate name is ambiguous and
             // must stop registry construction before any suite runs.
-            var duplicate = gvlsWithFiles
-                .GroupBy(x => x.Gvl.Name)
-                .FirstOrDefault(g => g.Count() > 1);
-            if (duplicate != null)
-                throw new DuplicateGvlNameException(
-                    duplicate.Key, duplicate.Select(x => x.FilePath).ToList());
+            DuplicateNameDetector.ThrowIfDuplicate(
+                gvlsWithFiles,
+                x => x.Gvl.Name,
+                x => x.FilePath,
+                (name, filePaths) => new DuplicateGvlNameException(name, filePaths));
 
             return gvlsWithFiles.Select(x => x.Gvl).ToList();
         }

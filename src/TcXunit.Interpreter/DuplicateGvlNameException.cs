@@ -1,6 +1,5 @@
-using System;
 using System.Collections.Generic;
-using System.Linq;
+using TcXunit.Parser;
 
 namespace TcXunit.Interpreter
 {
@@ -10,19 +9,13 @@ namespace TcXunit.Interpreter
     // shape/behavior: a duplicate GVL name is ambiguous and must stop
     // registry construction before any suite runs, naming the GVL and every
     // conflicting file path.
-    public sealed class DuplicateGvlNameException : Exception
+    public sealed class DuplicateGvlNameException : DuplicateNameException
     {
-        public string GvlName { get; }
-        public IReadOnlyList<string> FilePaths { get; }
+        public string GvlName => Name;
 
         public DuplicateGvlNameException(string gvlName, IReadOnlyList<string> filePaths)
-            : base(BuildMessage(gvlName, filePaths))
+            : base("GVL", gvlName, filePaths)
         {
-            GvlName = gvlName;
-            FilePaths = filePaths;
         }
-
-        private static string BuildMessage(string gvlName, IReadOnlyList<string> filePaths) =>
-            $"duplicate GVL '{gvlName}' defined in multiple files: {string.Join(", ", filePaths.OrderBy(p => p, StringComparer.Ordinal))}";
     }
 }

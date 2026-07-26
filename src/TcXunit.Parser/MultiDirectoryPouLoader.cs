@@ -75,14 +75,11 @@ namespace TcXunit.Parser
             return loaded;
         }
 
-        public static void CheckForDuplicates(IReadOnlyList<LoadedPou> loaded)
-        {
-            var duplicate = loaded
-                .GroupBy(l => l.Pou.Name)
-                .FirstOrDefault(g => g.Count() > 1);
-
-            if (duplicate != null)
-                throw new DuplicatePouTypeException(duplicate.Key, duplicate.Select(l => l.FilePath).ToList());
-        }
+        public static void CheckForDuplicates(IReadOnlyList<LoadedPou> loaded) =>
+            DuplicateNameDetector.ThrowIfDuplicate(
+                loaded,
+                l => l.Pou.Name,
+                l => l.FilePath,
+                (name, filePaths) => new DuplicatePouTypeException(name, filePaths));
     }
 }

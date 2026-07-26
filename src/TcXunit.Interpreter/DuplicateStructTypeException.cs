@@ -1,6 +1,5 @@
-using System;
 using System.Collections.Generic;
-using System.Linq;
+using TcXunit.Parser;
 
 namespace TcXunit.Interpreter
 {
@@ -11,19 +10,13 @@ namespace TcXunit.Interpreter
     // must stop registry construction before any suite runs, naming the type
     // and every conflicting file path, instead of letting TypeRegistry's
     // constructor silently let the later file win.
-    public sealed class DuplicateStructTypeException : Exception
+    public sealed class DuplicateStructTypeException : DuplicateNameException
     {
-        public string TypeName { get; }
-        public IReadOnlyList<string> FilePaths { get; }
+        public string TypeName => Name;
 
         public DuplicateStructTypeException(string typeName, IReadOnlyList<string> filePaths)
-            : base(BuildMessage(typeName, filePaths))
+            : base("STRUCT type", typeName, filePaths)
         {
-            TypeName = typeName;
-            FilePaths = filePaths;
         }
-
-        private static string BuildMessage(string typeName, IReadOnlyList<string> filePaths) =>
-            $"duplicate STRUCT type '{typeName}' defined in multiple files: {string.Join(", ", filePaths.OrderBy(p => p, StringComparer.Ordinal))}";
     }
 }

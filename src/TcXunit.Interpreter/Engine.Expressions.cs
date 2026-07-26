@@ -158,6 +158,19 @@ namespace TcXunit.Interpreter
             if (leftVal is bool lbEq && rightVal is bool rbEq && (binary.Op == "=" || binary.Op == "<>"))
                 return binary.Op == "=" ? lbEq == rbEq : lbEq != rbEq;
 
+            // TcXunit-80v: any other BOOL usage reaching this point has no
+            // valid IEC 61131-3 semantics - either BOOL mixed with a
+            // non-BOOL operand (e.g. TRUE = 1), or a BOOL operand with an
+            // operator that has no BOOL semantics (e.g. TRUE < FALSE).
+            // Without this guard both cases fall through to the int-cast
+            // numeric path below and throw an unhelpful raw
+            // InvalidCastException; guard here for a descriptive message,
+            // mirroring EvaluateBitstring's mismatched-type guard.
+            if (leftVal is bool || rightVal is bool)
+                throw new NotSupportedException(
+                    $"Operator '{binary.Op}' is not supported between {leftVal?.GetType().Name ?? "null"} and " +
+                    $"{rightVal?.GetType().Name ?? "null"}; BOOL only supports '=' and '<>' against another BOOL");
+
             // INT->REAL->LREAL implicit widening: promote to the widest operand's
             // type for the whole operation, per TwinCAT's "smaller to larger is
             // implicit" arithmetic promotion rule.

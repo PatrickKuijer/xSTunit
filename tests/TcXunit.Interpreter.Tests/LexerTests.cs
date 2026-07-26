@@ -43,6 +43,38 @@ namespace TcXunit.Interpreter.Tests
             Assert.Equal($"a{expected}b", literal.Text);
         }
 
+        [Theory]
+        [InlineData("$41", 'A')]
+        [InlineData("$4A", 'J')]
+        [InlineData("$4a", 'J')]
+        [InlineData("$09", '\t')]
+        public void Tokenize_DollarHexEscape_ProducesCharacterWithGivenCode(string escape, char expected)
+        {
+            var tokens = Lexer.Tokenize($"'a{escape}b'");
+
+            var literal = Assert.Single(tokens, t => t.Type == TokenType.StringLiteral);
+            Assert.Equal($"a{expected}b", literal.Text);
+        }
+
+        [Fact]
+        public void Tokenize_DollarFollowedByNonHexDigits_IsLiteralDollar()
+        {
+            var tokens = Lexer.Tokenize("'a$zzb'");
+
+            var literal = Assert.Single(tokens, t => t.Type == TokenType.StringLiteral);
+            Assert.Equal("a$zzb", literal.Text);
+        }
+
+        [Fact]
+        public void Tokenize_DollarHexEscapeTruncatedByClosingQuote_IsLiteralDollar()
+        {
+            // Only one hex digit before the closing quote: not a valid $hh escape.
+            var tokens = Lexer.Tokenize("'a$4'");
+
+            var literal = Assert.Single(tokens, t => t.Type == TokenType.StringLiteral);
+            Assert.Equal("a$4", literal.Text);
+        }
+
         [Fact]
         public void Tokenize_StringLiteralWithoutEscapes_IsUnaffected()
         {

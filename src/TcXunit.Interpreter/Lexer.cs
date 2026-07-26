@@ -198,10 +198,11 @@ namespace TcXunit.Interpreter
         }
 
         // Recognizes IEC 61131-3 '$'-escape sequences inside single-quoted STRING
-        // literals (e.g. $$ -> '$', $' -> '\''). On a match, advances i past the
-        // escape sequence and returns the decoded character; returns null (and
-        // leaves i untouched) if text[i..] is not a recognized escape, so the
-        // caller falls back to treating '$' as a literal character.
+        // literals (e.g. $$ -> '$', $' -> '\'', $hh -> two-hex-digit character
+        // code). On a match, advances i past the escape sequence and returns the
+        // decoded character; returns null (and leaves i untouched) if text[i..]
+        // is not a recognized escape, so the caller falls back to treating '$'
+        // as a literal character.
         private static char? TryConsumeDollarEscape(string text, ref int i)
         {
             var next = text[i + 1];
@@ -218,10 +219,24 @@ namespace TcXunit.Interpreter
             };
 
             if (decoded.HasValue)
+            {
                 i += 2;
+                return decoded;
+            }
 
-            return decoded;
+            if (i + 2 < text.Length && IsHexDigit(text[i + 1]) && IsHexDigit(text[i + 2])
+                && int.TryParse(text.Substring(i + 1, 2), System.Globalization.NumberStyles.HexNumber, null, out var code))
+            {
+                i += 3;
+                return (char)code;
+            }
+
+            return null;
         }
+
+        // Returns true if c is 0-9, a-f, or A-F.
+        private static bool IsHexDigit(char c)
+            => (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
 
         // Consumes an optional '.digits' fraction and/or '[eE][+-]digits' exponent
         // starting at i, advancing i past whatever it consumes. Returns true if

@@ -12,6 +12,16 @@ namespace TcXunit.Interpreter
         private readonly Dictionary<string, IReadOnlyList<VarDecl>> _gvls = new Dictionary<string, IReadOnlyList<VarDecl>>();
         private readonly Dictionary<string, string> _aliases = new Dictionary<string, string>();
 
+        // Parse-once caches (TcXunit-6af.4): Parser.ParseStatements/
+        // VarBlockParser.Parse are pure functions of their input text, but
+        // CallMethod/StepCycles/RunSuite re-parsed the same POU/method
+        // ImplementationText/DeclarationText string on every single
+        // invocation/cycle. Cache keyed on the text itself (not the owning
+        // PouAst/MethodAst instance) since the mapping is content -> AST
+        // regardless of which declaration the text came from.
+        private readonly Dictionary<string, IReadOnlyList<Stmt>> _statementCache = new Dictionary<string, IReadOnlyList<Stmt>>();
+        private readonly Dictionary<string, IReadOnlyList<VarDecl>> _declCache = new Dictionary<string, IReadOnlyList<VarDecl>>();
+
         // Chained-alias (alias-of-alias) resolution depth cap (TcXunit-6hg):
         // no real IEC 61131-3 project defines a self-referential/cyclic
         // ALIAS chain, but a malformed .TcDUT set shouldn't be able to hang
@@ -74,5 +84,30 @@ namespace TcXunit.Interpreter
             _gvls.TryGetValue(name, out var decls) ? decls : null;
 
         public IEnumerable<string> GvlNames => _gvls.Keys;
+
+        // Cached equivalent of Parser.ParseStatements(implementationText) -
+        // parses once per distinct implementation text, reused on every
+        // subsequent call with the same text.
+        public IReadOnlyList<Stmt> GetStatements(string implementationText)
+        {
+            if (!_statementCache.TryGetValue(implementationText, out var statements))
+            {
+                statements = Parser.ParseStatements(implementationText);
+                _statementCache[implementationText] = statements;
+            }
+            return statements;
+        }
+
+        // Cached equivalent of VarBlockParser.Parse(declarationText) - same
+        // parse-once rationale as GetStatements.
+        public IReadOnlyList<VarDecl> GetDecls(string declarationText)
+        {
+            if (!_declCache.TryGetValue(declarationText, out var decls))
+            {
+                decls = VarBlockParser.Parse(declarationText);
+                _declCache[declarationText] = decls;
+            }
+            return decls;
+        }
     }
 }

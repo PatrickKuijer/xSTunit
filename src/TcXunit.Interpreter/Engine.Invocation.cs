@@ -157,12 +157,12 @@ namespace TcXunit.Interpreter
             }
 
             var newFrame = new Frame(instance, definingType);
-            var paramDecls = VarBlockParser.Parse(methodDef.DeclarationText);
+            var paramDecls = _registry.GetDecls(methodDef.DeclarationText);
             BindParams(paramDecls, positionalArgs, namedArgs, callerFrame, newFrame);
 
             try
             {
-                ExecuteStatements(Parser.ParseStatements(methodDef.ImplementationText), newFrame);
+                ExecuteStatements(_registry.GetStatements(methodDef.ImplementationText), newFrame);
             }
             catch (MethodReturnSignal)
             {
@@ -277,7 +277,7 @@ namespace TcXunit.Interpreter
             for (var i = chain.Count - 1; i >= 0; i--)
             {
                 var def = _registry.Get(chain[i]);
-                result.AddRange(VarBlockParser.Parse(def.DeclarationText)
+                result.AddRange(_registry.GetDecls(def.DeclarationText)
                     .Where(d => d.Section == VarSection.Input || d.Section == VarSection.InOut));
             }
             return result;
@@ -306,7 +306,7 @@ namespace TcXunit.Interpreter
             var calleeFrame = new Frame(callee, callee.ActualTypeName);
             try
             {
-                ExecuteStatements(Parser.ParseStatements(def.ImplementationText), calleeFrame);
+                ExecuteStatements(_registry.GetStatements(def.ImplementationText), calleeFrame);
             }
             catch (MethodReturnSignal)
             {

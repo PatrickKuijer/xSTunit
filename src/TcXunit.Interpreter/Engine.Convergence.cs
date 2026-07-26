@@ -15,7 +15,7 @@ namespace TcXunit.Interpreter
             if (def == null)
                 throw new InvalidOperationException($"Type '{instance.ActualTypeName}' not found for StepCycles");
 
-            var statements = Parser.ParseStatements(def.ImplementationText);
+            var statements = _registry.GetStatements(def.ImplementationText);
             for (var i = 0; i < cycles; i++)
             {
                 var frame = new Frame(instance, instance.ActualTypeName);

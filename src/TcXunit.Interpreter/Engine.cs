@@ -92,7 +92,7 @@ namespace TcXunit.Interpreter
             var frame = new Frame(instance, suiteTypeName);
             try
             {
-                ExecuteStatements(Parser.ParseStatements(def.ImplementationText), frame);
+                ExecuteStatements(_registry.GetStatements(def.ImplementationText), frame);
             }
             catch (MethodReturnSignal)
             {
@@ -156,7 +156,7 @@ namespace TcXunit.Interpreter
                 // otherwise dot-access and StepCycles-internal references to
                 // a nested FB's own inputs/outputs never resolve
                 // (TcXunit-0v1).
-                foreach (var decl in VarBlockParser.Parse(def.DeclarationText).Where(IsPersistedField))
+                foreach (var decl in _registry.GetDecls(def.DeclarationText).Where(IsPersistedField))
                 {
                     instance.Fields[decl.Name] = new Cell { Value = DefaultValue(decl, instance), DeclaredTypeName = decl.TypeName };
                     instance.FieldTypeNames[decl.Name] = decl.TypeName;

@@ -76,5 +76,33 @@ namespace TcXunit.Interpreter.Tests
 
             Assert.True((bool)engine.Evaluate(Parser.ParseExpression("p1 <> p2"), frame));
         }
+
+        [Fact]
+        public void TwoPointersToSameScalarTarget_AreEqual()
+        {
+            // buf is a plain scalar VAR (not an array), so ADR(buf) resolves to a
+            // Cell reference rather than an ArrayElementCell, exercising the
+            // ReferenceEquals(left, right) fallback in PointerTargetsEqual.
+            var (engine, instance, frame) = NewHolder(
+                "VAR\n\tbuf : BYTE := 1;\n\tp1 : POINTER TO BYTE;\n\tp2 : POINTER TO BYTE;\nEND_VAR");
+            instance.Fields["p1"].Value = engine.Evaluate(Parser.ParseExpression("ADR(buf)"), frame);
+            instance.Fields["p2"].Value = engine.Evaluate(Parser.ParseExpression("ADR(buf)"), frame);
+
+            Assert.True((bool)engine.Evaluate(Parser.ParseExpression("p1 = p2"), frame));
+        }
+
+        [Fact]
+        public void TwoPointersToDifferentScalarTargets_AreNotEqual()
+        {
+            // buf1/buf2 are plain scalar VARs, so ADR() resolves to distinct Cell
+            // references rather than ArrayElementCells, exercising the
+            // ReferenceEquals(left, right) fallback in PointerTargetsEqual.
+            var (engine, instance, frame) = NewHolder(
+                "VAR\n\tbuf1 : BYTE := 1;\n\tbuf2 : BYTE := 2;\n\tp1 : POINTER TO BYTE;\n\tp2 : POINTER TO BYTE;\nEND_VAR");
+            instance.Fields["p1"].Value = engine.Evaluate(Parser.ParseExpression("ADR(buf1)"), frame);
+            instance.Fields["p2"].Value = engine.Evaluate(Parser.ParseExpression("ADR(buf2)"), frame);
+
+            Assert.True((bool)engine.Evaluate(Parser.ParseExpression("p1 <> p2"), frame));
+        }
     }
 }

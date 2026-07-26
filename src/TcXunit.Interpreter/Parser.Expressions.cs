@@ -279,11 +279,12 @@ namespace TcXunit.Interpreter
                     }
                     else if (Current.Type == TokenType.Identifier && _tokens[_pos + 1].Type == TokenType.Arrow)
                     {
-                        // Name => expr: VAR_OUTPUT binding syntax. Nothing in
-                        // the interpreter consumes output-parameter semantics
-                        // yet (TcXunit-mym.5) - recorded as a named arg with
-                        // IsOutput set so BindParams' Input/InOut-only lookup
-                        // continues to ignore it, matching real ST semantics.
+                        // Name => expr: VAR_OUTPUT binding syntax. Recorded as
+                        // a named arg with IsOutput set; BindParams' Input/
+                        // InOut-only lookup ignores it, and CallMethod's
+                        // WriteBackOutputArgs (TcXunit-wmh) writes the
+                        // callee's output value back into this arg's lvalue
+                        // after the call returns.
                         var argName = Advance().Text;
                         Advance(); // =>
                         named.Add(new NamedArg(argName, ParseExpr(), isOutput: true));

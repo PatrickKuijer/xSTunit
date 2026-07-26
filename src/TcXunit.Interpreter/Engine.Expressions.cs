@@ -292,11 +292,13 @@ namespace TcXunit.Interpreter
             var posIndex = 0;
             foreach (var paramName in paramNamesInDeclOrder)
             {
-                var match = namedArgs.FirstOrDefault(a => a.Name == paramName);
-                if (match != null)
-                    resolved[paramName] = match.Value;
-                else if (posIndex < positionalArgs.Count)
-                    resolved[paramName] = positionalArgs[posIndex++];
+                if (ArgBinder.TryResolveArg(
+                    paramName,
+                    name => namedArgs.FirstOrDefault(a => a.Name == name)?.Value,
+                    positionalArgs,
+                    ref posIndex,
+                    out var value))
+                    resolved[paramName] = value;
             }
             return resolved;
         }

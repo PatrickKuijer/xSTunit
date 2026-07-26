@@ -108,10 +108,13 @@ namespace TcXunit.Interpreter
             var posIndex = 0;
             foreach (var paramName in paramNamesInDeclOrder)
             {
-                if (named.TryGetValue(paramName, out var value))
+                if (ArgBinder.TryResolveArg(
+                    paramName,
+                    name => named.TryGetValue(name, out var v) ? v : null,
+                    positional,
+                    ref posIndex,
+                    out var value))
                     resolved[paramName] = value;
-                else if (posIndex < positional.Count)
-                    resolved[paramName] = positional[posIndex++];
             }
             return resolved;
         }

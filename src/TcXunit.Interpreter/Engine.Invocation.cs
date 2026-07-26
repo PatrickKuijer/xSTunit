@@ -325,15 +325,15 @@ namespace TcXunit.Interpreter
             {
                 object value;
 
-                if (decl.Section == VarSection.Input || decl.Section == VarSection.InOut)
+                if ((decl.Section == VarSection.Input || decl.Section == VarSection.InOut) &&
+                    ArgBinder.TryResolveArg(
+                        decl.Name,
+                        name => namedArgs.FirstOrDefault(a => a.Name == name)?.Value,
+                        positionalArgs,
+                        ref posIndex,
+                        out var argExpr))
                 {
-                    var match = namedArgs.FirstOrDefault(a => a.Name == decl.Name);
-                    if (match != null)
-                        value = Evaluate(match.Value, callerFrame);
-                    else if (posIndex < positionalArgs.Count)
-                        value = Evaluate(positionalArgs[posIndex++], callerFrame);
-                    else
-                        value = DefaultValue(decl, newFrame.Instance);
+                    value = Evaluate(argExpr, callerFrame);
                 }
                 else
                 {

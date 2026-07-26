@@ -168,7 +168,33 @@ namespace TcXunit.Interpreter
             {
             }
 
+            WriteBackOutputArgs(paramDecls, namedArgs, newFrame, callerFrame);
+
             return newFrame.Locals.TryGetValue(methodName, out var returnCell) ? returnCell.Value : null;
+        }
+
+        // Name => expr call args (TcXunit-mym.5) bind a VAR_OUTPUT param's
+        // value back into the caller-side lvalue after the call returns -
+        // BindParams only reads namedArgs for Input/InOut, so this is the
+        // only place output binding happens.
+        private void WriteBackOutputArgs(
+            IReadOnlyList<VarDecl> paramDecls,
+            IReadOnlyList<NamedArg> namedArgs,
+            Frame newFrame,
+            Frame callerFrame)
+        {
+            foreach (var arg in namedArgs)
+            {
+                if (!arg.IsOutput)
+                    continue;
+
+                var decl = paramDecls.FirstOrDefault(d => d.Name == arg.Name && d.Section == VarSection.Output);
+                if (decl == null)
+                    continue;
+
+                if (newFrame.Locals.TryGetValue(decl.Name, out var outCell))
+                    SetLValue(arg.Value, outCell.Value, callerFrame);
+            }
         }
 
         // Resolves a bare-invocation callee cell by name, checking the caller

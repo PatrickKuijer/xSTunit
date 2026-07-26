@@ -149,5 +149,115 @@ namespace TcXunit.Interpreter.Tests
 
             Assert.Contains("__ISVALIDREF", ex.Message);
         }
+
+        // TcXunit-cnn: every test above binds REFERENCE TO INT, but the
+        // motivating real-world use case cited by this file's own header
+        // comment (FB_SFC2's IF __ISVALIDREF(istMachine) THEN) is a
+        // REFERENCE TO of an FB/STRUCT container, not a scalar. The two
+        // tests below cover that shape directly: a REFERENCE TO of a
+        // user-defined FB type and of a STRUCT type, bound to an actual
+        // FB instance/struct field rather than a plain scalar, mirroring
+        // FB_SFC2's istMachine guard.
+        private static (Engine Engine, FbInstance Instance, Frame Frame) NewFbTargetHolder()
+        {
+            var target = new PouAst(
+                "FB_Machine",
+                null,
+                "VAR\n\tState : INT := 42;\nEND_VAR",
+                "",
+                new List<MethodAst>());
+            var holder = new PouAst(
+                "FB_Holder2",
+                null,
+                "VAR\n\tmachine : FB_Machine;\n\trefMachine : REFERENCE TO FB_Machine;\nEND_VAR",
+                "",
+                new List<MethodAst>());
+            var engine = new Engine(new TypeRegistry(new[] { target, holder }));
+            var instance = engine.NewInstance("FB_Holder2");
+            return (engine, instance, new Frame(instance, "FB_Holder2"));
+        }
+
+        private static (Engine Engine, FbInstance Instance, Frame Frame) NewStructTargetHolder()
+        {
+            var payloadStruct = new StructAst(
+                "ST_Payload",
+                new List<VarDecl> { new VarDecl("Value", "INT", "7", VarSection.Local) });
+            var holder = new PouAst(
+                "FB_Holder3",
+                null,
+                "VAR\n\tpayload : ST_Payload;\n\trefPayload : REFERENCE TO ST_Payload;\nEND_VAR",
+                "",
+                new List<MethodAst>());
+            var engine = new Engine(new TypeRegistry(new[] { holder }, new[] { payloadStruct }));
+            var instance = engine.NewInstance("FB_Holder3");
+            return (engine, instance, new Frame(instance, "FB_Holder3"));
+        }
+
+        [Fact]
+        public void IsValidRef_UnassignedFbReference_ReturnsFalse()
+        {
+            // istMachine-shaped REFERENCE TO of a user FB type, never bound.
+            var (engine, _, frame) = NewFbTargetHolder();
+
+            var result = engine.Evaluate(Parser.ParseExpression("__ISVALIDREF(refMachine)"), frame);
+
+            Assert.Equal(false, result);
+        }
+
+        [Fact]
+        public void IsValidRef_FbReferenceBoundViaRefAssign_ReturnsTrueAndAliasesFields()
+        {
+            // Mirrors FB_SFC2's actual guard shape: a REFERENCE TO an FB
+            // type (not REFERENCE TO INT), bound to a real FB instance
+            // field via REF=.
+            var (engine, instance, frame) = NewFbTargetHolder();
+
+            engine.ExecuteStatements(Parser.ParseStatements("refMachine REF= machine;"), frame);
+            var validity = engine.Evaluate(Parser.ParseExpression("__ISVALIDREF(refMachine)"), frame);
+
+            Assert.Equal(true, validity);
+
+            // FieldsOf/Cell aliasing: the reference's Cell was replaced
+            // wholesale with the target's own Cell (TcXunit-t6p), so a
+            // field write through refMachine.State must be visible via
+            // machine.State - same Cell, not a copy - exactly as it is for
+            // the REFERENCE TO INT case.
+            engine.ExecuteStatements(Parser.ParseStatements("refMachine.State := 99;"), frame);
+            var machineState = engine.Evaluate(Parser.ParseExpression("machine.State"), frame);
+
+            Assert.Equal(99, machineState);
+            Assert.Same(instance.Fields["machine"].Value, frame.ResolveCell("refMachine").Value);
+        }
+
+        [Fact]
+        public void IsValidRef_UnassignedStructReference_ReturnsFalse()
+        {
+            // Same shape as istMachine, but the target is a STRUCT
+            // container rather than an FB instance.
+            var (engine, _, frame) = NewStructTargetHolder();
+
+            var result = engine.Evaluate(Parser.ParseExpression("__ISVALIDREF(refPayload)"), frame);
+
+            Assert.Equal(false, result);
+        }
+
+        [Fact]
+        public void IsValidRef_StructReferenceBoundViaRefAssign_ReturnsTrueAndAliasesFields()
+        {
+            var (engine, _, frame) = NewStructTargetHolder();
+
+            engine.ExecuteStatements(Parser.ParseStatements("refPayload REF= payload;"), frame);
+            var validity = engine.Evaluate(Parser.ParseExpression("__ISVALIDREF(refPayload)"), frame);
+
+            Assert.Equal(true, validity);
+
+            // Same FieldsOf/Cell aliasing guarantee, but for a STRUCT
+            // target rather than an FB instance - StructInstance shares
+            // the FieldsOf(receiver) path with FbInstance (Engine.Cells.cs).
+            engine.ExecuteStatements(Parser.ParseStatements("refPayload.Value := 123;"), frame);
+            var payloadValue = engine.Evaluate(Parser.ParseExpression("payload.Value"), frame);
+
+            Assert.Equal(123, payloadValue);
+        }
     }
 }

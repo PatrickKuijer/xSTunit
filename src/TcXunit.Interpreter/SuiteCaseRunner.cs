@@ -84,11 +84,24 @@ namespace TcXunit.Interpreter
                 if (skip.FileKey != null)
                     return new TestCaseResult(caseName, new[] { new AssertionFailure(skip.Message) });
 
-                // Not a parse-level skip: re-attempt the suite run so a
-                // runtime failure (e.g. TcXunit-654) surfaces the same
-                // synthetic failing case DiscoverCases reported, rather than
-                // falling through to "case not found" for what is actually a
-                // known-bad suite.
+                // Not a parse-level skip and suiteName resolves to a real
+                // type: re-attempt the suite run so a runtime failure (e.g.
+                // TcXunit-654) surfaces the same synthetic failing case
+                // DiscoverCases reported, rather than falling through to
+                // "case not found" for what is actually a known-bad suite.
+                //
+                // If suiteName isn't in the registry at all (a stale suite/
+                // case pair from an earlier discovery, or the skip set
+                // changed between DiscoverCases and RunCase calls), it never
+                // parsed successfully, so RunSuite would dereference a null
+                // type definition (NullReferenceException) - checked here
+                // instead of relying on the catch below, since that generic
+                // catch would otherwise swallow the NRE into a failing
+                // TestCaseResult rather than the clear not-found error
+                // (TcXunit-t0u).
+                if (registry.Get(suiteName) == null)
+                    throw new InvalidOperationException($"Case '{caseName}' not found in suite '{suiteName}'");
+
                 try
                 {
                     new Engine(registry).RunSuite(suiteName);
@@ -98,12 +111,6 @@ namespace TcXunit.Interpreter
                     return new TestCaseResult(caseName, new[] { new AssertionFailure(ex.Message) });
                 }
 
-                // No matching skip entry (e.g. a stale suite/case pair from an
-                // earlier discovery, or the skip set changed between
-                // DiscoverCases and RunCase calls): suiteName was never added
-                // to the TypeRegistry (it failed to parse), so falling through
-                // to engine.RunSuite would dereference a null type definition.
-                // Throw the same not-found error used below instead.
                 throw new InvalidOperationException($"Case '{caseName}' not found in suite '{suiteName}'");
             }
 

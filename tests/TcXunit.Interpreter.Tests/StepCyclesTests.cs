@@ -79,5 +79,34 @@ namespace TcXunit.Interpreter.Tests
             var nested = (FbInstance)instance.Fields["sfb"].Value;
             Assert.Equal(0, nested.Fields["Count"].Value);
         }
+
+        // TcXunit-agc: the try/catch(MethodReturnSignal) in StepCycles's
+        // `for` loop is per-iteration, so a RETURN that ends cycle N must
+        // not prevent cycles N+1..cycles from running. The body flips
+        // ibEnable on its own RETURN-taking cycle so a single StepCycles(3)
+        // call exercises both the RETURN path (cycle 1) and normal
+        // completion (cycles 2 and 3) without external re-entry.
+        [Fact]
+        public void StepCycles_ReturnInEarlyCycle_DoesNotAbortRemainingCycles()
+        {
+            var pou = new PouAst(
+                "FB_ToggleCounter",
+                null,
+                "VAR_INPUT\n\tibEnable : BOOL;\nEND_VAR\nVAR\n\tCount : INT;\nEND_VAR",
+                "IF NOT(ibEnable) THEN\n\tibEnable := TRUE;\n\tRETURN;\nEND_IF\nCount := Count + 1;",
+                new List<MethodAst>());
+
+            var engine = new Engine(new TypeRegistry(new[] { pou }));
+            var instance = engine.NewInstance("FB_ToggleCounter");
+
+            engine.CallMethod(instance, "StepCycles", new Expr[] { new IntLiteralExpr(3) }, new NamedArg[0], null, null);
+
+            // Cycle 1: ibEnable starts FALSE, so it flips to TRUE and RETURNs
+            // before incrementing Count. Cycles 2 and 3 then see ibEnable ==
+            // TRUE and run to completion, each incrementing Count. If the
+            // MethodReturnSignal from cycle 1 aborted the whole cycles loop
+            // instead of just that iteration, Count would still be 0.
+            Assert.Equal(2, instance.Fields["Count"].Value);
+        }
     }
 }

@@ -21,7 +21,7 @@ namespace TcXunit.Interpreter
 
         public StructInstance Build(string structTypeName, params (string Field, Boundary Boundary)[] overrides)
         {
-            var structAst = _registry.GetStruct(structTypeName)
+            var structAst = _registry.GetStruct(_registry.ResolveAlias(structTypeName))
                 ?? throw new InvalidOperationException($"Unknown struct type '{structTypeName}'");
 
             var overrideMap = new Dictionary<string, Boundary>();
@@ -53,26 +53,30 @@ namespace TcXunit.Interpreter
         // Engine instance (the builder runs before any FbInstance exists).
         private object InRangeDefault(VarDecl field)
         {
-            if (ArrayTypeInfo.IsArrayType(field.TypeName))
-                return BuildArrayInRange(field.TypeName);
+            // Resolve through any ALIAS DUT (TcXunit-6hg) once up front, same
+            // rationale as Engine.DefaultValue.
+            var typeName = _registry.ResolveAlias(field.TypeName);
 
-            var nestedStruct = _registry.GetStruct(field.TypeName);
+            if (ArrayTypeInfo.IsArrayType(typeName))
+                return BuildArrayInRange(typeName);
+
+            var nestedStruct = _registry.GetStruct(typeName);
             if (nestedStruct != null)
-                return Build(field.TypeName);
+                return Build(typeName);
 
-            if (StringTypeInfo.IsStringType(field.TypeName))
+            if (StringTypeInfo.IsStringType(typeName))
                 return "";
 
-            if (field.TypeName == "BOOL")
+            if (typeName == "BOOL")
                 return false;
 
-            if (field.TypeName == "REAL")
+            if (typeName == "REAL")
                 return 0f;
 
-            if (field.TypeName == "LREAL")
+            if (typeName == "LREAL")
                 return 0d;
 
-            if (IecNumericBounds.TryGetBounds(field.TypeName, out var bounds))
+            if (IecNumericBounds.TryGetBounds(typeName, out var bounds))
                 return ZeroLike(bounds.Min);
 
             return 0;
@@ -80,13 +84,15 @@ namespace TcXunit.Interpreter
 
         private object BoundaryValue(VarDecl field, Boundary boundary)
         {
-            if (StringTypeInfo.IsStringType(field.TypeName))
+            var typeName = _registry.ResolveAlias(field.TypeName);
+
+            if (StringTypeInfo.IsStringType(typeName))
             {
-                var length = StringTypeInfo.ParseLength(field.TypeName);
+                var length = StringTypeInfo.ParseLength(typeName);
                 return boundary == Boundary.Min ? "" : new string('X', length);
             }
 
-            if (IecNumericBounds.TryGetBounds(field.TypeName, out var bounds))
+            if (IecNumericBounds.TryGetBounds(typeName, out var bounds))
                 return boundary == Boundary.Min ? bounds.Min : bounds.Max;
 
             throw new NotSupportedException(

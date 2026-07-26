@@ -7,38 +7,45 @@ namespace TcXunit.Interpreter
     {
         private object DefaultValue(VarDecl decl, FbInstance owningInstance)
         {
-            if (ArrayTypeInfo.IsArrayType(decl.TypeName))
+            // Resolve through any ALIAS DUT (TcXunit-6hg, e.g. T_MaxString ->
+            // STRING(255)) once up front so every check below - ARRAY,
+            // STRUCT, FB/native-timer instance, STRING, scalar - operates on
+            // the underlying type text without needing its own alias-aware
+            // branch.
+            var typeName = _registry.ResolveAlias(decl.TypeName);
+
+            if (ArrayTypeInfo.IsArrayType(typeName))
                 return BuildArrayDefault(decl, owningInstance);
 
-            var structAst = _registry.GetStruct(decl.TypeName);
+            var structAst = _registry.GetStruct(typeName);
             if (structAst != null)
                 return BuildStructDefault(structAst, decl.DefaultValueText, owningInstance);
 
-            if (_registry.Get(decl.TypeName) != null || NativeTimerTypes.Contains(decl.TypeName) || decl.TypeName == "Loopback" || NativeEdgeTriggerTypes.Contains(decl.TypeName))
-                return NewInstance(decl.TypeName);
+            if (_registry.Get(typeName) != null || NativeTimerTypes.Contains(typeName) || typeName == "Loopback" || NativeEdgeTriggerTypes.Contains(typeName))
+                return NewInstance(typeName);
 
             if (decl.DefaultValueText != null)
-                return Evaluate(Parser.ParseExpression(decl.DefaultValueText), new Frame(owningInstance, decl.TypeName));
+                return Evaluate(Parser.ParseExpression(decl.DefaultValueText), new Frame(owningInstance, typeName));
 
-            if (StringTypeInfo.IsStringType(decl.TypeName))
+            if (StringTypeInfo.IsStringType(typeName))
                 return "";
 
-            if (decl.TypeName == "BOOL")
+            if (typeName == "BOOL")
                 return false;
 
-            if (decl.TypeName == "REAL")
+            if (typeName == "REAL")
                 return 0f;
 
-            if (decl.TypeName == "LREAL")
+            if (typeName == "LREAL")
                 return 0d;
 
-            if (decl.TypeName == "TIME")
+            if (typeName == "TIME")
                 return 0u;
 
-            if (decl.TypeName == "LTIME")
+            if (typeName == "LTIME")
                 return 0ul;
 
-            if (decl.TypeName.StartsWith("POINTER TO") || decl.TypeName.StartsWith("REFERENCE TO"))
+            if (typeName.StartsWith("POINTER TO") || typeName.StartsWith("REFERENCE TO"))
                 return null;
 
             return 0;

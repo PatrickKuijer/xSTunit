@@ -66,6 +66,12 @@ namespace TcXunit.Cli
                 return 2;
             }
 
+            // ALIAS .TcDUT definitions (TcXunit-6hg, e.g. T_MaxString ->
+            // STRING(255)): shared with SuiteCaseRunner via DutAliasLoader
+            // for the same "both entry points resolve DUTs identically"
+            // reason as DutStructLoader/GvlLoader above.
+            var aliases = DutAliasLoader.Load(args, out _);
+
             // .TcGVL global variable lists (TcXunit-71o): shared with
             // SuiteCaseRunner via GvlLoader, same resilient/fail-fast shape
             // as DutStructLoader above.
@@ -80,7 +86,7 @@ namespace TcXunit.Cli
                 return 2;
             }
 
-            var registry = new TypeRegistry(types, structTypes, gvls);
+            var registry = new TypeRegistry(types, structTypes, gvls, aliases);
             var suiteNames = SuiteDiscovery.FindSuiteTypeNames(registry, types.Select(t => t.Name));
 
             if (suiteNames.Count == 0)

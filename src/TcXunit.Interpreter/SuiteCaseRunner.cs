@@ -239,6 +239,12 @@ namespace TcXunit.Interpreter
                 skipped.Add(new SkippedPou(ex.TypeName, ex.Message));
             }
 
+            // ALIAS .TcDUT definitions (TcXunit-6hg, e.g. T_MaxString ->
+            // STRING(255)), shared with CliRunner via DutAliasLoader for the
+            // same reason DUT struct types/GVLs are shared above.
+            var aliases = DutAliasLoader.Load(pouDirectories, out var aliasSkipped);
+            skipped.AddRange(aliasSkipped.Select(s => new SkippedPou(s.FilePath, s.Message)));
+
             // .TcGVL global variable lists (TcXunit-71o), shared with
             // CliRunner via GvlLoader for the same reason DUT struct types
             // are shared above - both entry points must resolve GVLs
@@ -259,7 +265,7 @@ namespace TcXunit.Interpreter
                 skipped.Add(new SkippedPou(ex.GvlName, ex.Message));
             }
 
-            return new TypeRegistry(types, structTypes, gvls);
+            return new TypeRegistry(types, structTypes, gvls, aliases);
         }
     }
 }

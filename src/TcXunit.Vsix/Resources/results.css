@@ -16,8 +16,14 @@
       components" CSS block as those selectors (not the shared "Components --
       Core" block .empty-state comes from, see vsix-shell.css), so it belongs
       here, not vsix-shell.css.
-    - TcXunit-1tt.5 adds filter/segmented-control behavior over .node (no new
-      selectors expected -- filtering hides/shows existing nodes).
+    - TcXunit-1tt.5 adds filter/segmented-control behavior over .node. The text
+      filter (results.js's applyTextFilter) toggles the `hidden` attribute on
+      existing rows directly, no new selectors needed for it -- but see the
+      `[hidden]` rule below, which the text filter depends on. The segmented
+      All/Failed/Skipped control instead toggles a status class on .tree per
+      the epic's own wording ("the segmented control toggles a status class on
+      .tree"), so that *does* add new selectors: see "status segmented
+      control" below.
     - TcXunit-1tt.6 fills in real .node-dur text (slot/markup already emitted
       here as "--").
     - TcXunit-1tt.7/.4 add keyboard-nav/selection and click-to-navigate
@@ -91,6 +97,17 @@ body[data-theme="light"] {
 }
 .node:hover { background: var(--accent-soft); }
 .node.selected { background: var(--accent-soft); border-left-color: var(--accent); }
+
+/* CSS cascades per-property, not per-rule: `.node`'s own `display: flex`
+   above is an author-origin declaration, so it silently beats the (lower-
+   priority) UA stylesheet's `[hidden] { display: none }` default on that same
+   property, no matter how the `hidden` attribute is toggled from JS. Restated
+   explicitly here so `hidden` actually hides a .node -- the twisty's
+   expand/collapse (TcXunit-1tt.2) and this ticket's text filter
+   (results.js's applyTextFilter) both depend on it. `.assert`/`.banner` don't
+   need the same override -- neither sets `display` itself, so nothing shadows
+   the UA default for them. */
+.node[hidden] { display: none; }
 
 /* Indent: 6 / 24 / 42px (18px per level). Two-level max -- suite (no depth
    class) then depth1 (leaf test). depth2 exists only as a defensive ceiling;
@@ -186,6 +203,23 @@ body[data-theme="light"] {
 }
 .banner strong { display: block; color: var(--error); font-weight: 600; margin-bottom: 3px; font-size: 11px; }
 .banner code { font-family: var(--mono); font-size: 10.5px; }
+
+/* -- status segmented control (TcXunit-1tt.5): All/Failed/Skipped. results.js
+   toggles "filter-fail"/"filter-skip" on #tree itself when a segment other
+   than "All" is active (no class at all = "All", nothing to select against).
+   Only leaf test rows (.node.depth1) are pruned -- suite header rows (plain
+   .node, no depth class) and .banner are deliberately left out of these
+   selectors so they stay visible "with their ancestor suite rows still
+   visible for context" per this ticket's acceptance criteria, regardless of
+   which segment is active. .assert blocks only ever exist for failed tests,
+   so "Skipped" hides them outright rather than needing a per-row rule tied to
+   a specific failed sibling; "Failed" needs no rule for them since they're
+   visible by default. This is independent of (and composes with) the text
+   filter's per-row `hidden` toggling above -- a row shows only if neither
+   mechanism hides it. */
+.tree.filter-fail .node.depth1:not(.fail) { display: none; }
+.tree.filter-skip .node.depth1:not(.skip) { display: none; }
+.tree.filter-skip .assert { display: none; }
 
 /* -- running/progress sweep (TcXunit-1tt.3): a thin CSS-only bar that lives
    between .toolbar and .tw-body while a run is in flight, per

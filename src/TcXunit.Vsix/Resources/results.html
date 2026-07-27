@@ -41,9 +41,24 @@
     #tree is results.css/.tree's render target, filled in by results.js. The
     .tw-statusbar region is required per docs/design-system.html section 6
     (tool-window anatomy) and is never omitted, even in this empty state.
+
+    #statusSeg (TcXunit-1tt.5) is design-system.html section 5's All/Failed/
+    Skipped .seg control -- data-status is a separate attribute from data-v
+    ("plain", already styled by vsix-shell.css's .seg button.active[data-v]
+    rule) purely for results.js to read without depending on visual state.
+    Clicking a segment toggles a "filter-fail"/"filter-skip" class on #tree
+    itself (see results.css); "All" clears it. #filterInput (design-system.html's
+    .field, "Filter tests...") live-filters by suite/test name substring --
+    see results.js's applyTextFilter for how the two compose.
   -->
   <div class="toolbar">
     <button class="send-btn" type="button" id="runButton">Run tests</button>
+    <div class="seg" id="statusSeg">
+      <button class="active" data-v="plain" data-status="all" type="button">All</button>
+      <button data-v="plain" data-status="fail" type="button">Failed</button>
+      <button data-v="plain" data-status="skip" type="button">Skipped</button>
+    </div>
+    <input class="field" type="text" id="filterInput" placeholder="Filter tests..." autocomplete="off" />
     <div class="counts" id="counts">
       <span class="count zero" id="countPass">✓<span class="n">0</span></span>
       <span class="count zero" id="countFail">✗<span class="n">0</span></span>

@@ -30,15 +30,35 @@
 // nothing to wire a handler onto -- satisfies "do not attempt navigation"
 // without a separate guard.
 //
-// Not implemented here (separate sibling tickets under TcXunit-1tt): filter
-// box, All/Failed/Skipped segmented control, rerun-failed, keyboard nav, real
-// .node-dur values (always "--" for a row that ran; omitted for a row that
-// didn't -- see design-system.html section 5's node-anatomy table), per-node
-// "currently executing" state (the CLI emits one JSON blob at the end of a
-// run, not an incremental stream, so there is no data to know which suite is
-// currently executing -- only that a run is or isn't in flight). Plain
-// script (no ES modules) since this page has exactly one small render
-// concern, unlike TcAgent's chat.html.
+// TcXunit-1tt.5 adds the filter box (#filterInput, a .field per
+// design-system.html section 5) and the All/Failed/Skipped segmented control
+// (#statusSeg, a .seg). These are two independent, composable mechanisms, not
+// one:
+//   - The segmented control toggles a "filter-fail"/"filter-skip" class on
+//     #tree itself (see setStatusFilter below) -- results.css keys its
+//     .tree.filter-fail/.tree.filter-skip selectors off that class and does
+//     the actual hide/show in CSS, per the epic's own wording ("the
+//     segmented control toggles a status class on .tree"). No JS walk of the
+//     tree needed for it, and nothing to redo on a later render -- the class
+//     lives on #tree, which a rerun never replaces (only its children).
+//   - The text filter (applyTextFilter) is pure per-row `hidden` toggling
+//     over the already-rendered DOM, re-run on every keystroke -- no
+//     debounce; these trees are a handful of suites/tests, not worth the
+//     complexity. It groups the tree's flat row sequence back into
+//     suite/test/assert units (mirroring renderSuite's own output shape) to
+//     decide, per row, whether the suite name or the row's own name matches.
+// Both apply to the same rows at once (a status-filtered-out row's CSS
+// display:none and a text-filtered-out row's hidden attribute are
+// independent effects -- a row needs neither to be visible).
+//
+// Not implemented here (separate sibling tickets under TcXunit-1tt):
+// rerun-failed, keyboard nav, real .node-dur values (always "--" for a row
+// that ran; omitted for a row that didn't -- see design-system.html section
+// 5's node-anatomy table), per-node "currently executing" state (the CLI
+// emits one JSON blob at the end of a run, not an incremental stream, so
+// there is no data to know which suite is currently executing -- only that a
+// run is or isn't in flight). Plain script (no ES modules) since this page
+// has exactly one small render concern, unlike TcAgent's chat.html.
 (function () {
   'use strict';
 
@@ -46,6 +66,8 @@
   var emptyStateEl = document.getElementById('emptyState');
   var runButton = document.getElementById('runButton');
   var progEl = document.getElementById('prog');
+  var filterInput = document.getElementById('filterInput');
+  var statusSeg = document.getElementById('statusSeg');
 
   // FB_TestSuite.Fail()'s baked failure-message format (see
   // src/TcXunit.Runner/TcUnitStub/FB_TestSuite.cs):
@@ -302,6 +324,120 @@
     return rows;
   }
 
+  function normalize(text) {
+    return (text || '').toLowerCase();
+  }
+
+  function nameOf(rowEl) {
+    var nameEl = rowEl && rowEl.querySelector('.node-name');
+    return normalize(nameEl && nameEl.textContent);
+  }
+
+  // TcXunit-1tt.5: text filter over the already-rendered .tree. Walks the
+  // flat row sequence (.tree has no per-suite wrapper element -- see
+  // renderSuite's own comment on why) back into suite-sized groups, then
+  // toggles `hidden` per row rather than touching the DOM structure or
+  // re-rendering from JSON. A suite header row (and its .banner, if any)
+  // stays visible whenever its own name matches OR any of its tests do --
+  // "narrows the visible tree to matching suite/test names" without losing a
+  // matching leaf's suite context; a suite whose name matches shows all of
+  // its tests too, same reasoning in the other direction. Composes with the
+  // segmented status control (results.css's .tree.filter-fail/-skip) purely
+  // by both being independently necessary for visibility -- no interaction
+  // between the two is coded here.
+  function applyTextFilter() {
+    if (!treeEl) {
+      return;
+    }
+
+    var query = normalize(filterInput && filterInput.value);
+    var rows = Array.prototype.slice.call(treeEl.children);
+    var i = 0;
+
+    while (i < rows.length) {
+      var suiteRow = rows[i];
+      i++;
+
+      if (!suiteRow.classList || !suiteRow.classList.contains('node') || suiteRow.classList.contains('depth1')) {
+        // Not a suite header (shouldn't happen given renderSuite's output
+        // shape) -- skip rather than misclassify or loop forever.
+        continue;
+      }
+
+      var suiteMatches = query === '' || nameOf(suiteRow).indexOf(query) !== -1;
+      var testEntries = [];
+      var anyTestMatches = false;
+
+      while (i < rows.length && rows[i].classList.contains('depth1')) {
+        var testRow = rows[i];
+        i++;
+        var testMatches = query === '' || nameOf(testRow).indexOf(query) !== -1;
+        if (testMatches) {
+          anyTestMatches = true;
+        }
+
+        var assertRows = [];
+        while (i < rows.length && rows[i].classList.contains('assert')) {
+          assertRows.push(rows[i]);
+          i++;
+        }
+
+        testEntries.push({ row: testRow, matches: testMatches, asserts: assertRows });
+      }
+
+      var bannerRow = null;
+      if (i < rows.length && rows[i].classList.contains('banner')) {
+        bannerRow = rows[i];
+        i++;
+      }
+
+      var suiteVisible = suiteMatches || anyTestMatches;
+      suiteRow.hidden = !suiteVisible;
+      if (bannerRow) {
+        bannerRow.hidden = !suiteVisible;
+      }
+
+      testEntries.forEach(function (entry) {
+        var testVisible = suiteMatches || entry.matches;
+        entry.row.hidden = !testVisible;
+        entry.asserts.forEach(function (assertRow) {
+          assertRow.hidden = !testVisible;
+        });
+      });
+    }
+  }
+
+  // TcXunit-1tt.5: All/Failed/Skipped segmented control. Pure class-toggle on
+  // #tree -- results.css's selectors do the actual hide/show (see that
+  // file's "status segmented control" block) -- plus the .seg's own
+  // active-button bookkeeping (data-v="plain" is what vsix-shell.css's
+  // existing `.seg button.active[data-v]` rule keys its highlight off; the
+  // separate data-status attribute is only for this handler to read).
+  function setStatusFilter(status) {
+    if (!treeEl) {
+      return;
+    }
+    treeEl.classList.remove('filter-fail', 'filter-skip');
+    if (status === 'fail' || status === 'skip') {
+      treeEl.classList.add('filter-' + status);
+    }
+  }
+
+  if (filterInput) {
+    filterInput.addEventListener('input', applyTextFilter);
+  }
+
+  if (statusSeg) {
+    var segButtons = Array.prototype.slice.call(statusSeg.querySelectorAll('button'));
+    segButtons.forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        segButtons.forEach(function (b) { b.classList.remove('active'); });
+        btn.classList.add('active');
+        setStatusFilter(btn.getAttribute('data-status'));
+      });
+    });
+  }
+
   // Global entry point -- see the file banner above for who calls this and how.
   window.tcxunitRenderResult = function (result) {
     if (!treeEl) {
@@ -320,6 +456,13 @@
     });
 
     updateCounts(result || {});
+
+    // TcXunit-1tt.5: a rerun replaces #tree's children (above) but never
+    // #tree itself, so the segmented control's "filter-fail"/"filter-skip"
+    // class survives automatically -- only the text filter's per-row hidden
+    // state needs recomputing against the freshly-built rows, so a filter
+    // typed before a rerun still applies to the new results.
+    applyTextFilter();
 
     // First render this session swaps the empty state out for the tree
     // permanently -- a later rerun replaces #tree's contents in place (above)

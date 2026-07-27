@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Text;
@@ -9,9 +10,9 @@ using System.Web.Script.Serialization;
 namespace TcXunit.Vsix.TestRunner
 {
     /// <summary>
-    /// Shells out to `tcxunit &lt;path-a&gt; [&lt;path-b&gt; ...] --format json`
-    /// (chosen over referencing TcXunit's libraries in-process - see
-    /// TcXunit-6nt) and parses the resulting JSON.
+    /// Shells out to `tcxunit &lt;path-a&gt; [&lt;path-b&gt; ...] --format json
+    /// [--suite &lt;name&gt; ...]` (chosen over referencing TcXunit's libraries
+    /// in-process - see TcXunit-6nt) and parses the resulting JSON.
     /// Proves out whether Process.Start works unrestricted from inside XAE Shell.
     /// </summary>
     internal sealed class TcxunitProcessRunner
@@ -25,10 +26,16 @@ namespace TcXunit.Vsix.TestRunner
         /// returned Task ends in the canceled state (OperationCanceledException),
         /// which the caller distinguishes from a genuine run failure -- "stopped
         /// on purpose" vs. "errored".
+        ///
+        /// suiteNames (TcXunit-1tt.8) is optional: null/empty runs every suite under
+        /// config.Paths exactly as before, while a non-empty list restricts the run to
+        /// just those suites via a repeated --suite &lt;name&gt; (TcXunit-6fb.3) -- what
+        /// "rerun failed" uses to re-invoke tcxunit scoped to only the suites that just
+        /// failed.
         /// </summary>
-        public async Task<TcxunitRunResult> RunAsync(TcxunitConfig config, string workingDirectory, CancellationToken cancellationToken)
+        public async Task<TcxunitRunResult> RunAsync(TcxunitConfig config, string workingDirectory, CancellationToken cancellationToken, IReadOnlyList<string> suiteNames = null)
         {
-            var startInfo = BuildStartInfo(config, workingDirectory);
+            var startInfo = BuildStartInfo(config, workingDirectory, suiteNames);
 
             var stdout = new StringBuilder();
             var stderr = new StringBuilder();
@@ -81,15 +88,14 @@ namespace TcXunit.Vsix.TestRunner
             }
         }
 
-        private static ProcessStartInfo BuildStartInfo(TcxunitConfig config, string workingDirectory)
+        private static ProcessStartInfo BuildStartInfo(TcxunitConfig config, string workingDirectory, IReadOnlyList<string> suiteNames)
         {
-            var arguments = new StringBuilder();
-            arguments.Append(EscapeArgument(config.CliPath)).Append(' ');
-            foreach (var path in config.Paths)
-            {
-                arguments.Append(EscapeArgument(path)).Append(' ');
-            }
-            arguments.Append("--format json");
+            // Argument construction (including --suite <name> per suiteNames, and the
+            // Win32-style quoting each token needs) lives in TcxunitArgumentBuilder --
+            // pulled out to a class with no JavaScriptSerializer/VS SDK dependency so it
+            // can be unit tested under net8.0 (see that file's own comment and
+            // tests/TcXunit.Vsix.Tests).
+            var arguments = TcxunitArgumentBuilder.BuildArguments(config.CliPath, config.Paths, suiteNames);
 
             // Run via "cmd.exe /c" rather than invoking config.CliPath directly.
             // Process.Start with UseShellExecute=false calls CreateProcess directly,
@@ -108,7 +114,7 @@ namespace TcXunit.Vsix.TestRunner
             return new ProcessStartInfo
             {
                 FileName = "cmd.exe",
-                Arguments = "/c \"" + arguments.ToString().TrimEnd() + "\"",
+                Arguments = "/c \"" + arguments.TrimEnd() + "\"",
                 WorkingDirectory = workingDirectory,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
@@ -167,54 +173,6 @@ namespace TcXunit.Vsix.TestRunner
                     // guarantee against on a process that ignores termination signals).
                 }
             }
-        }
-
-        // Win32/CommandLineToArgvW argument-quoting algorithm (the same one .NET Core's
-        // ProcessStartInfo.ArgumentList uses internally - not available on net472's
-        // Process, so it's reimplemented here). Naively wrapping a path in quotes breaks
-        // as soon as the path itself ends in a backslash (e.g. "C:\Foo\") because that
-        // backslash then escapes the closing quote instead of being a path separator; a
-        // path containing a literal '"' would break unquoted concatenation too. This
-        // always quotes and doubles any run of backslashes that's immediately followed by
-        // a quote (embedded or closing).
-        private static string EscapeArgument(string argument)
-        {
-            var result = new StringBuilder();
-            result.Append('"');
-
-            var backslashCount = 0;
-            foreach (var c in argument)
-            {
-                if (c == '\\')
-                {
-                    backslashCount++;
-                    continue;
-                }
-
-                if (c == '"')
-                {
-                    // Backslashes immediately before a quote must be doubled, plus one
-                    // more to escape the quote itself.
-                    result.Append('\\', backslashCount * 2 + 1);
-                    result.Append('"');
-                    backslashCount = 0;
-                    continue;
-                }
-
-                if (backslashCount > 0)
-                {
-                    result.Append('\\', backslashCount);
-                    backslashCount = 0;
-                }
-
-                result.Append(c);
-            }
-
-            // Backslashes immediately before the closing quote must be doubled so they
-            // aren't read as escaping it.
-            result.Append('\\', backslashCount * 2);
-            result.Append('"');
-            return result.ToString();
         }
     }
 }

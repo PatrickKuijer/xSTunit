@@ -64,21 +64,48 @@
 // failed-to-load suite gets no slot, exactly as before this ticket; what
 // changes here is only what fills the slot when one is drawn.
 //
-// Not implemented here (separate sibling tickets under TcXunit-1tt):
-// rerun-failed, keyboard nav, per-node "currently executing" state (the CLI
-// emits one JSON blob at the end of a run, not an incremental stream, so
-// there is no data to know which suite is currently executing -- only that a
-// run is or isn't in flight). Plain script (no ES modules) since this page
-// has exactly one small render concern, unlike TcAgent's chat.html.
+// TcXunit-1tt.8 adds #rerunFailedButton (a .ghost-btn per design-system.html
+// section 5's populated-tree example). It carries no suite-name data of its
+// own -- the WPF host, not this page, tracks which suites failed in the last
+// run (ResultsToolWindowControl.xaml.cs's _lastFailedSuiteNames) -- so a
+// click just posts the JSON envelope {type:'rerunFailed'}, the same
+// window.chrome.webview.postMessage channel TcXunit-1tt.4's openFile uses,
+// and the host does the rest (re-invokes tcxunit with --suite <name> per
+// failed suite, then pushes a normal window.tcxunitRenderResult(...) back in
+// -- REPLACING #tree exactly like any other run, never merging into it,
+// since there is no separate "partial render" code path here at all). This
+// page's only two jobs are (1) posting the click and (2) keeping the
+// button's `disabled` attribute correct -- per the mockup's
+// ".ghost-btn[disabled]" state, disabled whenever the last render had zero
+// failures OR a run is currently in flight (updateRerunFailedButton, wired
+// into both tcxunitRenderResult and tcxunitSetRunning below).
+//
+// Not implemented here (separate sibling ticket under TcXunit-1tt):
+// keyboard nav, per-node "currently executing" state (the CLI emits one JSON
+// blob at the end of a run, not an incremental stream, so there is no data
+// to know which suite is currently executing -- only that a run is or isn't
+// in flight). Plain script (no ES modules) since this page has exactly one
+// small render concern, unlike TcAgent's chat.html.
 (function () {
   'use strict';
 
   var treeEl = document.getElementById('tree');
   var emptyStateEl = document.getElementById('emptyState');
   var runButton = document.getElementById('runButton');
+  var rerunFailedButton = document.getElementById('rerunFailedButton');
   var progEl = document.getElementById('prog');
   var filterInput = document.getElementById('filterInput');
   var statusSeg = document.getElementById('statusSeg');
+
+  // TcXunit-1tt.8: the two independent reasons #rerunFailedButton can be
+  // disabled -- "last render had zero failures" (hasFailures, set by
+  // tcxunitRenderResult) and "a run is currently in flight" (isRunning, set
+  // by tcxunitSetRunning). Neither alone is the whole rule: a passing run
+  // must disable it regardless of run state, and a run in flight must
+  // disable it regardless of the previous result (one action live at a
+  // time, same reasoning #runButton/#prog already follow).
+  var hasFailures = false;
+  var isRunning = false;
 
   // FB_TestSuite.Fail()'s baked failure-message format (see
   // src/TcXunit.Runner/TcUnitStub/FB_TestSuite.cs):
@@ -140,6 +167,29 @@
       return null;
     }
     return durationMs + ' ms';
+  }
+
+  // TcXunit-1tt.8: whether a suite counts as "failed" for #rerunFailedButton's
+  // enable/disable rule -- exactly the same test renderSuite below uses to
+  // pick a suite row's glyph/status class (hasError || anyFail), pulled out
+  // to a named function since both this file's own render path and the
+  // button-state check need the identical definition of "failed".
+  function suiteFailed(suite) {
+    if (suite && suite.error) {
+      return true;
+    }
+    var tests = (suite && suite.tests) || [];
+    return tests.some(function (t) { return statusOf(t) === 'fail'; });
+  }
+
+  // Applies the combined disabled rule (see hasFailures/isRunning's own
+  // comment above) to #rerunFailedButton. Called after every render and
+  // every running-state change so the two independently-updated flags never
+  // leave the button in a stale state.
+  function updateRerunFailedButton() {
+    if (rerunFailedButton) {
+      rerunFailedButton.disabled = !hasFailures || isRunning;
+    }
   }
 
   function glyphFor(status) {
@@ -486,6 +536,15 @@
 
     updateCounts(result || {});
 
+    // TcXunit-1tt.8: recompute #rerunFailedButton's "last run had zero
+    // failures" half of its disabled rule from this render's own suites list
+    // -- covers a normal run, a rerun-failed run (button correctly goes back
+    // to disabled once the previously-failed suites all pass), and the
+    // suite-load-failure case (a suite with an .error banner counts via
+    // suiteFailed, same as any other failure).
+    hasFailures = suites.some(suiteFailed);
+    updateRerunFailedButton();
+
     // TcXunit-1tt.5: a rerun replaces #tree's children (above) but never
     // #tree itself, so the segmented control's "filter-fail"/"filter-skip"
     // class survives automatically -- only the text filter's per-row hidden
@@ -510,6 +569,8 @@
   // whether a tcxunit child process is running, never an optimistic guess
   // made on click.
   window.tcxunitSetRunning = function (running) {
+    isRunning = !!running;
+
     if (runButton) {
       runButton.textContent = running ? 'Stop' : 'Run tests';
       runButton.classList.toggle('stop-btn', !!running);
@@ -517,6 +578,12 @@
     if (progEl) {
       progEl.hidden = !running;
     }
+
+    // TcXunit-1tt.8: a run in flight (whether started from #runButton or
+    // #rerunFailedButton itself) disables #rerunFailedButton regardless of
+    // the previous result -- one action live at a time, same reasoning
+    // #runButton/#prog already follow.
+    updateRerunFailedButton();
   };
 
   if (runButton) {
@@ -530,6 +597,22 @@
       }
       var running = runButton.classList.contains('stop-btn');
       window.chrome.webview.postMessage(running ? 'stop' : 'run');
+    });
+  }
+
+  // TcXunit-1tt.8: posts the JSON envelope (mirrors postOpenFile's shape,
+  // TcXunit-1tt.4) requesting a rerun of just the last run's failed suites.
+  // No payload of its own -- see this file's top-of-file banner comment for
+  // why the host, not this page, is the one holding the suite-name list.
+  // The `disabled` attribute (kept correct by updateRerunFailedButton) is
+  // the only guard needed here; a disabled button doesn't fire click events,
+  // so there's nothing further to check before posting.
+  if (rerunFailedButton) {
+    rerunFailedButton.addEventListener('click', function () {
+      if (!(window.chrome && window.chrome.webview)) {
+        return;
+      }
+      window.chrome.webview.postMessage({ type: 'rerunFailed' });
     });
   }
 })();

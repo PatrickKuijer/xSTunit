@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Web.Script.Serialization;
@@ -37,6 +38,17 @@ namespace TcXunit.Vsix
     /// EnvDTE.DTE.ItemOperations.OpenFile, obtained the same way ResolveProjectDirectory below
     /// already does (Package.GetGlobalService(typeof(EnvDTE.DTE))).
     ///
+    /// TcXunit-1tt.8 (rerun failed) adds a third message under the same JSON envelope:
+    /// {type:'rerunFailed'}, posted by results.js's #rerunFailedButton. Unlike openFile it
+    /// carries no payload -- this host, not the page, is the one tracking which suites
+    /// failed (_lastFailedSuiteNames, refreshed from every completed run's deserialized
+    /// TcxunitRunResult in StartRunAsync), so the page only has to ask. Handling it re-runs
+    /// StartRunAsync with that suite list, which threads through to
+    /// TcxunitProcessRunner.RunAsync's suiteNames parameter and becomes a repeated
+    /// --suite &lt;name&gt; (TcXunit-6fb.3) on the CLI invocation -- restricting the run to
+    /// just those suites and replacing (not merging into) the displayed tree via the exact
+    /// same window.tcxunitRenderResult(...) path a normal run already uses.
+    ///
     /// WebView2 hosting and VS-theme wiring mirror
     /// TcAgentPlugin/src/TcAgent/ChatToolWindowControl.xaml.cs exactly (EnsureCoreWebView2Async +
     /// CoreWebView2Environment, SetVirtualHostNameToFolderMapping onto Resources, a
@@ -59,6 +71,17 @@ namespace TcXunit.Vsix
         // StartRunAsync's finally clears it back to null. Doubles as the "is a run currently
         // running" flag -- there's deliberately no separate bool to keep in sync with this.
         private CancellationTokenSource _runCts;
+
+        // TcXunit-1tt.8: the failed suite names from the most recently *completed* run,
+        // refreshed at the end of every successful StartRunAsync (including a rerun-failed
+        // one) and left untouched by a stopped/errored run -- StatusText already reports
+        // those, and there is nothing to update this list from since no new
+        // TcxunitRunResult exists in that case. A suite counts as failed if it never loaded
+        // (Error set) or has at least one failing test, matching results.js's own
+        // suite-status logic (renderSuite's hasError/anyFail). Starts empty: "no run yet"
+        // and "last run had zero failures" both correctly leave rerunFailed with nothing to
+        // do.
+        private List<string> _lastFailedSuiteNames = new List<string>();
 
         public ResultsToolWindowControl()
         {
@@ -153,10 +176,11 @@ namespace TcXunit.Vsix
             catch (Exception)
             {
                 // Not a plain string -- results.js also posts a JSON object for
-                // click-to-navigate (TcXunit-1tt.4: {type:'openFile', filePath}). Anything
-                // that isn't that shape either is genuinely foreign/unexpected and is
-                // safely ignored, same as before this ticket.
-                this.HandleJsonMessage(e.WebMessageAsJson);
+                // click-to-navigate (TcXunit-1tt.4: {type:'openFile', filePath}) and
+                // rerun-failed (TcXunit-1tt.8: {type:'rerunFailed'}). Anything that isn't
+                // one of those shapes either is genuinely foreign/unexpected and is safely
+                // ignored, same as before this ticket.
+                await this.HandleJsonMessageAsync(e.WebMessageAsJson);
                 return;
             }
 
@@ -170,15 +194,17 @@ namespace TcXunit.Vsix
             }
         }
 
-        /// <summary>Handles the non-string postMessage shape (currently just
-        /// click-to-navigate's {type:'openFile', filePath}). JavaScriptSerializer is already
-        /// referenced by this project via System.Web.Extensions (see
-        /// TcxunitProcessRunner.RunAsync) -- reused here rather than adding a JSON
-        /// dependency for one small envelope. Any parse failure or unrecognized/missing
-        /// "type"/"filePath" is ignored rather than surfaced as an error: a malformed or
-        /// future/foreign message from the page is not a host-level failure worth alarming
-        /// the user over.</summary>
-        private void HandleJsonMessage(string json)
+        /// <summary>Handles the non-string postMessage shapes: click-to-navigate's
+        /// {type:'openFile', filePath} and rerun-failed's {type:'rerunFailed'}.
+        /// JavaScriptSerializer is already referenced by this project via
+        /// System.Web.Extensions (see TcxunitProcessRunner.RunAsync) -- reused here rather
+        /// than adding a JSON dependency for these small envelopes. Any parse failure or
+        /// unrecognized/missing "type" is ignored rather than surfaced as an error: a
+        /// malformed or future/foreign message from the page is not a host-level failure
+        /// worth alarming the user over. Async (rather than the old sync HandleJsonMessage)
+        /// because rerunFailed has to await StartRunAsync -- openFile stays synchronous
+        /// internally, just called from this now-async method.</summary>
+        private async Task HandleJsonMessageAsync(string json)
         {
             ThreadHelper.ThrowIfNotOnUIThread();
 
@@ -197,16 +223,32 @@ namespace TcXunit.Vsix
                 return;
             }
 
-            if (envelope == null
-                || !envelope.TryGetValue("type", out var typeObj)
-                || !string.Equals(typeObj as string, "openFile", StringComparison.Ordinal))
+            if (envelope == null || !envelope.TryGetValue("type", out var typeObj))
             {
                 return;
             }
 
-            if (envelope.TryGetValue("filePath", out var filePathObj) && filePathObj is string filePath)
+            var type = typeObj as string;
+
+            if (string.Equals(type, "openFile", StringComparison.Ordinal))
             {
-                this.OpenFile(filePath);
+                if (envelope.TryGetValue("filePath", out var filePathObj) && filePathObj is string filePath)
+                {
+                    this.OpenFile(filePath);
+                }
+            }
+            else if (string.Equals(type, "rerunFailed", StringComparison.Ordinal))
+            {
+                // No suite names travel in the envelope -- this host already knows them
+                // from the last completed run (_lastFailedSuiteNames). A click that somehow
+                // arrives with nothing to rerun (button should be disabled in that case,
+                // but a stray/late message is not impossible) is a no-op rather than
+                // falling through to a full unfiltered run, which would surprise a user who
+                // asked for "just the failed ones".
+                if (this._lastFailedSuiteNames.Count > 0)
+                {
+                    await this.StartRunAsync(this._lastFailedSuiteNames);
+                }
             }
         }
 
@@ -297,8 +339,15 @@ namespace TcXunit.Vsix
         /// window.tcxunitSetRunning(false) back in. A stray second 'run' message while
         /// _runCts is already non-null (the button should already read Stop, so this is
         /// defensive, not an expected path) is a no-op -- one run at a time, per the
-        /// acceptance criteria's "unambiguous about which action is live".</summary>
-        private async Task StartRunAsync()
+        /// acceptance criteria's "unambiguous about which action is live".
+        ///
+        /// suiteNames is null for a normal #runButton-driven run (every suite under
+        /// config.Paths) and non-null/non-empty for TcXunit-1tt.8's rerun-failed
+        /// (_lastFailedSuiteNames from the prior completed run) -- threaded straight through
+        /// to TcxunitProcessRunner.RunAsync, which turns it into a repeated --suite &lt;name&gt;.
+        /// Either way the result REPLACES #tree via the same window.tcxunitRenderResult(...)
+        /// call below; a rerun-failed result is not merged into the existing tree.</summary>
+        private async Task StartRunAsync(IReadOnlyList<string> suiteNames = null)
         {
             ThreadHelper.ThrowIfNotOnUIThread();
 
@@ -316,15 +365,25 @@ namespace TcXunit.Vsix
                 var directory = ResolveProjectDirectory();
                 var config = TcxunitConfig.Load(directory);
                 var runner = new TcxunitProcessRunner();
-                var result = await runner.RunAsync(config, directory, this._runCts.Token).ConfigureAwait(true);
+                var result = await runner.RunAsync(config, directory, this._runCts.Token, suiteNames).ConfigureAwait(true);
 
                 if (!string.IsNullOrEmpty(result.Error))
                 {
                     this.StatusText.Text = "Error: " + result.Error;
+                    // No new TcxunitRunResult worth trusting (early-exit error shape has no
+                    // Suites) -- leave _lastFailedSuiteNames exactly as it was rather than
+                    // clearing it, so a transient failure (e.g. Stop racing the process's own
+                    // exit) doesn't silently disable rerunFailed for a real prior result the
+                    // tree is still showing.
                 }
-                else if (this.Browser.CoreWebView2 != null && !string.IsNullOrEmpty(result.RawJson))
+                else
                 {
-                    _ = this.Browser.CoreWebView2.ExecuteScriptAsync(BuildRenderResultScript(result.RawJson));
+                    this._lastFailedSuiteNames = ComputeFailedSuiteNames(result);
+
+                    if (this.Browser.CoreWebView2 != null && !string.IsNullOrEmpty(result.RawJson))
+                    {
+                        _ = this.Browser.CoreWebView2.ExecuteScriptAsync(BuildRenderResultScript(result.RawJson));
+                    }
                 }
             }
             catch (OperationCanceledException)
@@ -345,6 +404,30 @@ namespace TcXunit.Vsix
                 this._runCts = null;
                 this.PushSetRunning(false);
             }
+        }
+
+        /// <summary>Computes the failed suite names from a completed run's result, for
+        /// TcXunit-1tt.8's rerun-failed to hand back to TcxunitProcessRunner.RunAsync as
+        /// its suiteNames filter next time. Mirrors results.js's own per-suite status logic
+        /// exactly (renderSuite there): a suite counts as failed if it never loaded
+        /// (Error non-empty, "no tests were run") or has at least one test with
+        /// Passed == false. result.Suites is null for the early-exit error shape, but
+        /// callers only reach here once result.Error is confirmed empty, so that case does
+        /// not need special-casing beyond the null-conditional below.</summary>
+        private static List<string> ComputeFailedSuiteNames(TcxunitRunResult result)
+        {
+            var suites = result?.Suites;
+            if (suites == null)
+            {
+                return new List<string>();
+            }
+
+            return suites
+                .Where(suite => !string.IsNullOrEmpty(suite.Error)
+                    || (suite.Tests != null && suite.Tests.Any(test => !test.Passed)))
+                .Select(suite => suite.Name)
+                .Where(name => !string.IsNullOrEmpty(name))
+                .ToList();
         }
 
         /// <summary>Cancels the in-flight run, if any -- TcxunitProcessRunner.RunAsync's

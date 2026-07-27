@@ -19,10 +19,19 @@
     use System.Web.Script.Serialization.JavaScriptSerializer, a .NET Framework
     only API with no netstandard/net8.0-compatible package, so they can't
     compile in this project without a production-code refactor that is out of
-    scope for TcXunit-1tt.2 (tracked separately).
+    scope for TcXunit-1tt.2 (tracked separately). TcxunitArgumentBuilder.cs
+    (added TcXunit-1tt.8) has neither dependency; it takes plain
+    strings/lists rather than a TcxunitConfig instance for exactly this
+    reason (see its own file comment), so it IS linked, covering the
+    epic's "suite argument construction for rerun-failed" testing decision
+    (a repeated suite &lt;name&gt; flag). Note: this comment avoids the
+    double-hyphen aside this codebase otherwise favors in .cs/.js/.css files,
+    since XML comments may not contain one; semicolons/parens stand in
+    instead.
   -->
   <ItemGroup>
     <Compile Include="..\..\src\TcXunit.Vsix\TestRunner\TcxunitModels.cs" Link="TestRunner\TcxunitModels.cs" />
+    <Compile Include="..\..\src\TcXunit.Vsix\TestRunner\TcxunitArgumentBuilder.cs" Link="TestRunner\TcxunitArgumentBuilder.cs" />
   </ItemGroup>
 
   <ItemGroup>

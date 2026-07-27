@@ -50,9 +50,23 @@
     itself (see results.css); "All" clears it. #filterInput (design-system.html's
     .field, "Filter tests...") live-filters by suite/test name substring --
     see results.js's applyTextFilter for how the two compose.
+
+    #rerunFailedButton (TcXunit-1tt.8) is design-system.html section 5's
+    ".ghost-btn" "Rerun failed" affordance (populated-tree example): a click
+    posts {type:'rerunFailed'} to the WPF host over the same JSON-envelope
+    postMessage channel #tree's node-open double-click uses (TcXunit-1tt.4).
+    The host -- not this page -- tracks which suites failed in the last run,
+    so the message carries no payload; the host re-invokes tcxunit with
+    --suite <name> per failed suite and pushes a normal
+    window.tcxunitRenderResult(...) back in, replacing #tree exactly like any
+    other run. Starts `disabled` in markup (no run yet = no failures); results.js
+    toggles the attribute after every render and on tcxunitSetRunning, per the
+    mockup's ".ghost-btn[disabled]" rule ("disabled when the last run had zero
+    failures").
   -->
   <div class="toolbar">
     <button class="send-btn" type="button" id="runButton">Run tests</button>
+    <button class="ghost-btn" type="button" id="rerunFailedButton" disabled>Rerun failed</button>
     <div class="seg" id="statusSeg">
       <button class="active" data-v="plain" data-status="all" type="button">All</button>
       <button data-v="plain" data-status="fail" type="button">Failed</button>

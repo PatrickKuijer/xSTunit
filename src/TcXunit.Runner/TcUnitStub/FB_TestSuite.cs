@@ -228,5 +228,44 @@ namespace TcXunit.Runner.TcUnitStub
 
         protected void AssertEquals_REAL(double expected, double actual, double delta, string message) =>
             AssertEqualsScalar("REAL", expected, actual, delta, message);
+
+        // Integer-family types (TcXunit-gd2.1): each is a 1-line forward
+        // into AssertEqualsScalar, matching the INT/BOOL/STRING/REAL pattern
+        // above. Parameter CLR types mirror the natural .NET type for each
+        // IEC type's range/signedness; ScalarAssertType.AsLong64/AsULong64
+        // widen whatever boxed shape arrives (this or an interpreted Cell's
+        // own boxing per IecNumericType.cs) before narrowing/comparing.
+        protected void AssertEquals_BYTE(byte expected, byte actual, string message) =>
+            AssertEqualsScalar("BYTE", expected, actual, null, message);
+
+        protected void AssertEquals_SINT(sbyte expected, sbyte actual, string message) =>
+            AssertEqualsScalar("SINT", expected, actual, null, message);
+
+        protected void AssertEquals_USINT(byte expected, byte actual, string message) =>
+            AssertEqualsScalar("USINT", expected, actual, null, message);
+
+        protected void AssertEquals_WORD(ushort expected, ushort actual, string message) =>
+            AssertEqualsScalar("WORD", expected, actual, null, message);
+
+        protected void AssertEquals_UINT(ushort expected, ushort actual, string message) =>
+            AssertEqualsScalar("UINT", expected, actual, null, message);
+
+        protected void AssertEquals_DINT(int expected, int actual, string message) =>
+            AssertEqualsScalar("DINT", expected, actual, null, message);
+
+        protected void AssertEquals_DWORD(uint expected, uint actual, string message) =>
+            AssertEqualsScalar("DWORD", expected, actual, null, message);
+
+        protected void AssertEquals_UDINT(uint expected, uint actual, string message) =>
+            AssertEqualsScalar("UDINT", expected, actual, null, message);
+
+        protected void AssertEquals_LINT(long expected, long actual, string message) =>
+            AssertEqualsScalar("LINT", expected, actual, null, message);
+
+        protected void AssertEquals_LWORD(ulong expected, ulong actual, string message) =>
+            AssertEqualsScalar("LWORD", expected, actual, null, message);
+
+        protected void AssertEquals_ULINT(ulong expected, ulong actual, string message) =>
+            AssertEqualsScalar("ULINT", expected, actual, null, message);
     }
 }

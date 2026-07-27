@@ -149,5 +149,49 @@ namespace TcXunit.Interpreter.Tests
 
             Assert.True(Assert.Single(engine.RunSuite("FB_MySuite")).Passed);
         }
+
+        // TcXunit-gd2.1: AssertEquals_DINT is the highest-priority
+        // integer-family type added by the ScalarAssertType registry - this
+        // is the E2E proof it's reachable through NativeMethodBridge from
+        // interpreted ST, both passing and reporting a clear failure.
+        [Fact]
+        public void RunSuite_AssertEqualsDint_NamedArgs_ReachableThroughInterpreter()
+        {
+            var engine = NewSuiteEngine(
+                "TEST('t');\n" +
+                "AssertEquals_DINT(Expected := 2147483647, Actual := 2147483647, Message := 'ok');\n" +
+                "TEST_FINISHED();");
+
+            Assert.True(Assert.Single(engine.RunSuite("FB_MySuite")).Passed);
+        }
+
+        [Fact]
+        public void RunSuite_AssertEqualsDint_PositionalArgs_ReachableThroughInterpreter()
+        {
+            var engine = NewSuiteEngine(
+                "TEST('t');\n" +
+                "AssertEquals_DINT(1, 1, 'ok');\n" +
+                "TEST_FINISHED();");
+
+            Assert.True(Assert.Single(engine.RunSuite("FB_MySuite")).Passed);
+        }
+
+        [Fact]
+        public void RunSuite_AssertEqualsDint_ReportsFailureWithExpAct()
+        {
+            // Not int.MinValue here: the interpreter's literal parser negates
+            // a positive literal (Parser.Expressions.cs), and 2147483648
+            // itself overflows Int32.Parse before negation ever applies -
+            // a pre-existing, separate parser gap unrelated to this ticket.
+            var engine = NewSuiteEngine(
+                "TEST('t');\n" +
+                "AssertEquals_DINT(Expected := -2147483647, Actual := 2147483647, Message := 'mismatch');\n" +
+                "TEST_FINISHED();");
+
+            var result = Assert.Single(engine.RunSuite("FB_MySuite"));
+
+            Assert.False(result.Passed);
+            Assert.Contains("EXP: -2147483647, ACT: 2147483647", result.Failures[0].Message);
+        }
     }
 }

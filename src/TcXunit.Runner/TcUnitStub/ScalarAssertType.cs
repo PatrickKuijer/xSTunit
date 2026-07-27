@@ -92,6 +92,130 @@ namespace TcXunit.Runner.TcUnitStub
                         Math.Abs(Convert.ToDouble(expected) - Convert.ToDouble(actual)) <= Convert.ToDouble(delta),
                     formatExpected: (expected, delta) => $"{Convert.ToDouble(expected)} +/- {Convert.ToDouble(delta)}",
                     formatActual: actual => Convert.ToDouble(actual).ToString()),
+
+                // Integer-family types (TcXunit-gd2.1). The interpreter boxes
+                // these Cell values per IecNumericType.cs - SINT/USINT/BYTE/
+                // WORD/UINT/DINT as C# int, DWORD/UDINT/LINT as C# long, and
+                // LWORD/ULINT as C# ulong - but an integer literal reaching a
+                // native call from interpreted ST is *always* boxed C# int
+                // regardless of the IEC type it's headed for (Parser.
+                // Expressions.cs IntLiteralExpr), and a C# fixture calling
+                // AssertEquals_<TYPE> directly boxes whatever CLR parameter
+                // type that method declares. AsLong64/AsULong64 below accept
+                // any of those boxed shapes and each entry's compare/format
+                // then wraps to its own width/signedness (mirroring INT's
+                // pre-existing 16-bit wrap), the same way a real IEC variable
+                // would already be truncated to that width by the time an
+                // assert sees it.
+                ["SINT"] = new ScalarAssertType(
+                    "SINT",
+                    hasDelta: false,
+                    areEqual: (expected, actual, delta) => WrapSByte(expected) == WrapSByte(actual),
+                    formatExpected: (expected, delta) => WrapSByte(expected).ToString(),
+                    formatActual: actual => WrapSByte(actual).ToString()),
+
+                ["USINT"] = new ScalarAssertType(
+                    "USINT",
+                    hasDelta: false,
+                    areEqual: (expected, actual, delta) => WrapByte(expected) == WrapByte(actual),
+                    formatExpected: (expected, delta) => WrapByte(expected).ToString(),
+                    formatActual: actual => WrapByte(actual).ToString()),
+
+                ["BYTE"] = new ScalarAssertType(
+                    "BYTE",
+                    hasDelta: false,
+                    areEqual: (expected, actual, delta) => WrapByte(expected) == WrapByte(actual),
+                    formatExpected: (expected, delta) => WrapByte(expected).ToString(),
+                    formatActual: actual => WrapByte(actual).ToString()),
+
+                ["WORD"] = new ScalarAssertType(
+                    "WORD",
+                    hasDelta: false,
+                    areEqual: (expected, actual, delta) => WrapUShort(expected) == WrapUShort(actual),
+                    formatExpected: (expected, delta) => WrapUShort(expected).ToString(),
+                    formatActual: actual => WrapUShort(actual).ToString()),
+
+                ["UINT"] = new ScalarAssertType(
+                    "UINT",
+                    hasDelta: false,
+                    areEqual: (expected, actual, delta) => WrapUShort(expected) == WrapUShort(actual),
+                    formatExpected: (expected, delta) => WrapUShort(expected).ToString(),
+                    formatActual: actual => WrapUShort(actual).ToString()),
+
+                ["DINT"] = new ScalarAssertType(
+                    "DINT",
+                    hasDelta: false,
+                    areEqual: (expected, actual, delta) => WrapInt(expected) == WrapInt(actual),
+                    formatExpected: (expected, delta) => WrapInt(expected).ToString(),
+                    formatActual: actual => WrapInt(actual).ToString()),
+
+                ["DWORD"] = new ScalarAssertType(
+                    "DWORD",
+                    hasDelta: false,
+                    areEqual: (expected, actual, delta) => WrapUInt(expected) == WrapUInt(actual),
+                    formatExpected: (expected, delta) => WrapUInt(expected).ToString(),
+                    formatActual: actual => WrapUInt(actual).ToString()),
+
+                ["UDINT"] = new ScalarAssertType(
+                    "UDINT",
+                    hasDelta: false,
+                    areEqual: (expected, actual, delta) => WrapUInt(expected) == WrapUInt(actual),
+                    formatExpected: (expected, delta) => WrapUInt(expected).ToString(),
+                    formatActual: actual => WrapUInt(actual).ToString()),
+
+                ["LINT"] = new ScalarAssertType(
+                    "LINT",
+                    hasDelta: false,
+                    areEqual: (expected, actual, delta) => AsLong64(expected) == AsLong64(actual),
+                    formatExpected: (expected, delta) => AsLong64(expected).ToString(),
+                    formatActual: actual => AsLong64(actual).ToString()),
+
+                ["LWORD"] = new ScalarAssertType(
+                    "LWORD",
+                    hasDelta: false,
+                    areEqual: (expected, actual, delta) => AsULong64(expected) == AsULong64(actual),
+                    formatExpected: (expected, delta) => AsULong64(expected).ToString(),
+                    formatActual: actual => AsULong64(actual).ToString()),
+
+                ["ULINT"] = new ScalarAssertType(
+                    "ULINT",
+                    hasDelta: false,
+                    areEqual: (expected, actual, delta) => AsULong64(expected) == AsULong64(actual),
+                    formatExpected: (expected, delta) => AsULong64(expected).ToString(),
+                    formatActual: actual => AsULong64(actual).ToString()),
             };
+
+        // Accepts any boxed integer shape a Cell or C# fixture parameter
+        // might use (int/long/uint/ulong/etc, per IecNumericType.cs) and
+        // widens to a signed 64-bit value for narrowing/comparison.
+        private static long AsLong64(object value) => value switch
+        {
+            long l => l,
+            int i => i,
+            uint u => u,
+            ulong ul => unchecked((long)ul),
+            _ => Convert.ToInt64(value),
+        };
+
+        // Same as AsLong64 but for the unsigned 64-bit types (LWORD/ULINT),
+        // whose full range doesn't fit in a signed long.
+        private static ulong AsULong64(object value) => value switch
+        {
+            ulong ul => ul,
+            long l => unchecked((ulong)l),
+            uint u => u,
+            int i => unchecked((ulong)(long)i),
+            _ => Convert.ToUInt64(value),
+        };
+
+        private static sbyte WrapSByte(object value) => unchecked((sbyte)AsLong64(value));
+
+        private static byte WrapByte(object value) => unchecked((byte)AsLong64(value));
+
+        private static ushort WrapUShort(object value) => unchecked((ushort)AsLong64(value));
+
+        private static int WrapInt(object value) => unchecked((int)AsLong64(value));
+
+        private static uint WrapUInt(object value) => unchecked((uint)AsLong64(value));
     }
 }

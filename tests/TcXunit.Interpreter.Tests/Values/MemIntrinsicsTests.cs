@@ -134,14 +134,82 @@ namespace TcXunit.Interpreter.Tests
                 engine.Evaluate(Parser.ParseExpression("MEMCPY(ADR(dst), ADR(src), 4)"), frame));
         }
 
+        // TcXunit-4vn: ADR(scalarVar) as a MEMCPY dest - no ArrayElementCell,
+        // so the 2 copied bytes are packed into count's own INT byte
+        // representation (little-endian) rather than requiring an
+        // ArrayElementCell target.
         [Fact]
-        public void Memcpy_DestNotAnArrayElementPointer_ThrowsNotSupported()
+        public void Memcpy_IntoScalarCell_PacksBytesIntoValue()
         {
             var (engine, instance, frame) = NewHolder(
                 "VAR\n\tcount : INT;\n\tsrc : ARRAY[0..1] OF BYTE := [1, 2];\nEND_VAR");
 
+            engine.Evaluate(Parser.ParseExpression("MEMCPY(ADR(count), ADR(src), 2)"), frame);
+
+            Assert.Equal(513, instance.Fields["count"].Value); // 0x0201 little-endian
+        }
+
+        // ADR(scalarVar) as a MEMCPY src - the scalar's current byte
+        // representation is read out into the dest array.
+        [Fact]
+        public void Memcpy_FromScalarCell_ReadsBytesOutOfValue()
+        {
+            var (engine, instance, frame) = NewHolder(
+                "VAR\n\tcount : INT := 513;\n\tdst : ARRAY[0..1] OF BYTE;\nEND_VAR");
+
+            engine.Evaluate(Parser.ParseExpression("MEMCPY(ADR(dst), ADR(count), 2)"), frame);
+
+            var dst = (ArrayValue)instance.Fields["dst"].Value;
+            Assert.Equal(new object[] { 1, 2 }, dst.Elements);
+        }
+
+        // ADR(struct.field) - a struct field Cell holding a scalar, packed
+        // by its own declared field type same as a plain scalar variable.
+        [Fact]
+        public void Memcpy_IntoStructField_PacksBytesIntoFieldValue()
+        {
+            var structType = StructDeclParser.Parse(@"TYPE ST_Msg :
+STRUCT
+	flag : BYTE;
+	count : INT;
+END_STRUCT
+END_TYPE");
+            var fb = new PouAst(
+                "FB_Holder", null, "VAR\n\tm : ST_Msg;\n\tsrc : ARRAY[0..1] OF BYTE := [9, 0];\nEND_VAR", "", new List<MethodAst>());
+            var engine = new Engine(new TypeRegistry(new[] { fb }, new[] { structType }));
+            var instance = engine.NewInstance("FB_Holder");
+            var frame = new Frame(instance, "FB_Holder");
+
+            engine.Evaluate(Parser.ParseExpression("MEMCPY(ADR(m.count), ADR(src), 2)"), frame);
+
+            var m = (StructInstance)instance.Fields["m"].Value;
+            Assert.Equal(9, m.Fields["count"].Value);
+        }
+
+        // MEMSET on a scalar Cell: fills its byte representation with the
+        // low byte of value, same as filling a BYTE array.
+        [Fact]
+        public void Memset_OnScalarCell_FillsBytesOfValue()
+        {
+            var (engine, instance, frame) = NewHolder("VAR\n\tcount : DINT := 0;\nEND_VAR");
+
+            engine.Evaluate(Parser.ParseExpression("MEMSET(ADR(count), 1, 4)"), frame);
+
+            Assert.Equal(16843009, instance.Fields["count"].Value); // 0x01010101
+        }
+
+        // A scalar/struct-field Cell with no declared type (not backed by a
+        // VarDecl) still can't be byte-addressed - only ArrayElementCell or
+        // a Cell with a known DeclaredTypeName is supported.
+        [Fact]
+        public void Memcpy_TargetCellWithNoDeclaredType_ThrowsNotSupported()
+        {
+            var (engine, instance, frame) = NewHolder(
+                "VAR\n\tsrc : ARRAY[0..1] OF BYTE := [1, 2];\nEND_VAR");
+            frame.Locals["p"] = new Cell { Value = new Pointer(new Cell { Value = 0 }) };
+
             Assert.Throws<NotSupportedException>(() =>
-                engine.Evaluate(Parser.ParseExpression("MEMCPY(ADR(count), ADR(src), 2)"), frame));
+                engine.Evaluate(Parser.ParseExpression("MEMCPY(p, ADR(src), 2)"), frame));
         }
 
         // TcXunit-996: destAddr/srcAddr passed by name (a legal ST calling

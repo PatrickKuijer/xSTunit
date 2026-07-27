@@ -373,29 +373,27 @@ namespace TcXunit.Interpreter
             return ptr;
         }
 
-        private static (ArrayValue Array, int Index) RequireArrayElement(Pointer ptr, string methodName, string paramName)
-        {
-            if (!(ptr.Target is ArrayElementCell aec))
-                throw new NotSupportedException(
-                    $"{methodName} '{paramName}' pointer must target an array element (e.g. ADR(buf) or ADR(buf[i])) - " +
-                    "byte-offset into a scalar or STRUCT interior isn't modeled.");
-            return (aec.Array, aec.Index);
-        }
-
         // MEMCPY (overlapSafe: false) copies forward regardless of overlap,
         // same as the C intrinsic it mirrors. MEMMOVE (overlapSafe: true)
         // detects a forward overlap (dest inside [src, src+count) on the same
         // backing array) and copies backward instead, so a "shift buffer
         // down after consuming its head" pattern doesn't clobber source
         // elements before they're read.
-        private static Pointer MemCopy(Pointer dest, Pointer src, int count, bool overlapSafe)
+        //
+        // dest/src may target either a real ArrayElementCell or, since
+        // TcXunit-4vn, a plain scalar/STRUCT Cell (ADR(struct.field) or
+        // ADR(scalarVar)) - ResolveByteTarget hands back a byte-array view
+        // over either shape uniformly; only dest's Commit (writing the final
+        // bytes back into a scalar/STRUCT Cell) matters, since src is only
+        // read from.
+        private Pointer MemCopy(Pointer dest, Pointer src, int count, bool overlapSafe, Frame frame)
         {
             if (count < 0)
                 throw new ArgumentOutOfRangeException(nameof(count), "MEMCPY/MEMMOVE count must be >= 0");
 
             var methodName = overlapSafe ? "MEMMOVE" : "MEMCPY";
-            var (destArray, destIndex) = RequireArrayElement(dest, methodName, "destAddr");
-            var (srcArray, srcIndex) = RequireArrayElement(src, methodName, "srcAddr");
+            var (destArray, destIndex, destCommit) = ResolveByteTarget(dest, methodName, "destAddr", frame);
+            var (srcArray, srcIndex, _) = ResolveByteTarget(src, methodName, "srcAddr", frame);
 
             var backward = overlapSafe
                 && ReferenceEquals(destArray, srcArray)
@@ -413,19 +411,23 @@ namespace TcXunit.Interpreter
                     destArray.Elements[destIndex + i] = srcArray.Elements[srcIndex + i];
             }
 
+            destCommit?.Invoke();
+
             return dest;
         }
 
-        private static Pointer MemSet(Pointer dest, object value, int count)
+        private Pointer MemSet(Pointer dest, object value, int count, Frame frame)
         {
             if (count < 0)
                 throw new ArgumentOutOfRangeException(nameof(count), "MEMSET count must be >= 0");
 
-            var (destArray, destIndex) = RequireArrayElement(dest, "MEMSET", "destAddr");
+            var (destArray, destIndex, destCommit) = ResolveByteTarget(dest, "MEMSET", "destAddr", frame);
             var lowByte = Convert.ToInt32(value) & 0xFF;
 
             for (var i = 0; i < count; i++)
                 destArray.Elements[destIndex + i] = lowByte;
+
+            destCommit?.Invoke();
 
             return dest;
         }
@@ -580,7 +582,8 @@ namespace TcXunit.Interpreter
                         RequirePointerArg(call.MethodName, "destAddr", args, frame),
                         RequirePointerArg(call.MethodName, "srcAddr", args, frame),
                         (int)Evaluate(RequireIntrinsicArg(call.MethodName, "n", args), frame),
-                        overlapSafe: call.MethodName == "MEMMOVE");
+                        overlapSafe: call.MethodName == "MEMMOVE",
+                        frame);
                 }
 
                 if (call.MethodName == "MEMSET")
@@ -589,7 +592,8 @@ namespace TcXunit.Interpreter
                     return MemSet(
                         RequirePointerArg(call.MethodName, "destAddr", args, frame),
                         Evaluate(RequireIntrinsicArg(call.MethodName, "value", args), frame),
-                        (int)Evaluate(RequireIntrinsicArg(call.MethodName, "n", args), frame));
+                        (int)Evaluate(RequireIntrinsicArg(call.MethodName, "n", args), frame),
+                        frame);
                 }
 
                 if (call.MethodName == "SIZEOF")

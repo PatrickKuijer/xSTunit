@@ -50,12 +50,20 @@ MEMMOVE(destAddr := ADR(buf) + 1, srcAddr := ADR(buf), n := 3);
 MEMSET(destAddr := ADR(buf), value := 0, n := 4);
 ```
 
-- `dest`/`src` must be pointers targeting an array element (`ADR(buf)` or
-  `ADR(buf[i])`) — anything else throws `InvalidOperationException`
-  (wrong argument type) or `NotSupportedException` (pointer doesn't
-  target an array element).
-- `n` counts elements, which equals bytes for a `BYTE`/`SINT`/`USINT`
-  -element array — the buffer-packing case these intrinsics exist for.
+- `dest`/`src` targeting an array element (`ADR(buf)` or `ADR(buf[i])`)
+  address into the array's own backing storage directly.
+- `dest`/`src` targeting a plain scalar or `STRUCT`/struct-field `Cell`
+  (`ADR(scalarVar)` or `ADR(structVar.field)`, `TcXunit-4vn`) are also
+  supported: the `Cell`'s current value is packed into a same-size byte
+  buffer (natural-alignment layout, reusing the `SIZEOF` byte-size math),
+  copied into/out of like a real array, then unpacked back into the
+  `Cell` once the copy completes (dest only — src is read-only). A
+  pointer with neither shape (e.g. targeting a `Cell` with no declared
+  type) throws `InvalidOperationException` (wrong argument type) or
+  `NotSupportedException` (byte-addressing not modeled for that target).
+- `n` counts elements/bytes, which equals bytes for a `BYTE`/`SINT`/
+  `USINT`-element array (the buffer-packing case these intrinsics exist
+  for) or for the byte-serialized size of a scalar/`STRUCT` target.
   Negative `n` throws `ArgumentOutOfRangeException`.
 - `MEMCPY` copies forward regardless of overlap, same as the C intrinsic
   it mirrors — an overlapping forward copy can clobber source elements

@@ -153,6 +153,12 @@ body[data-theme="light"] {
 }
 .node:hover .node-open { opacity: 1; }
 
+/* Not part of design-system.html's verbatim rule set -- same rationale as
+   .twisty's cursor comment above: TcXunit-1tt.4 makes rows carrying a
+   .node-open affordance double-click targets (results.js adds this class
+   only alongside the dblclick handler it wires), so the cursor should say so. */
+.node.has-open { cursor: pointer; }
+
 /* -- failed-assertion detail block -- */
 .assert {
   margin: 1px 9px 4px 42px;

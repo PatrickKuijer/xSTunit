@@ -18,16 +18,27 @@
 // optimistically flipped on click, so they can never desync from whether a
 // tcxunit process is actually running.
 //
+// TcXunit-1tt.4 adds click-to-navigate: a suite row's .node-open (and, per
+// the epic's explicit design decision, a failed leaf test row's -- it has no
+// file of its own, so it inherits its parent suite's filePath) posts
+// {type:'openFile', filePath} to the WPF host over the same
+// window.chrome.webview.postMessage channel TcXunit-1tt.3 uses for 'run'/
+// 'stop', on double-click (design-system.html section 5: "the double-click
+// target hint" / section 8's Data rule: "filePath is what
+// ItemOperations.OpenFile receives on double-click"). Passing/skipped leaf
+// rows never get a .node-open span (see buildTestNode below), so they have
+// nothing to wire a handler onto -- satisfies "do not attempt navigation"
+// without a separate guard.
+//
 // Not implemented here (separate sibling tickets under TcXunit-1tt): filter
-// box, All/Failed/Skipped segmented control, click-to-navigate (.node-open
-// is visual only), rerun-failed, keyboard nav, real .node-dur values (always
-// "--" for a row that ran; omitted for a row that didn't -- see
-// design-system.html section 5's node-anatomy table), per-node "currently
-// executing" state (the CLI emits one JSON blob at the end of a run, not an
-// incremental stream, so there is no data to know which suite is currently
-// executing -- only that a run is or isn't in flight). Plain script (no ES
-// modules) since this page has exactly one small render concern, unlike
-// TcAgent's chat.html.
+// box, All/Failed/Skipped segmented control, rerun-failed, keyboard nav, real
+// .node-dur values (always "--" for a row that ran; omitted for a row that
+// didn't -- see design-system.html section 5's node-anatomy table), per-node
+// "currently executing" state (the CLI emits one JSON blob at the end of a
+// run, not an incremental stream, so there is no data to know which suite is
+// currently executing -- only that a run is or isn't in flight). Plain
+// script (no ES modules) since this page has exactly one small render
+// concern, unlike TcAgent's chat.html.
 (function () {
   'use strict';
 
@@ -57,6 +68,21 @@
     var e = el(tag, className);
     e.textContent = value;
     return e;
+  }
+
+  // Click-to-navigate (TcXunit-1tt.4): posts a JSON envelope, not a plain
+  // string -- unlike 'run'/'stop' (TcXunit-1tt.3) this needs to carry data.
+  // OnWebMessageReceived (ResultsToolWindowControl.xaml.cs) distinguishes the
+  // two by trying TryGetWebMessageAsString first and falling back to parsing
+  // WebMessageAsJson, mirroring the envelope shape TcAgentPlugin's
+  // Browser_WebMessageReceived already uses for its own object messages.
+  // No-op with no filePath (nothing to navigate to) or outside the WebView2
+  // host (same guard #runButton's click handler uses below).
+  function postOpenFile(filePath) {
+    if (!filePath || !(window.chrome && window.chrome.webview)) {
+      return;
+    }
+    window.chrome.webview.postMessage({ type: 'openFile', filePath: filePath });
   }
 
   // No "skipped" concept exists in the interpreter/CLI today (TestResult.Passed
@@ -154,7 +180,10 @@
     return div;
   }
 
-  function buildTestNode(test) {
+  // suiteFilePath is the parent suite's filePath (or falsy) -- a failed leaf
+  // test has no file of its own (out of scope per the epic: "no per-test file
+  // granularity exists"), so it inherits the suite's for navigation purposes.
+  function buildTestNode(test, suiteFilePath) {
     var status = statusOf(test);
     var classes = 'node depth1';
     if (status === 'fail' || status === 'skip') {
@@ -175,9 +204,20 @@
 
     // node-open (click-to-navigate affordance, TcXunit-1tt.4): only failed
     // tests inherit their suite's filePath as a navigation target per the
-    // epic's design decision, so only failed rows get the hover affordance.
+    // epic's design decision, so only failed rows get the hover affordance --
+    // and only those with an actual filePath to navigate to get the
+    // double-click handler wired (defensive: postOpenFile no-ops without one
+    // regardless, but 'has-open' should only claim the affordance is live
+    // when it is).
     if (status === 'fail') {
       node.appendChild(textEl('span', 'node-open', '↗'));
+
+      if (suiteFilePath) {
+        node.classList.add('has-open');
+        node.addEventListener('dblclick', function () {
+          postOpenFile(suiteFilePath);
+        });
+      }
     }
 
     return node;
@@ -215,6 +255,10 @@
 
     if (suite && suite.filePath) {
       suiteNode.appendChild(textEl('span', 'node-open', '↗'));
+      suiteNode.classList.add('has-open');
+      suiteNode.addEventListener('dblclick', function () {
+        postOpenFile(suite.filePath);
+      });
     }
 
     rows.push(suiteNode);
@@ -230,8 +274,9 @@
     }
 
     var childRows = [];
+    var suiteFilePath = suite && suite.filePath;
     tests.forEach(function (test) {
-      var testNode = buildTestNode(test);
+      var testNode = buildTestNode(test, suiteFilePath);
       rows.push(testNode);
       childRows.push(testNode);
 

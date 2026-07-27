@@ -1,8 +1,10 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Web.Script.Serialization;
 using System.Windows;
 using System.Windows.Controls;
 using Microsoft.VisualStudio.PlatformUI;
@@ -25,6 +27,15 @@ namespace TcXunit.Vsix
     /// The former native WPF "Run tests" Button is retired -- see ResultsToolWindowControl.xaml's
     /// comment. StatusText remains for host-level errors the page itself can't show (WebView2
     /// failing to initialize, tcxunit.json missing/invalid).
+    ///
+    /// TcXunit-1tt.4 (click-to-navigate) reuses OnWebMessageReceived for a second message
+    /// shape: a double-clicked suite/failed-test row posts a JSON object
+    /// ({type:'openFile', filePath}) instead of a plain string, mirroring TcAgentPlugin's
+    /// Browser_WebMessageReceived envelope pattern (ChatToolWindowControl.xaml.cs). It is
+    /// distinguished from 'run'/'stop' by TryGetWebMessageAsString throwing for a non-string
+    /// payload; the catch falls back to parsing WebMessageAsJson and opens the file via
+    /// EnvDTE.DTE.ItemOperations.OpenFile, obtained the same way ResolveProjectDirectory below
+    /// already does (Package.GetGlobalService(typeof(EnvDTE.DTE))).
     ///
     /// WebView2 hosting and VS-theme wiring mirror
     /// TcAgentPlugin/src/TcAgent/ChatToolWindowControl.xaml.cs exactly (EnsureCoreWebView2Async +
@@ -141,9 +152,11 @@ namespace TcXunit.Vsix
             }
             catch (Exception)
             {
-                // Not a string message (e.g. a JSON object) -- results.js only ever posts
-                // the plain strings 'run'/'stop', so anything else is foreign/unexpected
-                // and safely ignored rather than throwing out of an event handler.
+                // Not a plain string -- results.js also posts a JSON object for
+                // click-to-navigate (TcXunit-1tt.4: {type:'openFile', filePath}). Anything
+                // that isn't that shape either is genuinely foreign/unexpected and is
+                // safely ignored, same as before this ticket.
+                this.HandleJsonMessage(e.WebMessageAsJson);
                 return;
             }
 
@@ -154,6 +167,81 @@ namespace TcXunit.Vsix
             else if (string.Equals(message, "stop", StringComparison.Ordinal))
             {
                 this.StopRun();
+            }
+        }
+
+        /// <summary>Handles the non-string postMessage shape (currently just
+        /// click-to-navigate's {type:'openFile', filePath}). JavaScriptSerializer is already
+        /// referenced by this project via System.Web.Extensions (see
+        /// TcxunitProcessRunner.RunAsync) -- reused here rather than adding a JSON
+        /// dependency for one small envelope. Any parse failure or unrecognized/missing
+        /// "type"/"filePath" is ignored rather than surfaced as an error: a malformed or
+        /// future/foreign message from the page is not a host-level failure worth alarming
+        /// the user over.</summary>
+        private void HandleJsonMessage(string json)
+        {
+            ThreadHelper.ThrowIfNotOnUIThread();
+
+            if (string.IsNullOrEmpty(json))
+            {
+                return;
+            }
+
+            Dictionary<string, object> envelope;
+            try
+            {
+                envelope = new JavaScriptSerializer().Deserialize<Dictionary<string, object>>(json);
+            }
+            catch (Exception)
+            {
+                return;
+            }
+
+            if (envelope == null
+                || !envelope.TryGetValue("type", out var typeObj)
+                || !string.Equals(typeObj as string, "openFile", StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            if (envelope.TryGetValue("filePath", out var filePathObj) && filePathObj is string filePath)
+            {
+                this.OpenFile(filePath);
+            }
+        }
+
+        /// <summary>Opens filePath (a suite's, or -- for a failed leaf test row -- its
+        /// parent suite's, per the epic's explicit "no per-test file granularity" design
+        /// decision) in the XAE Shell editor via EnvDTE, the interaction
+        /// TcXunit.Vsix/README.md flagged as deferred pending exactly this data. Uses the
+        /// same Package.GetGlobalService(typeof(EnvDTE.DTE)) lookup ResolveProjectDirectory
+        /// already relies on elsewhere in this file, rather than caching a DTE field the way
+        /// ChatToolWindowControl does -- this path is click-driven and infrequent, so a
+        /// fresh lookup per click is simpler than keeping a cached reference valid across
+        /// the control's Loaded/Unloaded churn.</summary>
+        private void OpenFile(string filePath)
+        {
+            ThreadHelper.ThrowIfNotOnUIThread();
+
+            if (string.IsNullOrEmpty(filePath))
+            {
+                return;
+            }
+
+            try
+            {
+                if (Package.GetGlobalService(typeof(EnvDTE.DTE)) is EnvDTE.DTE dte)
+                {
+                    dte.ItemOperations.OpenFile(filePath);
+                }
+                else
+                {
+                    this.ShowError("Could not open file: no DTE available.");
+                }
+            }
+            catch (Exception ex)
+            {
+                this.ShowError($"Failed to open {filePath}: {ex.Message}");
             }
         }
 

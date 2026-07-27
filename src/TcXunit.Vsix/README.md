@@ -43,9 +43,11 @@ TcXunit.sln` from the CLI will skip or fail on this project; build it via
   `ResultsToolWindowControl.xaml.cs` over `window.chrome.webview.postMessage`
   (`CoreWebView2.WebMessageReceived`), which drives `TcxunitProcessRunner.RunAsync`
   and pushes `window.tcxunitSetRunning(bool)` back in so the button/`.prog`
-  sweep always reflect whether a process is actually running. No
-  click-to-navigate into the `.TcPOU` editor yet — deferred to TcXunit-1tt.4
-  (source file path is already in the JSON output as of TcXunit-8gj). No
+  sweep always reflect whether a process is actually running. As of
+  TcXunit-1tt.4, double-clicking a suite row or a failed test row (which
+  inherits its parent suite's `filePath` — no per-test file granularity
+  exists) posts `{type:'openFile', filePath}` the same way, and
+  `OnWebMessageReceived` opens it via `EnvDTE.DTE.ItemOperations.OpenFile`. No
   per-test/per-suite "currently executing" granularity either — the CLI emits
   one JSON blob at the end of a run, not an incremental stream, so there's no
   data to show which suite is running, only that a run is or isn't in flight.

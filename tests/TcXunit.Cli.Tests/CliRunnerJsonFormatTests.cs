@@ -35,6 +35,8 @@ namespace TcXunit.Cli.Tests
             Assert.Equal(0, root.GetProperty("failed").GetInt32());
             Assert.Equal(0, root.GetProperty("exitCode").GetInt32());
             Assert.True(root.GetProperty("suites").GetArrayLength() > 0);
+            var suite = root.GetProperty("suites")[0];
+            Assert.EndsWith(".TcPOU", suite.GetProperty("filePath").GetString());
         }
 
         [Fact]
@@ -49,6 +51,7 @@ namespace TcXunit.Cli.Tests
             var root = doc.RootElement;
             Assert.Equal(1, root.GetProperty("failed").GetInt32());
             var suite = root.GetProperty("suites")[0];
+            Assert.EndsWith("FB_AlwaysFailsTests.TcPOU", suite.GetProperty("filePath").GetString());
             var test = suite.GetProperty("tests")[0];
             Assert.False(test.GetProperty("passed").GetBoolean());
             Assert.True(test.GetProperty("failures").GetArrayLength() > 0);

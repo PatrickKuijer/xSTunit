@@ -137,6 +137,7 @@ namespace TcXunit.Cli
 
             var registry = new TypeRegistry(types, structTypes, gvls, aliases, enumMembers);
             var suiteNames = SuiteDiscovery.FindSuiteTypeNames(registry, types.Select(t => t.Name));
+            var suiteFilePaths = loaded.ToDictionary(l => l.Pou.Name, l => l.FilePath);
 
             if (suiteNames.Count == 0)
                 return WriteError($"no TcUnit suites found under {string.Join(", ", args)}");
@@ -158,7 +159,8 @@ namespace TcXunit.Cli
                 {
                     if (!asJson)
                         output.WriteLine($"{suiteName}: FAIL ({ex.Message})");
-                    suiteReports.Add(new SuiteReport(suiteName, ex.Message, Array.Empty<TestReport>()));
+                    suiteFilePaths.TryGetValue(suiteName, out var failFilePath);
+                    suiteReports.Add(new SuiteReport(suiteName, failFilePath, ex.Message, Array.Empty<TestReport>()));
                     failCount++;
                     anyFailed = true;
                     continue;
@@ -179,7 +181,8 @@ namespace TcXunit.Cli
                     }
                 }
 
-                suiteReports.Add(new SuiteReport(suiteName, null, testReports));
+                suiteFilePaths.TryGetValue(suiteName, out var filePath);
+                suiteReports.Add(new SuiteReport(suiteName, filePath, null, testReports));
             }
 
             var exitCode = anyFailed ? 1 : 0;
@@ -234,14 +237,16 @@ namespace TcXunit.Cli
 
         private sealed class SuiteReport
         {
-            public SuiteReport(string name, string error, IReadOnlyList<TestReport> tests)
+            public SuiteReport(string name, string filePath, string error, IReadOnlyList<TestReport> tests)
             {
                 Name = name;
+                FilePath = filePath;
                 Error = error;
                 Tests = tests;
             }
 
             public string Name { get; }
+            public string FilePath { get; }
             public string Error { get; }
             public IReadOnlyList<TestReport> Tests { get; }
         }

@@ -172,13 +172,31 @@ namespace TcXunit.Vsix
 
                 this.StatusText.Text = $"Passed: {result.Passed}  Failed: {result.Failed}  (exit code {result.ExitCode})";
 
-                // Pushing suites/tests into the WebView2's #tree is not implemented yet --
-                // see TcXunit-1tt.2 (static results tree render).
+                if (this.Browser.CoreWebView2 != null && !string.IsNullOrEmpty(result.RawJson))
+                {
+                    _ = this.Browser.CoreWebView2.ExecuteScriptAsync(BuildRenderResultScript(result.RawJson));
+                }
             }
             catch (Exception ex)
             {
                 this.StatusText.Text = "Error: " + ex.Message;
             }
+        }
+
+        /// <summary>Pushes one run's results into the page by calling
+        /// window.tcxunitRenderResult(result) (see Resources/results.js) -- same
+        /// ExecuteScriptAsync mechanism as BuildApplyThemeScript above, chosen over
+        /// PostWebMessageAsJson because this is a single one-shot push after a
+        /// completed run, not an ongoing bidirectional stream (contrast with
+        /// TcAgentPlugin's chat panel, which does need that). rawJson is the CLI's
+        /// own `tcxunit ... --format json` stdout text (TcxunitProcessRunner stashes
+        /// it verbatim on TcxunitRunResult.RawJson) embedded directly as a JS object
+        /// literal -- valid JSON is valid JS expression syntax, so no JSON.parse
+        /// round-trip or escaping is needed here.</summary>
+        private static string BuildRenderResultScript(string rawJson)
+        {
+            return "(function(){function apply(){if(window.tcxunitRenderResult){window.tcxunitRenderResult(" + rawJson + ");}}"
+                + "if(document.readyState!=='loading'){apply();}else{document.addEventListener('DOMContentLoaded',apply);}})();";
         }
 
         private void ShowError(string message)

@@ -72,8 +72,13 @@ namespace TcXunit.Vsix.TestRunner
                 }
 
                 var serializer = new JavaScriptSerializer();
-                var result = serializer.Deserialize<TcxunitRunResult>(stdout.ToString());
+                var stdoutText = stdout.ToString();
+                var result = serializer.Deserialize<TcxunitRunResult>(stdoutText);
                 result.ExitCode = process.ExitCode;
+                // Keep the CLI's own JSON text around (see TcxunitRunResult.RawJson)
+                // so the WebView2 host can forward it verbatim rather than
+                // re-serializing this object -- see TcXunit-1tt.2.
+                result.RawJson = stdoutText;
                 return result;
             }
         }

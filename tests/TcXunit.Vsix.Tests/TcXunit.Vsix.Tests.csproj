@@ -1,0 +1,34 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <!--
+    TcXunit.Vsix.csproj is a classic packages.config VSSDK project (net472,
+    references WebView2/EnvDTE/VS SDK assemblies) that does not build outside
+    Visual Studio on Windows; see src/TcXunit.Vsix/README.md and
+    docs/design-system.html's Testing Decisions. A normal ProjectReference to
+    it is not viable here (nor in CI). Instead this project source-links the
+    handful of files under TestRunner/ that have zero VS SDK/WebView2
+    dependency; the "one genuinely testable seam" the TcXunit-1tt epic calls
+    out. TcxunitConfig.cs and TcxunitProcessRunner.cs are NOT linked here: both
+    use System.Web.Script.Serialization.JavaScriptSerializer, a .NET Framework
+    only API with no netstandard/net8.0-compatible package, so they can't
+    compile in this project without a production-code refactor that is out of
+    scope for TcXunit-1tt.2 (tracked separately).
+  -->
+  <ItemGroup>
+    <Compile Include="..\..\src\TcXunit.Vsix\TestRunner\TcxunitModels.cs" Link="TestRunner\TcxunitModels.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
+    <PackageReference Include="xunit" Version="2.9.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
+  </ItemGroup>
+
+</Project>

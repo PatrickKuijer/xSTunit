@@ -2,9 +2,178 @@
   TcXunit-only results layer: .toolbar .tree .node .assert .banner .count -- per
   docs/design-system.html section 5 (results tree) and section 8's file-split plan.
 
-  Intentionally empty for now. Implemented by TcXunit-1tt.2 (static results tree
-  render: node anatomy, banner, assert detail) and extended by the later sibling
-  tickets (filter/segmented control, duration display, etc.) -- see TcXunit-1tt's
-  child issues. results.html already loads this file so none of that later work
-  needs to touch the shell page's <link> wiring.
+  Selectors below are copied verbatim from design-system.html's embedded ".vsix"
+  specimen stylesheet (section 5's "extension layer: results components" block),
+  with the ".vsix " scope prefix dropped -- results.html's <body> IS the panel
+  (same de-scoping vsix-shell.css already did for .tw-tabs/.send-btn/etc.), so
+  there is no wrapping .vsix element to key off here.
+
+  Implemented by TcXunit-1tt.2 (static results tree render: node anatomy, banner,
+  assert detail). Extended by later sibling tickets:
+    - TcXunit-1tt.3 adds .prog (running/progress sweep) -- not this file's job
+      per design-system.html section 8's file list (results.css: .toolbar .tree
+      .node .assert .banner .count only).
+    - TcXunit-1tt.5 adds filter/segmented-control behavior over .node (no new
+      selectors expected -- filtering hides/shows existing nodes).
+    - TcXunit-1tt.6 fills in real .node-dur text (slot/markup already emitted
+      here as "--").
+    - TcXunit-1tt.7/.4 add keyboard-nav/selection and click-to-navigate
+      *behavior*; the selection/hover visuals and .node-open affordance are
+      already styled below since they're pure CSS states.
 */
+
+/* Extension-layer tokens: TcXunit's pass/fail/skip/busy vocabulary, aliased
+   (not invented) onto the shared tokens from vsix-tokens.css, exactly per
+   design-system.html section 1's "Extension: result status" table. These are
+   TcXunit-specific (not part of the shared/never-forked vsix-tokens.css), so
+   they live here rather than in that file. */
+:root {
+  --pass: var(--local);
+  --pass-bg: var(--local-bg-strong);
+  --fail: var(--error);
+  --fail-bg: var(--error-bg);
+  --skip: var(--text-faint);
+  --skip-bg: rgba(111, 111, 111, 0.18);
+  --busy: var(--accent);
+  --busy-bg: var(--accent-soft);
+}
+
+body[data-theme="light"] {
+  --skip-bg: rgba(118, 118, 118, 0.14);
+}
+
+/* -- toolbar (primary action left, counts right via margin-left:auto) -- */
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 9px;
+  background: var(--chrome-bg-2);
+  border-bottom: 1px solid var(--border);
+  flex: none;
+}
+.toolbar .field { flex: 1 1 auto; min-width: 80px; }
+.counts { display: flex; gap: 4px; margin-left: auto; flex: none; }
+
+/* -- count badges: state is in the fill, not only the number. A zero count
+   drops to an outline so "nothing failed" doesn't read as an alert. -- */
+.count {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 10.5px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  border: 1px solid transparent;
+  line-height: 1.6;
+}
+.count .n { font-family: var(--mono); }
+.count.pass { background: var(--pass-bg); color: var(--pass); }
+.count.fail { background: var(--fail-bg); color: var(--fail); border-color: var(--error-border); }
+.count.skip { background: var(--skip-bg); color: var(--skip); }
+.count.zero { background: transparent; color: var(--text-faint); border-color: var(--border); font-weight: 400; }
+
+/* -- tree / node anatomy -- */
+.tree { padding: 4px 0; font-size: 12px; }
+.node {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 9px 3px 6px;
+  cursor: default;
+  position: relative;
+  border-left: 2px solid transparent;
+}
+.node:hover { background: var(--accent-soft); }
+.node.selected { background: var(--accent-soft); border-left-color: var(--accent); }
+
+/* Indent: 6 / 24 / 42px (18px per level). Two-level max -- suite (no depth
+   class) then depth1 (leaf test). depth2 exists only as a defensive ceiling;
+   deeper nesting is a modelling error per design-system.html section 5, not a
+   UI concern this file needs to grow to accommodate. */
+.node.depth1 { padding-left: 24px; }
+.node.depth2 { padding-left: 42px; }
+
+.twisty {
+  width: 12px;
+  flex: none;
+  text-align: center;
+  color: var(--text-faint);
+  font-size: 8px;
+  line-height: 1;
+  transform: translateY(-1px);
+  /* Not part of design-system.html's verbatim rule set -- results.js (TcXunit-
+     1tt.2) makes this element clickable to satisfy "twisty expand/collapse
+     works". A cursor change is the minimum affordance to make that
+     discoverable without touching layout/color, so it's additive rather than
+     a deviation from the spec'd visuals. */
+  cursor: pointer;
+}
+
+.glyph { width: 13px; flex: none; text-align: center; font-size: 11px; line-height: 1; font-weight: 700; }
+.glyph.pass { color: var(--pass); }
+.glyph.fail { color: var(--fail); }
+.glyph.skip { color: var(--skip); }
+.glyph.busy { color: var(--busy); }
+
+.node-name { color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.node.fail .node-name { color: var(--text); }
+.node.skip .node-name { color: var(--text-dim); }
+
+.node-src {
+  font-size: 10.5px;
+  color: var(--text-faint);
+  font-family: var(--mono);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.node-dur {
+  margin-left: auto;
+  flex: none;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.node-open {
+  flex: none;
+  opacity: 0;
+  color: var(--accent);
+  font-size: 10px;
+  padding-left: 2px;
+}
+.node:hover .node-open { opacity: 1; }
+
+/* -- failed-assertion detail block -- */
+.assert {
+  margin: 1px 9px 4px 42px;
+  padding: 6px 9px;
+  background: var(--error-bg);
+  border-left: 2px solid var(--error-border);
+  border-radius: 0 3px 3px 0;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  line-height: 1.5;
+  color: var(--text-dim);
+  white-space: pre-wrap;
+}
+.assert b { color: var(--error); font-weight: 400; }
+
+/* -- suite-failed-to-load banner (distinct from a swallowed empty suite) -- */
+.banner {
+  margin: 3px 9px 5px 24px;
+  padding: 7px 10px;
+  background: var(--error-bg);
+  border: 1px solid var(--error-border);
+  border-radius: 4px;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+.banner strong { display: block; color: var(--error); font-weight: 600; margin-bottom: 3px; font-size: 11px; }
+.banner code { font-family: var(--mono); font-size: 10.5px; }

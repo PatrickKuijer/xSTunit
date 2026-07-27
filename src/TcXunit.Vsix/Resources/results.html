@@ -10,14 +10,35 @@
 </head>
 <body>
   <!--
-    Empty shell for TcXunit-1tt.1: proves the WebView2 control loads this page and
-    follows the VS host's light/dark theme (document.body.dataset.theme, pushed in by
-    ResultsToolWindowControl.xaml.cs; see BuildApplyThemeScript there).
+    WebView2 page loaded by ResultsToolWindowControl.xaml.cs, which follows the VS
+    host's light/dark theme (document.body.dataset.theme, pushed via
+    ExecuteScriptAsync -- see BuildApplyThemeScript there) and, after a run,
+    pushes the CLI's run-result JSON in by calling window.tcxunitRenderResult(...)
+    (see results.js, and BuildRenderResultScript on the host side).
 
-    #tree is the future results.css/.tree render target; see TcXunit-1tt.2. The
-    .tw-statusbar region is required per docs/design-system.html section 6 (tool-window
-    anatomy) and is never omitted, even in this empty state.
+    The #runButton inside .toolbar is a visual seam only (TcXunit-1tt.2) -- it is
+    not wired to anything yet. The native WPF "Run tests (tcxunit)" button
+    (ResultsToolWindowControl.xaml) is still what actually triggers a run; a later
+    ticket (TcXunit-1tt.3, which needs to swap this button to a Stop state and
+    drive the .prog sweep while a run is in flight) is expected to be what wires
+    this one up and retires the WPF button, per docs/design-system.html's own
+    "everything lives in the WebView2 panel" shape for the toolbar. Until then,
+    having both visible is a known, temporary artifact of building this out in
+    stages -- not a bug.
+
+    #tree is results.css/.tree's render target, filled in by results.js. The
+    .tw-statusbar region is required per docs/design-system.html section 6
+    (tool-window anatomy) and is never omitted, even in this empty state.
   -->
+  <div class="toolbar">
+    <button class="send-btn" type="button" id="runButton">Run tests</button>
+    <div class="counts" id="counts">
+      <span class="count zero" id="countPass">✓<span class="n">0</span></span>
+      <span class="count zero" id="countFail">✗<span class="n">0</span></span>
+      <span class="count zero" id="countSkip">–<span class="n">0</span></span>
+    </div>
+  </div>
+
   <div class="tw-body">
     <div class="tree" id="tree"></div>
   </div>
@@ -26,5 +47,7 @@
     <span class="dot"></span>
     <span id="statusText">Ready</span>
   </div>
+
+  <script src="results.js"></script>
 </body>
 </html>

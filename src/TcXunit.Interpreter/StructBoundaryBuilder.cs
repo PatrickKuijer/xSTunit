@@ -97,7 +97,7 @@ namespace TcXunit.Interpreter
 
         private ArrayValue BuildArrayInRange(string arrayTypeName)
         {
-            var (dimensions, elementTypeName) = ArrayTypeInfo.Parse(arrayTypeName);
+            var (dimensions, elementTypeName) = ArrayTypeInfo.Parse(arrayTypeName, ResolveArrayBound);
             var count = dimensions.Aggregate(1, (acc, d) => acc * (d.Hi - d.Lo + 1));
             var elementDecl = new VarDecl(null, elementTypeName, null, VarSection.Local);
 
@@ -106,6 +106,51 @@ namespace TcXunit.Interpreter
                 elements[i] = InRangeDefault(elementDecl);
 
             return new ArrayValue(dimensions, elementTypeName, elements);
+        }
+
+        // Resolves a non-literal ARRAY bound (e.g. a GVL-qualified constant
+        // like "cTcpDataServerClient.MAX_REMOTE_UNITS") without needing a
+        // running Engine/Frame - the builder runs before any FbInstance
+        // exists (see class remarks). GVL constants are themselves constant
+        // expressions (literals, arithmetic, or references to other GVL
+        // constants), so this recurses through TypeRegistry's already-parsed
+        // GVL declarations rather than requiring Engine.Evaluate.
+        private int ResolveArrayBound(string boundText) =>
+            EvaluateConstExpr(Parser.ParseExpression(boundText));
+
+        private int EvaluateConstExpr(Expr expr)
+        {
+            switch (expr)
+            {
+                case IntLiteralExpr intLit:
+                    return intLit.Value;
+
+                case UnaryExpr unary when unary.Op == "-":
+                    return -EvaluateConstExpr(unary.Operand);
+
+                case BinaryExpr binary:
+                    var left = EvaluateConstExpr(binary.Left);
+                    var right = EvaluateConstExpr(binary.Right);
+                    switch (binary.Op)
+                    {
+                        case "+": return left + right;
+                        case "-": return left - right;
+                        case "*": return left * right;
+                        case "/": return left / right;
+                    }
+                    break;
+
+                case FieldAccessExpr fieldAccess when fieldAccess.Receiver is IdentifierExpr gvlIdent:
+                    var gvlDecls = _registry.GetGvlDecls(gvlIdent.Name)
+                        ?? throw new InvalidOperationException($"Unknown GVL '{gvlIdent.Name}' referenced in array bound");
+                    var constDecl = gvlDecls.FirstOrDefault(d => d.Name == fieldAccess.FieldName)
+                        ?? throw new InvalidOperationException($"Unknown constant '{fieldAccess.FieldName}' in GVL '{gvlIdent.Name}'");
+                    if (constDecl.DefaultValueText == null)
+                        throw new InvalidOperationException($"GVL constant '{gvlIdent.Name}.{fieldAccess.FieldName}' has no default value");
+                    return EvaluateConstExpr(Parser.ParseExpression(constDecl.DefaultValueText));
+            }
+
+            throw new NotSupportedException($"Unsupported constant array-bound expression of type '{expr.GetType().Name}'");
         }
     }
 }

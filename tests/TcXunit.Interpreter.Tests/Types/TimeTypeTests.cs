@@ -118,6 +118,20 @@ namespace TcXunit.Interpreter.Tests
             Assert.Equal(1_000_000ul, (ulong)result);
         }
 
+        // TcXunit-odo: TIME boxes as uint - EvaluateBinary's comparison ops
+        // route through NumericCoercion.Promote, which used to unbox straight
+        // to int for anything that wasn't double/float/long/ulong, throwing
+        // InvalidCastException on a boxed uint.
+        [Fact]
+        public void Evaluate_TimeLiteralEqualsTimeLiteral_ReturnsTrueWithoutThrowing()
+        {
+            var engine = NewEngine();
+            var result = engine.Evaluate(Parser.ParseExpression("T#1s = T#1s"), NewFrame());
+
+            Assert.IsType<bool>(result);
+            Assert.True((bool)result);
+        }
+
         [Fact]
         public void NewInstance_TimeAndLtimeFields_DefaultToZeroOfCorrectClrType()
         {

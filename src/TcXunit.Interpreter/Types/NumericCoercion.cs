@@ -35,6 +35,14 @@ namespace TcXunit.Interpreter
             if (left is ulong || right is ulong)
                 return (ToULong(left), ToULong(right));
 
+            // TIME/DATE/DATE_AND_TIME/TIME_OF_DAY box as uint (DateTimeLiteral.cs,
+            // Engine.Defaults.cs) - unlike UDINT/DWORD, which box as long
+            // specifically to avoid this. Widen to long (same tier as
+            // int->long above) rather than unboxing straight to int below,
+            // which throws (boxed uint can't unbox to int).
+            if (left is uint || right is uint)
+                return (ToLong(left), ToLong(right));
+
             return ((int)left, (int)right);
         }
 
@@ -56,6 +64,7 @@ namespace TcXunit.Interpreter
         public static long ToLong(object value) => value switch
         {
             long l => l,
+            uint u => u,
             int i => i,
             _ => throw new NotSupportedException($"Cannot use {value?.GetType().Name} in numeric arithmetic"),
         };

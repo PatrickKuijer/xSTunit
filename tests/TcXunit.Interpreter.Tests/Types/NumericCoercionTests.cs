@@ -110,6 +110,37 @@ namespace TcXunit.Interpreter.Tests
             Assert.Throws<NotSupportedException>(() => NumericCoercion.Promote(1L, 2UL));
         }
 
+        // TcXunit-odo: TIME/DATE/DATE_AND_TIME/TIME_OF_DAY box as uint
+        // (DateTimeLiteral.cs) - comparing/arithmetic between two of them,
+        // or one against a plain INT literal, must not throw.
+        [Fact]
+        public void Promote_UIntAndUInt_WidensBothToLong()
+        {
+            var (left, right) = NumericCoercion.Promote(1u, 2u);
+
+            Assert.IsType<long>(left);
+            Assert.IsType<long>(right);
+            Assert.Equal(1L, left);
+            Assert.Equal(2L, right);
+        }
+
+        [Fact]
+        public void Promote_IntAndUInt_WidensBothToLong()
+        {
+            var (left, right) = NumericCoercion.Promote(1, 2u);
+
+            Assert.IsType<long>(left);
+            Assert.IsType<long>(right);
+            Assert.Equal(1L, left);
+            Assert.Equal(2L, right);
+        }
+
+        [Fact]
+        public void ToLong_UInt_Widens()
+        {
+            Assert.Equal(5L, NumericCoercion.ToLong(5u));
+        }
+
         [Fact]
         public void ToULong_Int_Widens()
         {

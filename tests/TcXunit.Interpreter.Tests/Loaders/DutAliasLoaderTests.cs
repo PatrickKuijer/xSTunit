@@ -94,6 +94,27 @@ namespace TcXunit.Interpreter.Tests
         }
 
         [Fact]
+        public void Load_NoSourceFiles_StillRegistersWellKnownLibraryAlias()
+        {
+            // T_MaxString (TcXunit-w51): Tc2_System.T_MaxString has no
+            // project-authored .TcDUT - it's compiled library metadata - so
+            // Load must still resolve it even when the scanned directory
+            // has no matching source file at all.
+            var tempDir = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "tcxunit-alias-wellknown-" + Guid.NewGuid()));
+            try
+            {
+                var aliases = DutAliasLoader.Load(new[] { tempDir.FullName }, out var skipped);
+
+                Assert.Empty(skipped);
+                Assert.Equal("STRING(255)", aliases["T_MaxString"]);
+            }
+            finally
+            {
+                Directory.Delete(tempDir.FullName, recursive: true);
+            }
+        }
+
+        [Fact]
         public void Load_StructDut_IsNotRegisteredAsAlias()
         {
             var tempDir = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "tcxunit-aliasstructskip-" + Guid.NewGuid()));
@@ -105,7 +126,7 @@ namespace TcXunit.Interpreter.Tests
                 var aliases = DutAliasLoader.Load(new[] { tempDir.FullName }, out var skipped);
 
                 Assert.Empty(skipped);
-                Assert.Empty(aliases);
+                Assert.False(aliases.ContainsKey("ST_Point"));
             }
             finally
             {

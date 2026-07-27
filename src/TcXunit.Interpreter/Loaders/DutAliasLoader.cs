@@ -78,11 +78,29 @@ namespace TcXunit.Interpreter
             return false;
         }
 
+        // Well-known Beckhoff system-library ALIAS types (TcXunit-w51): these
+        // have no project-authored .TcDUT - they only exist as compiled
+        // library metadata (.tmc/.xti DataType entries), which is out of
+        // scope to parse for now, so DutAliasLoader can never discover them
+        // from source. Seeded here (grow-on-demand as more library aliases
+        // are hit) and merged in as defaults beneath whatever the project's
+        // own .TcDUT files define, so a project-authored alias of the same
+        // name (unlikely, but not impossible) always wins.
+        private static readonly IReadOnlyDictionary<string, string> WellKnownLibraryAliases =
+            new Dictionary<string, string>
+            {
+                // Tc2_System.T_MaxString: TwinCAT PLC string of max length
+                // 255 bytes + 1 byte null delimiter.
+                ["T_MaxString"] = "STRING(255)",
+            };
+
         public static IReadOnlyDictionary<string, string> Load(
             IReadOnlyList<string> pouDirectories, out List<SkippedFile> skipped)
         {
             skipped = new List<SkippedFile>();
             var aliases = new Dictionary<string, string>();
+            foreach (var wellKnown in WellKnownLibraryAliases)
+                aliases[wellKnown.Key] = wellKnown.Value;
 
             foreach (var file in MultiDirectoryPouLoader.FindDutFiles(pouDirectories))
             {

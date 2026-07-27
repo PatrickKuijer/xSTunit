@@ -58,6 +58,33 @@ namespace TcXunit.Cli.Tests
         }
 
         [Fact]
+        public void Run_JsonFormat_TestsCarryNonNegativeDurationMs_ForPassingAndFailingTests()
+        {
+            var passingOutput = new StringWriter();
+            var passingExitCode = CliRunner.Run(new[] { TestFixtures.FbCounterFixtureDir(), "--format", "json" }, passingOutput);
+            Assert.Equal(0, passingExitCode);
+            using var passingDoc = JsonDocument.Parse(passingOutput.ToString());
+            var passingTests = passingDoc.RootElement.GetProperty("suites")[0].GetProperty("tests");
+            Assert.True(passingTests.GetArrayLength() > 0);
+            foreach (var test in passingTests.EnumerateArray())
+            {
+                var durationMs = test.GetProperty("durationMs");
+                Assert.Equal(JsonValueKind.Number, durationMs.ValueKind);
+                Assert.True(durationMs.GetInt64() >= 0);
+            }
+
+            var failingOutput = new StringWriter();
+            var failingExitCode = CliRunner.Run(new[] { _tempDir, "--format=json" }, failingOutput);
+            Assert.Equal(1, failingExitCode);
+            using var failingDoc = JsonDocument.Parse(failingOutput.ToString());
+            var failingTest = failingDoc.RootElement.GetProperty("suites")[0].GetProperty("tests")[0];
+            Assert.False(failingTest.GetProperty("passed").GetBoolean());
+            var failingDurationMs = failingTest.GetProperty("durationMs");
+            Assert.Equal(JsonValueKind.Number, failingDurationMs.ValueKind);
+            Assert.True(failingDurationMs.GetInt64() >= 0);
+        }
+
+        [Fact]
         public void Run_MissingPath_JsonFormat_ReturnsTwoAndJsonError()
         {
             var output = new StringWriter();

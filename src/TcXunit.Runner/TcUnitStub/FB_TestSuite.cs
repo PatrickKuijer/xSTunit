@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 
 namespace TcXunit.Runner.TcUnitStub
 {
@@ -30,6 +31,7 @@ namespace TcXunit.Runner.TcUnitStub
                 Name = name;
                 Failures = new List<AssertionFailure>();
                 LastCycleIndex = cycleIndex;
+                Stopwatch = new Stopwatch();
             }
 
             public string Name { get; }
@@ -37,6 +39,14 @@ namespace TcXunit.Runner.TcUnitStub
             public int? OrderNumber { get; set; }
             public bool Finished { get; set; }
             public int LastCycleIndex { get; set; }
+
+            // Per-test elapsed time (TcXunit-6fb.1): started when TEST()/
+            // TEST_ORDERED() opens this record's bracket, stopped in the
+            // shared FinishRecord. Restart() (not Start()) so a re-declared
+            // test in a later cycle (see class-level comment) times only its
+            // most recent open->finish span, matching how FinishRecord
+            // replaces rather than appends its TestCaseResult.
+            public Stopwatch Stopwatch { get; }
         }
 
         private readonly List<TestCaseResult> _finished = new List<TestCaseResult>();
@@ -80,11 +90,14 @@ namespace TcXunit.Runner.TcUnitStub
                 // Re-declaration in a later cycle: re-attach to the existing
                 // test rather than erroring, matching upstream AddTest.
                 existing.LastCycleIndex = CurrentCycle;
+                existing.Stopwatch.Restart();
                 _currentName = name;
                 return;
             }
 
-            _records[name] = new TestRecord(name, CurrentCycle);
+            var record = new TestRecord(name, CurrentCycle);
+            record.Stopwatch.Restart();
+            _records[name] = record;
             _currentName = name;
         }
 
@@ -106,6 +119,7 @@ namespace TcXunit.Runner.TcUnitStub
                 throw new InvalidOperationException(
                     $"TEST_ORDERED('{name}') called before TEST_FINISHED() for '{_currentName}'");
 
+            record.Stopwatch.Restart();
             _currentName = name;
             return true;
         }
@@ -152,11 +166,13 @@ namespace TcXunit.Runner.TcUnitStub
 
         private void FinishRecord(TestRecord record)
         {
+            record.Stopwatch.Stop();
+
             // A re-declared test (TEST('X') again in a later cycle) can finish
             // more than once across cycles; replace its prior result rather
             // than appending a second entry for the same name (TcXunit-k28.5).
             var previousIndex = _finished.FindIndex(r => r.Name == record.Name);
-            var result = new TestCaseResult(record.Name, record.Failures);
+            var result = new TestCaseResult(record.Name, record.Failures, record.Stopwatch.ElapsedMilliseconds);
             if (previousIndex >= 0)
                 _finished[previousIndex] = result;
             else

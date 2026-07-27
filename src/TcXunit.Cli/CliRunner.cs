@@ -171,7 +171,7 @@ namespace TcXunit.Cli
                 {
                     if (!asJson)
                         output.WriteLine(result.ToString());
-                    testReports.Add(new TestReport(result.Name, result.Passed, result.Failures.Select(f => f.Message).ToArray()));
+                    testReports.Add(new TestReport(result.Name, result.Passed, result.Failures.Select(f => f.Message).ToArray(), result.ElapsedMilliseconds));
                     if (result.Passed)
                         passCount++;
                     else
@@ -253,16 +253,18 @@ namespace TcXunit.Cli
 
         private sealed class TestReport
         {
-            public TestReport(string name, bool passed, IReadOnlyList<string> failures)
+            public TestReport(string name, bool passed, IReadOnlyList<string> failures, long durationMs)
             {
                 Name = name;
                 Passed = passed;
                 Failures = failures;
+                DurationMs = durationMs;
             }
 
             public string Name { get; }
             public bool Passed { get; }
             public IReadOnlyList<string> Failures { get; }
+            public long DurationMs { get; }
         }
     }
 }

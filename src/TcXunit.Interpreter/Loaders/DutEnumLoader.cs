@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Globalization;
 using System.IO;
 using System.Text.RegularExpressions;
 using TcXunit.Parser;
@@ -103,7 +102,7 @@ namespace TcXunit.Interpreter
                 if (assignIndex >= 0)
                 {
                     memberName = entry.Substring(0, assignIndex).Trim();
-                    value = int.Parse(entry.Substring(assignIndex + 2).Trim(), CultureInfo.InvariantCulture);
+                    value = ParseInitializerValue(entry.Substring(assignIndex + 2).Trim());
                 }
                 else
                 {
@@ -116,6 +115,29 @@ namespace TcXunit.Interpreter
             }
 
             return members;
+        }
+
+        // Parses an explicit member initializer's value text via the same
+        // Lexer/Parser numeric-literal handling every other integer literal
+        // in an ST body goes through (rather than a bare int.Parse), so an
+        // IEC 61131-3 based literal (e.g. "16#8", "2#1010") - not just plain
+        // decimal - resolves correctly instead of throwing FormatException
+        // (regression: an ENUM DUT member initializer isn't guaranteed to be
+        // decimal). Also covers a leading unary minus (e.g. "-1"); anything
+        // else (a non-literal constant expression) is out of scope, same as
+        // this file's existing "no parenthesised-expression initializers"
+        // note.
+        private static int ParseInitializerValue(string valueText)
+        {
+            switch (Parser.ParseExpression(valueText))
+            {
+                case IntLiteralExpr literal:
+                    return literal.Value;
+                case UnaryExpr { Op: "-", Operand: IntLiteralExpr literal }:
+                    return -literal.Value;
+                default:
+                    throw new FormatException($"Unsupported ENUM member initializer '{valueText}' - expected an integer literal");
+            }
         }
 
         public static IReadOnlyDictionary<string, string> Load(

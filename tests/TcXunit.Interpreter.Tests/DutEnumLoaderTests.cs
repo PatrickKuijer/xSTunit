@@ -159,6 +159,25 @@ namespace TcXunit.Interpreter.Tests
             Assert.Equal(2, members["TypeB"]);
         }
 
+        [Theory]
+        [InlineData("16#8", 8)]
+        [InlineData("8#17", 15)]
+        [InlineData("2#1010", 10)]
+        [InlineData("-1", -1)]
+        public void TryParseEnum_MemberWithBasedOrNegativeInitializer_ResolvesToDecimalValue(string initializer, int expected)
+        {
+            // Regression: an ENUM DUT member's explicit initializer isn't
+            // guaranteed to be a plain decimal literal - IEC 61131-3 SS2.4.2
+            // based-literal notation (<base>#<digits>) is also valid, and a
+            // bare int.Parse throws FormatException on it (e.g. "16#8").
+            var declaration = $"TYPE eBasedLiteral :\n(\n\tTypeA := {initializer},\n\tTypeB\n);\nEND_TYPE";
+
+            DutEnumLoader.TryParseEnum(declaration, out _, out _, out var members);
+
+            Assert.Equal(expected, members["TypeA"]);
+            Assert.Equal(expected + 1, members["TypeB"]);
+        }
+
         private static string DutXml(string typeName, string declaration) => $@"<?xml version=""1.0"" encoding=""utf-8""?>
 <TcPlcObject Version=""1.1.0.1"" ProductVersion=""3.1.4026.18"">
   <DUT Name=""{typeName}"" Id=""{{a1b2c3d4-0008-4a1a-8b1b-0000000000ff}}"">

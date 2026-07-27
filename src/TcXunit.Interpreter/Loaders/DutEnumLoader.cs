@@ -28,6 +28,17 @@ namespace TcXunit.Interpreter
             @"^TYPE\s+(?<name>\w+)\s*:\s*\((?<body>[^)]*)\)\s*(?<base>[A-Za-z_]\w*)?\s*;",
             RegexOptions.Compiled);
 
+        // Matches a single leading "{attribute '...'}"-style pragma line
+        // (e.g. "{attribute 'qualified_only'}") or a leading "// ..." line
+        // comment, which TwinCAT emits before the "TYPE Name :" header for
+        // DUTs with pragma attributes and/or a declaration comment. Neither
+        // is part of the enum's declaration shape, so they're stripped
+        // before EnumPattern is tried (mirrors real .TcDUT declaration text
+        // - see PLC repo's eModuleParameterDataTypes.TcDUT/
+        // eRemoteRegistrationOpcode.TcDUT).
+        private static readonly Regex LeadingPragmaOrCommentLine = new Regex(
+            @"\A\s*(\{[^\n\}]*\}|//[^\n]*)\s*", RegexOptions.Compiled);
+
         // Extracts (name, underlyingTypeName) from an ENUM DUT's
         // declaration text - e.g. "E_Color" / "INT" (the IEC 61131-3
         // default) from "TYPE E_Color : (Red, Green, Blue); END_TYPE", or
@@ -38,7 +49,11 @@ namespace TcXunit.Interpreter
             name = null;
             underlyingTypeName = null;
 
-            var match = EnumPattern.Match(declarationText.Replace("\r\n", "\n").Trim());
+            var text = declarationText.Replace("\r\n", "\n").Trim();
+            for (var lead = LeadingPragmaOrCommentLine.Match(text); lead.Success; lead = LeadingPragmaOrCommentLine.Match(text))
+                text = text.Substring(lead.Length);
+
+            var match = EnumPattern.Match(text);
             if (!match.Success)
                 return false;
 

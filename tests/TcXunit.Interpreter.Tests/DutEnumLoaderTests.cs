@@ -52,6 +52,32 @@ namespace TcXunit.Interpreter.Tests
         }
 
         [Fact]
+        public void TryParseEnum_LeadingAttributePragmas_AreSkipped()
+        {
+            const string declaration =
+                "{attribute 'qualified_only'}\n{attribute 'strict'}\nTYPE eModuleParameterDataTypes :\n(\n\tTypeBool := 0,\n\tTypeInt := 1\n);\nEND_TYPE";
+
+            var parsed = DutEnumLoader.TryParseEnum(declaration, out var name, out var underlying);
+
+            Assert.True(parsed);
+            Assert.Equal("eModuleParameterDataTypes", name);
+            Assert.Equal("INT", underlying);
+        }
+
+        [Fact]
+        public void TryParseEnum_LeadingAttributePragmasAndComment_AreSkipped()
+        {
+            const string declaration =
+                "{attribute 'qualified_only'}\n{attribute 'strict'}\n// Registration channel opcode\nTYPE eRemoteRegistrationOpcode :\n(\n\tAdd := 0,\n\tRemove := 1\n);\nEND_TYPE";
+
+            var parsed = DutEnumLoader.TryParseEnum(declaration, out var name, out var underlying);
+
+            Assert.True(parsed);
+            Assert.Equal("eRemoteRegistrationOpcode", name);
+            Assert.Equal("INT", underlying);
+        }
+
+        [Fact]
         public void TryParseEnum_AliasDeclaration_ReturnsFalse()
         {
             const string declaration = "TYPE T_MaxString : STRING(255);\nEND_TYPE";

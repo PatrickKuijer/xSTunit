@@ -540,6 +540,9 @@ namespace TcXunit.Interpreter
                         (int)Evaluate(RequireIntrinsicArg(call.MethodName, "n", args), frame));
                 }
 
+                if (call.MethodName == "SIZEOF")
+                    return EvaluateSizeOf(call.PositionalArgs[0], frame);
+
                 if (TryEvaluateCast(call, frame, out var castResult))
                     return castResult;
 

@@ -42,6 +42,8 @@ dotnet run --project src/TcXunit.Cli -- <path-to-POUs-directory>
 
 Scans `<path>` recursively for `*.TcPOU` files, finds any FB type that extends `TcUnit.FB_TestSuite` (directly or transitively), and runs its test methods. Exit code is `0` if all tests pass, `1` if any fail, `2` on usage/discovery errors. Multiple directory args are supported: TcXunit unions the POU sets from each, and errors out if duplicate type names collide across directories.
 
+Pass `--format json` for structured output (suites → tests → pass/fail/failure messages, plus overall pass/fail counts and exit code) instead of plain text — useful for a tool consuming results programmatically (e.g. an IDE extension) rather than a human reading console output.
+
 ## Issue tracking
 
 This project uses `bd` (beads). Run `bd prime` for workflow context, `bd ready` for available work.

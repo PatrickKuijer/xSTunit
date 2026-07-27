@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text.Json;
 using TcXunit.Interpreter;
 using TcXunit.Parser;
 
@@ -13,19 +14,63 @@ namespace TcXunit.Cli
     {
         public static int Run(string[] args, TextWriter output)
         {
+            // --format json|text (TcXunit prototype spike: structured output for
+            // non-console consumers, e.g. a VSIX tool window shelling out to the
+            // CLI instead of parsing plain-text lines). Accepted anywhere in args,
+            // both "--format json" and "--format=json"; everything else is a path.
+            var format = "text";
+            var paths = new List<string>();
+            for (var i = 0; i < args.Length; i++)
+            {
+                var arg = args[i];
+                if (arg.StartsWith("--format=", StringComparison.OrdinalIgnoreCase))
+                {
+                    format = arg.Substring("--format=".Length);
+                }
+                else if (string.Equals(arg, "--format", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (i + 1 >= args.Length)
+                    {
+                        output.WriteLine("error: --format requires a value (text|json)");
+                        return 2;
+                    }
+                    format = args[++i];
+                }
+                else
+                {
+                    paths.Add(arg);
+                }
+            }
+
+            if (!string.Equals(format, "text", StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(format, "json", StringComparison.OrdinalIgnoreCase))
+            {
+                output.WriteLine($"error: unknown --format value '{format}' (expected text|json)");
+                return 2;
+            }
+
+            var asJson = string.Equals(format, "json", StringComparison.OrdinalIgnoreCase);
+            args = paths.ToArray();
+
             if (args.Length == 0)
             {
-                output.WriteLine("usage: tcxunit run <path-to-POUs-directory> [<path-to-POUs-directory> ...]");
+                output.WriteLine("usage: tcxunit run <path-to-POUs-directory> [<path-to-POUs-directory> ...] [--format text|json]");
+                return 2;
+            }
+
+            int WriteError(string message)
+            {
+                if (asJson)
+                    output.WriteLine(JsonSerializer.Serialize(new ErrorReport(message), JsonOptions));
+                else
+                    output.WriteLine($"error: {message}");
                 return 2;
             }
 
             foreach (var path in args)
             {
                 if (!Directory.Exists(path))
-                {
-                    output.WriteLine($"error: path does not exist: {path}");
-                    return 2;
-                }
+                    return WriteError($"path does not exist: {path}");
             }
 
             IReadOnlyList<LoadedPou> loaded;
@@ -35,13 +80,11 @@ namespace TcXunit.Cli
             }
             catch (DuplicatePouTypeException ex)
             {
-                output.WriteLine($"error: {ex.Message}");
-                return 2;
+                return WriteError(ex.Message);
             }
             catch (TcPouRejectedException ex)
             {
-                output.WriteLine($"error: {ex.Message}");
-                return 2;
+                return WriteError(ex.Message);
             }
 
             var types = loaded.Select(l => l.Pou).ToList();
@@ -62,8 +105,7 @@ namespace TcXunit.Cli
             }
             catch (DuplicateStructTypeException ex)
             {
-                output.WriteLine($"error: {ex.Message}");
-                return 2;
+                return WriteError(ex.Message);
             }
 
             // ALIAS .TcDUT definitions (TcXunit-6hg, e.g. T_MaxString ->
@@ -90,23 +132,20 @@ namespace TcXunit.Cli
             }
             catch (DuplicateGvlNameException ex)
             {
-                output.WriteLine($"error: {ex.Message}");
-                return 2;
+                return WriteError(ex.Message);
             }
 
             var registry = new TypeRegistry(types, structTypes, gvls, aliases, enumMembers);
             var suiteNames = SuiteDiscovery.FindSuiteTypeNames(registry, types.Select(t => t.Name));
 
             if (suiteNames.Count == 0)
-            {
-                output.WriteLine($"error: no TcUnit suites found under {string.Join(", ", args)}");
-                return 2;
-            }
+                return WriteError($"no TcUnit suites found under {string.Join(", ", args)}");
 
             var engine = new Engine(registry);
             var anyFailed = false;
             var passCount = 0;
             var failCount = 0;
+            var suiteReports = new List<SuiteReport>();
 
             foreach (var suiteName in suiteNames)
             {
@@ -117,15 +156,20 @@ namespace TcXunit.Cli
                 }
                 catch (Exception ex)
                 {
-                    output.WriteLine($"{suiteName}: FAIL ({ex.Message})");
+                    if (!asJson)
+                        output.WriteLine($"{suiteName}: FAIL ({ex.Message})");
+                    suiteReports.Add(new SuiteReport(suiteName, ex.Message, Array.Empty<TestReport>()));
                     failCount++;
                     anyFailed = true;
                     continue;
                 }
 
+                var testReports = new List<TestReport>();
                 foreach (var result in results)
                 {
-                    output.WriteLine(result.ToString());
+                    if (!asJson)
+                        output.WriteLine(result.ToString());
+                    testReports.Add(new TestReport(result.Name, result.Passed, result.Failures.Select(f => f.Message).ToArray()));
                     if (result.Passed)
                         passCount++;
                     else
@@ -134,10 +178,86 @@ namespace TcXunit.Cli
                         anyFailed = true;
                     }
                 }
+
+                suiteReports.Add(new SuiteReport(suiteName, null, testReports));
             }
 
-            output.WriteLine($"{passCount} passed, {failCount} failed");
-            return anyFailed ? 1 : 0;
+            var exitCode = anyFailed ? 1 : 0;
+
+            if (asJson)
+            {
+                output.WriteLine(JsonSerializer.Serialize(new RunReport(suiteReports, passCount, failCount, exitCode), JsonOptions));
+            }
+            else
+            {
+                output.WriteLine($"{passCount} passed, {failCount} failed");
+            }
+
+            return exitCode;
+        }
+
+        private static readonly JsonSerializerOptions JsonOptions = new JsonSerializerOptions
+        {
+            WriteIndented = true,
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+        };
+
+        private sealed class ErrorReport
+        {
+            public ErrorReport(string error)
+            {
+                Error = error;
+            }
+
+            public string Error { get; }
+        }
+
+        // Shapes for `--format json` (TcXunit prototype spike: structured output
+        // for non-console consumers such as a VSIX tool window). Deliberately
+        // separate from TestCaseResult/AssertionFailure so the wire format is
+        // stable even if the interpreter's internal model changes.
+        private sealed class RunReport
+        {
+            public RunReport(IReadOnlyList<SuiteReport> suites, int passed, int failed, int exitCode)
+            {
+                Suites = suites;
+                Passed = passed;
+                Failed = failed;
+                ExitCode = exitCode;
+            }
+
+            public IReadOnlyList<SuiteReport> Suites { get; }
+            public int Passed { get; }
+            public int Failed { get; }
+            public int ExitCode { get; }
+        }
+
+        private sealed class SuiteReport
+        {
+            public SuiteReport(string name, string error, IReadOnlyList<TestReport> tests)
+            {
+                Name = name;
+                Error = error;
+                Tests = tests;
+            }
+
+            public string Name { get; }
+            public string Error { get; }
+            public IReadOnlyList<TestReport> Tests { get; }
+        }
+
+        private sealed class TestReport
+        {
+            public TestReport(string name, bool passed, IReadOnlyList<string> failures)
+            {
+                Name = name;
+                Passed = passed;
+                Failures = failures;
+            }
+
+            public string Name { get; }
+            public bool Passed { get; }
+            public IReadOnlyList<string> Failures { get; }
         }
     }
 }

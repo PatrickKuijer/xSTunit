@@ -193,6 +193,36 @@ namespace TcXunit.Interpreter
                     $"Operator '{binary.Op}' is not supported between {leftVal?.GetType().Name ?? "null"} and " +
                     $"{rightVal?.GetType().Name ?? "null"}; BOOL only supports '=' and '<>' against another BOOL");
 
+            // TcXunit-ixh: STRING/WSTRING operands (both are represented as
+            // boxed System.String - StringTypeInfo distinguishes them only at
+            // declaration time) have no numeric representation, so without
+            // this guard they fall through to the int-cast path below and
+            // throw a raw InvalidCastException. IEC 61131-3 defines ordering
+            // for ANY_STRING as ordinal/lexicographic comparison (TwinCAT
+            // compares string data byte-by-byte), so all six comparison
+            // operators are supported here, unlike the BOOL guard above which
+            // only allows '=' and '<>'.
+            if (leftVal is string ls && rightVal is string rs)
+                return binary.Op switch
+                {
+                    "=" => ls == rs,
+                    "<>" => ls != rs,
+                    "<" => string.CompareOrdinal(ls, rs) < 0,
+                    ">" => string.CompareOrdinal(ls, rs) > 0,
+                    "<=" => string.CompareOrdinal(ls, rs) <= 0,
+                    ">=" => string.CompareOrdinal(ls, rs) >= 0,
+                    _ => throw new NotSupportedException(
+                        $"Operator '{binary.Op}' is not supported between STRING operands"),
+                };
+
+            // Mismatched STRING/non-STRING (e.g. sVal = 1) has no valid
+            // IEC 61131-3 semantics; guard here for a descriptive message
+            // instead of falling through to the int-cast numeric path.
+            if (leftVal is string || rightVal is string)
+                throw new NotSupportedException(
+                    $"Operator '{binary.Op}' is not supported between {leftVal?.GetType().Name ?? "null"} and " +
+                    $"{rightVal?.GetType().Name ?? "null"}; STRING can only be compared against another STRING");
+
             // INT->LONG->REAL->LREAL implicit widening: promote both operands to
             // their common arithmetic type, per TwinCAT's "smaller to larger is
             // implicit" arithmetic promotion rule.

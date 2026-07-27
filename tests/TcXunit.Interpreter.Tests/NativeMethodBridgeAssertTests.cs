@@ -207,5 +207,59 @@ namespace TcXunit.Interpreter.Tests
 
             Assert.True(Assert.Single(engine.RunSuite("FB_MySuite")).Passed);
         }
+
+        // TcXunit-gd2.3: AssertEquals_TIME/LTIME - E2E proof they're
+        // reachable through NativeMethodBridge from interpreted ST, driven
+        // by real TIME#/LTIME# literals (see TimeTypeTests.cs for how the
+        // interpreter evaluates these to boxed uint ms / ulong ns).
+        [Fact]
+        public void RunSuite_AssertEqualsTime_NamedArgs_ReachableThroughInterpreter()
+        {
+            var engine = NewSuiteEngine(
+                "TEST('t');\n" +
+                "AssertEquals_TIME(Expected := T#1s500ms, Actual := TIME#1s500ms, Message := 'ok');\n" +
+                "TEST_FINISHED();");
+
+            Assert.True(Assert.Single(engine.RunSuite("FB_MySuite")).Passed);
+        }
+
+        [Fact]
+        public void RunSuite_AssertEqualsTime_PositionalArgs_ReportsFailureWithExpAct()
+        {
+            var engine = NewSuiteEngine(
+                "TEST('t');\n" +
+                "AssertEquals_TIME(T#1s500ms, T#2s, 'mismatch');\n" +
+                "TEST_FINISHED();");
+
+            var result = Assert.Single(engine.RunSuite("FB_MySuite"));
+
+            Assert.False(result.Passed);
+            Assert.Contains("EXP: 1500, ACT: 2000", result.Failures[0].Message);
+        }
+
+        [Fact]
+        public void RunSuite_AssertEqualsLtime_NamedArgs_ReachableThroughInterpreter()
+        {
+            var engine = NewSuiteEngine(
+                "TEST('t');\n" +
+                "AssertEquals_LTIME(Expected := LTIME#1s2us44ns, Actual := LT#1s2us44ns, Message := 'ok');\n" +
+                "TEST_FINISHED();");
+
+            Assert.True(Assert.Single(engine.RunSuite("FB_MySuite")).Passed);
+        }
+
+        [Fact]
+        public void RunSuite_AssertEqualsLtime_PositionalArgs_ReportsFailureWithExpAct()
+        {
+            var engine = NewSuiteEngine(
+                "TEST('t');\n" +
+                "AssertEquals_LTIME(LTIME#1ms, LTIME#2ms, 'mismatch');\n" +
+                "TEST_FINISHED();");
+
+            var result = Assert.Single(engine.RunSuite("FB_MySuite"));
+
+            Assert.False(result.Passed);
+            Assert.Contains("EXP: 1000000, ACT: 2000000", result.Failures[0].Message);
+        }
     }
 }

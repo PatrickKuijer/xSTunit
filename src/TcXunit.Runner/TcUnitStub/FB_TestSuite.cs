@@ -270,5 +270,14 @@ namespace TcXunit.Runner.TcUnitStub
 
         protected void AssertEquals_ULINT(ulong expected, ulong actual, string message) =>
             AssertEqualsScalar("ULINT", expected, actual, null, message);
+
+        // TIME/LTIME (TcXunit-gd2.3): durations compare exactly (no Delta
+        // param), matching upstream - mirrors the DINT/DWORD-style
+        // exact-match forward shape, not REAL/LREAL's delta-based one.
+        protected void AssertEquals_TIME(uint expected, uint actual, string message) =>
+            AssertEqualsScalar("TIME", expected, actual, null, message);
+
+        protected void AssertEquals_LTIME(ulong expected, ulong actual, string message) =>
+            AssertEqualsScalar("LTIME", expected, actual, null, message);
     }
 }

@@ -508,5 +508,81 @@ namespace TcXunit.Runner.Tests
             Assert.Equal($"{1.0} +/- {0.1}", type.FormatExpected(1.0, 0.1));
             Assert.Equal($"{1.2}", type.FormatActual(1.2));
         }
+
+        // TIME (TcXunit-gd2.3): boxed C# uint milliseconds per
+        // TimeLiteral.ParseTimeMs, compared exactly (no Delta).
+        [Theory]
+        [InlineData(0u, 0u, true)]
+        [InlineData(uint.MaxValue, uint.MaxValue, true)]
+        [InlineData(0u, uint.MaxValue, false)]
+        [InlineData(1_500u, 1_500u, true)]
+        [InlineData(1_500u, 1_501u, false)]
+        public void Time_AreEqual(uint expected, uint actual, bool expectedResult)
+        {
+            var type = ScalarAssertType.Registry["TIME"];
+
+            Assert.Equal(expectedResult, type.AreEqual(expected, actual, null));
+        }
+
+        [Fact]
+        public void Time_HasDelta_IsFalse()
+        {
+            Assert.False(ScalarAssertType.Registry["TIME"].HasDelta);
+        }
+
+        [Fact]
+        public void Time_Format_UsesUnsignedIntValue()
+        {
+            var type = ScalarAssertType.Registry["TIME"];
+
+            Assert.Equal("0", type.FormatExpected(uint.MinValue, null));
+            Assert.Equal(uint.MaxValue.ToString(), type.FormatActual(uint.MaxValue));
+        }
+
+        [Fact]
+        public void Time_AreEqual_AcceptsBoxedIntFromInterpretedLiteral()
+        {
+            var type = ScalarAssertType.Registry["TIME"];
+
+            Assert.True(type.AreEqual(100, 100, null));
+        }
+
+        // LTIME (TcXunit-gd2.3): boxed C# ulong nanoseconds per
+        // TimeLiteral.ParseLTimeNs, compared exactly (no Delta).
+        [Theory]
+        [InlineData(0ul, 0ul, true)]
+        [InlineData(ulong.MaxValue, ulong.MaxValue, true)]
+        [InlineData(0ul, ulong.MaxValue, false)]
+        [InlineData(1_000_002_044ul, 1_000_002_044ul, true)]
+        [InlineData(1_000_002_044ul, 1_000_002_045ul, false)]
+        public void Ltime_AreEqual(ulong expected, ulong actual, bool expectedResult)
+        {
+            var type = ScalarAssertType.Registry["LTIME"];
+
+            Assert.Equal(expectedResult, type.AreEqual(expected, actual, null));
+        }
+
+        [Fact]
+        public void Ltime_HasDelta_IsFalse()
+        {
+            Assert.False(ScalarAssertType.Registry["LTIME"].HasDelta);
+        }
+
+        [Fact]
+        public void Ltime_Format_UsesUnsignedLongValue()
+        {
+            var type = ScalarAssertType.Registry["LTIME"];
+
+            Assert.Equal("0", type.FormatExpected(ulong.MinValue, null));
+            Assert.Equal(ulong.MaxValue.ToString(), type.FormatActual(ulong.MaxValue));
+        }
+
+        [Fact]
+        public void Ltime_AreEqual_AcceptsBoxedIntFromInterpretedLiteral()
+        {
+            var type = ScalarAssertType.Registry["LTIME"];
+
+            Assert.True(type.AreEqual(100, 100, null));
+        }
     }
 }

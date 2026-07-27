@@ -196,6 +196,29 @@ namespace TcXunit.Runner.TcUnitStub
                     areEqual: (expected, actual, delta) => AsULong64(expected) == AsULong64(actual),
                     formatExpected: (expected, delta) => AsULong64(expected).ToString(),
                     formatActual: actual => AsULong64(actual).ToString()),
+
+                // TIME/LTIME (TcXunit-gd2.3): TimeLiteral.cs already gives the
+                // interpreter a numeric representation for both - TIME as
+                // uint milliseconds, LTIME as ulong nanoseconds - so, like
+                // DWORD/UDINT and LWORD/ULINT above, they slot straight into
+                // the integer-family compare/format helpers. Upstream TcUnit
+                // has no delta-based AssertEquals_TIME/LTIME (durations
+                // compare exactly, not within tolerance), so these use exact
+                // equality the same way DWORD/LWORD do rather than REAL's
+                // delta-based compare.
+                ["TIME"] = new ScalarAssertType(
+                    "TIME",
+                    hasDelta: false,
+                    areEqual: (expected, actual, delta) => WrapUInt(expected) == WrapUInt(actual),
+                    formatExpected: (expected, delta) => WrapUInt(expected).ToString(),
+                    formatActual: actual => WrapUInt(actual).ToString()),
+
+                ["LTIME"] = new ScalarAssertType(
+                    "LTIME",
+                    hasDelta: false,
+                    areEqual: (expected, actual, delta) => AsULong64(expected) == AsULong64(actual),
+                    formatExpected: (expected, delta) => AsULong64(expected).ToString(),
+                    formatActual: actual => AsULong64(actual).ToString()),
             };
 
         // Accepts any boxed integer shape a Cell or C# fixture parameter

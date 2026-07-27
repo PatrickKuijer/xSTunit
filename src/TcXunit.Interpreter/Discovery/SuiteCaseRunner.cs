@@ -236,7 +236,7 @@ namespace TcXunit.Interpreter
             // registered into the same alias map so SIZEOF() and every other
             // ResolveAlias call site resolves an enum type name to its
             // underlying integer type without a separate lookup path.
-            var enumAliases = DutEnumLoader.Load(pouDirectories, out var enumSkipped);
+            var enumAliases = DutEnumLoader.Load(pouDirectories, out var enumSkipped, out var enumMembers);
             skipped.AddRange(enumSkipped);
             foreach (var enumAlias in enumAliases)
                 aliases[enumAlias.Key] = enumAlias.Value;
@@ -261,7 +261,7 @@ namespace TcXunit.Interpreter
                 skipped.Add(new SkippedFile(ex.GvlName, ex.Message));
             }
 
-            return new TypeRegistry(types, structTypes, gvls, aliases);
+            return new TypeRegistry(types, structTypes, gvls, aliases, enumMembers);
         }
     }
 }

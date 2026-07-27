@@ -76,7 +76,8 @@ namespace TcXunit.Cli
             // registered into the same alias map so SIZEOF() and every other
             // ResolveAlias call site resolves an enum type name to its
             // underlying integer type without a separate lookup path.
-            foreach (var enumAlias in DutEnumLoader.Load(args, out _))
+            var enumAliases = DutEnumLoader.Load(args, out _, out var enumMembers);
+            foreach (var enumAlias in enumAliases)
                 aliases[enumAlias.Key] = enumAlias.Value;
 
             // .TcGVL global variable lists (TcXunit-71o): shared with
@@ -93,7 +94,7 @@ namespace TcXunit.Cli
                 return 2;
             }
 
-            var registry = new TypeRegistry(types, structTypes, gvls, aliases);
+            var registry = new TypeRegistry(types, structTypes, gvls, aliases, enumMembers);
             var suiteNames = SuiteDiscovery.FindSuiteTypeNames(registry, types.Select(t => t.Name));
 
             if (suiteNames.Count == 0)

@@ -1,4 +1,6 @@
+using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Text.RegularExpressions;
 using TcXunit.Parser;
@@ -39,15 +41,20 @@ namespace TcXunit.Interpreter
         private static readonly Regex LeadingPragmaOrCommentLine = new Regex(
             @"\A\s*(\{[^\n\}]*\}|//[^\n]*)\s*", RegexOptions.Compiled);
 
-        // Extracts (name, underlyingTypeName) from an ENUM DUT's
+        // Extracts (name, underlyingTypeName, members) from an ENUM DUT's
         // declaration text - e.g. "E_Color" / "INT" (the IEC 61131-3
         // default) from "TYPE E_Color : (Red, Green, Blue); END_TYPE", or
         // "eModuleParameterDataTypes" / "DINT" when the DUT declares an
-        // explicit base type after the member list's closing paren.
-        public static bool TryParseEnum(string declarationText, out string name, out string underlyingTypeName)
+        // explicit base type after the member list's closing paren. members
+        // is the member-name -> ordinal-value table (TcXunit-rk3), parsed
+        // from the same body capture group used above - never a second scan
+        // of the DUT file.
+        public static bool TryParseEnum(
+            string declarationText, out string name, out string underlyingTypeName, out IReadOnlyDictionary<string, int> members)
         {
             name = null;
             underlyingTypeName = null;
+            members = null;
 
             var text = declarationText.Replace("\r\n", "\n").Trim();
             for (var lead = LeadingPragmaOrCommentLine.Match(text); lead.Success; lead = LeadingPragmaOrCommentLine.Match(text))
@@ -62,14 +69,56 @@ namespace TcXunit.Interpreter
             underlyingTypeName = baseGroup.Success && baseGroup.Value.Length > 0
                 ? baseGroup.Value
                 : DefaultUnderlyingType;
+            members = ParseMembers(match.Groups["body"].Value);
             return true;
         }
 
+        // Splits the member-list body (e.g. "Red,\n\tGreen,\n\tBlue" or
+        // "Ok := 0,\n\tError := 1") into member -> ordinal-value pairs,
+        // following standard IEC 61131-3 enum numbering: an explicit
+        // ":=" initializer is used verbatim, an unspecified member is one
+        // greater than the previous member's value, and the first
+        // unspecified member (no preceding member at all) defaults to 0.
+        private static IReadOnlyDictionary<string, int> ParseMembers(string body)
+        {
+            var members = new Dictionary<string, int>();
+            var nextValue = 0;
+
+            foreach (var rawEntry in body.Split(','))
+            {
+                var entry = rawEntry.Trim();
+                if (entry.Length == 0)
+                    continue;
+
+                var assignIndex = entry.IndexOf(":=", StringComparison.Ordinal);
+                string memberName;
+                int value;
+                if (assignIndex >= 0)
+                {
+                    memberName = entry.Substring(0, assignIndex).Trim();
+                    value = int.Parse(entry.Substring(assignIndex + 2).Trim(), CultureInfo.InvariantCulture);
+                }
+                else
+                {
+                    memberName = entry;
+                    value = nextValue;
+                }
+
+                members[memberName] = value;
+                nextValue = value + 1;
+            }
+
+            return members;
+        }
+
         public static IReadOnlyDictionary<string, string> Load(
-            IReadOnlyList<string> pouDirectories, out List<SkippedFile> skipped)
+            IReadOnlyList<string> pouDirectories,
+            out List<SkippedFile> skipped,
+            out IReadOnlyDictionary<string, IReadOnlyDictionary<string, int>> memberTables)
         {
             skipped = new List<SkippedFile>();
             var enums = new Dictionary<string, string>();
+            var members = new Dictionary<string, IReadOnlyDictionary<string, int>>();
 
             foreach (var file in MultiDirectoryPouLoader.FindDutFiles(pouDirectories))
             {
@@ -80,10 +129,14 @@ namespace TcXunit.Interpreter
                     continue;
                 }
 
-                if (TryParseEnum(dut.DeclarationText, out var name, out var underlyingTypeName))
+                if (TryParseEnum(dut.DeclarationText, out var name, out var underlyingTypeName, out var enumMembers))
+                {
                     enums[name] = underlyingTypeName;
+                    members[name] = enumMembers;
+                }
             }
 
+            memberTables = members;
             return enums;
         }
     }

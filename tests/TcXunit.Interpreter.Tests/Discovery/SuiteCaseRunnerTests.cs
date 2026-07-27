@@ -350,6 +350,81 @@ TEST_FINISHED();]]></ST>
             }
         }
 
+        private const string ModuleParameterDataTypesDutXml = @"<?xml version=""1.0"" encoding=""utf-8""?>
+<TcPlcObject Version=""1.1.0.1"" ProductVersion=""3.1.4026.18"">
+  <DUT Name=""eModuleParameterDataTypes"" Id=""{a1b2c3d4-000a-4a1a-8b1b-0000000000ff}"">
+    <Declaration><![CDATA[TYPE eModuleParameterDataTypes :
+(
+	TypeBool,
+	TypeByte,
+	TypeInt,
+	TypeDint,
+	TypeLreal
+);
+END_TYPE]]></Declaration>
+  </DUT>
+</TcPlcObject>";
+
+        private const string EnumTestsPouXml = @"<?xml version=""1.0"" encoding=""utf-8""?>
+<TcPlcObject Version=""1.1.0.1"" ProductVersion=""3.1.4026.18"">
+  <POU Name=""FB_EnumTests"" Id=""{a1b2c3d4-000b-4a1a-8b1b-0000000000ff}"" SpecialFunc=""None"">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_EnumTests EXTENDS TcUnit.FB_TestSuite]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[QualifiedEnumLiteralResolvesToMemberValue();]]></ST>
+    </Implementation>
+    <Method Name=""QualifiedEnumLiteralResolvesToMemberValue"" Id=""{a1b2c3d4-000b-4a1a-8b1b-000000000002}"">
+      <Declaration><![CDATA[METHOD PRIVATE QualifiedEnumLiteralResolvesToMemberValue
+VAR
+	actual : INT;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('QualifiedEnumLiteralResolvesToMemberValue');
+
+actual := eModuleParameterDataTypes.TypeLreal;
+
+AssertEquals_INT(Expected := 4,
+                  Actual := actual,
+                  Message := 'qualified enum DUT literal resolves to member ordinal');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+  </POU>
+</TcPlcObject>";
+
+        [Fact]
+        public void DiscoverCases_QualifiedEnumDutLiteral_ResolvesAndAssertsMemberValue()
+        {
+            // TcXunit-rk3 end-to-end regression: a fully-qualified ENUM DUT
+            // literal (eModuleParameterDataTypes.TypeLreal) referenced from a
+            // suite method body must resolve through DutEnumLoader's member
+            // table registered on TypeRegistry, unblocking the PLC repo's
+            // FB_RemoteWireRecordsTests suite pattern.
+            var tempDir = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "tcxunit-enumliteral-" + Guid.NewGuid()));
+            try
+            {
+                File.WriteAllText(
+                    Path.Combine(tempDir.FullName, "eModuleParameterDataTypes.TcDUT"), ModuleParameterDataTypesDutXml);
+                File.WriteAllText(Path.Combine(tempDir.FullName, "FB_EnumTests.TcPOU"), EnumTestsPouXml);
+
+                var cases = SuiteCaseRunner.DiscoverCases(tempDir.FullName);
+
+                Assert.Equal(
+                    new[] { ("FB_EnumTests", "QualifiedEnumLiteralResolvesToMemberValue") },
+                    cases.Select(c => (c.SuiteName, c.CaseName)));
+
+                var result = SuiteCaseRunner.RunCase(
+                    tempDir.FullName, "FB_EnumTests", "QualifiedEnumLiteralResolvesToMemberValue");
+
+                Assert.True(result.Passed, result.ToString());
+            }
+            finally
+            {
+                Directory.Delete(tempDir.FullName, recursive: true);
+            }
+        }
+
         private const string MalformedXmlDut = @"<?xml version=""1.0"" encoding=""utf-8""?>
 <TcPlcObject Version=""1.1.0.1"" ProductVersion=""3.1.4026.18"">
   <DUT Name=""ST_Broken"" Id=""{a1b2c3d4-0005-4a1a-8b1b-0000000000ff}"">

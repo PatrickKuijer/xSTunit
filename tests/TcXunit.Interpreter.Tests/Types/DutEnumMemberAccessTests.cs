@@ -1,0 +1,136 @@
+using System.Collections.Generic;
+using TcXunit.Interpreter;
+using TcXunit.Parser;
+using Xunit;
+
+namespace TcXunit.Interpreter.Tests
+{
+    // TcXunit-rk3: a fully-qualified ENUM literal (EnumTypeName.MemberName,
+    // IEC 61131-3 SS2.4.3) for a user-defined ENUM DUT must resolve to the
+    // member's int value - the DUT-sourced counterpart to BuiltinEnumTests'
+    // TcEventSeverity coverage, backed by TypeRegistry.TryGetEnumMembers
+    // (populated from DutEnumLoader.Load, not exercised directly here).
+    public class DutEnumMemberAccessTests
+    {
+        private static IReadOnlyDictionary<string, IReadOnlyDictionary<string, int>> EnumMembers(
+            string enumName, params (string Name, int Value)[] members)
+        {
+            var table = new Dictionary<string, int>();
+            foreach (var member in members)
+                table[member.Name] = member.Value;
+
+            return new Dictionary<string, IReadOnlyDictionary<string, int>> { [enumName] = table };
+        }
+
+        private static Engine NewEngine(
+            string implementation,
+            IReadOnlyDictionary<string, IReadOnlyDictionary<string, int>> enumMembers,
+            string varBlock = "VAR\n\tresult : DINT;\nEND_VAR",
+            IEnumerable<StructAst> structTypes = null)
+        {
+            var pou = new PouAst("FB_Wrapper", null, varBlock, implementation, new List<MethodAst>());
+            return new Engine(new TypeRegistry(new[] { pou }, structTypes, enumMembers: enumMembers));
+        }
+
+        [Fact]
+        public void QualifiedEnumLiteral_ScalarAssignment_ResolvesToMemberValue()
+        {
+            var enumMembers = EnumMembers("eModuleParameterDataTypes", ("TypeBool", 0), ("TypeLreal", 3));
+            var engine = NewEngine("result := eModuleParameterDataTypes.TypeLreal;", enumMembers);
+            var instance = engine.NewInstance("FB_Wrapper");
+
+            engine.CallMethod(instance, "StepCycles", new Expr[] { new IntLiteralExpr(1) }, new NamedArg[0], null, null);
+
+            Assert.Equal(3, instance.Fields["result"].Value);
+        }
+
+        [Fact]
+        public void QualifiedEnumLiteral_ExplicitInitializerWithGap_ResolvesToDeclaredValue()
+        {
+            // TcXunit-rk3 user story 4: first explicit initializer is 5,
+            // gaps/offsets in the DUT source must be respected exactly.
+            var enumMembers = EnumMembers("eModuleParameterDataTypes", ("TypeBool", 5), ("TypeByte", 6), ("TypeInt", 7));
+            var engine = NewEngine("result := eModuleParameterDataTypes.TypeInt;", enumMembers);
+            var instance = engine.NewInstance("FB_Wrapper");
+
+            engine.CallMethod(instance, "StepCycles", new Expr[] { new IntLiteralExpr(1) }, new NamedArg[0], null, null);
+
+            Assert.Equal(7, instance.Fields["result"].Value);
+        }
+
+        [Fact]
+        public void QualifiedEnumLiteral_StructFieldOfArrayElement_AssignsMemberValue()
+        {
+            var stSendValue = StructDeclParser.Parse(@"TYPE ST_SendValue :
+STRUCT
+	eType : INT;
+END_STRUCT
+END_TYPE");
+            var enumMembers = EnumMembers("eModuleParameterDataTypes", ("TypeBool", 0), ("TypeLreal", 3));
+            var engine = NewEngine(
+                "aValues[1].eType := eModuleParameterDataTypes.TypeLreal;",
+                enumMembers,
+                varBlock: "VAR\n\taValues : ARRAY[0..1] OF ST_SendValue;\nEND_VAR",
+                structTypes: new[] { stSendValue });
+            var instance = engine.NewInstance("FB_Wrapper");
+
+            engine.CallMethod(instance, "StepCycles", new Expr[] { new IntLiteralExpr(1) }, new NamedArg[0], null, null);
+
+            var values = (ArrayValue)instance.Fields["aValues"].Value;
+            var element = (StructInstance)values.Elements[1];
+            Assert.Equal(3, element.Fields["eType"].Value);
+        }
+
+        [Fact]
+        public void QualifiedEnumLiteral_ComparedAgainstAssignedField_AreEqual()
+        {
+            var enumMembers = EnumMembers("eModuleParameterDataTypes", ("TypeBool", 0), ("TypeLreal", 3));
+            var engine = NewEngine(
+                "actual := eModuleParameterDataTypes.TypeLreal;\nresult := (actual = eModuleParameterDataTypes.TypeLreal);",
+                enumMembers,
+                varBlock: "VAR\n\tactual : INT;\n\tresult : BOOL;\nEND_VAR");
+            var instance = engine.NewInstance("FB_Wrapper");
+
+            engine.CallMethod(instance, "StepCycles", new Expr[] { new IntLiteralExpr(1) }, new NamedArg[0], null, null);
+
+            Assert.Equal(true, instance.Fields["result"].Value);
+        }
+
+        [Fact]
+        public void QualifiedEnumLiteral_UnknownMember_ThrowsMatchingBuiltinEnumErrorShape()
+        {
+            var enumMembers = EnumMembers("eModuleParameterDataTypes", ("TypeBool", 0), ("TypeLreal", 3));
+            var engine = NewEngine("result := eModuleParameterDataTypes.Bogus;", enumMembers);
+            var instance = engine.NewInstance("FB_Wrapper");
+
+            var ex = Assert.Throws<System.InvalidOperationException>(() =>
+                engine.CallMethod(instance, "StepCycles", new Expr[] { new IntLiteralExpr(1) }, new NamedArg[0], null, null));
+
+            Assert.Equal("Unknown enum member 'eModuleParameterDataTypes.Bogus'", ex.Message);
+        }
+
+        [Fact]
+        public void QualifiedEnumLiteral_LocalVariableSharesEnumTypeName_VariableWins()
+        {
+            // TcXunit-rk3 user story 7: a resolvable variable/cell always
+            // wins over enum-type-name resolution, mirroring the existing
+            // GVL-qualifier disambiguation rule (GvlGlobalsTests).
+            var stValue = StructDeclParser.Parse(@"TYPE ST_Value :
+STRUCT
+	TypeLreal : INT;
+END_STRUCT
+END_TYPE");
+            var enumMembers = EnumMembers("eModuleParameterDataTypes", ("TypeBool", 0), ("TypeLreal", 3));
+            var engine = NewEngine(
+                "result := eModuleParameterDataTypes.TypeLreal;",
+                enumMembers,
+                varBlock: "VAR\n\teModuleParameterDataTypes : ST_Value := (TypeLreal := 42);\n\tresult : INT;\nEND_VAR",
+                structTypes: new[] { stValue });
+            var instance = engine.NewInstance("FB_Wrapper");
+
+            engine.CallMethod(instance, "StepCycles", new Expr[] { new IntLiteralExpr(1) }, new NamedArg[0], null, null);
+
+            Assert.Equal(42, instance.Fields["result"].Value);
+        }
+    }
+}

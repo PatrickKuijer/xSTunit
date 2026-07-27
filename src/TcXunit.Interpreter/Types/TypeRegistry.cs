@@ -12,6 +12,15 @@ namespace TcXunit.Interpreter
         private readonly Dictionary<string, IReadOnlyList<VarDecl>> _gvls = new Dictionary<string, IReadOnlyList<VarDecl>>();
         private readonly Dictionary<string, string> _aliases = new Dictionary<string, string>();
 
+        // User-defined ENUM DUT member tables (enum-name -> member-name ->
+        // int-value, TcXunit-rk3), populated from DutEnumLoader.Load
+        // alongside the _aliases merge above - lets Engine.Expressions.cs
+        // resolve a qualified enum literal (EnumType.Member) the same way
+        // it already resolves BuiltinEnums.Types entries, without disturbing
+        // the existing SIZEOF()/ResolveAlias alias map.
+        private readonly Dictionary<string, IReadOnlyDictionary<string, int>> _enumMembers =
+            new Dictionary<string, IReadOnlyDictionary<string, int>>();
+
         // Parse-once caches (TcXunit-6af.4): Parser.ParseStatements/
         // VarBlockParser.Parse are pure functions of their input text, but
         // CallMethod/StepCycles/RunSuite re-parsed the same POU/method
@@ -32,7 +41,8 @@ namespace TcXunit.Interpreter
             IEnumerable<PouAst> types,
             IEnumerable<StructAst> structTypes = null,
             IEnumerable<GvlAst> gvls = null,
-            IEnumerable<KeyValuePair<string, string>> aliases = null)
+            IEnumerable<KeyValuePair<string, string>> aliases = null,
+            IEnumerable<KeyValuePair<string, IReadOnlyDictionary<string, int>>> enumMembers = null)
         {
             foreach (var type in types)
                 _types[type.Name] = type;
@@ -56,6 +66,10 @@ namespace TcXunit.Interpreter
             if (aliases != null)
                 foreach (var alias in aliases)
                     _aliases[alias.Key] = alias.Value;
+
+            if (enumMembers != null)
+                foreach (var enumMember in enumMembers)
+                    _enumMembers[enumMember.Key] = enumMember.Value;
         }
 
         public PouAst Get(string name) => _types.TryGetValue(name, out var type) ? type : null;
@@ -79,6 +93,13 @@ namespace TcXunit.Interpreter
         }
 
         public StructAst GetStruct(string name) => _structTypes.TryGetValue(name, out var structType) ? structType : null;
+
+        // Looks up a user-defined ENUM DUT's member-name -> int-value table
+        // by enum type name (TcXunit-rk3) - the DUT-sourced counterpart to
+        // BuiltinEnums.Types, consulted by Engine.Expressions.cs's
+        // FieldAccessExpr case for a qualified enum literal.
+        public bool TryGetEnumMembers(string typeName, out IReadOnlyDictionary<string, int> members) =>
+            _enumMembers.TryGetValue(typeName, out members);
 
         public IReadOnlyList<VarDecl> GetGvlDecls(string name) =>
             _gvls.TryGetValue(name, out var decls) ? decls : null;

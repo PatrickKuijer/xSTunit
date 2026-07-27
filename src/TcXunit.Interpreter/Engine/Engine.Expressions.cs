@@ -64,6 +64,22 @@ namespace TcXunit.Interpreter
                         return enumValue;
                     }
 
+                    // EnumTypeName.Member where EnumTypeName names a
+                    // user-defined ENUM DUT rather than a variable
+                    // (TcXunit-rk3) - same "receiver identifier doesn't
+                    // resolve as a variable" shape as the built-in-enum
+                    // check above, checked right alongside it so a
+                    // user-defined enum resolves the same way a built-in
+                    // one already does.
+                    if (fieldAccess.Receiver is IdentifierExpr dutEnumTypeId &&
+                        frame.ResolveCell(dutEnumTypeId.Name) == null &&
+                        _registry.TryGetEnumMembers(dutEnumTypeId.Name, out var dutEnumMembers))
+                    {
+                        if (!dutEnumMembers.TryGetValue(fieldAccess.FieldName, out var dutEnumValue))
+                            throw new InvalidOperationException($"Unknown enum member '{dutEnumTypeId.Name}.{fieldAccess.FieldName}'");
+                        return dutEnumValue;
+                    }
+
                     // GvlName.field where GvlName isn't a variable/field in
                     // scope but a registered GVL (TcXunit-71o) - same
                     // "receiver identifier doesn't resolve as a variable"

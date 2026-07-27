@@ -39,6 +39,17 @@ namespace TcXunit.Interpreter
         public new void AssertEqualsScalar(string typeName, object expected, object actual, object delta, string message) =>
             base.AssertEqualsScalar(typeName, expected, actual, delta, message);
 
+        // Type-erased AssertEquals(ANY) dispatcher (TcXunit-gd2.5): thin
+        // forward, same shape as AssertEqualsScalar above - NativeMethodBridge
+        // has already resolved Expected/Actual's declared IEC type names
+        // (via Engine.Invocation.cs, before they were evaluated away to bare
+        // CLR values) by the time this is called.
+        public void AssertEqualsAnyCall(
+            string expectedTypeName, object expectedValue,
+            string actualTypeName, object actualValue,
+            string message) =>
+            AssertEqualsAny(expectedTypeName, expectedValue, actualTypeName, actualValue, message);
+
         public IReadOnlyList<TestCaseResult> Collect() => Run();
     }
 }

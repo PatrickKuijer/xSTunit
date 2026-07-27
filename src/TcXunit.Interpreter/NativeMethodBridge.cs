@@ -13,7 +13,8 @@ namespace TcXunit.Interpreter
             TcUnitSuiteHost host,
             string methodName,
             IReadOnlyList<object> positional,
-            IReadOnlyDictionary<string, object> named)
+            IReadOnlyDictionary<string, object> named,
+            IReadOnlyDictionary<string, string> anyTypeNames = null)
         {
             switch (methodName)
             {
@@ -40,6 +41,27 @@ namespace TcXunit.Interpreter
                     {
                         var args = ResolveArgs(ConditionAssertParamNames, positional, named);
                         host.AssertFalseCall((bool)args["Condition"], (string)args["Message"]);
+                        return null;
+                    }
+                case "AssertEquals":
+                    {
+                        // TcXunit-gd2.5: type-erased AssertEquals(Expected:
+                        // ANY, Actual: ANY, Message) dispatcher. Expected/
+                        // Actual's declared IEC type names are resolved by
+                        // Engine.Invocation.cs (from the argument
+                        // expression, before evaluation) and passed in via
+                        // anyTypeNames, since NativeMethodBridge only ever
+                        // sees the already-evaluated CLR values here -
+                        // which, for several IEC scalar types, are
+                        // ambiguous/shared CLR representations (see
+                        // ScalarAssertType.cs) and can't be told apart on
+                        // their own.
+                        var args = ResolveArgs(ScalarAssertParamNames, positional, named);
+                        string expectedTypeName = null;
+                        string actualTypeName = null;
+                        anyTypeNames?.TryGetValue("Expected", out expectedTypeName);
+                        anyTypeNames?.TryGetValue("Actual", out actualTypeName);
+                        host.AssertEqualsAnyCall(expectedTypeName, args["Expected"], actualTypeName, args["Actual"], (string)args["Message"]);
                         return null;
                     }
                 default:

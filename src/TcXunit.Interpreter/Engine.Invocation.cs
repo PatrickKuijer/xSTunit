@@ -150,7 +150,31 @@ namespace TcXunit.Interpreter
                 {
                     var evaluatedPositional = positionalArgs.Select(e => Evaluate(e, callerFrame)).ToList();
                     var evaluatedNamed = namedArgs.ToDictionary(a => a.Name, a => Evaluate(a.Value, callerFrame));
-                    return NativeMethodBridge.Invoke(instance.NativeSuiteHost, methodName, evaluatedPositional, evaluatedNamed);
+
+                    // TcXunit-gd2.5: AssertEquals(Expected: ANY, Actual: ANY,
+                    // Message) needs Expected/Actual's *declared* IEC type to
+                    // pick the matching AssertEquals_<TYPE> - the interpreter
+                    // has no real ANY value carrying its own runtime type tag
+                    // (unlike a TwinCAT ANY struct's TypeClass/pValue/diSize),
+                    // so this resolves it from the *expression* the same way
+                    // SIZEOF() does (Engine.SizeOf.cs), before it's evaluated
+                    // away to a bare CLR value above - several IEC scalar
+                    // types share the same CLR representation once evaluated
+                    // (see IecNumericType.cs/ScalarAssertType.cs) and can't be
+                    // told apart from the value alone.
+                    IReadOnlyDictionary<string, string> anyTypeNames = null;
+                    if (methodName == "AssertEquals")
+                    {
+                        var expectedExpr = ResolveNamedOrPositionalArg("AssertEquals", "Expected", 0, positionalArgs, namedArgs);
+                        var actualExpr = ResolveNamedOrPositionalArg("AssertEquals", "Actual", 1, positionalArgs, namedArgs);
+                        anyTypeNames = new Dictionary<string, string>
+                        {
+                            ["Expected"] = ResolveDeclaredTypeName(expectedExpr, callerFrame),
+                            ["Actual"] = ResolveDeclaredTypeName(actualExpr, callerFrame),
+                        };
+                    }
+
+                    return NativeMethodBridge.Invoke(instance.NativeSuiteHost, methodName, evaluatedPositional, evaluatedNamed, anyTypeNames);
                 }
 
                 throw new InvalidOperationException($"Method '{methodName}' not found starting from type '{startType}'");

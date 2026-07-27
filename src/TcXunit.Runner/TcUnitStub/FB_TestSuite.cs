@@ -282,5 +282,40 @@ namespace TcXunit.Runner.TcUnitStub
 
         protected void AssertEquals_LTIME(ulong expected, ulong actual, string message) =>
             AssertEqualsScalar("LTIME", expected, actual, null, message);
+
+        // Type-erased AssertEquals(Expected: ANY, Actual: ANY, Message)
+        // dispatcher (TcXunit-gd2.5, upstream FB_TestSuite.TcPOU ~line
+        // 2215). Upstream compares the ANY parameters' TypeClass tags
+        // first - a mismatch fails immediately (EXP/ACT show the two type
+        // names, values are never compared) - and only once they agree
+        // does it delegate to the matching AssertEquals_<TYPE>, always
+        // with Delta := 0.0 for REAL/LREAL (this overload takes no delta
+        // parameter, unlike AssertEquals_REAL/_LREAL). The interpreter has
+        // no ANY value carrying its own runtime type tag the way a real
+        // TwinCAT ANY struct's TypeClass/pValue/diSize does, so both type
+        // names are resolved by the caller (from the argument *expression*,
+        // mirroring how SIZEOF() resolves a declared type - see
+        // Engine.Invocation.cs/NativeMethodBridge.cs) and handed to this
+        // method already known.
+        protected void AssertEqualsAny(
+            string expectedTypeName, object expectedValue,
+            string actualTypeName, object actualValue,
+            string message)
+        {
+            if (expectedTypeName != actualTypeName)
+            {
+                Fail(
+                    $"(Type class = {expectedTypeName ?? "UNKNOWN"})",
+                    $"(Type class = {actualTypeName ?? "UNKNOWN"})",
+                    message);
+                return;
+            }
+
+            if (!ScalarAssertType.Registry.ContainsKey(expectedTypeName ?? string.Empty))
+                throw new NotSupportedException(
+                    $"AssertEquals(ANY) doesn't support type '{expectedTypeName}' yet (grow-on-demand, TcXunit-gd2.5).");
+
+            AssertEqualsScalar(expectedTypeName, expectedValue, actualValue, 0.0, message);
+        }
     }
 }

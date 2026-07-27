@@ -620,5 +620,92 @@ namespace TcXunit.Runner.Tests
 
             Assert.True(type.AreEqual(100, 100, null));
         }
+
+        // DATE/DATE_AND_TIME/TIME_OF_DAY (TcXunit-gd2.13): all boxed C#
+        // uint per DateTimeLiteral.cs, compared exactly (no Delta), same
+        // shape as TIME above.
+        [Theory]
+        [InlineData(0u, 0u, true)]
+        [InlineData(uint.MaxValue, uint.MaxValue, true)]
+        [InlineData(0u, uint.MaxValue, false)]
+        [InlineData(1_704_067_200u, 1_704_067_200u, true)]
+        [InlineData(1_704_067_200u, 1_704_067_201u, false)]
+        public void Date_AreEqual(uint expected, uint actual, bool expectedResult)
+        {
+            var type = ScalarAssertType.Registry["DATE"];
+
+            Assert.Equal(expectedResult, type.AreEqual(expected, actual, null));
+        }
+
+        [Fact]
+        public void Date_HasDelta_IsFalse()
+        {
+            Assert.False(ScalarAssertType.Registry["DATE"].HasDelta);
+        }
+
+        [Fact]
+        public void Date_Format_UsesUnsignedIntValue()
+        {
+            var type = ScalarAssertType.Registry["DATE"];
+
+            Assert.Equal("0", type.FormatExpected(uint.MinValue, null));
+            Assert.Equal(uint.MaxValue.ToString(), type.FormatActual(uint.MaxValue));
+        }
+
+        [Theory]
+        [InlineData(0u, 0u, true)]
+        [InlineData(uint.MaxValue, uint.MaxValue, true)]
+        [InlineData(0u, uint.MaxValue, false)]
+        [InlineData(1_704_103_200u, 1_704_103_200u, true)]
+        [InlineData(1_704_103_200u, 1_704_103_201u, false)]
+        public void DateAndTime_AreEqual(uint expected, uint actual, bool expectedResult)
+        {
+            var type = ScalarAssertType.Registry["DATE_AND_TIME"];
+
+            Assert.Equal(expectedResult, type.AreEqual(expected, actual, null));
+        }
+
+        [Fact]
+        public void DateAndTime_HasDelta_IsFalse()
+        {
+            Assert.False(ScalarAssertType.Registry["DATE_AND_TIME"].HasDelta);
+        }
+
+        [Fact]
+        public void DateAndTime_Format_UsesUnsignedIntValue()
+        {
+            var type = ScalarAssertType.Registry["DATE_AND_TIME"];
+
+            Assert.Equal("0", type.FormatExpected(uint.MinValue, null));
+            Assert.Equal(uint.MaxValue.ToString(), type.FormatActual(uint.MaxValue));
+        }
+
+        [Theory]
+        [InlineData(0u, 0u, true)]
+        [InlineData(uint.MaxValue, uint.MaxValue, true)]
+        [InlineData(0u, uint.MaxValue, false)]
+        [InlineData(36_000_000u, 36_000_000u, true)]
+        [InlineData(36_000_000u, 36_000_500u, false)]
+        public void TimeOfDay_AreEqual(uint expected, uint actual, bool expectedResult)
+        {
+            var type = ScalarAssertType.Registry["TIME_OF_DAY"];
+
+            Assert.Equal(expectedResult, type.AreEqual(expected, actual, null));
+        }
+
+        [Fact]
+        public void TimeOfDay_HasDelta_IsFalse()
+        {
+            Assert.False(ScalarAssertType.Registry["TIME_OF_DAY"].HasDelta);
+        }
+
+        [Fact]
+        public void TimeOfDay_Format_UsesUnsignedIntValue()
+        {
+            var type = ScalarAssertType.Registry["TIME_OF_DAY"];
+
+            Assert.Equal("0", type.FormatExpected(uint.MinValue, null));
+            Assert.Equal(uint.MaxValue.ToString(), type.FormatActual(uint.MaxValue));
+        }
     }
 }

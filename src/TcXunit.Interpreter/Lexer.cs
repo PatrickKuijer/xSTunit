@@ -84,6 +84,40 @@ namespace TcXunit.Interpreter
                         continue;
                     }
 
+                    // DATE/DATE_AND_TIME/TIME_OF_DAY (TcXunit-gd2.13): calendar/
+                    // clock literals, not TIME's duration-segment grammar, so
+                    // their body is a run of digits/'-'/':'/'.' rather than
+                    // digits+unit-letters.
+                    if ((word == "DATE_AND_TIME" || word == "DT") && i < text.Length && text[i] == '#')
+                    {
+                        i++; // '#'
+                        var litStart = i;
+                        while (i < text.Length && IsDateTimeLiteralChar(text[i]))
+                            i++;
+                        tokens.Add(new Token(TokenType.DateAndTimeLiteral, text.Substring(litStart, i - litStart)));
+                        continue;
+                    }
+
+                    if ((word == "TIME_OF_DAY" || word == "TOD") && i < text.Length && text[i] == '#')
+                    {
+                        i++; // '#'
+                        var litStart = i;
+                        while (i < text.Length && IsDateTimeLiteralChar(text[i]))
+                            i++;
+                        tokens.Add(new Token(TokenType.TimeOfDayLiteral, text.Substring(litStart, i - litStart)));
+                        continue;
+                    }
+
+                    if ((word == "DATE" || word == "D") && i < text.Length && text[i] == '#')
+                    {
+                        i++; // '#'
+                        var litStart = i;
+                        while (i < text.Length && IsDateTimeLiteralChar(text[i]))
+                            i++;
+                        tokens.Add(new Token(TokenType.DateLiteral, text.Substring(litStart, i - litStart)));
+                        continue;
+                    }
+
                     tokens.Add(new Token(TokenType.Identifier, word));
                     continue;
                 }
@@ -243,6 +277,12 @@ namespace TcXunit.Interpreter
         // Returns true if c is 0-9, a-f, or A-F.
         private static bool IsHexDigit(char c)
             => (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
+
+        // Char class for the body of D#/DT#/TOD# literals (TcXunit-gd2.13):
+        // digits plus the date/time separators '-', ':', '.' - no letters,
+        // unlike TIME's digits+unit-letters body.
+        private static bool IsDateTimeLiteralChar(char c)
+            => char.IsDigit(c) || c == '-' || c == ':' || c == '.';
 
         // Consumes an optional '.digits' fraction and/or '[eE][+-]digits' exponent
         // starting at i, advancing i past whatever it consumes. Returns true if

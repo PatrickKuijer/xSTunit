@@ -122,6 +122,12 @@ namespace TcXunit.Interpreter
                     return new TimeLiteralExpr(TimeLiteral.ParseTimeMs(Advance().Text));
                 case TokenType.LtimeLiteral:
                     return new LtimeLiteralExpr(TimeLiteral.ParseLTimeNs(Advance().Text));
+                case TokenType.DateLiteral:
+                    return new DateLiteralExpr(DateTimeLiteral.ParseDateSeconds(Advance().Text));
+                case TokenType.DateAndTimeLiteral:
+                    return new DateAndTimeLiteralExpr(DateTimeLiteral.ParseDateAndTimeSeconds(Advance().Text));
+                case TokenType.TimeOfDayLiteral:
+                    return new TimeOfDayLiteralExpr(DateTimeLiteral.ParseTimeOfDayMs(Advance().Text));
                 case TokenType.StringLiteral:
                     return new StringLiteralExpr(Advance().Text);
                 case TokenType.LParen:

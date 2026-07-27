@@ -243,6 +243,43 @@ namespace TcXunit.Runner.TcUnitStub
                     areEqual: (expected, actual, delta) => AsULong64(expected) == AsULong64(actual),
                     formatExpected: (expected, delta) => AsULong64(expected).ToString(),
                     formatActual: actual => AsULong64(actual).ToString()),
+
+                // DATE/DATE_AND_TIME/TIME_OF_DAY (TcXunit-gd2.13):
+                // DateTimeLiteral.cs gives the interpreter a uint
+                // representation for all three (DATE/DATE_AND_TIME as
+                // seconds since the 1970-01-01 epoch, TIME_OF_DAY as
+                // milliseconds since midnight), so - like TIME above - they
+                // slot straight into the uint compare/format helpers, with
+                // exact equality rather than a delta (matching upstream:
+                // no AssertEquals_DATE/_DT/_TOD tolerance argument).
+                //
+                // Known limitation: FormatExpected/FormatActual print the
+                // raw uint value, not a calendar/clock string (e.g.
+                // "2024-01-01" or "10:00:00.500") - same as TIME/LTIME's
+                // existing raw-integer failure-message formatting. Adding
+                // calendar-string formatting is deferred until a fixture
+                // actually needs a human-readable EXP/ACT message for these
+                // types (grow-on-demand).
+                ["DATE"] = new ScalarAssertType(
+                    "DATE",
+                    hasDelta: false,
+                    areEqual: (expected, actual, delta) => WrapUInt(expected) == WrapUInt(actual),
+                    formatExpected: (expected, delta) => WrapUInt(expected).ToString(),
+                    formatActual: actual => WrapUInt(actual).ToString()),
+
+                ["DATE_AND_TIME"] = new ScalarAssertType(
+                    "DATE_AND_TIME",
+                    hasDelta: false,
+                    areEqual: (expected, actual, delta) => WrapUInt(expected) == WrapUInt(actual),
+                    formatExpected: (expected, delta) => WrapUInt(expected).ToString(),
+                    formatActual: actual => WrapUInt(actual).ToString()),
+
+                ["TIME_OF_DAY"] = new ScalarAssertType(
+                    "TIME_OF_DAY",
+                    hasDelta: false,
+                    areEqual: (expected, actual, delta) => WrapUInt(expected) == WrapUInt(actual),
+                    formatExpected: (expected, delta) => WrapUInt(expected).ToString(),
+                    formatActual: actual => WrapUInt(actual).ToString()),
             };
 
         // Accepts any boxed integer shape a Cell or C# fixture parameter

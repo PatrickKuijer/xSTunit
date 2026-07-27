@@ -20,6 +20,12 @@ namespace TcXunit.Interpreter
                     return t.Value;
                 case LtimeLiteralExpr lt:
                     return lt.Value;
+                case DateLiteralExpr d:
+                    return d.Value;
+                case DateAndTimeLiteralExpr dt:
+                    return dt.Value;
+                case TimeOfDayLiteralExpr tod:
+                    return tod.Value;
                 case StringLiteralExpr s:
                     return s.Value;
                 case BoolLiteralExpr b:

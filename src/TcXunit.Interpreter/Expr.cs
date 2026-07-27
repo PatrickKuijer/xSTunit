@@ -36,6 +36,24 @@ namespace TcXunit.Interpreter
         public LtimeLiteralExpr(ulong value) => Value = value;
     }
 
+    public sealed class DateLiteralExpr : Expr
+    {
+        public uint Value { get; }
+        public DateLiteralExpr(uint value) => Value = value;
+    }
+
+    public sealed class DateAndTimeLiteralExpr : Expr
+    {
+        public uint Value { get; }
+        public DateAndTimeLiteralExpr(uint value) => Value = value;
+    }
+
+    public sealed class TimeOfDayLiteralExpr : Expr
+    {
+        public uint Value { get; }
+        public TimeOfDayLiteralExpr(uint value) => Value = value;
+    }
+
     public sealed class BoolLiteralExpr : Expr
     {
         public bool Value { get; }

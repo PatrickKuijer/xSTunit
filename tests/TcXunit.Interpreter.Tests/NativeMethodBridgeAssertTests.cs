@@ -288,5 +288,85 @@ namespace TcXunit.Interpreter.Tests
             Assert.False(result.Passed);
             Assert.Contains("EXP: 1000000, ACT: 2000000", result.Failures[0].Message);
         }
+
+        // TcXunit-gd2.13: AssertEquals_DATE/_DATE_AND_TIME/_TIME_OF_DAY -
+        // E2E proof they're reachable through NativeMethodBridge from
+        // interpreted ST, driven by real D#/DT#/TOD# literals (see
+        // DateTimeTypeTests.cs for how the interpreter evaluates these to
+        // boxed uint epoch-seconds/midnight-ms).
+        [Fact]
+        public void RunSuite_AssertEqualsDate_NamedArgs_ReachableThroughInterpreter()
+        {
+            var engine = NewSuiteEngine(
+                "TEST('t');\n" +
+                "AssertEquals_DATE(Expected := D#2024-01-01, Actual := DATE#2024-01-01, Message := 'ok');\n" +
+                "TEST_FINISHED();");
+
+            Assert.True(Assert.Single(engine.RunSuite("FB_MySuite")).Passed);
+        }
+
+        [Fact]
+        public void RunSuite_AssertEqualsDate_PositionalArgs_ReportsFailureWithExpAct()
+        {
+            var engine = NewSuiteEngine(
+                "TEST('t');\n" +
+                "AssertEquals_DATE(D#2024-01-01, D#2024-01-02, 'mismatch');\n" +
+                "TEST_FINISHED();");
+
+            var result = Assert.Single(engine.RunSuite("FB_MySuite"));
+
+            Assert.False(result.Passed);
+            Assert.Contains("EXP: 1704067200, ACT: 1704153600", result.Failures[0].Message);
+        }
+
+        [Fact]
+        public void RunSuite_AssertEqualsDateAndTime_NamedArgs_ReachableThroughInterpreter()
+        {
+            var engine = NewSuiteEngine(
+                "TEST('t');\n" +
+                "AssertEquals_DATE_AND_TIME(Expected := DT#2024-01-01-10:00:00, Actual := DATE_AND_TIME#2024-01-01-10:00:00, Message := 'ok');\n" +
+                "TEST_FINISHED();");
+
+            Assert.True(Assert.Single(engine.RunSuite("FB_MySuite")).Passed);
+        }
+
+        [Fact]
+        public void RunSuite_AssertEqualsDateAndTime_PositionalArgs_ReportsFailureWithExpAct()
+        {
+            var engine = NewSuiteEngine(
+                "TEST('t');\n" +
+                "AssertEquals_DATE_AND_TIME(DT#2024-01-01-10:00:00, DT#2024-01-01-11:00:00, 'mismatch');\n" +
+                "TEST_FINISHED();");
+
+            var result = Assert.Single(engine.RunSuite("FB_MySuite"));
+
+            Assert.False(result.Passed);
+            Assert.Contains("EXP: 1704103200, ACT: 1704106800", result.Failures[0].Message);
+        }
+
+        [Fact]
+        public void RunSuite_AssertEqualsTimeOfDay_NamedArgs_ReachableThroughInterpreter()
+        {
+            var engine = NewSuiteEngine(
+                "TEST('t');\n" +
+                "AssertEquals_TIME_OF_DAY(Expected := TOD#10:00:00, Actual := TIME_OF_DAY#10:00:00, Message := 'ok');\n" +
+                "TEST_FINISHED();");
+
+            Assert.True(Assert.Single(engine.RunSuite("FB_MySuite")).Passed);
+        }
+
+        [Fact]
+        public void RunSuite_AssertEqualsTimeOfDay_PositionalArgs_ReportsFailureWithExpAct()
+        {
+            var engine = NewSuiteEngine(
+                "TEST('t');\n" +
+                "AssertEquals_TIME_OF_DAY(TOD#10:00:00, TOD#10:00:00.500, 'mismatch');\n" +
+                "TEST_FINISHED();");
+
+            var result = Assert.Single(engine.RunSuite("FB_MySuite"));
+
+            Assert.False(result.Passed);
+            Assert.Contains("EXP: 36000000, ACT: 36000500", result.Failures[0].Message);
+        }
     }
 }

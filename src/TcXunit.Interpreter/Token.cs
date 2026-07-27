@@ -8,6 +8,9 @@ namespace TcXunit.Interpreter
         LrealLiteral,
         TimeLiteral,
         LtimeLiteral,
+        DateLiteral,
+        DateAndTimeLiteral,
+        TimeOfDayLiteral,
         StringLiteral,
         Assign,      // :=
         RefAssign,   // REF=

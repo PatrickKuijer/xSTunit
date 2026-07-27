@@ -39,6 +39,11 @@ namespace TcXunit.Interpreter
             if (typeName == "LTIME")
                 return 0ul;
 
+            // DATE/DATE_AND_TIME/TIME_OF_DAY (TcXunit-gd2.13) all box as
+            // uint (see DateTimeLiteral.cs), same as TIME above.
+            if (typeName == "DATE" || typeName == "DATE_AND_TIME" || typeName == "TIME_OF_DAY")
+                return 0u;
+
             if (typeName.StartsWith("POINTER TO") || typeName.StartsWith("REFERENCE TO"))
                 return null;
 

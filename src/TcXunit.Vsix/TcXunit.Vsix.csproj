@@ -139,6 +139,13 @@
     <Reference Include="Microsoft.VisualStudio.Validation, Version=15.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL">
       <HintPath>..\..\packages\Microsoft.VisualStudio.Validation.15.0.82\lib\net45\Microsoft.VisualStudio.Validation.dll</HintPath>
     </Reference>
+    <!-- Same version TcAgentPlugin/src/TcAgent pins; see TcXunit-1tt.1. -->
+    <Reference Include="Microsoft.Web.WebView2.Core, Version=1.0.2592.51, Culture=neutral, processorArchitecture=MSIL">
+      <HintPath>..\..\packages\Microsoft.Web.WebView2.1.0.2592.51\lib\net462\Microsoft.Web.WebView2.Core.dll</HintPath>
+    </Reference>
+    <Reference Include="Microsoft.Web.WebView2.Wpf, Version=1.0.2592.51, Culture=neutral, processorArchitecture=MSIL">
+      <HintPath>..\..\packages\Microsoft.Web.WebView2.1.0.2592.51\lib\net462\Microsoft.Web.WebView2.Wpf.dll</HintPath>
+    </Reference>
   </ItemGroup>
   <ItemGroup>
     <Analyzer Include="..\..\packages\Microsoft.VisualStudio.SDK.Analyzers.15.8.33\analyzers\cs\Microsoft.VisualStudio.SDK.Analyzers.dll" />
@@ -171,6 +178,33 @@
   <ItemGroup>
     <Content Include="Resources\ResultsToolWindowCommand.png" />
     <Content Include="Resources\ResultsToolWindowPackage.ico" />
+    <Content Include="Resources\results.html">
+      <IncludeInVSIX>true</IncludeInVSIX>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Resources\vsix-tokens.css">
+      <IncludeInVSIX>true</IncludeInVSIX>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Resources\vsix-shell.css">
+      <IncludeInVSIX>true</IncludeInVSIX>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Resources\results.css">
+      <IncludeInVSIX>true</IncludeInVSIX>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <!--
+      WebView2's native loader. VS2017/XAE Shell's devenv.exe is a 32-bit process, so
+      this is the x86 build regardless of this project's AnyCPU platform setting. Not
+      auto-copied the way an SDK-style project's "runtimes" folder would be; this
+      classic project needs it listed explicitly; mirrors TcAgent.csproj.
+    -->
+    <Content Include="..\..\packages\Microsoft.Web.WebView2.1.0.2592.51\runtimes\win-x86\native\WebView2Loader.dll">
+      <Link>WebView2Loader.dll</Link>
+      <IncludeInVSIX>true</IncludeInVSIX>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
   </ItemGroup>
   <ItemGroup>
     <VSCTCompile Include="VSCommandTable.vsct">

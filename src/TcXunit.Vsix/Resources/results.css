@@ -1,0 +1,10 @@
+/*
+  TcXunit-only results layer: .toolbar .tree .node .assert .banner .count -- per
+  docs/design-system.html section 5 (results tree) and section 8's file-split plan.
+
+  Intentionally empty for now. Implemented by TcXunit-1tt.2 (static results tree
+  render: node anatomy, banner, assert detail) and extended by the later sibling
+  tickets (filter/segmented control, duration display, etc.) -- see TcXunit-1tt's
+  child issues. results.html already loads this file so none of that later work
+  needs to touch the shell page's <link> wiring.
+*/

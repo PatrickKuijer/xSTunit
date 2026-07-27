@@ -1,0 +1,56 @@
+/*
+  TcXunit.Vsix shared design tokens: :root (dark, default) + body[data-theme="light"]
+  overrides. Copy-sourced from TcAgentPlugin/src/TcAgent/Resources/chat.css per
+  docs/design-system.html section 8's file-split plan -- "shared, never forked".
+
+  Keep this file's values in sync with chat.css by hand; a single-sourced shared
+  package is explicitly out of scope for TcXunit-1tt (see design-system.html's
+  "Out of Scope" note). WebView2 does not inherit the host's light/dark theme from
+  prefers-color-scheme -- the WPF host pushes body[data-theme] in directly via
+  ExecuteScriptAsync (see ResultsToolWindowControl.xaml.cs).
+*/
+
+:root{
+  --panel-bg:#252526;
+  --chrome-bg:#2d2d30;
+  --chrome-bg-2:#333337;
+  --border:#3f3f42;
+  --border-soft:#383839;
+  --text:#cccccc;
+  --text-dim:#9d9d9d;
+  --text-faint:#6f6f6f;
+  --accent:#3794ff;
+  --accent-soft:rgba(55,148,255,0.14);
+  --user-bg:#2a2d2e;
+  --local:#4ec9b0;
+  --local-bg-strong:rgba(78,201,176,0.20);
+  --cloud:#d7ba7d;
+  --cloud-bg-strong:rgba(215,186,125,0.20);
+  --statusbar-bg:#007acc;
+  --ui:'Segoe UI',-apple-system,BlinkMacSystemFont,system-ui,Arial,sans-serif;
+  --mono:Consolas,'Courier New',monospace;
+  --error:#f48771;
+  --error-bg:rgba(244,135,113,0.12);
+  --error-border:rgba(244,135,113,0.35);
+}
+
+body[data-theme="light"]{
+  --panel-bg:#f6f6f6;
+  --chrome-bg:#e8e8ea;
+  --chrome-bg-2:#f0f0f1;
+  --border:#d6d6d8;
+  --border-soft:#e0e0e2;
+  --text:#1e1e1e;
+  --text-dim:#3c3c3c;
+  --text-faint:#767676;
+  --accent:#0060c0;
+  --accent-soft:rgba(0,96,192,0.10);
+  --user-bg:#e5f0fb;
+  --local:#0e7a63;
+  --local-bg-strong:rgba(14,122,99,0.15);
+  --cloud:#8a5c00;
+  --cloud-bg-strong:rgba(138,92,0,0.15);
+  --error:#b3261e;
+  --error-bg:rgba(179,38,30,0.08);
+  --error-border:rgba(179,38,30,0.25);
+}

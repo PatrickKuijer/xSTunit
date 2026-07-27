@@ -1,30 +1,160 @@
 using System;
+using System.Diagnostics;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Media;
+using Microsoft.VisualStudio.PlatformUI;
 using Microsoft.VisualStudio.Shell;
+using Microsoft.Web.WebView2.Core;
 using TcXunit.Vsix.TestRunner;
 
 namespace TcXunit.Vsix
 {
     /// <summary>
-    /// First cut just proves the process-exec + JSON +
-    /// tool-window-render loop works inside XAE Shell - no click-to-navigate
-    /// into the .TcPOU editor yet (see README.md).
+    /// "Run tests" (WPF Button) shells out via TcxunitProcessRunner and shows a pass/fail
+    /// summary in StatusText, same as before. The former WPF TreeView is now a WebView2
+    /// loading Resources/results.html, which pulls in Resources/vsix-tokens.css,
+    /// vsix-shell.css, and results.css -- see docs/design-system.html section 8. Hosting
+    /// and VS-theme wiring mirror TcAgentPlugin/src/TcAgent/ChatToolWindowControl.xaml.cs
+    /// exactly (EnsureCoreWebView2Async + CoreWebView2Environment,
+    /// SetVirtualHostNameToFolderMapping onto Resources, a pre-navigation
+    /// AddScriptToExecuteOnDocumentCreatedAsync theme push plus a live
+    /// VSColorTheme.ThemeChanged -&gt; ExecuteScriptAsync push, and NewWindowRequested
+    /// opening links in the user's real browser instead of a second WebView2 popup).
+    ///
+    /// Rendering the run result into the WebView2's tree is not implemented yet -- see
+    /// TcXunit-1tt.2 (static results tree render) and the rest of TcXunit-1tt's children.
     /// </summary>
     public partial class ResultsToolWindowControl : UserControl
     {
+        private const string VirtualHostName = "tcxunit.results";
+
+        // WPF re-fires Loaded on tool-window redock/retab without disposing the control, but
+        // EnsureCoreWebView2Async only tolerates being called once per environment -- a second
+        // call with a fresh CoreWebView2Environment throws the "already initialized with a
+        // different CoreWebView2Environment" error. Mirrors ChatToolWindowControl's guard.
+        private bool _webViewInitialized;
+
         public ResultsToolWindowControl()
         {
             this.InitializeComponent();
+
+            this.Loaded += this.ResultsToolWindowControl_Loaded;
+            this.Unloaded += this.ResultsToolWindowControl_Unloaded;
+        }
+
+        private async void ResultsToolWindowControl_Loaded(object sender, RoutedEventArgs e)
+        {
+            if (_webViewInitialized)
+            {
+                return;
+            }
+
+            _webViewInitialized = true;
+
+            try
+            {
+                var userDataFolder = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                    "TcXunit",
+                    "WebView2");
+
+                var environment = await CoreWebView2Environment.CreateAsync(
+                    browserExecutableFolder: null,
+                    userDataFolder: userDataFolder);
+
+                await this.Browser.EnsureCoreWebView2Async(environment);
+
+                var resourcesFolder = Path.Combine(
+                    Path.GetDirectoryName(typeof(ResultsToolWindowControl).Assembly.Location) ?? string.Empty,
+                    "Resources");
+
+                this.Browser.CoreWebView2.SetVirtualHostNameToFolderMapping(
+                    VirtualHostName,
+                    resourcesFolder,
+                    CoreWebView2HostResourceAccessKind.DenyCors);
+
+                // Injected before any navigation's HTML parses, so the page never paints in the
+                // wrong theme first. VSColorTheme.ThemeChanged (subscribed below) keeps it in
+                // sync afterwards via a direct ExecuteScriptAsync push.
+                await this.Browser.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(
+                    BuildApplyThemeScript(GetCurrentThemeName()));
+
+                VSColorTheme.ThemeChanged += this.OnVsThemeChanged;
+
+                // results.html has no outbound links today, but this mirrors
+                // ChatToolWindowControl's handling defensively: left unhandled, WebView2's
+                // default action for a target="_blank"/window.open() is to open another
+                // embedded WebView2 popup rather than the user's actual browser.
+                this.Browser.CoreWebView2.NewWindowRequested += this.OnNewWindowRequested;
+
+                this.Browser.CoreWebView2.Navigate($"https://{VirtualHostName}/results.html");
+            }
+            catch (Exception ex)
+            {
+                this.ShowError($"WebView2 failed to initialize: {ex.Message}");
+            }
+        }
+
+        private void ResultsToolWindowControl_Unloaded(object sender, RoutedEventArgs e)
+        {
+            VSColorTheme.ThemeChanged -= this.OnVsThemeChanged;
+
+            if (this.Browser?.CoreWebView2 != null)
+            {
+                this.Browser.CoreWebView2.NewWindowRequested -= this.OnNewWindowRequested;
+            }
+        }
+
+        private void OnNewWindowRequested(object sender, CoreWebView2NewWindowRequestedEventArgs args)
+        {
+            args.Handled = true;
+            try
+            {
+                Process.Start(new ProcessStartInfo(args.Uri) { UseShellExecute = true });
+            }
+            catch (Exception ex)
+            {
+                this.ShowError($"Failed to open browser: {ex.Message}");
+            }
+        }
+
+        private void OnVsThemeChanged(ThemeChangedEventArgs e)
+        {
+            if (this.Browser.CoreWebView2 == null)
+            {
+                return;
+            }
+
+            _ = this.Browser.CoreWebView2.ExecuteScriptAsync(BuildApplyThemeScript(GetCurrentThemeName()));
+        }
+
+        /// <summary>Classifies the current VS environment theme as "light" or "dark" from the
+        /// tool window background's perceived luminance -- same formula as
+        /// ChatToolWindowControl.GetCurrentThemeName, so both panels agree on the same
+        /// light/dark boundary.</summary>
+        private static string GetCurrentThemeName()
+        {
+            var background = VSColorTheme.GetThemedColor(EnvironmentColors.ToolWindowBackgroundColorKey);
+            double luminance = ((0.299 * background.R) + (0.587 * background.G) + (0.114 * background.B)) / 255.0;
+            return luminance > 0.5 ? "light" : "dark";
+        }
+
+        /// <summary>Sets data-theme on &lt;body&gt; (vsix-tokens.css keys its light palette off
+        /// body[data-theme="light"]; dark is the :root default). Deferred to DOMContentLoaded
+        /// when document.body isn't parsed yet, so this is safe both as a pre-navigation
+        /// injected script and as a live ExecuteScriptAsync push after the page has
+        /// loaded.</summary>
+        private static string BuildApplyThemeScript(string themeName)
+        {
+            return "(function(){function apply(){document.body.setAttribute('data-theme','" + themeName + "');}"
+                + "if(document.body){apply();}else{document.addEventListener('DOMContentLoaded',apply);}})();";
         }
 
         private void RunButton_Click(object sender, RoutedEventArgs e)
         {
             ThreadHelper.ThrowIfNotOnUIThread();
 
-            this.ResultsTree.Items.Clear();
             this.StatusText.Text = "Running...";
 
             try
@@ -42,42 +172,18 @@ namespace TcXunit.Vsix
 
                 this.StatusText.Text = $"Passed: {result.Passed}  Failed: {result.Failed}  (exit code {result.ExitCode})";
 
-                foreach (var suite in result.Suites ?? new System.Collections.Generic.List<TcxunitSuiteResult>())
-                {
-                    var suiteItem = new TreeViewItem { Header = suite.Name, IsExpanded = true };
-
-                    if (!string.IsNullOrEmpty(suite.Error))
-                    {
-                        suiteItem.Items.Add(new TreeViewItem
-                        {
-                            Header = "ERROR: " + suite.Error,
-                            Foreground = Brushes.Red,
-                        });
-                    }
-
-                    foreach (var test in suite.Tests ?? new System.Collections.Generic.List<TcxunitTestResult>())
-                    {
-                        var testItem = new TreeViewItem
-                        {
-                            Header = (test.Passed ? "[PASS] " : "[FAIL] ") + test.Name,
-                            Foreground = test.Passed ? Brushes.Green : Brushes.Red,
-                        };
-
-                        foreach (var failure in test.Failures ?? new System.Collections.Generic.List<string>())
-                        {
-                            testItem.Items.Add(new TreeViewItem { Header = failure });
-                        }
-
-                        suiteItem.Items.Add(testItem);
-                    }
-
-                    this.ResultsTree.Items.Add(suiteItem);
-                }
+                // Pushing suites/tests into the WebView2's #tree is not implemented yet --
+                // see TcXunit-1tt.2 (static results tree render).
             }
             catch (Exception ex)
             {
                 this.StatusText.Text = "Error: " + ex.Message;
             }
+        }
+
+        private void ShowError(string message)
+        {
+            this.StatusText.Text = message;
         }
 
         // Resolves the open solution's directory via DTE (mirrors TcAgentPlugin's

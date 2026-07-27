@@ -1,0 +1,157 @@
+/*
+  TcXunit.Vsix shared shell layer: base panel layout, tabs, buttons, seg, field,
+  chip, picker, statusbar -- per docs/design-system.html section 8's file-split
+  plan. Copy-sourced from TcAgentPlugin/src/TcAgent/Resources/chat.css, adapting
+  its TcAgent-specific selector names (e.g. .tw-session-search, .picker-filter)
+  to the generic ones docs/design-system.html itself already demonstrates in its
+  embedded .vsix specimen stylesheet (.field, .picker-menu/.picker-opt).
+
+  Requires vsix-tokens.css to be loaded first (every rule here references its
+  custom properties -- no literal colors, per section 7's "Style through tokens"
+  rule). TcXunit's own layer (.toolbar .tree .node .assert .banner .count) lives
+  in results.css, not here -- see that file.
+*/
+
+*{ box-sizing:border-box; }
+html,body{ margin:0; padding:0; height:100%; }
+body{
+  background:var(--panel-bg);
+  color:var(--text);
+  font-family:var(--ui);
+  font-size:12.5px;
+  line-height:1.5;
+  display:flex;
+  flex-direction:column;
+  height:100vh;
+  overflow:hidden;
+}
+
+/* -- body scroll region (section 6 tool-window anatomy: flex:1, panel-bg,
+   min-height:0 -- without min-height:0 the flex child refuses to shrink and
+   the status bar gets pushed off the bottom of the panel) -- */
+.tw-body{
+  flex:1;
+  min-height:0;
+  display:flex;
+  flex-direction:column;
+}
+
+/* -- tabs -- */
+.tw-tabs{
+  display:flex;
+  align-items:center;
+  gap:4px;
+  padding:6px 9px 0;
+  background:var(--chrome-bg-2);
+  border-bottom:1px solid var(--border);
+  flex:none;
+}
+.tw-tab{
+  padding:6px 4px 7px;
+  font-size:11.5px;
+  color:var(--text-faint);
+  cursor:pointer;
+  border-bottom:2px solid transparent;
+}
+.tw-tab.active{ color:var(--text); border-bottom-color:var(--accent); }
+.tw-tab:hover:not(.active){ color:var(--text-dim); }
+
+/* -- buttons -- */
+.send-btn,
+.ghost-btn{
+  border-radius:3px;
+  padding:4px 10px;
+  font-size:11.5px;
+  font-family:var(--ui);
+  cursor:pointer;
+}
+.send-btn{ background:var(--accent); color:#fff; border:none; }
+.send-btn:hover{ filter:brightness(1.08); }
+.send-btn.stop-btn{ background:var(--error); }
+.ghost-btn{ background:transparent; color:var(--text-dim); border:1px solid var(--border); }
+.ghost-btn:hover{ color:var(--text); border-color:var(--border-soft); }
+.ghost-btn[disabled]{ opacity:.35; cursor:default; }
+
+/* -- segmented control -- */
+.seg{ display:flex; border:1px solid var(--border); border-radius:4px; overflow:hidden; flex:none; }
+.seg button{
+  border:none;
+  background:var(--chrome-bg);
+  color:var(--text-faint);
+  font-size:10.5px;
+  font-family:var(--ui);
+  padding:5px 8px;
+  cursor:pointer;
+}
+.seg button.active[data-v="local"]{ background:var(--local-bg-strong); color:var(--local); font-weight:600; }
+.seg button.active[data-v="remote"]{ background:var(--cloud-bg-strong); color:var(--cloud); font-weight:600; }
+.seg button.active[data-v="plain"]{ background:var(--accent-soft); color:var(--text); font-weight:600; }
+
+/* -- field (filter/search inputs) -- */
+.field{
+  width:100%;
+  font-family:var(--ui);
+  font-size:11.5px;
+  padding:5px 7px;
+  border-radius:3px;
+  border:1px solid var(--border);
+  background:var(--chrome-bg);
+  color:var(--text);
+}
+.field::placeholder{ color:var(--text-faint); }
+.field:focus{ outline:none; border-color:var(--accent); }
+
+/* -- chip -- */
+.chip{
+  display:inline-flex;
+  align-items:center;
+  gap:5px;
+  max-width:220px;
+  padding:2px 8px;
+  border-radius:11px;
+  font-size:11px;
+  line-height:1.6;
+  border:1px solid var(--border);
+  background:var(--chrome-bg-2);
+  color:var(--text-dim);
+}
+.chip.accepted{ background:var(--accent-soft); border-color:transparent; color:var(--text); }
+.chip.suggestion{ border-style:dashed; color:var(--text-faint); cursor:pointer; }
+
+/* -- picker (dropdown menus/popovers) -- */
+.group-label{
+  font-size:9.5px;
+  text-transform:uppercase;
+  letter-spacing:.06em;
+  color:var(--text-faint);
+  padding:7px 10px 3px;
+}
+.picker-menu{
+  background:var(--panel-bg);
+  border:1px solid var(--border);
+  border-radius:3px;
+  box-shadow:0 12px 28px rgba(0,0,0,0.45);
+  overflow:hidden;
+  min-width:220px;
+}
+.picker-opt{ display:flex; align-items:center; gap:8px; padding:6px 10px; cursor:pointer; font-size:12px; }
+.picker-opt:hover,
+.picker-opt.active{ background:var(--accent-soft); }
+.picker-opt .opt-model{ color:var(--text); flex:1; }
+.picker-opt .opt-note{ color:var(--text-faint); font-size:10.5px; }
+.picker-dot{ width:7px; height:7px; border-radius:50%; flex:none; }
+
+/* -- statusbar (required region -- never omitted, per section 6) -- */
+.tw-statusbar{
+  flex:none;
+  height:20px;
+  background:var(--statusbar-bg);
+  color:#fff;
+  font-size:10px;
+  display:flex;
+  align-items:center;
+  gap:8px;
+  padding:0 9px;
+}
+.tw-statusbar .dot{ width:6px; height:6px; border-radius:50%; background:#8fe3c7; }
+.status-spacer{ opacity:.7; }

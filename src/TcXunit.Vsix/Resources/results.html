@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>TcXunit Results</title>
+<link rel="stylesheet" href="vsix-tokens.css" />
+<link rel="stylesheet" href="vsix-shell.css" />
+<link rel="stylesheet" href="results.css" />
+</head>
+<body>
+  <!--
+    Empty shell for TcXunit-1tt.1: proves the WebView2 control loads this page and
+    follows the VS host's light/dark theme (document.body.dataset.theme, pushed in by
+    ResultsToolWindowControl.xaml.cs; see BuildApplyThemeScript there).
+
+    #tree is the future results.css/.tree render target; see TcXunit-1tt.2. The
+    .tw-statusbar region is required per docs/design-system.html section 6 (tool-window
+    anatomy) and is never omitted, even in this empty state.
+  -->
+  <div class="tw-body">
+    <div class="tree" id="tree"></div>
+  </div>
+
+  <div class="tw-statusbar">
+    <span class="dot"></span>
+    <span id="statusText">Ready</span>
+  </div>
+</body>
+</html>

@@ -206,5 +206,42 @@ END_VAR";
             Assert.Equal(VarSection.Global, value.Section);
             Assert.Equal("16", value.DefaultValueText);
         }
+
+        // TcXunit-988: a STRING/WSTRING size need not be a bare integer
+        // literal - a GVL-qualified constant (e.g.
+        // cFramework.MAX_PAR_STRING_SIZE) is a legal IEC 61131-3 constant
+        // expression there too. Previously VarLinePattern only accepted
+        // \d+ inside the parens, so the whole line silently failed to
+        // match and the field was dropped from the VarDecl list entirely.
+        [Fact]
+        public void Parse_StringSizedByGvlQualifiedConstant_ReadsFullTypeName()
+        {
+            const string declaration = @"TYPE uRemoteRegistrationRecord :
+STRUCT
+	sDefaultValue : STRING(cFramework.MAX_PAR_STRING_SIZE);
+END_STRUCT
+END_TYPE";
+
+            var vars = VarBlockParser.Parse(declaration);
+
+            var value = Assert.Single(vars);
+            Assert.Equal("sDefaultValue", value.Name);
+            Assert.Equal("STRING(cFramework.MAX_PAR_STRING_SIZE)", value.TypeName);
+        }
+
+        [Fact]
+        public void Parse_WStringSizedByConstArithmeticExpression_ReadsFullTypeName()
+        {
+            const string declaration = @"FUNCTION_BLOCK FB_Holder
+VAR
+	label : WSTRING(cFramework.BASE_SIZE * 2);
+END_VAR";
+
+            var vars = VarBlockParser.Parse(declaration);
+
+            var value = Assert.Single(vars);
+            Assert.Equal("label", value.Name);
+            Assert.Equal("WSTRING(cFramework.BASE_SIZE * 2)", value.TypeName);
+        }
     }
 }

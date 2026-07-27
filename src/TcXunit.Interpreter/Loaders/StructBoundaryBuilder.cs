@@ -82,7 +82,11 @@ namespace TcXunit.Interpreter
 
             if (StringTypeInfo.IsStringType(typeName))
             {
-                var length = StringTypeInfo.ParseLength(typeName);
+                // The size may be a non-literal constant expression (e.g. a
+                // GVL-qualified constant, TcXunit-988); reuse the same
+                // const-expression resolver ARRAY bounds already use rather
+                // than duplicating it.
+                var length = StringTypeInfo.ParseLength(typeName, ResolveArrayBound);
                 return boundary == Boundary.Min ? "" : new string('X', length);
             }
 

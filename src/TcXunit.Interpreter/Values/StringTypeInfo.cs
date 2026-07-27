@@ -1,3 +1,4 @@
+using System;
 using System.Text.RegularExpressions;
 
 namespace TcXunit.Interpreter
@@ -13,8 +14,14 @@ namespace TcXunit.Interpreter
     {
         private const int DefaultLength = 80;
 
+        // The sized form's size text need not be a bare digit literal - a
+        // GVL-qualified constant expression (e.g. cFramework.MAX_STRING_SIZE)
+        // is equally legal IEC 61131-3 (TcXunit-988), so the group here
+        // captures the raw expression text; ParseLength resolves it (either
+        // the digit fast path, or via the caller's constant-expression
+        // resolver).
         private static readonly Regex SizedPattern = new Regex(
-            @"^(STRING|WSTRING)\s*\(\s*(?<n>\d+)\s*\)$", RegexOptions.Compiled);
+            @"^(STRING|WSTRING)\s*\(\s*(?<n>[^()]+?)\s*\)$", RegexOptions.Compiled);
 
         public static bool IsStringType(string typeName)
         {
@@ -25,14 +32,26 @@ namespace TcXunit.Interpreter
             return trimmed == "STRING" || trimmed == "WSTRING" || SizedPattern.IsMatch(trimmed);
         }
 
-        public static int ParseLength(string typeName)
+        // Digit-literal fast path only; throws for a non-literal size
+        // expression (e.g. a GVL constant) - callers that may see one should
+        // use the ParseLength(typeName, resolveExpr) overload instead
+        // (mirroring Engine.Defaults.ResolveArrayBound /
+        // StructBoundaryBuilder.EvaluateConstExpr for ARRAY bounds).
+        public static int ParseLength(string typeName) =>
+            ParseLength(typeName, exprText => throw new NotSupportedException(
+                $"STRING/WSTRING size '{exprText}' is not an integer literal; " +
+                "use the ParseLength(typeName, resolveExpr) overload to resolve constant expressions."));
+
+        public static int ParseLength(string typeName, Func<string, int> resolveExpr)
         {
             var trimmed = typeName.Trim();
             if (trimmed == "STRING" || trimmed == "WSTRING")
                 return DefaultLength;
 
             var match = SizedPattern.Match(trimmed);
-            return int.Parse(match.Groups["n"].Value);
+            var sizeText = match.Groups["n"].Value.Trim();
+            return int.TryParse(sizeText, out var literal) ? literal : resolveExpr(sizeText);
         }
     }
 }
+

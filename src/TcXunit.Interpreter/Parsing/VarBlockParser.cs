@@ -12,8 +12,15 @@ namespace TcXunit.Interpreter
     // lists.
     public static class VarBlockParser
     {
+        // The W?STRING(...) size may be any IEC 61131-3 constant expression
+        // (int literal, GVL-qualified constant, +-*/), not just a bare
+        // digit literal - TcXunit-988. [^()]+ (rather than \d+) accepts
+        // that whole expression text verbatim; StringTypeInfo/
+        // StructBoundaryBuilder resolve it later via
+        // ResolveArrayBound/EvaluateConstExpr, mirroring how ARRAY bounds
+        // are resolved (TcXunit-654).
         private static readonly Regex VarLinePattern = new Regex(
-            @"^(?<name>\w+)\s*:\s*(?<type>POINTER TO \w+|REFERENCE TO \w+|ARRAY\s*\[[^\]]+\]\s*OF\s*\w+|W?STRING\s*\(\s*\d+\s*\)|\w+)\s*(:=\s*(?<default>.+?))?;$",
+            @"^(?<name>\w+)\s*:\s*(?<type>POINTER TO \w+|REFERENCE TO \w+|ARRAY\s*\[[^\]]+\]\s*OF\s*\w+|W?STRING\s*\(\s*[^()]+\s*\)|\w+)\s*(:=\s*(?<default>.+?))?;$",
             RegexOptions.Compiled);
 
         public static IReadOnlyList<VarDecl> Parse(string declarationText)

@@ -81,6 +81,23 @@ namespace TcXunit.Interpreter.Tests
             Assert.Equal(11, result);
         }
 
+        // TcXunit-988: a STRING size may be a GVL-qualified constant
+        // expression, not just a bare integer literal.
+        [Fact]
+        public void SizeOf_StringSizedByGvlQualifiedConstant_ReturnsLengthPlusNull()
+        {
+            var gvl = new GvlAst("cFramework", "VAR_GLOBAL CONSTANT\n\tMAX_PAR_STRING_SIZE : UINT := 32;\nEND_VAR");
+            var fb = new PouAst(
+                "FB_Holder", null, "VAR\n\ts : STRING(cFramework.MAX_PAR_STRING_SIZE);\nEND_VAR", "", new List<MethodAst>());
+            var engine = new Engine(new TypeRegistry(new[] { fb }, null, new[] { gvl }));
+            var instance = engine.NewInstance("FB_Holder");
+            var frame = new Frame(instance, "FB_Holder");
+
+            var result = engine.Evaluate(Parser.ParseExpression("SIZEOF(s)"), frame);
+
+            Assert.Equal(33, result);
+        }
+
         [Fact]
         public void SizeOf_Array_ReturnsElementSizeTimesCount()
         {

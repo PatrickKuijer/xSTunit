@@ -131,6 +131,27 @@ END_TYPE");
             Assert.Equal(new string('X', 80), instance.Fields["label"].Value);
         }
 
+        // TcXunit-988: a STRING size may be a GVL-qualified constant
+        // expression - the builder has no Engine/Frame (see class remarks),
+        // so this must resolve through the same GVL-lookup path
+        // ResolveArrayBound/EvaluateConstExpr already use for ARRAY bounds.
+        [Fact]
+        public void Build_StringFieldSizedByGvlQualifiedConstant_MaxIsResolvedLengthString()
+        {
+            var structAst = StructDeclParser.Parse(@"TYPE ST_Msg :
+STRUCT
+	label : STRING(cFramework.MAX_PAR_STRING_SIZE);
+END_STRUCT
+END_TYPE");
+            var gvl = new GvlAst("cFramework", "VAR_GLOBAL CONSTANT\n\tMAX_PAR_STRING_SIZE : UINT := 32;\nEND_VAR");
+            var registry = new TypeRegistry(System.Array.Empty<PouAst>(), new[] { structAst }, new[] { gvl });
+            var builder = new StructBoundaryBuilder(registry);
+
+            var instance = builder.Build("ST_Msg", ("label", Boundary.Max));
+
+            Assert.Equal(new string('X', 32), instance.Fields["label"].Value);
+        }
+
         [Fact]
         public void Build_ArrayField_FillsElementsAtInRangeDefaultWithoutOverride()
         {

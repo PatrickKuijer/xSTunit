@@ -87,7 +87,15 @@ namespace TcXunit.Interpreter
                 return SizeOfStruct(structAst, frame);
 
             if (StringTypeInfo.IsStringType(resolved))
-                return (StringTypeInfo.ParseLength(resolved) + 1, 1);
+            {
+                // The size may be a non-literal constant expression (e.g. a
+                // GVL-qualified constant, TcXunit-988), resolved the same
+                // way the ARRAY-bound lambda just above does: through the
+                // normal Evaluate() path rather than a bare int.Parse.
+                var length = StringTypeInfo.ParseLength(
+                    resolved, boundText => Convert.ToInt32(Evaluate(Parser.ParseExpression(boundText), frame)));
+                return (length + 1, 1);
+            }
 
             if (resolved == "BOOL")
                 return (1, 1);

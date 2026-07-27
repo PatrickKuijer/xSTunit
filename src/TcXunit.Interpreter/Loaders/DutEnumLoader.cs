@@ -73,6 +73,13 @@ namespace TcXunit.Interpreter
             return true;
         }
 
+        // Matches a "// ..." line comment trailing a member entry (e.g.
+        // "TypeBool := 1  // Slave ramps in depending on progress of master
+        // position.") - stripped before splitting the body on commas so an
+        // in-comment comma can't be mistaken for a member separator and an
+        // in-comment digit run can't reach int.Parse.
+        private static readonly Regex TrailingLineComment = new Regex(@"//[^\n]*", RegexOptions.Compiled);
+
         // Splits the member-list body (e.g. "Red,\n\tGreen,\n\tBlue" or
         // "Ok := 0,\n\tError := 1") into member -> ordinal-value pairs,
         // following standard IEC 61131-3 enum numbering: an explicit
@@ -84,7 +91,7 @@ namespace TcXunit.Interpreter
             var members = new Dictionary<string, int>();
             var nextValue = 0;
 
-            foreach (var rawEntry in body.Split(','))
+            foreach (var rawEntry in TrailingLineComment.Replace(body, "").Split(','))
             {
                 var entry = rawEntry.Trim();
                 if (entry.Length == 0)

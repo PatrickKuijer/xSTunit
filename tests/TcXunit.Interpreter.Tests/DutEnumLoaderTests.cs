@@ -141,6 +141,24 @@ namespace TcXunit.Interpreter.Tests
             Assert.Equal(1, members["Remove"]);
         }
 
+        [Fact]
+        public void TryParseEnum_MemberWithTrailingLineComment_CommentIsIgnored()
+        {
+            // Regression: a real TwinCAT ENUM DUT member can carry a
+            // trailing "// ..." explanation on the same line as its
+            // initializer (e.g. PLC1's suite fixture) - int.Parse must never
+            // see that comment text as part of the initializer value.
+            const string declaration =
+                "TYPE eSlaveRampMode :\n(\n\tTypeA := 1\t\t\t// Slave ramps in depending on progress of master position. Dynamic limits are not considered\n\t,\n\tTypeB\n);\nEND_TYPE";
+
+            var parsed = DutEnumLoader.TryParseEnum(declaration, out var name, out _, out var members);
+
+            Assert.True(parsed);
+            Assert.Equal("eSlaveRampMode", name);
+            Assert.Equal(1, members["TypeA"]);
+            Assert.Equal(2, members["TypeB"]);
+        }
+
         private static string DutXml(string typeName, string declaration) => $@"<?xml version=""1.0"" encoding=""utf-8""?>
 <TcPlcObject Version=""1.1.0.1"" ProductVersion=""3.1.4026.18"">
   <DUT Name=""{typeName}"" Id=""{{a1b2c3d4-0008-4a1a-8b1b-0000000000ff}}"">

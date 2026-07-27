@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using TcXunit.Runner.TcUnitStub;
 
@@ -85,8 +86,20 @@ namespace TcXunit.Interpreter
             }
         }
 
-        public IReadOnlyList<TestCaseResult> RunSuite(string suiteTypeName)
+        public IReadOnlyList<TestCaseResult> RunSuite(string suiteTypeName) =>
+            RunSuite(suiteTypeName, out _);
+
+        // TcXunit-6fb.2: suite-level counterpart to TestCaseResult.ElapsedMilliseconds
+        // (TcXunit-6fb.1) - wraps the same instantiate/execute call this type's
+        // parameterless overload makes, but times it so CliRunner's JSON output can
+        // report suites[].durationMs. An out-param overload (rather than changing
+        // RunSuite's existing return type) keeps every pre-existing call site -
+        // SuiteCaseRunner.cs and the many Engine tests that only care about the
+        // IReadOnlyList<TestCaseResult> - compiling unchanged; only call sites that
+        // actually want the duration opt into this overload.
+        public IReadOnlyList<TestCaseResult> RunSuite(string suiteTypeName, out long elapsedMilliseconds)
         {
+            var stopwatch = Stopwatch.StartNew();
             var instance = NewInstance(suiteTypeName);
             var def = _registry.Get(suiteTypeName);
             var frame = new Frame(instance, suiteTypeName);
@@ -97,6 +110,8 @@ namespace TcXunit.Interpreter
             catch (MethodReturnSignal)
             {
             }
+            stopwatch.Stop();
+            elapsedMilliseconds = stopwatch.ElapsedMilliseconds;
             return instance.NativeSuiteHost.Collect();
         }
 

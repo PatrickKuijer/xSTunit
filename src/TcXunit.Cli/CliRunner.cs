@@ -151,16 +151,20 @@ namespace TcXunit.Cli
             foreach (var suiteName in suiteNames)
             {
                 IReadOnlyList<TcXunit.Runner.TcUnitStub.TestCaseResult> results;
+                long suiteDurationMs;
                 try
                 {
-                    results = engine.RunSuite(suiteName);
+                    results = engine.RunSuite(suiteName, out suiteDurationMs);
                 }
                 catch (Exception ex)
                 {
                     if (!asJson)
                         output.WriteLine($"{suiteName}: FAIL ({ex.Message})");
                     suiteFilePaths.TryGetValue(suiteName, out var failFilePath);
-                    suiteReports.Add(new SuiteReport(suiteName, failFilePath, ex.Message, Array.Empty<TestReport>()));
+                    // No suite ran to completion here (load/instantiation/default-value
+                    // failure), so there's no elapsed time to report - null, not a
+                    // fabricated zero (TcXunit-6fb.2).
+                    suiteReports.Add(new SuiteReport(suiteName, failFilePath, ex.Message, Array.Empty<TestReport>(), null));
                     failCount++;
                     anyFailed = true;
                     continue;
@@ -182,7 +186,7 @@ namespace TcXunit.Cli
                 }
 
                 suiteFilePaths.TryGetValue(suiteName, out var filePath);
-                suiteReports.Add(new SuiteReport(suiteName, filePath, null, testReports));
+                suiteReports.Add(new SuiteReport(suiteName, filePath, null, testReports, suiteDurationMs));
             }
 
             var exitCode = anyFailed ? 1 : 0;
@@ -237,18 +241,25 @@ namespace TcXunit.Cli
 
         private sealed class SuiteReport
         {
-            public SuiteReport(string name, string filePath, string error, IReadOnlyList<TestReport> tests)
+            public SuiteReport(string name, string filePath, string error, IReadOnlyList<TestReport> tests, long? durationMs)
             {
                 Name = name;
                 FilePath = filePath;
                 Error = error;
                 Tests = tests;
+                DurationMs = durationMs;
             }
 
             public string Name { get; }
             public string FilePath { get; }
             public string Error { get; }
             public IReadOnlyList<TestReport> Tests { get; }
+
+            // TcXunit-6fb.2: suite-level wall-clock time from Engine.RunSuite's
+            // stopwatch, alongside each test's existing durationMs. Null (not a
+            // fabricated 0) when the suite never ran to completion - see the
+            // suite-load-failure catch above.
+            public long? DurationMs { get; }
         }
 
         private sealed class TestReport

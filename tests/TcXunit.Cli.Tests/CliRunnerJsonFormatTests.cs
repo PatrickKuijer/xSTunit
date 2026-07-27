@@ -85,6 +85,76 @@ namespace TcXunit.Cli.Tests
         }
 
         [Fact]
+        public void Run_JsonFormat_PassingSuite_ReportsNonNegativeDurationMs()
+        {
+            var output = new StringWriter();
+
+            var exitCode = CliRunner.Run(new[] { TestFixtures.FbCounterFixtureDir(), "--format", "json" }, output);
+
+            Assert.Equal(0, exitCode);
+            using var doc = JsonDocument.Parse(output.ToString());
+            var suite = doc.RootElement.GetProperty("suites")[0];
+            var durationMs = suite.GetProperty("durationMs");
+            Assert.Equal(JsonValueKind.Number, durationMs.ValueKind);
+            Assert.True(durationMs.GetInt64() >= 0);
+        }
+
+        [Fact]
+        public void Run_JsonFormat_SuiteWithAFailingTest_StillReportsDurationMs()
+        {
+            var output = new StringWriter();
+
+            var exitCode = CliRunner.Run(new[] { _tempDir, "--format=json" }, output);
+
+            Assert.Equal(1, exitCode);
+            using var doc = JsonDocument.Parse(output.ToString());
+            var suite = doc.RootElement.GetProperty("suites")[0];
+            var test = suite.GetProperty("tests")[0];
+            Assert.False(test.GetProperty("passed").GetBoolean());
+
+            // The suite ran to completion (only the individual TEST() assertion
+            // failed), so it still reports a duration - distinct from the
+            // suite-load-failure path below, which never ran at all.
+            var durationMs = suite.GetProperty("durationMs");
+            Assert.Equal(JsonValueKind.Number, durationMs.ValueKind);
+            Assert.True(durationMs.GetInt64() >= 0);
+        }
+
+        [Fact]
+        public void Run_JsonFormat_SuiteLoadFailure_OmitsOrNullsDurationMsRatherThanReportingZero()
+        {
+            var brokenDir = Path.Combine(Path.GetTempPath(), "TcXunitCliJsonBrokenFixture_" + Guid.NewGuid());
+            Directory.CreateDirectory(brokenDir);
+            try
+            {
+                // Extends TcUnit.FB_TestSuite but references an unresolvable type in
+                // its default-value construction, so Engine's suite instantiation
+                // throws before RunSuite's stopwatch ever completes a suite run -
+                // exercising CliRunner.Run's suite-load-failure catch block.
+                File.WriteAllText(Path.Combine(brokenDir, "FB_BrokenSuiteTests.TcPOU"), BrokenSuiteXml);
+
+                var output = new StringWriter();
+                var exitCode = CliRunner.Run(new[] { brokenDir, "--format=json" }, output);
+
+                Assert.Equal(1, exitCode);
+                using var doc = JsonDocument.Parse(output.ToString());
+                var suite = doc.RootElement.GetProperty("suites")[0];
+                Assert.False(string.IsNullOrEmpty(suite.GetProperty("error").GetString()));
+
+                var durationMsKind = suite.TryGetProperty("durationMs", out var durationMs)
+                    ? durationMs.ValueKind
+                    : JsonValueKind.Undefined;
+                Assert.True(
+                    durationMsKind == JsonValueKind.Null || durationMsKind == JsonValueKind.Undefined,
+                    $"expected durationMs to be omitted or null, got {durationMsKind}");
+            }
+            finally
+            {
+                Directory.Delete(brokenDir, recursive: true);
+            }
+        }
+
+        [Fact]
         public void Run_MissingPath_JsonFormat_ReturnsTwoAndJsonError()
         {
             var output = new StringWriter();
@@ -106,6 +176,23 @@ namespace TcXunit.Cli.Tests
             Assert.Equal(2, exitCode);
             Assert.Contains("unknown --format value", output.ToString());
         }
+
+        // Extends TcUnit.FB_TestSuite (so SuiteDiscovery picks it up) but its
+        // Implementation calls a method that doesn't exist anywhere in the
+        // suite's EXTENDS chain, which Engine.Invocation's method-resolution
+        // throws InvalidOperationException for (see "not found starting from
+        // type" in Engine.Invocation.cs) before RunSuite's stopwatch ever
+        // finishes a suite run - exercising CliRunner.Run's suite-load-failure
+        // catch block, distinct from a suite that ran but had a failing TEST().
+        private const string BrokenSuiteXml = @"<?xml version=""1.0"" encoding=""utf-8""?>
+<TcPlcObject Version=""1.1.0.1"">
+  <POU Name=""FB_BrokenSuiteTests"" Id=""{00000000-0000-0000-0000-0000000000dd}"" SpecialFunc=""None"">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_BrokenSuiteTests EXTENDS TcUnit.FB_TestSuite]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[ThisMethodDoesNotExistAnywhere();]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>";
 
         private const string AlwaysFailsSuiteXml = @"<?xml version=""1.0"" encoding=""utf-8""?>
 <TcPlcObject Version=""1.1.0.1"">

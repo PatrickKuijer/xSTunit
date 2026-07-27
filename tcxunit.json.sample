@@ -1,0 +1,4 @@
+{
+  "testProjectPath": "PLC.Tests\\PLC.Tests.csproj",
+  "cliPath": "tcxunit"
+}

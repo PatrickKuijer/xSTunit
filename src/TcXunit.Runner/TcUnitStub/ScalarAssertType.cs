@@ -93,6 +93,19 @@ namespace TcXunit.Runner.TcUnitStub
                     formatExpected: (expected, delta) => $"{Convert.ToDouble(expected)} +/- {Convert.ToDouble(delta)}",
                     formatActual: actual => Convert.ToDouble(actual).ToString()),
 
+                // LREAL (TcXunit-gd2.2): the 64-bit delta-based twin of REAL.
+                // Both REAL and LREAL are boxed as C# double by the time they
+                // reach a native call (there's no narrower float representation
+                // in this codebase), so the comparison logic is identical to
+                // REAL's - only the IEC type name differs.
+                ["LREAL"] = new ScalarAssertType(
+                    "LREAL",
+                    hasDelta: true,
+                    areEqual: (expected, actual, delta) =>
+                        Math.Abs(Convert.ToDouble(expected) - Convert.ToDouble(actual)) <= Convert.ToDouble(delta),
+                    formatExpected: (expected, delta) => $"{Convert.ToDouble(expected)} +/- {Convert.ToDouble(delta)}",
+                    formatActual: actual => Convert.ToDouble(actual).ToString()),
+
                 // Integer-family types (TcXunit-gd2.1). The interpreter boxes
                 // these Cell values per IecNumericType.cs - SINT/USINT/BYTE/
                 // WORD/UINT/DINT as C# int, DWORD/UDINT/LINT as C# long, and

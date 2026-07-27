@@ -193,5 +193,19 @@ namespace TcXunit.Interpreter.Tests
             Assert.False(result.Passed);
             Assert.Contains("EXP: -2147483647, ACT: 2147483647", result.Failures[0].Message);
         }
+
+        // TcXunit-gd2.2: AssertEquals_LREAL is the 64-bit delta-based twin
+        // of AssertEquals_REAL - this is the E2E proof it's reachable
+        // through NativeMethodBridge from interpreted ST.
+        [Fact]
+        public void RunSuite_AssertEqualsLreal_ReachableAndRespectsDelta()
+        {
+            var engine = NewSuiteEngine(
+                "TEST('t');\n" +
+                "AssertEquals_LREAL(Expected := 1.0, Actual := 1.05, Delta := 0.1, Message := 'ok');\n" +
+                "TEST_FINISHED();");
+
+            Assert.True(Assert.Single(engine.RunSuite("FB_MySuite")).Passed);
+        }
     }
 }

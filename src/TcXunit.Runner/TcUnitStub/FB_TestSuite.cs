@@ -229,6 +229,9 @@ namespace TcXunit.Runner.TcUnitStub
         protected void AssertEquals_REAL(double expected, double actual, double delta, string message) =>
             AssertEqualsScalar("REAL", expected, actual, delta, message);
 
+        protected void AssertEquals_LREAL(double expected, double actual, double delta, string message) =>
+            AssertEqualsScalar("LREAL", expected, actual, delta, message);
+
         // Integer-family types (TcXunit-gd2.1): each is a 1-line forward
         // into AssertEqualsScalar, matching the INT/BOOL/STRING/REAL pattern
         // above. Parameter CLR types mirror the natural .NET type for each

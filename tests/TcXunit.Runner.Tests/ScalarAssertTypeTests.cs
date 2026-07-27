@@ -475,5 +475,38 @@ namespace TcXunit.Runner.Tests
 
             Assert.True(type.AreEqual(100L, 100L, null));
         }
+
+        // LREAL (TcXunit-gd2.2): the 64-bit delta-based twin of REAL - same
+        // compare/format logic, but at double precision throughout.
+        [Fact]
+        public void Lreal_AreEqual_TrueWithinDelta()
+        {
+            var type = ScalarAssertType.Registry["LREAL"];
+
+            Assert.True(type.AreEqual(1.0, 1.05, 0.1));
+        }
+
+        [Fact]
+        public void Lreal_AreEqual_FalseOutsideDelta()
+        {
+            var type = ScalarAssertType.Registry["LREAL"];
+
+            Assert.False(type.AreEqual(1.0, 1.2, 0.1));
+        }
+
+        [Fact]
+        public void Lreal_HasDelta_IsTrue()
+        {
+            Assert.True(ScalarAssertType.Registry["LREAL"].HasDelta);
+        }
+
+        [Fact]
+        public void Lreal_Format_IncludesDeltaOnExpectedOnly()
+        {
+            var type = ScalarAssertType.Registry["LREAL"];
+
+            Assert.Equal($"{1.0} +/- {0.1}", type.FormatExpected(1.0, 0.1));
+            Assert.Equal($"{1.2}", type.FormatActual(1.2));
+        }
     }
 }

@@ -126,7 +126,7 @@ namespace TcXunit.Parser.Tests
 
             var found = MultiDirectoryPouLoader.FindDutFiles(new[] { _dirA, _dirB });
 
-            Assert.Equal(new[] { pathA, pathB }, found.OrderBy(f => f));
+            Assert.Equal(new[] { pathA, pathB }.OrderBy(f => f).ToArray(), found.OrderBy(f => f).ToArray());
         }
 
         [Fact]

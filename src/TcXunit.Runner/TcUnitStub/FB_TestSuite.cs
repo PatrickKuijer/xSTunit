@@ -193,8 +193,6 @@ namespace TcXunit.Runner.TcUnitStub
             failures.Add(new AssertionFailure(formatted));
         }
 
-        private static string FormatBool(bool value) => value ? "TRUE" : "FALSE";
-
         // Upstream delegates both through AssertEquals_BOOL(Expected:=TRUE/
         // FALSE, Actual:=Condition, Message) rather than failing with just a
         // bare message, so a failing AssertTrue/AssertFalse carries the same
@@ -205,36 +203,30 @@ namespace TcXunit.Runner.TcUnitStub
         protected void AssertFalse(bool condition, string message) =>
             AssertEquals_BOOL(false, condition, message);
 
-        // Upstream operates on IEC 61131-3 INT, a signed 16-bit type - a real
-        // INT variable would already be truncated/wrapped to that range by
-        // the time it reaches this assert. Params stay C# int (the rest of
-        // this codebase has no narrower INT representation), but the compare
-        // wraps both operands to 16 bits first so out-of-range values that
-        // would collide as INT compare equal here too (TcXunit-k28.4).
-        protected void AssertEquals_INT(int expected, int actual, string message)
+        // Table-driven scalar dispatch (TcXunit-gd2.11): each named
+        // AssertEquals_<TYPE> method below is kept as the real, compile-time
+        // API surface (C# fixtures under tests/TcXunit.Runner.Tests/Fakes/
+        // extend FB_TestSuite directly and call these by name), but each is
+        // now a 1-line forward into this one generic method, which looks up
+        // compare/format behavior from the ScalarAssertType registry instead
+        // of every type re-implementing its own Fail()-on-mismatch method.
+        protected void AssertEqualsScalar(string typeName, object expected, object actual, object delta, string message)
         {
-            var expectedInt = unchecked((short)expected);
-            var actualInt = unchecked((short)actual);
-            if (expectedInt != actualInt)
-                Fail(expectedInt.ToString(), actualInt.ToString(), message);
+            var type = ScalarAssertType.Registry[typeName];
+            if (!type.AreEqual(expected, actual, delta))
+                Fail(type.FormatExpected(expected, delta), type.FormatActual(actual), message);
         }
 
-        protected void AssertEquals_BOOL(bool expected, bool actual, string message)
-        {
-            if (expected != actual)
-                Fail(FormatBool(expected), FormatBool(actual), message);
-        }
+        protected void AssertEquals_INT(int expected, int actual, string message) =>
+            AssertEqualsScalar("INT", expected, actual, null, message);
 
-        protected void AssertEquals_STRING(string expected, string actual, string message)
-        {
-            if (expected != actual)
-                Fail($"'{expected}'", $"'{actual}'", message);
-        }
+        protected void AssertEquals_BOOL(bool expected, bool actual, string message) =>
+            AssertEqualsScalar("BOOL", expected, actual, null, message);
 
-        protected void AssertEquals_REAL(double expected, double actual, double delta, string message)
-        {
-            if (Math.Abs(expected - actual) > delta)
-                Fail($"{expected} +/- {delta}", actual.ToString(), message);
-        }
+        protected void AssertEquals_STRING(string expected, string actual, string message) =>
+            AssertEqualsScalar("STRING", expected, actual, null, message);
+
+        protected void AssertEquals_REAL(double expected, double actual, double delta, string message) =>
+            AssertEqualsScalar("REAL", expected, actual, delta, message);
     }
 }

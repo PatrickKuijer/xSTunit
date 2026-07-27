@@ -24,23 +24,20 @@ namespace TcXunit.Interpreter
 
         public bool IsTestFinished(string name) => IS_TEST_FINISHED(name);
 
-        public void AssertEqualsInt(int expected, int actual, string message) =>
-            AssertEquals_INT(expected, actual, message);
-
         public void AssertTrueCall(bool condition, string message) =>
             AssertTrue(condition, message);
 
         public void AssertFalseCall(bool condition, string message) =>
             AssertFalse(condition, message);
 
-        public void AssertEqualsBool(bool expected, bool actual, string message) =>
-            AssertEquals_BOOL(expected, actual, message);
-
-        public void AssertEqualsString(string expected, string actual, string message) =>
-            AssertEquals_STRING(expected, actual, message);
-
-        public void AssertEqualsReal(double expected, double actual, double delta, string message) =>
-            AssertEquals_REAL(expected, actual, delta, message);
+        // Table-driven scalar dispatch (TcXunit-gd2.11): collapses the 4
+        // named AssertEquals<Type> wrappers this used to have (Int/Bool/
+        // String/Real) into one generic forward. No compile-time-name
+        // constraint is needed on this side - only NativeMethodBridge calls
+        // it, keyed off the AssertEquals_<TYPE> suffix it parsed from the
+        // native call name.
+        public new void AssertEqualsScalar(string typeName, object expected, object actual, object delta, string message) =>
+            base.AssertEqualsScalar(typeName, expected, actual, delta, message);
 
         public IReadOnlyList<TestCaseResult> Collect() => Run();
     }

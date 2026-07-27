@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using TcXunit.Runner.TcUnitStub;
 
 namespace TcXunit.Interpreter
 {
@@ -29,12 +30,6 @@ namespace TcXunit.Interpreter
                     return null;
                 case "IS_TEST_FINISHED":
                     return host.IsTestFinished(ResolveTestName(positional, named));
-                case "AssertEquals_INT":
-                    {
-                        var args = ResolveArgs(IntAssertParamNames, positional, named);
-                        host.AssertEqualsInt((int)args["Expected"], (int)args["Actual"], (string)args["Message"]);
-                        return null;
-                    }
                 case "AssertTrue":
                     {
                         var args = ResolveArgs(ConditionAssertParamNames, positional, named);
@@ -47,39 +42,34 @@ namespace TcXunit.Interpreter
                         host.AssertFalseCall((bool)args["Condition"], (string)args["Message"]);
                         return null;
                     }
-                case "AssertEquals_BOOL":
-                    {
-                        var args = ResolveArgs(BoolAssertParamNames, positional, named);
-                        host.AssertEqualsBool((bool)args["Expected"], (bool)args["Actual"], (string)args["Message"]);
-                        return null;
-                    }
-                case "AssertEquals_STRING":
-                    {
-                        var args = ResolveArgs(StringAssertParamNames, positional, named);
-                        host.AssertEqualsString((string)args["Expected"], (string)args["Actual"], (string)args["Message"]);
-                        return null;
-                    }
-                case "AssertEquals_REAL":
-                    {
-                        var args = ResolveArgs(RealAssertParamNames, positional, named);
-                        host.AssertEqualsReal(
-                            Convert.ToDouble(args["Expected"]),
-                            Convert.ToDouble(args["Actual"]),
-                            Convert.ToDouble(args["Delta"]),
-                            (string)args["Message"]);
-                        return null;
-                    }
                 default:
+                    // TcXunit-gd2.11: table-driven scalar dispatch. Parses
+                    // the AssertEquals_<TYPE> suffix from the native call
+                    // name, looks up the ScalarAssertType registry to know
+                    // whether a Delta arg is expected, and calls the one
+                    // generic host method instead of switching per type -
+                    // adding a new scalar type means adding a registry entry,
+                    // not a new case here.
+                    if (methodName.StartsWith("AssertEquals_", StringComparison.Ordinal))
+                    {
+                        var typeName = methodName.Substring("AssertEquals_".Length);
+                        if (ScalarAssertType.Registry.TryGetValue(typeName, out var scalarType))
+                        {
+                            var paramNames = scalarType.HasDelta ? ScalarAssertWithDeltaParamNames : ScalarAssertParamNames;
+                            var args = ResolveArgs(paramNames, positional, named);
+                            var delta = scalarType.HasDelta ? args["Delta"] : null;
+                            host.AssertEqualsScalar(typeName, args["Expected"], args["Actual"], delta, (string)args["Message"]);
+                            return null;
+                        }
+                    }
                     throw new NotSupportedException(
                         $"TcUnit native call '{methodName}' isn't supported yet (grow-on-demand, TcXunit-w5x.12).");
             }
         }
 
         private static readonly string[] ConditionAssertParamNames = { "Condition", "Message" };
-        private static readonly string[] IntAssertParamNames = { "Expected", "Actual", "Message" };
-        private static readonly string[] BoolAssertParamNames = { "Expected", "Actual", "Message" };
-        private static readonly string[] StringAssertParamNames = { "Expected", "Actual", "Message" };
-        private static readonly string[] RealAssertParamNames = { "Expected", "Actual", "Delta", "Message" };
+        private static readonly string[] ScalarAssertParamNames = { "Expected", "Actual", "Message" };
+        private static readonly string[] ScalarAssertWithDeltaParamNames = { "Expected", "Actual", "Delta", "Message" };
 
         // TEST_ORDERED/TEST_FINISHED_NAMED/IS_TEST_FINISHED take a single
         // TestName input in upstream - accept it either positionally or by

@@ -5,7 +5,7 @@ namespace TcXunit.Vsix.TestRunner
     /// <summary>
     /// Mirrors the camelCase JSON shape emitted by
     /// `tcxunit run --format json` (see TcXunit.Cli.CliRunner):
-    /// { suites: [{ name, filePath, error, tests: [{ name, passed, failures }] }], passed, failed, exitCode }
+    /// { suites: [{ name, filePath, error, durationMs, tests: [{ name, passed, failures, durationMs }] }], passed, failed, exitCode }
     /// and its early-exit error shape: { error }.
     /// </summary>
     internal sealed class TcxunitRunResult
@@ -42,6 +42,13 @@ namespace TcXunit.Vsix.TestRunner
         public string Error { get; set; }
 
         public List<TcxunitTestResult> Tests { get; set; }
+
+        // Added for TcXunit-1tt.6: the results tree's .node-dur slot (suite
+        // rows) renders this. The CLI has emitted "durationMs" on SuiteReport
+        // since TcXunit-6fb.2 as a nullable long -- null when the suite failed
+        // to load (never ran, so there's nothing to time), matching this
+        // model's nullable long?.
+        public long? DurationMs { get; set; }
     }
 
     internal sealed class TcxunitTestResult
@@ -51,5 +58,12 @@ namespace TcXunit.Vsix.TestRunner
         public bool Passed { get; set; }
 
         public List<string> Failures { get; set; }
+
+        // Added for TcXunit-1tt.6: the results tree's .node-dur slot (leaf
+        // test rows). The CLI has emitted "durationMs" on TestReport since
+        // TcXunit-6fb.1 as a non-negative long -- every test that appears in
+        // the JSON ran (a suite that failed to load has no test entries at
+        // all), so this is a plain long, not nullable.
+        public long DurationMs { get; set; }
     }
 }

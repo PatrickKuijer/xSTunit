@@ -24,8 +24,10 @@
       the epic's own wording ("the segmented control toggles a status class on
       .tree"), so that *does* add new selectors: see "status segmented
       control" below.
-    - TcXunit-1tt.6 fills in real .node-dur text (slot/markup already emitted
-      here as "--").
+    - TcXunit-1tt.6 fills in real .node-dur text (results.js now renders
+      "<n> ms" from the CLI's durationMs field, or omits the element entirely
+      for a row that didn't run -- no CSS change needed here, .node-dur's
+      styling below is content-agnostic).
     - TcXunit-1tt.7/.4 add keyboard-nav/selection and click-to-navigate
       *behavior*; the selection/hover visuals and .node-open affordance are
       already styled below since they're pure CSS states.

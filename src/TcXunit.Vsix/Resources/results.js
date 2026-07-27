@@ -51,10 +51,21 @@
 // display:none and a text-filtered-out row's hidden attribute are
 // independent effects -- a row needs neither to be visible).
 //
+// TcXunit-1tt.6 wires real .node-dur values from durationMs (added to the
+// CLI's --format json output by the companion TcXunit-6fb.1/.2 tickets):
+// suite.durationMs and test.durationMs are milliseconds (a plain number for a
+// test -- every test entry in the JSON ran; a nullable number for a suite,
+// null when the suite failed to load). formatDurationMs renders "<n> ms" per
+// design-system.html section 5's populated-tree example (12 ms, 3 ms, 31 ms,
+// ...) -- the doc's node-anatomy table gives no unit-switching threshold (no
+// example duration is anywhere near 1000ms), so this does not invent one.
+// "Omitted entirely when a test didn't run" (same table) is what governs
+// whether a .node-dur element exists at all -- a skipped test or a
+// failed-to-load suite gets no slot, exactly as before this ticket; what
+// changes here is only what fills the slot when one is drawn.
+//
 // Not implemented here (separate sibling tickets under TcXunit-1tt):
-// rerun-failed, keyboard nav, real .node-dur values (always "--" for a row
-// that ran; omitted for a row that didn't -- see design-system.html section
-// 5's node-anatomy table), per-node "currently executing" state (the CLI
+// rerun-failed, keyboard nav, per-node "currently executing" state (the CLI
 // emits one JSON blob at the end of a run, not an incremental stream, so
 // there is no data to know which suite is currently executing -- only that a
 // run is or isn't in flight). Plain script (no ES modules) since this page
@@ -116,6 +127,19 @@
       return 'skip';
     }
     return test && test.passed ? 'pass' : 'fail';
+  }
+
+  // Formats a durationMs number as the .node-dur slot's text, per
+  // design-system.html section 5's populated-tree example ("12 ms", "3 ms",
+  // "31 ms"). Returns null for anything that isn't a genuine numeric
+  // duration (missing/null -- the "didn't run" case, which callers use to
+  // decide whether to draw the .node-dur element at all) rather than
+  // rendering "NaN ms" or similar.
+  function formatDurationMs(durationMs) {
+    if (typeof durationMs !== 'number' || !isFinite(durationMs)) {
+      return null;
+    }
+    return durationMs + ' ms';
   }
 
   function glyphFor(status) {
@@ -217,11 +241,14 @@
     node.appendChild(textEl('span', 'node-name', (test && test.name) || ''));
 
     // .node-dur: "Omitted entirely when a test didn't run" (design-system.html
-    // section 5) -- a skipped test never ran, so it gets no slot at all, not a
-    // "--" placeholder. A pass/fail test did run; its duration just isn't
-    // wired yet (TcXunit-1tt.6), hence the placeholder.
-    if (status !== 'skip') {
-      node.appendChild(textEl('span', 'node-dur', '--'));
+    // section 5) -- a skipped test never ran, so it gets no slot at all. A
+    // pass/fail test did run and the CLI always emits a non-negative
+    // durationMs for it (TcXunit-6fb.1); formatDurationMs returning null here
+    // would mean an unexpected payload shape, in which case omitting the slot
+    // is still the right call (no fabricated placeholder).
+    var testDur = formatDurationMs(test && test.durationMs);
+    if (status !== 'skip' && testDur !== null) {
+      node.appendChild(textEl('span', 'node-dur', testDur));
     }
 
     // node-open (click-to-navigate affordance, TcXunit-1tt.4): only failed
@@ -270,9 +297,11 @@
 
     // A suite that failed to load never ran -- same "didn't run" rule as a
     // skipped test, so no .node-dur slot at all (matches the mockup's
-    // failed-to-load suite row, which also omits it).
-    if (!hasError) {
-      suiteNode.appendChild(textEl('span', 'node-dur', '--'));
+    // failed-to-load suite row, which also omits it; the CLI backs this up by
+    // emitting durationMs: null for exactly this case, TcXunit-6fb.2).
+    var suiteDur = formatDurationMs(suite && suite.durationMs);
+    if (!hasError && suiteDur !== null) {
+      suiteNode.appendChild(textEl('span', 'node-dur', suiteDur));
     }
 
     if (suite && suite.filePath) {

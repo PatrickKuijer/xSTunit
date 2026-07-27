@@ -1,6 +1,8 @@
 using System;
 using System.Diagnostics;
 using System.IO;
+using System.Threading;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using Microsoft.VisualStudio.PlatformUI;
@@ -11,19 +13,25 @@ using TcXunit.Vsix.TestRunner;
 namespace TcXunit.Vsix
 {
     /// <summary>
-    /// "Run tests" (WPF Button) shells out via TcxunitProcessRunner and shows a pass/fail
-    /// summary in StatusText, same as before. The former WPF TreeView is now a WebView2
-    /// loading Resources/results.html, which pulls in Resources/vsix-tokens.css,
-    /// vsix-shell.css, and results.css -- see docs/design-system.html section 8. Hosting
-    /// and VS-theme wiring mirror TcAgentPlugin/src/TcAgent/ChatToolWindowControl.xaml.cs
-    /// exactly (EnsureCoreWebView2Async + CoreWebView2Environment,
-    /// SetVirtualHostNameToFolderMapping onto Resources, a pre-navigation
-    /// AddScriptToExecuteOnDocumentCreatedAsync theme push plus a live
-    /// VSColorTheme.ThemeChanged -&gt; ExecuteScriptAsync push, and NewWindowRequested
-    /// opening links in the user's real browser instead of a second WebView2 popup).
+    /// The WebView2 page's #runButton (Resources/results.html/results.js) drives a run:
+    /// a click posts 'run'/'stop' over window.chrome.webview.postMessage, handled here by
+    /// OnWebMessageReceived, which calls StartRunAsync/StopRun. StartRunAsync shells
+    /// out via TcxunitProcessRunner.RunAsync (TcXunit-1tt.3 -- async + cancellable, so the
+    /// UI thread isn't blocked for a run's duration and Stop has something to cancel) and
+    /// pushes the result into the page via window.tcxunitRenderResult(...); StopRun cancels
+    /// the in-flight run, which kills the child tcxunit process. window.tcxunitSetRunning(bool)
+    /// is pushed in around the run so the page's button/prog-sweep state always reflects
+    /// whether a process is actually running, never an optimistic guess made on click.
+    /// The former native WPF "Run tests" Button is retired -- see ResultsToolWindowControl.xaml's
+    /// comment. StatusText remains for host-level errors the page itself can't show (WebView2
+    /// failing to initialize, tcxunit.json missing/invalid).
     ///
-    /// Rendering the run result into the WebView2's tree is not implemented yet -- see
-    /// TcXunit-1tt.2 (static results tree render) and the rest of TcXunit-1tt's children.
+    /// WebView2 hosting and VS-theme wiring mirror
+    /// TcAgentPlugin/src/TcAgent/ChatToolWindowControl.xaml.cs exactly (EnsureCoreWebView2Async +
+    /// CoreWebView2Environment, SetVirtualHostNameToFolderMapping onto Resources, a
+    /// pre-navigation AddScriptToExecuteOnDocumentCreatedAsync theme push plus a live
+    /// VSColorTheme.ThemeChanged -&gt; ExecuteScriptAsync push, and NewWindowRequested opening
+    /// links in the user's real browser instead of a second WebView2 popup).
     /// </summary>
     public partial class ResultsToolWindowControl : UserControl
     {
@@ -34,6 +42,12 @@ namespace TcXunit.Vsix
         // call with a fresh CoreWebView2Environment throws the "already initialized with a
         // different CoreWebView2Environment" error. Mirrors ChatToolWindowControl's guard.
         private bool _webViewInitialized;
+
+        // Non-null exactly while a run is in flight; StartRunAsync creates it, StopRun (or a
+        // second stray 'run' message while one is already running) cancels it, and
+        // StartRunAsync's finally clears it back to null. Doubles as the "is a run currently
+        // running" flag -- there's deliberately no separate bool to keep in sync with this.
+        private CancellationTokenSource _runCts;
 
         public ResultsToolWindowControl()
         {
@@ -88,6 +102,10 @@ namespace TcXunit.Vsix
                 // embedded WebView2 popup rather than the user's actual browser.
                 this.Browser.CoreWebView2.NewWindowRequested += this.OnNewWindowRequested;
 
+                // #runButton's click handler (results.js) posts the plain strings 'run'/'stop'
+                // here -- see StartRunAsync/StopRun below.
+                this.Browser.CoreWebView2.WebMessageReceived += this.OnWebMessageReceived;
+
                 this.Browser.CoreWebView2.Navigate($"https://{VirtualHostName}/results.html");
             }
             catch (Exception ex)
@@ -100,9 +118,42 @@ namespace TcXunit.Vsix
         {
             VSColorTheme.ThemeChanged -= this.OnVsThemeChanged;
 
+            // A run left in flight when the tool window unloads (redock/retab churns
+            // Loaded/Unloaded without necessarily tearing the control down -- see
+            // _webViewInitialized's comment -- but closing VS or the tool window itself
+            // can genuinely unload it mid-run) must not be left as an orphaned child
+            // process; cancelling here reuses the exact same kill path Stop uses.
+            this._runCts?.Cancel();
+
             if (this.Browser?.CoreWebView2 != null)
             {
                 this.Browser.CoreWebView2.NewWindowRequested -= this.OnNewWindowRequested;
+                this.Browser.CoreWebView2.WebMessageReceived -= this.OnWebMessageReceived;
+            }
+        }
+
+        private async void OnWebMessageReceived(object sender, CoreWebView2WebMessageReceivedEventArgs e)
+        {
+            string message;
+            try
+            {
+                message = e.TryGetWebMessageAsString();
+            }
+            catch (Exception)
+            {
+                // Not a string message (e.g. a JSON object) -- results.js only ever posts
+                // the plain strings 'run'/'stop', so anything else is foreign/unexpected
+                // and safely ignored rather than throwing out of an event handler.
+                return;
+            }
+
+            if (string.Equals(message, "run", StringComparison.Ordinal))
+            {
+                await this.StartRunAsync();
+            }
+            else if (string.Equals(message, "stop", StringComparison.Ordinal))
+            {
+                this.StopRun();
             }
         }
 
@@ -151,35 +202,85 @@ namespace TcXunit.Vsix
                 + "if(document.body){apply();}else{document.addEventListener('DOMContentLoaded',apply);}})();";
         }
 
-        private void RunButton_Click(object sender, RoutedEventArgs e)
+        /// <summary>Starts one run: pushes window.tcxunitSetRunning(true) in (which flips
+        /// #runButton to its Stop state and shows the .prog sweep -- see PushSetRunning),
+        /// awaits TcxunitProcessRunner.RunAsync, then pushes either the result into the
+        /// tree or an error into StatusText, and finally pushes
+        /// window.tcxunitSetRunning(false) back in. A stray second 'run' message while
+        /// _runCts is already non-null (the button should already read Stop, so this is
+        /// defensive, not an expected path) is a no-op -- one run at a time, per the
+        /// acceptance criteria's "unambiguous about which action is live".</summary>
+        private async Task StartRunAsync()
         {
             ThreadHelper.ThrowIfNotOnUIThread();
 
-            this.StatusText.Text = "Running...";
+            if (this._runCts != null)
+            {
+                return;
+            }
+
+            this.StatusText.Text = string.Empty;
+            this._runCts = new CancellationTokenSource();
+            this.PushSetRunning(true);
 
             try
             {
                 var directory = ResolveProjectDirectory();
                 var config = TcxunitConfig.Load(directory);
                 var runner = new TcxunitProcessRunner();
-                var result = runner.Run(config, directory);
+                var result = await runner.RunAsync(config, directory, this._runCts.Token).ConfigureAwait(true);
 
                 if (!string.IsNullOrEmpty(result.Error))
                 {
                     this.StatusText.Text = "Error: " + result.Error;
-                    return;
                 }
-
-                this.StatusText.Text = $"Passed: {result.Passed}  Failed: {result.Failed}  (exit code {result.ExitCode})";
-
-                if (this.Browser.CoreWebView2 != null && !string.IsNullOrEmpty(result.RawJson))
+                else if (this.Browser.CoreWebView2 != null && !string.IsNullOrEmpty(result.RawJson))
                 {
                     _ = this.Browser.CoreWebView2.ExecuteScriptAsync(BuildRenderResultScript(result.RawJson));
                 }
             }
+            catch (OperationCanceledException)
+            {
+                // Stop was clicked -- not a run failure. Whatever the tree already showed
+                // from a prior run is left exactly as it was (StartRunAsync never clears
+                // #tree itself; only a completed run's window.tcxunitRenderResult call
+                // does), per the acceptance criteria's "results already rendered ... stay
+                // visible ... during a subsequent run".
+                this.StatusText.Text = "Stopped.";
+            }
             catch (Exception ex)
             {
                 this.StatusText.Text = "Error: " + ex.Message;
+            }
+            finally
+            {
+                this._runCts = null;
+                this.PushSetRunning(false);
+            }
+        }
+
+        /// <summary>Cancels the in-flight run, if any -- TcxunitProcessRunner.RunAsync's
+        /// CancellationToken.Register callback is what actually kills the child process
+        /// tree (see KillProcessTree there); this just requests it. A 'stop' message with
+        /// no run in flight (button already reads "Run tests") is a no-op.</summary>
+        private void StopRun()
+        {
+            ThreadHelper.ThrowIfNotOnUIThread();
+
+            this._runCts?.Cancel();
+        }
+
+        /// <summary>Pushes window.tcxunitSetRunning(running) into the page (see
+        /// Resources/results.js) so #runButton's label/class and #prog's visibility are
+        /// always a direct reflection of whether TcxunitProcessRunner.RunAsync actually
+        /// has a process in flight, never an optimistic guess made purely from the
+        /// click.</summary>
+        private void PushSetRunning(bool running)
+        {
+            if (this.Browser.CoreWebView2 != null)
+            {
+                _ = this.Browser.CoreWebView2.ExecuteScriptAsync(
+                    "(function(){if(window.tcxunitSetRunning){window.tcxunitSetRunning(" + (running ? "true" : "false") + ");}})();");
             }
         }
 

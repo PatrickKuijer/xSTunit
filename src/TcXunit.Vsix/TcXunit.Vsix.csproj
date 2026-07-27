@@ -195,6 +195,17 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
     <!--
+      Pre-existing gap found while implementing TcXunit-1tt.3: results.js (added by
+      TcXunit-1tt.2) was never added here, so it would never be copied to the output
+      directory or packaged into the VSIX; results.html's script tag pointing at
+      results.js would 404 at runtime despite the file being on disk. Fixed here
+      since 1tt.3's own work (run/stop wiring, empty-state swap) lives in this file.
+    -->
+    <Content Include="Resources\results.js">
+      <IncludeInVSIX>true</IncludeInVSIX>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <!--
       WebView2's native loader. VS2017/XAE Shell's devenv.exe is a 32-bit process, so
       this is the x86 build regardless of this project's AnyCPU platform setting. Not
       auto-copied the way an SDK-style project's "runtimes" folder would be; this

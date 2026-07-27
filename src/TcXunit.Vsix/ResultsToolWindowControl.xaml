@@ -7,25 +7,34 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              d:DesignHeight="400" d:DesignWidth="350">
     <!--
-      Row 2 (the former WPF TreeView) is now a WebView2 loading Resources/results.html,
+      Row 1 (the former WPF TreeView) is now a WebView2 loading Resources/results.html,
       which itself loads vsix-tokens.css/vsix-shell.css/results.css; see
-      docs/design-system.html section 8 and TcXunit-1tt.1. RunButton/StatusText stay
-      native WPF for now; results-tree rendering into the WebView2 is TcXunit-1tt.2.
-      WebView2 fills its row edge-to-edge (no Margin) so the panel's own dark chrome
-      reaches the tool window's borders, matching TcAgentPlugin's chat panel.
+      docs/design-system.html section 8 and TcXunit-1tt.1. Results-tree rendering into
+      the WebView2 is TcXunit-1tt.2. WebView2 fills its row edge-to-edge (no Margin) so
+      the panel's own dark chrome reaches the tool window's borders, matching
+      TcAgentPlugin's chat panel.
+
+      TcXunit-1tt.3 retires the native WPF "Run tests (tcxunit)" Button that used to sit
+      in Row 0: docs/design-system.html's toolbar has exactly one primary action
+      (.send-btn, toggling to .stop-btn while a run is in flight, per its "exactly two
+      buttons" rule and user story 12's "unambiguous about which action is live") and
+      that now lives entirely inside the WebView2 page as #runButton (results.html),
+      driven by ResultsToolWindowControl.xaml.cs's StartRunAsync/StopRun over
+      window.chrome.webview.postMessage / CoreWebView2.WebMessageReceived. StatusText
+      remains as a host-level fallback for errors the WebView2 page itself can't show
+      (e.g. WebView2 failing to initialize, tcxunit.json missing); everything else
+      (running state, run results) is pushed into the page. Note: this comment avoids
+      the double-hyphen aside this codebase otherwise favors in .cs/.js/.css files,
+      since XML comments may not contain one; semicolons/parens stand in instead.
     -->
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <Button Grid.Row="0" x:Name="RunButton" Content="Run tests (tcxunit)" HorizontalAlignment="Left"
-                Padding="8,4" Margin="8,8,8,8" Click="RunButton_Click" />
+        <TextBlock Grid.Row="0" x:Name="StatusText" Margin="8,8,8,8" TextWrapping="Wrap" />
 
-        <TextBlock Grid.Row="1" x:Name="StatusText" Margin="8,0,8,8" TextWrapping="Wrap" />
-
-        <wv2:WebView2 Grid.Row="2" x:Name="Browser" />
+        <wv2:WebView2 Grid.Row="1" x:Name="Browser" />
     </Grid>
 </UserControl>

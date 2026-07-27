@@ -6,21 +6,35 @@
 // docs/design-system.html section 8's "Data" rule).
 //
 // window.tcxunitRenderResult(result) is called by
-// ResultsToolWindowControl.xaml.cs's RunButton_Click via ExecuteScriptAsync,
+// ResultsToolWindowControl.xaml.cs's StartRunAsync via ExecuteScriptAsync,
 // passing the CLI's own JSON output as a literal JS expression (not a string
 // to JSON.parse -- see BuildRenderResultScript in that file).
+//
+// TcXunit-1tt.3 adds the other half of the run lifecycle: #runButton posts
+// 'run'/'stop' strings to the WPF host over window.chrome.webview.postMessage
+// (CoreWebView2.WebMessageReceived on the host side), and the host calls
+// window.tcxunitSetRunning(bool) back in once the run actually starts/ends --
+// the button's label/class and #prog's visibility are host-driven, not
+// optimistically flipped on click, so they can never desync from whether a
+// tcxunit process is actually running.
 //
 // Not implemented here (separate sibling tickets under TcXunit-1tt): filter
 // box, All/Failed/Skipped segmented control, click-to-navigate (.node-open
 // is visual only), rerun-failed, keyboard nav, real .node-dur values (always
 // "--" for a row that ran; omitted for a row that didn't -- see
-// design-system.html section 5's node-anatomy table). Plain script (no ES
+// design-system.html section 5's node-anatomy table), per-node "currently
+// executing" state (the CLI emits one JSON blob at the end of a run, not an
+// incremental stream, so there is no data to know which suite is currently
+// executing -- only that a run is or isn't in flight). Plain script (no ES
 // modules) since this page has exactly one small render concern, unlike
 // TcAgent's chat.html.
 (function () {
   'use strict';
 
   var treeEl = document.getElementById('tree');
+  var emptyStateEl = document.getElementById('emptyState');
+  var runButton = document.getElementById('runButton');
+  var progEl = document.getElementById('prog');
 
   // FB_TestSuite.Fail()'s baked failure-message format (see
   // src/TcXunit.Runner/TcUnitStub/FB_TestSuite.cs):
@@ -261,5 +275,44 @@
     });
 
     updateCounts(result || {});
+
+    // First render this session swaps the empty state out for the tree
+    // permanently -- a later rerun replaces #tree's contents in place (above)
+    // rather than ever reverting to #emptyState, per TcXunit-1tt.3's
+    // acceptance criteria ("results already rendered from a prior run stay
+    // visible/updating during a subsequent run").
+    if (emptyStateEl && !emptyStateEl.hidden) {
+      emptyStateEl.hidden = true;
+      treeEl.hidden = false;
+    }
   };
+
+  // Global entry point -- called by ResultsToolWindowControl.xaml.cs's
+  // StartRunAsync/StopRun (via PushSetRunning) once a run has actually
+  // started or actually ended, so this is always a true reflection of
+  // whether a tcxunit child process is running, never an optimistic guess
+  // made on click.
+  window.tcxunitSetRunning = function (running) {
+    if (runButton) {
+      runButton.textContent = running ? 'Stop' : 'Run tests';
+      runButton.classList.toggle('stop-btn', !!running);
+    }
+    if (progEl) {
+      progEl.hidden = !running;
+    }
+  };
+
+  if (runButton) {
+    runButton.addEventListener('click', function () {
+      if (!(window.chrome && window.chrome.webview)) {
+        // Not hosted inside the VS WebView2 control (e.g. opened directly in
+        // a browser for a quick visual check) -- nothing to post to, and
+        // nothing would ever call tcxunitSetRunning back, so there is
+        // nothing safe to do here.
+        return;
+      }
+      var running = runButton.classList.contains('stop-btn');
+      window.chrome.webview.postMessage(running ? 'stop' : 'run');
+    });
+  }
 })();

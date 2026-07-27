@@ -10,9 +10,12 @@
 
   Implemented by TcXunit-1tt.2 (static results tree render: node anatomy, banner,
   assert detail). Extended by later sibling tickets:
-    - TcXunit-1tt.3 adds .prog (running/progress sweep) -- not this file's job
-      per design-system.html section 8's file list (results.css: .toolbar .tree
-      .node .assert .banner .count only).
+    - TcXunit-1tt.3 adds .prog (running/progress sweep, below) -- design-system.html
+      section 8's file list only spells out .toolbar/.tree/.node/.assert/.banner/
+      .count by name, but .prog lives in the same "extension layer: results
+      components" CSS block as those selectors (not the shared "Components --
+      Core" block .empty-state comes from, see vsix-shell.css), so it belongs
+      here, not vsix-shell.css.
     - TcXunit-1tt.5 adds filter/segmented-control behavior over .node (no new
       selectors expected -- filtering hides/shows existing nodes).
     - TcXunit-1tt.6 fills in real .node-dur text (slot/markup already emitted
@@ -177,3 +180,19 @@ body[data-theme="light"] {
 }
 .banner strong { display: block; color: var(--error); font-weight: 600; margin-bottom: 3px; font-size: 11px; }
 .banner code { font-family: var(--mono); font-size: 10.5px; }
+
+/* -- running/progress sweep (TcXunit-1tt.3): a thin CSS-only bar that lives
+   between .toolbar and .tw-body while a run is in flight, per
+   design-system.html's "running" spec example. Toggled via the #prog
+   element's hidden attribute (results.js's setRunning), never a class --
+   there's nothing else to vary here. Animation is copied verbatim, including
+   the prefers-reduced-motion fallback. -- */
+.prog { height: 2px; background: var(--border); overflow: hidden; flex: none; }
+.prog i { display: block; height: 100%; width: 38%; background: var(--accent); animation: sweep 1.4s ease-in-out infinite; }
+@keyframes sweep {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(300%); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .prog i { animation: none; width: 100%; opacity: .5; }
+}

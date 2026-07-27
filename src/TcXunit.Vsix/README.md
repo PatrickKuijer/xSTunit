@@ -27,23 +27,37 @@ TcXunit.sln` from the CLI will skip or fail on this project; build it via
   guess — see `tcxunit.json.sample`).
 - `TestRunner/TcxunitProcessRunner.cs` + `TcxunitModels.cs` — shells out to
   `tcxunit run <path> --format json` via `Process.Start` and deserializes the
-  JSON with `JavaScriptSerializer` (System.Web.Extensions).
-- `ResultsToolWindowControl.xaml(.cs)` — "Run tests" button + status line
-  (native WPF) plus a `Microsoft.Web.WebView2.Wpf.WebView2` that loads
-  `Resources/results.html`. Per TcXunit-1tt (rebuild as WebView2 per
-  `docs/design-system.html`), the results tree itself now renders as HTML/CSS
-  inside the WebView2 rather than a WPF `TreeView` — as of TcXunit-1tt.1 that
-  page is still an empty shell (no tree render yet; see TcXunit-1tt.2+). No
-  click-to-navigate into the `.TcPOU` editor yet either — deferred to
-  TcXunit-1tt.4 (source file path is already in the JSON output as of
-  TcXunit-8gj).
+  JSON with `JavaScriptSerializer` (System.Web.Extensions). `RunAsync` (added
+  by TcXunit-1tt.3) is async/cancellable — cancelling kills the whole child
+  process tree (`taskkill /T`, since a plain `Process.Kill()` on net472 only
+  kills the immediate `cmd.exe` wrapper, not the `tcxunit.exe` it launched).
+- `ResultsToolWindowControl.xaml(.cs)` — a `Microsoft.Web.WebView2.Wpf.WebView2`
+  that loads `Resources/results.html`, plus a `StatusText` line for host-level
+  errors the page itself can't show (WebView2 failing to initialize,
+  `tcxunit.json` missing/invalid). Per TcXunit-1tt (rebuild as WebView2 per
+  `docs/design-system.html`), the results tree renders as HTML/CSS inside the
+  WebView2 rather than a WPF `TreeView` (TcXunit-1tt.2). As of TcXunit-1tt.3
+  the toolbar's `#runButton` inside the WebView2 page is the only "Run
+  tests"/"Stop" action — the native WPF button TcXunit-1tt.1/.2 left in place
+  is retired. A click posts `'run'`/`'stop'` to
+  `ResultsToolWindowControl.xaml.cs` over `window.chrome.webview.postMessage`
+  (`CoreWebView2.WebMessageReceived`), which drives `TcxunitProcessRunner.RunAsync`
+  and pushes `window.tcxunitSetRunning(bool)` back in so the button/`.prog`
+  sweep always reflect whether a process is actually running. No
+  click-to-navigate into the `.TcPOU` editor yet — deferred to TcXunit-1tt.4
+  (source file path is already in the JSON output as of TcXunit-8gj). No
+  per-test/per-suite "currently executing" granularity either — the CLI emits
+  one JSON blob at the end of a run, not an incremental stream, so there's no
+  data to show which suite is running, only that a run is or isn't in flight.
 - `Resources/results.html`, `Resources/vsix-tokens.css`,
   `Resources/vsix-shell.css`, `Resources/results.css` — the WebView2 page and
   its shared/TcXunit-only stylesheets. `vsix-tokens.css`/`vsix-shell.css` are
   copy-sourced from `TcAgentPlugin/src/TcAgent/Resources/chat.css` per
   `docs/design-system.html` section 8's file-split plan and should be kept in
   sync with it by hand (no shared CSS package between the two repos yet).
-  `results.css` is TcXunit-only and currently an empty skeleton.
+  `results.css` is TcXunit-only (`.toolbar`/`.tree`/`.node`/`.assert`/`.banner`/
+  `.count`/`.prog`); `.empty-state` lives in `vsix-shell.css` since it's a
+  shared "Components — Core" element per the design doc, not results-specific.
 
 ## Building on Windows
 
@@ -56,10 +70,14 @@ TcXunit.sln` from the CLI will skip or fail on this project; build it via
    the VS SDK isn't registered the way `TcAgentPlugin` expects.
 3. Deploy locally (`F5` / `/rootsuffix Exp`, or into XAE Shell directly) and
    verify: the "TcXunit Results" tool window shows up (Other Windows menu),
-   its WebView2 area loads (empty shell page, dark/light matching the XAE
-   Shell theme — toggle Tools > Options > Environment > General to confirm it
-   updates live), and "Run tests (tcxunit)" shells out successfully (needs a
-   real `tcxunit.json` — copy `tcxunit.json.sample` and fill in
-   `testProjectPath`, plus the `tcxunit` CLI on PATH or `cliPath` set to a
-   full path) and updates the status line with a pass/fail count. The results
-   tree itself doesn't render into the WebView2 yet — see TcXunit-1tt.2.
+   its WebView2 area loads (dark/light matching the XAE Shell theme — toggle
+   Tools > Options > Environment > General to confirm it updates live), and
+   shows the empty-state copy ("No results yet...") before any run. Clicking
+   "Run tests" (needs a real `tcxunit.json` — copy `tcxunit.json.sample` and
+   fill in `testProjectPath`, plus the `tcxunit` CLI on PATH or `cliPath` set
+   to a full path) swaps the button to "Stop", shows the `.prog` sweep above
+   the tree, and on completion renders the pass/fail tree and swaps the
+   button back to "Run tests". Clicking "Stop" mid-run should kill the
+   `tcxunit` process (verify via Task Manager) and return the button to "Run
+   tests" without touching whatever tree was already rendered from a prior
+   run.

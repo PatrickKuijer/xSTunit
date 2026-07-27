@@ -141,6 +141,21 @@ body{
 .picker-opt .opt-note{ color:var(--text-faint); font-size:10.5px; }
 .picker-dot{ width:7px; height:7px; border-radius:50%; flex:none; }
 
+/* -- empty state (TcXunit-1tt.3: shown in results.html's #tree area before
+   the first run of a session) -- copied verbatim from design-system.html's
+   "Components -- Core" section (shared across every panel, alongside
+   buttons/seg/field/chip/picker above), not results.css, even though today
+   only results.html uses it. */
+.empty-state{
+  padding:18px 16px;
+  border:1px dashed var(--border);
+  border-radius:8px;
+  background:var(--chrome-bg);
+  color:var(--text-dim);
+  font-size:12.5px;
+}
+.empty-state strong{ display:block; margin-bottom:6px; font-size:12px; color:var(--text); }
+
 /* -- statusbar (required region -- never omitted, per section 6) -- */
 .tw-statusbar{
   flex:none;

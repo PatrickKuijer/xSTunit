@@ -16,15 +16,27 @@
     pushes the CLI's run-result JSON in by calling window.tcxunitRenderResult(...)
     (see results.js, and BuildRenderResultScript on the host side).
 
-    The #runButton inside .toolbar is a visual seam only (TcXunit-1tt.2) -- it is
-    not wired to anything yet. The native WPF "Run tests (tcxunit)" button
-    (ResultsToolWindowControl.xaml) is still what actually triggers a run; a later
-    ticket (TcXunit-1tt.3, which needs to swap this button to a Stop state and
-    drive the .prog sweep while a run is in flight) is expected to be what wires
-    this one up and retires the WPF button, per docs/design-system.html's own
-    "everything lives in the WebView2 panel" shape for the toolbar. Until then,
-    having both visible is a known, temporary artifact of building this out in
-    stages -- not a bug.
+    #runButton (TcXunit-1tt.3) is the panel's one send-btn/stop-btn per
+    design-system.html's "exactly two [buttons]" rule and user story 12
+    ("unambiguous about which action is live"): a click posts the string
+    'run' or 'stop' to the WPF host via window.chrome.webview.postMessage
+    (see results.js), which drives TcxunitProcessRunner.RunAsync and pushes
+    window.tcxunitSetRunning(bool) back in to flip this button's label/class
+    and toggle #prog. This retires the separate native WPF "Run tests
+    (tcxunit)" button TcXunit-1tt.1/.2 left in ResultsToolWindowControl.xaml,
+    per that button's own since-removed comment foreshadowing this ticket.
+
+    #prog is the CSS-only sweep (results.css) shown only while a run is in
+    flight -- hidden by default, toggled via the hidden attribute, never a
+    class (nothing else about it varies).
+
+    #emptyState is design-system.html's ".empty-state" block (Components --
+    Core, so its rules live in vsix-shell.css) shown verbatim until the first
+    window.tcxunitRenderResult(...) call this session, at which point
+    results.js swaps it out for #tree permanently (a subsequent run's results
+    replace #tree's contents in place -- the tree stays visible/updating
+    across reruns per the mockup's "running" example, it does not revert to
+    this empty state).
 
     #tree is results.css/.tree's render target, filled in by results.js. The
     .tw-statusbar region is required per docs/design-system.html section 6
@@ -39,8 +51,15 @@
     </div>
   </div>
 
+  <div class="prog" id="prog" hidden><i></i></div>
+
   <div class="tw-body">
-    <div class="tree" id="tree"></div>
+    <div class="empty-state" id="emptyState">
+      <strong>No results yet.</strong>
+      Run the suites in this solution to see pass and fail output here. Double-click any
+      result to open its .TcPOU in the editor.
+    </div>
+    <div class="tree" id="tree" hidden></div>
   </div>
 
   <div class="tw-statusbar">

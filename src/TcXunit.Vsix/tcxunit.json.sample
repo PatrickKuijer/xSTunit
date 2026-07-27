@@ -1,0 +1,7 @@
+{
+  "paths": [
+    "PLC\\POUs",
+    "PLC\\Tests"
+  ],
+  "cliPath": "tcxunit"
+}

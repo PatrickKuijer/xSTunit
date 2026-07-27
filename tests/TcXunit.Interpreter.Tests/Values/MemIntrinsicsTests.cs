@@ -186,6 +186,69 @@ END_TYPE");
             Assert.Equal(9, m.Fields["count"].Value);
         }
 
+        // TcXunit-fsz: ADR(struct.field) where the field is STRING(n) - the
+        // Beckhoff wire-record round-trip case (uRemoteRegistrationRecord's
+        // sModuleName). PackValue must byte-pack the string (ASCII,
+        // null-terminated) instead of throwing NotSupportedException.
+        [Fact]
+        public void Memcpy_StringStructField_RoundTripsThroughByteBuffer()
+        {
+            var structType = StructDeclParser.Parse(@"TYPE ST_Msg :
+STRUCT
+	name : STRING(5);
+END_STRUCT
+END_TYPE");
+            var fb = new PouAst(
+                "FB_Holder", null, "VAR\n\tm : ST_Msg := (name := 'abc');\n\tout : ARRAY[0..5] OF BYTE;\nEND_VAR",
+                "", new List<MethodAst>());
+            var engine = new Engine(new TypeRegistry(new[] { fb }, new[] { structType }));
+            var instance = engine.NewInstance("FB_Holder");
+            var frame = new Frame(instance, "FB_Holder");
+
+            engine.Evaluate(Parser.ParseExpression("MEMCPY(ADR(out), ADR(m.name), 6)"), frame);
+
+            var outBuf = (ArrayValue)instance.Fields["out"].Value;
+            Assert.Equal(new object[] { 97, 98, 99, 0, 0, 0 }, outBuf.Elements); // "abc\0\0\0"
+        }
+
+        // Inverse direction: bytes copied *into* a STRING(n) struct field
+        // are unpacked back into a CLR string, truncating at the first null.
+        [Fact]
+        public void Memcpy_IntoStringStructField_UnpacksBytesAsString()
+        {
+            var structType = StructDeclParser.Parse(@"TYPE ST_Msg :
+STRUCT
+	name : STRING(5);
+END_STRUCT
+END_TYPE");
+            var fb = new PouAst(
+                "FB_Holder", null,
+                "VAR\n\tm : ST_Msg;\n\tsrc : ARRAY[0..5] OF BYTE := [120, 121, 0, 0, 0, 0];\nEND_VAR", // "xy\0\0\0\0"
+                "", new List<MethodAst>());
+            var engine = new Engine(new TypeRegistry(new[] { fb }, new[] { structType }));
+            var instance = engine.NewInstance("FB_Holder");
+            var frame = new Frame(instance, "FB_Holder");
+
+            engine.Evaluate(Parser.ParseExpression("MEMCPY(ADR(m.name), ADR(src), 6)"), frame);
+
+            var m = (StructInstance)instance.Fields["m"].Value;
+            Assert.Equal("xy", m.Fields["name"].Value);
+        }
+
+        // A value longer than the declared STRING(n) length is truncated to
+        // n characters, mirroring TwinCAT's fixed-size wire format.
+        [Fact]
+        public void Memcpy_StringLongerThanDeclaredLength_TruncatesToDeclaredLength()
+        {
+            var (engine, instance, frame) = NewHolder(
+                "VAR\n\ts : STRING(3) := 'abcdef';\n\tout : ARRAY[0..3] OF BYTE;\nEND_VAR");
+
+            engine.Evaluate(Parser.ParseExpression("MEMCPY(ADR(out), ADR(s), 4)"), frame);
+
+            var outBuf = (ArrayValue)instance.Fields["out"].Value;
+            Assert.Equal(new object[] { 97, 98, 99, 0 }, outBuf.Elements); // "abc\0" (declared length 3, not "abcdef")
+        }
+
         // MEMSET on a scalar Cell: fills its byte representation with the
         // low byte of value, same as filling a BYTE array.
         [Fact]

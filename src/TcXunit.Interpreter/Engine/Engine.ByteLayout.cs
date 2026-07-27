@@ -55,9 +55,9 @@ namespace TcXunit.Interpreter
         // Writes value (already known to be of IEC type typeName) into
         // buffer at offset, byte-for-byte, using the same natural-alignment
         // struct/array layout SizeOfType computes. Grow-on-demand: only the
-        // scalar/STRUCT/ARRAY shapes SizeOfType itself understands are
-        // supported here; STRING/POINTER/REFERENCE byte-packing isn't
-        // modeled yet (no fixture needs it).
+        // scalar/STRUCT/ARRAY/STRING shapes SizeOfType itself understands are
+        // supported here; POINTER/REFERENCE byte-packing isn't modeled yet
+        // (no fixture needs it).
         private void PackValue(byte[] buffer, int offset, object value, string typeName, Frame frame)
         {
             var resolved = _registry.ResolveAlias(typeName);
@@ -92,6 +92,24 @@ namespace TcXunit.Interpreter
                 var array = (ArrayValue)value;
                 for (var i = 0; i < count; i++)
                     PackValue(buffer, offset + i * elementSize, array.Elements[i], elementTypeName, frame);
+                return;
+            }
+
+            if (StringTypeInfo.IsStringType(resolved))
+            {
+                // Wire format is a fixed length+1 byte buffer (matching
+                // SizeOfType's STRING/WSTRING size), ASCII, null-terminated:
+                // truncate to length chars, then null-pad (and terminate)
+                // the rest. WSTRING mirrors STRING here (StringTypeInfo's
+                // character width isn't enforced elsewhere either).
+                var length = StringTypeInfo.ParseLength(
+                    resolved, boundText => Convert.ToInt32(Evaluate(Parser.ParseExpression(boundText), frame)));
+                var text = (string)value ?? string.Empty;
+                var charCount = Math.Min(text.Length, length);
+                for (var i = 0; i < charCount; i++)
+                    buffer[offset + i] = unchecked((byte)text[i]);
+                for (var i = charCount; i <= length; i++)
+                    buffer[offset + i] = 0;
                 return;
             }
 
@@ -185,6 +203,22 @@ namespace TcXunit.Interpreter
                 for (var i = 0; i < count; i++)
                     elements[i] = UnpackValue(buffer, offset + i * elementSize, elementTypeName, frame);
                 return new ArrayValue(dimensions, elementTypeName, elements);
+            }
+
+            if (StringTypeInfo.IsStringType(resolved))
+            {
+                // Inverse of the PackValue case above: read up to the
+                // declared length, stopping early at the null terminator.
+                var length = StringTypeInfo.ParseLength(
+                    resolved, boundText => Convert.ToInt32(Evaluate(Parser.ParseExpression(boundText), frame)));
+                var end = offset;
+                var max = offset + length;
+                while (end < max && buffer[end] != 0)
+                    end++;
+                var chars = new char[end - offset];
+                for (var i = 0; i < chars.Length; i++)
+                    chars[i] = (char)buffer[offset + i];
+                return new string(chars);
             }
 
             switch (resolved)

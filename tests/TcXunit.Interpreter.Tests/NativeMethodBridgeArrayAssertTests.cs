@@ -201,5 +201,146 @@ namespace TcXunit.Interpreter.Tests
             Assert.False(result.Passed);
             Assert.Contains("EXP: SIZE = 3, ACT: SIZE = 2", result.Failures[0].Message);
         }
+
+        // TcXunit-gd2.10: AssertArray2dEquals_REAL/_LREAL and
+        // AssertArray3dEquals_REAL/_LREAL - confirmed (per FB_TestSuite.cs'
+        // AssertArrayEquals and ArrayValue's flattened N-dimension storage)
+        // to be pure dispatch wiring reusing the same generic dispatcher as
+        // the 1D case above, not a new implementation - these tests exist
+        // to prove that rather than assume it. Declared array literals are
+        // flat/row-major regardless of dimension count (Engine.Defaults.cs'
+        // OverlayArray walks the flattened Elements array in order), same
+        // as ArrayValue's own storage, so a 2x2 literal is just the 1D
+        // 4-element list in row-major order.
+        [Theory]
+        [MemberData(nameof(FloatArrayTypes))]
+        public void RunSuite_AssertArray2dEquals_WithinDelta_Passes(string typeName)
+        {
+            var declarationText =
+                $"VAR\n" +
+                $"aExpecteds : ARRAY[0..1,0..1] OF {typeName} := [1.0, 2.0, 3.0, 4.0];\n" +
+                $"aActuals : ARRAY[0..1,0..1] OF {typeName} := [1.05, 2.0, 3.0, 4.0];\n" +
+                "END_VAR";
+
+            var engine = NewSuiteEngine(
+                declarationText,
+                "TEST('t');\n" +
+                "AssertArray2dEquals_" + typeName + "(Expecteds := aExpecteds, Actuals := aActuals, Delta := 0.1, Message := 'ok');\n" +
+                "TEST_FINISHED();");
+
+            Assert.True(Assert.Single(engine.RunSuite("FB_MySuite")).Passed);
+        }
+
+        [Theory]
+        [MemberData(nameof(FloatArrayTypes))]
+        public void RunSuite_AssertArray2dEquals_OutsideDelta_ReportsIndexAndValues(string typeName)
+        {
+            var declarationText =
+                $"VAR\n" +
+                $"aExpecteds : ARRAY[0..1,0..1] OF {typeName} := [1.0, 2.0, 3.0, 4.0];\n" +
+                $"aActuals : ARRAY[0..1,0..1] OF {typeName} := [1.0, 2.0, 3.5, 4.0];\n" +
+                "END_VAR";
+
+            var engine = NewSuiteEngine(
+                declarationText,
+                "TEST('t');\n" +
+                "AssertArray2dEquals_" + typeName + "(Expecteds := aExpecteds, Actuals := aActuals, Delta := 0.1, Message := 'mismatch');\n" +
+                "TEST_FINISHED();");
+
+            var result = Assert.Single(engine.RunSuite("FB_MySuite"));
+
+            Assert.False(result.Passed);
+            // flat index 2 in a [0..1,0..1] row-major layout unflattens to
+            // [1,0] - the third element (0-based) of the 4-value literal.
+            Assert.Contains("EXP: ARRAY[1,0] = 3, ACT: ARRAY[1,0] = 3.5", result.Failures[0].Message);
+        }
+
+        [Theory]
+        [MemberData(nameof(FloatArrayTypes))]
+        public void RunSuite_AssertArray2dEquals_ShapeMismatch_ReportsSizeFailure(string typeName)
+        {
+            var declarationText =
+                $"VAR\n" +
+                $"aExpecteds : ARRAY[0..1,0..1] OF {typeName} := [1.0, 2.0, 3.0, 4.0];\n" +
+                $"aActuals : ARRAY[0..1,0..2] OF {typeName} := [1.0, 2.0, 3.0, 4.0, 5.0, 6.0];\n" +
+                "END_VAR";
+
+            var engine = NewSuiteEngine(
+                declarationText,
+                "TEST('t');\n" +
+                "AssertArray2dEquals_" + typeName + "(Expecteds := aExpecteds, Actuals := aActuals, Delta := 0.1, Message := 'mismatch');\n" +
+                "TEST_FINISHED();");
+
+            var result = Assert.Single(engine.RunSuite("FB_MySuite"));
+
+            Assert.False(result.Passed);
+            Assert.Contains("EXP: SIZE = 2x2, ACT: SIZE = 2x3", result.Failures[0].Message);
+        }
+
+        [Theory]
+        [MemberData(nameof(FloatArrayTypes))]
+        public void RunSuite_AssertArray3dEquals_WithinDelta_Passes(string typeName)
+        {
+            var declarationText =
+                $"VAR\n" +
+                $"aExpecteds : ARRAY[0..1,0..1,0..1] OF {typeName} := [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0];\n" +
+                $"aActuals : ARRAY[0..1,0..1,0..1] OF {typeName} := [1.05, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0];\n" +
+                "END_VAR";
+
+            var engine = NewSuiteEngine(
+                declarationText,
+                "TEST('t');\n" +
+                "AssertArray3dEquals_" + typeName + "(Expecteds := aExpecteds, Actuals := aActuals, Delta := 0.1, Message := 'ok');\n" +
+                "TEST_FINISHED();");
+
+            Assert.True(Assert.Single(engine.RunSuite("FB_MySuite")).Passed);
+        }
+
+        [Theory]
+        [MemberData(nameof(FloatArrayTypes))]
+        public void RunSuite_AssertArray3dEquals_OutsideDelta_ReportsIndexAndValues(string typeName)
+        {
+            var declarationText =
+                $"VAR\n" +
+                $"aExpecteds : ARRAY[0..1,0..1,0..1] OF {typeName} := [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0];\n" +
+                $"aActuals : ARRAY[0..1,0..1,0..1] OF {typeName} := [1.0, 2.0, 3.0, 4.0, 5.0, 6.5, 7.0, 8.0];\n" +
+                "END_VAR";
+
+            var engine = NewSuiteEngine(
+                declarationText,
+                "TEST('t');\n" +
+                "AssertArray3dEquals_" + typeName + "(Expecteds := aExpecteds, Actuals := aActuals, Delta := 0.1, Message := 'mismatch');\n" +
+                "TEST_FINISHED();");
+
+            var result = Assert.Single(engine.RunSuite("FB_MySuite"));
+
+            Assert.False(result.Passed);
+            // flat index 5 in a [0..1,0..1,0..1] row-major layout unflattens
+            // to [1,0,1] - the sixth element (0-based) of the 8-value
+            // literal.
+            Assert.Contains("EXP: ARRAY[1,0,1] = 6, ACT: ARRAY[1,0,1] = 6.5", result.Failures[0].Message);
+        }
+
+        [Theory]
+        [MemberData(nameof(FloatArrayTypes))]
+        public void RunSuite_AssertArray3dEquals_ShapeMismatch_ReportsSizeFailure(string typeName)
+        {
+            var declarationText =
+                $"VAR\n" +
+                $"aExpecteds : ARRAY[0..1,0..1,0..1] OF {typeName} := [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0];\n" +
+                $"aActuals : ARRAY[0..1,0..1,0..2] OF {typeName} := [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0];\n" +
+                "END_VAR";
+
+            var engine = NewSuiteEngine(
+                declarationText,
+                "TEST('t');\n" +
+                "AssertArray3dEquals_" + typeName + "(Expecteds := aExpecteds, Actuals := aActuals, Delta := 0.1, Message := 'mismatch');\n" +
+                "TEST_FINISHED();");
+
+            var result = Assert.Single(engine.RunSuite("FB_MySuite"));
+
+            Assert.False(result.Passed);
+            Assert.Contains("EXP: SIZE = 2x2x2, ACT: SIZE = 2x2x3", result.Failures[0].Message);
+        }
     }
 }

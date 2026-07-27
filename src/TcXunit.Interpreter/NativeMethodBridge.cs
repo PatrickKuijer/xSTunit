@@ -92,6 +92,46 @@ namespace TcXunit.Interpreter
                         }
                     }
 
+                    // TcXunit-gd2.10: AssertArray2dEquals_<TYPE>/
+                    // AssertArray3dEquals_<TYPE> (REAL/LREAL only, matching
+                    // upstream - it has no non-float 2D/3D array asserts).
+                    // Unlike AssertArrayEquals_<TYPE> above, the dimension
+                    // count is baked into the method name itself ("2d"/"3d"
+                    // between "Array" and "Equals", not just a type suffix),
+                    // so the prefix is "AssertArray2dEquals_"/
+                    // "AssertArray3dEquals_" rather than a single shared
+                    // prefix - but both forward to the exact same host call
+                    // as the 1D case. AssertArrayEqualsCall/AssertArrayEquals
+                    // are already dimension-agnostic (ArrayValue.Dimensions
+                    // is a per-dimension list, and the Runner's shape-check/
+                    // UnflattenIndex loop over Count generically), confirmed
+                    // by reading ArrayValue.cs/ArrayTypeInfo.cs and upstream's
+                    // FB_TestSuite.TcPOU AssertArray2dEquals_REAL/
+                    // AssertArray3dEquals_REAL: per-element mismatches format
+                    // as "ARRAY[i,j]"/"ARRAY[i,j,k]" - identical in shape to
+                    // this dispatcher's existing
+                    // $"ARRAY[{string.Join(",", index)}]" - so no new
+                    // dispatcher logic needed, just wider prefix matching.
+                    // (Upstream's SIZE-mismatch message for 2D/3D is more
+                    // verbose - "SIZE = [lo..hi,lo..hi] (WxH)" with bounds -
+                    // than this dispatcher's flat "SIZE = WxH"; kept as-is
+                    // for consistency with the existing 1D dispatcher rather
+                    // than special-cased per dimension count.)
+                    if (methodName.StartsWith("AssertArray2dEquals_", StringComparison.Ordinal) ||
+                        methodName.StartsWith("AssertArray3dEquals_", StringComparison.Ordinal))
+                    {
+                        var typeName = methodName.Substring(methodName.IndexOf('_') + 1);
+                        if (MultiDimArrayAssertSupportedTypes.Contains(typeName))
+                        {
+                            var scalarType = ScalarAssertType.Registry[typeName];
+                            var paramNames = scalarType.HasDelta ? ArrayAssertWithDeltaParamNames : ArrayAssertParamNames;
+                            var args = ResolveArgs(paramNames, positional, named);
+                            var delta = scalarType.HasDelta ? args["Delta"] : null;
+                            host.AssertArrayEqualsCall(typeName, (ArrayValue)args["Expecteds"], (ArrayValue)args["Actuals"], delta, (string)args["Message"]);
+                            return null;
+                        }
+                    }
+
                     // TcXunit-gd2.11: table-driven scalar dispatch. Parses
                     // the AssertEquals_<TYPE> suffix from the native call
                     // name, looks up the ScalarAssertType registry to know
@@ -130,6 +170,14 @@ namespace TcXunit.Interpreter
         private static readonly HashSet<string> ArrayAssertSupportedTypes = new HashSet<string>
         {
             "BOOL", "BYTE", "DINT", "DWORD", "INT", "LINT", "LREAL", "REAL", "SINT", "UDINT", "UINT", "ULINT", "USINT", "WORD",
+        };
+
+        // TcXunit-gd2.10: upstream only has AssertArray2dEquals_<TYPE>/
+        // AssertArray3dEquals_<TYPE> for REAL/LREAL (no non-float 2D/3D
+        // array asserts exist upstream), unlike the 1D array asserts above.
+        private static readonly HashSet<string> MultiDimArrayAssertSupportedTypes = new HashSet<string>
+        {
+            "LREAL", "REAL",
         };
 
         // TEST_ORDERED/TEST_FINISHED_NAMED/IS_TEST_FINISHED take a single

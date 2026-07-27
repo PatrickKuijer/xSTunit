@@ -11,10 +11,12 @@ namespace TcXunit.Interpreter.Tests
     public class SizeOfTests
     {
         private static (Engine Engine, FbInstance Instance, Frame Frame) NewHolder(
-            string varBlock, IEnumerable<StructAst> structTypes = null)
+            string varBlock,
+            IEnumerable<StructAst> structTypes = null,
+            IEnumerable<KeyValuePair<string, string>> aliases = null)
         {
             var fb = new PouAst("FB_Holder", null, varBlock, "", new List<MethodAst>());
-            var engine = new Engine(new TypeRegistry(new[] { fb }, structTypes));
+            var engine = new Engine(new TypeRegistry(new[] { fb }, structTypes, aliases: aliases));
             var instance = engine.NewInstance("FB_Holder");
             return (engine, instance, new Frame(instance, "FB_Holder"));
         }
@@ -152,6 +154,53 @@ END_TYPE");
             // struct to 9 bytes - but the struct's own alignment is 2 (its
             // largest member), so the overall size pads up to 10.
             Assert.Equal(10, result);
+        }
+
+        [Fact]
+        public void SizeOf_EnumVariable_DefaultsToIntByteWidth()
+        {
+            // TcXunit-fyu: no explicit base type on the ENUM DUT (E_Color ->
+            // INT via DutEnumLoader's default), so SIZEOF() resolves it the
+            // same way it resolves any other alias-to-scalar type name.
+            var aliases = new[] { new KeyValuePair<string, string>("E_Color", "INT") };
+            var (engine, _, frame) = NewHolder("VAR\n\tc : E_Color;\nEND_VAR", aliases: aliases);
+
+            var result = engine.Evaluate(Parser.ParseExpression("SIZEOF(c)"), frame);
+
+            Assert.Equal(2, result);
+        }
+
+        [Fact]
+        public void SizeOf_EnumWithExplicitBaseType_ReturnsBaseTypeByteWidth()
+        {
+            var aliases = new[] { new KeyValuePair<string, string>("eModuleParameterDataTypes", "DINT") };
+            var (engine, _, frame) = NewHolder(
+                "VAR\n\td : eModuleParameterDataTypes;\nEND_VAR", aliases: aliases);
+
+            var result = engine.Evaluate(Parser.ParseExpression("SIZEOF(d)"), frame);
+
+            Assert.Equal(4, result);
+        }
+
+        [Fact]
+        public void SizeOf_StructFieldOfEnumType_ComputesRecursively()
+        {
+            var structType = StructDeclParser.Parse(@"TYPE ST_WithEnum :
+STRUCT
+	flag : BYTE;
+	kind : E_Color;
+END_STRUCT
+END_TYPE");
+            var aliases = new[] { new KeyValuePair<string, string>("E_Color", "INT") };
+            var (engine, _, frame) = NewHolder(
+                "VAR\n\tm : ST_WithEnum;\nEND_VAR", new[] { structType }, aliases);
+
+            var result = engine.Evaluate(Parser.ParseExpression("SIZEOF(m)"), frame);
+
+            // BYTE at offset 0 (1 byte), then the enum (resolved to INT, 2
+            // bytes) needs 2-byte alignment - a 1-byte pad before it lands
+            // it at offset 2..3, total 4 bytes.
+            Assert.Equal(4, result);
         }
     }
 }

@@ -70,7 +70,14 @@ namespace TcXunit.Cli
             // STRING(255)): shared with SuiteCaseRunner via DutAliasLoader
             // for the same "both entry points resolve DUTs identically"
             // reason as DutStructLoader/GvlLoader above.
-            var aliases = DutAliasLoader.Load(args, out _);
+            var aliases = DutAliasLoader.Load(args, out _).ToDictionary(kv => kv.Key, kv => kv.Value);
+
+            // ENUM .TcDUT definitions (TcXunit-fyu, e.g. E_Color -> INT):
+            // registered into the same alias map so SIZEOF() and every other
+            // ResolveAlias call site resolves an enum type name to its
+            // underlying integer type without a separate lookup path.
+            foreach (var enumAlias in DutEnumLoader.Load(args, out _))
+                aliases[enumAlias.Key] = enumAlias.Value;
 
             // .TcGVL global variable lists (TcXunit-71o): shared with
             // SuiteCaseRunner via GvlLoader, same resilient/fail-fast shape

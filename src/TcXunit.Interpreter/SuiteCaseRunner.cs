@@ -228,8 +228,18 @@ namespace TcXunit.Interpreter
             // ALIAS .TcDUT definitions (TcXunit-6hg, e.g. T_MaxString ->
             // STRING(255)), shared with CliRunner via DutAliasLoader for the
             // same reason DUT struct types/GVLs are shared above.
-            var aliases = DutAliasLoader.Load(pouDirectories, out var aliasSkipped);
+            var aliases = DutAliasLoader.Load(pouDirectories, out var aliasSkipped)
+                .ToDictionary(kv => kv.Key, kv => kv.Value);
             skipped.AddRange(aliasSkipped);
+
+            // ENUM .TcDUT definitions (TcXunit-fyu, e.g. E_Color -> INT):
+            // registered into the same alias map so SIZEOF() and every other
+            // ResolveAlias call site resolves an enum type name to its
+            // underlying integer type without a separate lookup path.
+            var enumAliases = DutEnumLoader.Load(pouDirectories, out var enumSkipped);
+            skipped.AddRange(enumSkipped);
+            foreach (var enumAlias in enumAliases)
+                aliases[enumAlias.Key] = enumAlias.Value;
 
             // .TcGVL global variable lists (TcXunit-71o), shared with
             // CliRunner via GvlLoader for the same reason DUT struct types

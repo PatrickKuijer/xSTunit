@@ -1,7 +1,9 @@
 using System;
+using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using Microsoft.VisualStudio.Shell;
 using TcXunitResultsSpike.TestRunner;
 
 namespace TcXunitResultsSpike
@@ -20,15 +22,14 @@ namespace TcXunitResultsSpike
 
         private void RunButton_Click(object sender, RoutedEventArgs e)
         {
+            ThreadHelper.ThrowIfNotOnUIThread();
+
             this.ResultsTree.Items.Clear();
             this.StatusText.Text = "Running...";
 
             try
             {
-                // TODO(spike): resolve this from the open .plcproj's directory via
-                // the XAE DTE/solution service instead of the current directory,
-                // once running inside an actual XAE Shell session.
-                var directory = Environment.CurrentDirectory;
+                var directory = ResolveProjectDirectory();
                 var config = TcxunitConfig.Load(directory);
                 var runner = new TcxunitProcessRunner();
                 var result = runner.Run(config, directory);
@@ -77,6 +78,26 @@ namespace TcXunitResultsSpike
             {
                 this.StatusText.Text = "Error: " + ex.Message;
             }
+        }
+
+        // Resolves the open solution's directory via DTE (mirrors TcAgentPlugin's
+        // ChatToolWindowControl_Loaded pattern: dte.Solution.FullName is the .sln path,
+        // empty when no solution is open). Falls back to the process's current directory
+        // so this still works if no solution/DTE is available (e.g. a quick manual test).
+        private static string ResolveProjectDirectory()
+        {
+            ThreadHelper.ThrowIfNotOnUIThread();
+
+            if (Package.GetGlobalService(typeof(EnvDTE.DTE)) is EnvDTE.DTE dte)
+            {
+                var solutionPath = dte.Solution?.FullName;
+                if (!string.IsNullOrEmpty(solutionPath))
+                {
+                    return Path.GetDirectoryName(solutionPath);
+                }
+            }
+
+            return Environment.CurrentDirectory;
         }
     }
 }

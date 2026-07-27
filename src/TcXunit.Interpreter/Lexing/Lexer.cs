@@ -5,8 +5,8 @@ using System.Text;
 namespace TcXunit.Interpreter
 {
     // Tokenizes the ST statement subset the fixture actually uses
-    // (TcXunit-w5x.8/.12). No unary minus, no real/string escapes, no
-    // hex literals - grow-on-demand as new fixture bodies need them.
+    // (TcXunit-w5x.8/.12). No unary minus, no real/string escapes -
+    // grow-on-demand as new fixture bodies need them.
     public static class Lexer
     {
         public static List<Token> Tokenize(string text)
@@ -127,6 +127,24 @@ namespace TcXunit.Interpreter
                     var start = i;
                     while (i < text.Length && char.IsDigit(text[i]))
                         i++;
+
+                    // IEC 61131-3 §2.4.2 based literal: <base>#<digits>, e.g.
+                    // 16#ABCD (hex), 8#17 (octal), 2#1010 (binary), with
+                    // optional '_' digit separators (TcXunit-nsm).
+                    if (i < text.Length && text[i] == '#'
+                        && int.TryParse(text.Substring(start, i - start), out var numberBase))
+                    {
+                        var hashPos = i;
+                        i++; // '#'
+                        var digitsStart = i;
+                        while (i < text.Length && (char.IsLetterOrDigit(text[i]) || text[i] == '_'))
+                            i++;
+                        var digits = text.Substring(digitsStart, i - digitsStart).Replace("_", string.Empty);
+                        var value = ParseBasedLiteral(digits, numberBase, text, hashPos);
+                        tokens.Add(new Token(TokenType.IntLiteral, value.ToString()));
+                        continue;
+                    }
+
                     var isReal = ConsumeFraction(text, ref i);
                     tokens.Add(new Token(isReal ? TokenType.RealLiteral : TokenType.IntLiteral, text.Substring(start, i - start)));
                     continue;
@@ -283,6 +301,39 @@ namespace TcXunit.Interpreter
         // unlike TIME's digits+unit-letters body.
         private static bool IsDateTimeLiteralChar(char c)
             => char.IsDigit(c) || c == '-' || c == ':' || c == '.';
+
+        // Decodes an IEC 61131-3 §2.4.2 based-literal digit run (already
+        // stripped of '_' separators) for the given base (2, 8, or 16 -
+        // the only bases the standard defines; TcXunit-nsm). Letters A-Z/a-z
+        // count as digits 10-35 so callers get a clear "invalid digit"
+        // error rather than silent misparsing for out-of-range digits.
+        private static long ParseBasedLiteral(string digits, int numberBase, string text, int position)
+        {
+            if (numberBase != 2 && numberBase != 8 && numberBase != 16)
+                throw new FormatException($"Unsupported based-literal base '{numberBase}#' at position {position} in: {text}");
+
+            if (digits.Length == 0)
+                throw new FormatException($"Based literal has no digits after '#' at position {position} in: {text}");
+
+            long value = 0;
+            foreach (var ch in digits)
+            {
+                var digitValue = ch switch
+                {
+                    >= '0' and <= '9' => ch - '0',
+                    >= 'A' and <= 'Z' => ch - 'A' + 10,
+                    >= 'a' and <= 'z' => ch - 'a' + 10,
+                    _ => -1,
+                };
+
+                if (digitValue < 0 || digitValue >= numberBase)
+                    throw new FormatException($"Digit '{ch}' is invalid for base {numberBase} at position {position} in: {text}");
+
+                value = (value * numberBase) + digitValue;
+            }
+
+            return value;
+        }
 
         // Consumes an optional '.digits' fraction and/or '[eE][+-]digits' exponent
         // starting at i, advancing i past whatever it consumes. Returns true if

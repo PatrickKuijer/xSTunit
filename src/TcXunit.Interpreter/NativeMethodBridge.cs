@@ -72,22 +72,22 @@ namespace TcXunit.Interpreter
                     // doesn't match an "AssertArrayEquals_..." name, but
                     // checking array first keeps the two dispatches visually
                     // paired). Restricted to ArrayAssertSupportedTypes rather
-                    // than the full ScalarAssertType registry: unlike the
-                    // 12 non-float types here, upstream's
-                    // AssertArrayEquals_REAL/_LREAL take a Delta VAR_INPUT
-                    // (a different param list shape this one dispatcher
-                    // doesn't support - it always passes delta := null to
-                    // AreEqual, which REAL/LREAL's compare would reject) -
-                    // wiring those needs a second dispatcher, not a bigger
-                    // allow-list here (grow-on-demand, out of scope for
-                    // TcXunit-gd2.6).
+                    // than the full ScalarAssertType registry (grow-on-demand:
+                    // LWORD is the one remaining upstream array assert not
+                    // wired up yet). REAL/LREAL (TcXunit-gd2.7) take a Delta
+                    // VAR_INPUT, same as their scalar AssertEquals_REAL/
+                    // _LREAL counterparts - HasDelta picks the right param
+                    // list, mirroring the scalar dispatch below.
                     if (methodName.StartsWith("AssertArrayEquals_", StringComparison.Ordinal))
                     {
                         var typeName = methodName.Substring("AssertArrayEquals_".Length);
                         if (ArrayAssertSupportedTypes.Contains(typeName))
                         {
-                            var args = ResolveArgs(ArrayAssertParamNames, positional, named);
-                            host.AssertArrayEqualsCall(typeName, (ArrayValue)args["Expecteds"], (ArrayValue)args["Actuals"], (string)args["Message"]);
+                            var scalarType = ScalarAssertType.Registry[typeName];
+                            var paramNames = scalarType.HasDelta ? ArrayAssertWithDeltaParamNames : ArrayAssertParamNames;
+                            var args = ResolveArgs(paramNames, positional, named);
+                            var delta = scalarType.HasDelta ? args["Delta"] : null;
+                            host.AssertArrayEqualsCall(typeName, (ArrayValue)args["Expecteds"], (ArrayValue)args["Actuals"], delta, (string)args["Message"]);
                             return null;
                         }
                     }
@@ -120,15 +120,16 @@ namespace TcXunit.Interpreter
         private static readonly string[] ScalarAssertParamNames = { "Expected", "Actual", "Message" };
         private static readonly string[] ScalarAssertWithDeltaParamNames = { "Expected", "Actual", "Delta", "Message" };
         private static readonly string[] ArrayAssertParamNames = { "Expecteds", "Actuals", "Message" };
+        private static readonly string[] ArrayAssertWithDeltaParamNames = { "Expecteds", "Actuals", "Delta", "Message" };
 
         // The upstream AssertArrayEquals_<TYPE> overloads this dispatcher
-        // backs (TcXunit-gd2.6) - every non-float, non-string, non-time
-        // scalar type in the registry except LWORD (upstream has
-        // AssertArrayEquals_LWORD too, but it's not part of this ticket's
-        // scope - grow-on-demand).
+        // backs: the 12 non-float types from TcXunit-gd2.6, plus REAL/LREAL
+        // from TcXunit-gd2.7 - every scalar type in the registry except
+        // LWORD (upstream has AssertArrayEquals_LWORD too, but it's not part
+        // of this ticket's scope - grow-on-demand).
         private static readonly HashSet<string> ArrayAssertSupportedTypes = new HashSet<string>
         {
-            "BOOL", "BYTE", "DINT", "DWORD", "INT", "LINT", "SINT", "UDINT", "UINT", "ULINT", "USINT", "WORD",
+            "BOOL", "BYTE", "DINT", "DWORD", "INT", "LINT", "LREAL", "REAL", "SINT", "UDINT", "UINT", "ULINT", "USINT", "WORD",
         };
 
         // TEST_ORDERED/TEST_FINISHED_NAMED/IS_TEST_FINISHED take a single

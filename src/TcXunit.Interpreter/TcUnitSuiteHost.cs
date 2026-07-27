@@ -56,13 +56,15 @@ namespace TcXunit.Interpreter
         // size/lower-bound primitive lists AssertArrayEquals (Runner
         // project, no ArrayValue reference) expects, then forwards its own
         // already-flattened Elements storage straight through - no copy
-        // needed since AssertArrayEquals only reads.
-        public void AssertArrayEqualsCall(string typeName, ArrayValue expected, ArrayValue actual, string message) =>
+        // needed since AssertArrayEquals only reads. delta is null for the
+        // 12 non-float types; REAL/LREAL (TcXunit-gd2.7) pass their boxed
+        // Delta VAR_INPUT through here.
+        public void AssertArrayEqualsCall(string typeName, ArrayValue expected, ArrayValue actual, object delta, string message) =>
             AssertArrayEquals(
                 typeName,
                 DimensionSizes(expected), DimensionLowerBounds(expected), expected.Elements,
                 DimensionSizes(actual), DimensionLowerBounds(actual), actual.Elements,
-                message);
+                message, delta);
 
         private static List<int> DimensionSizes(ArrayValue array) =>
             array.Dimensions.Select(d => d.Hi - d.Lo + 1).ToList();

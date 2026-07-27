@@ -124,5 +124,82 @@ namespace TcXunit.Interpreter.Tests
             Assert.False(result.Passed);
             Assert.Contains("EXP: ARRAY[2] = 20, ACT: ARRAY[6] = 99", result.Failures[0].Message);
         }
+
+        // TcXunit-gd2.7: AssertArrayEquals_REAL/_LREAL - the float-array
+        // counterpart to the 12 non-float types above. Unlike those,
+        // upstream's REAL/LREAL array asserts take a caller-supplied Delta
+        // VAR_INPUT (verified against FB_TestSuite.TcPOU) and compare
+        // ABS(Expecteds[i] - Actuals[i]) > Delta per element - an absolute
+        // tolerance, not proportional to the expected value despite that
+        // method's own doc comment. One theory per failure mode, same as
+        // above, covers both REAL and LREAL via the same dispatcher.
+        public static IEnumerable<object[]> FloatArrayTypes => new[]
+        {
+            new object[] { "REAL" },
+            new object[] { "LREAL" },
+        };
+
+        [Theory]
+        [MemberData(nameof(FloatArrayTypes))]
+        public void RunSuite_AssertArrayEquals_WithinDelta_Passes(string typeName)
+        {
+            var declarationText =
+                $"VAR\n" +
+                $"aExpecteds : ARRAY[0..2] OF {typeName} := [1.0, 2.0, 3.0];\n" +
+                $"aActuals : ARRAY[0..2] OF {typeName} := [1.05, 2.0, 3.0];\n" +
+                "END_VAR";
+
+            var engine = NewSuiteEngine(
+                declarationText,
+                "TEST('t');\n" +
+                "AssertArrayEquals_" + typeName + "(Expecteds := aExpecteds, Actuals := aActuals, Delta := 0.1, Message := 'ok');\n" +
+                "TEST_FINISHED();");
+
+            Assert.True(Assert.Single(engine.RunSuite("FB_MySuite")).Passed);
+        }
+
+        [Theory]
+        [MemberData(nameof(FloatArrayTypes))]
+        public void RunSuite_AssertArrayEquals_OutsideDelta_ReportsIndexAndValues(string typeName)
+        {
+            var declarationText =
+                $"VAR\n" +
+                $"aExpecteds : ARRAY[0..2] OF {typeName} := [1.0, 2.0, 3.0];\n" +
+                $"aActuals : ARRAY[0..2] OF {typeName} := [1.05, 2.5, 3.0];\n" +
+                "END_VAR";
+
+            var engine = NewSuiteEngine(
+                declarationText,
+                "TEST('t');\n" +
+                "AssertArrayEquals_" + typeName + "(Expecteds := aExpecteds, Actuals := aActuals, Delta := 0.1, Message := 'mismatch');\n" +
+                "TEST_FINISHED();");
+
+            var result = Assert.Single(engine.RunSuite("FB_MySuite"));
+
+            Assert.False(result.Passed);
+            Assert.Contains("EXP: ARRAY[1] = 2, ACT: ARRAY[1] = 2.5", result.Failures[0].Message);
+        }
+
+        [Theory]
+        [MemberData(nameof(FloatArrayTypes))]
+        public void RunSuite_AssertArrayEquals_ShapeMismatch_ReportsSizeFailure(string typeName)
+        {
+            var declarationText =
+                $"VAR\n" +
+                $"aExpecteds : ARRAY[0..2] OF {typeName} := [1.0, 2.0, 3.0];\n" +
+                $"aActuals : ARRAY[0..1] OF {typeName};\n" +
+                "END_VAR";
+
+            var engine = NewSuiteEngine(
+                declarationText,
+                "TEST('t');\n" +
+                "AssertArrayEquals_" + typeName + "(Expecteds := aExpecteds, Actuals := aActuals, Delta := 0.1, Message := 'mismatch');\n" +
+                "TEST_FINISHED();");
+
+            var result = Assert.Single(engine.RunSuite("FB_MySuite"));
+
+            Assert.False(result.Passed);
+            Assert.Contains("EXP: SIZE = 3, ACT: SIZE = 2", result.Failures[0].Message);
+        }
     }
 }

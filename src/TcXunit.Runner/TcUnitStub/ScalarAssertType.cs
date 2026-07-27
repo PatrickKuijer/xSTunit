@@ -51,6 +51,17 @@ namespace TcXunit.Runner.TcUnitStub
 
         private static string FormatBool(bool value) => value ? "TRUE" : "FALSE";
 
+        // REAL/LREAL formatting (TcXunit-gd2.7 fix): plain ToString() uses
+        // CurrentCulture, which renders "." as "," on e.g. de-DE - silently
+        // corrupting the EXP/ACT failure message (and, for the array
+        // dispatcher's per-element message, making a real numeric
+        // difference look like a formatting artifact). Assertion messages
+        // are diagnostic text, not user-locale-facing output, so format
+        // with InvariantCulture like every other IEC type here already
+        // does implicitly (integers don't vary by culture).
+        private static string FormatDouble(object value) =>
+            Convert.ToDouble(value).ToString(System.Globalization.CultureInfo.InvariantCulture);
+
         // Keyed by the IEC type name suffix from AssertEquals_<TYPE>
         // (e.g. "INT", "BOOL", "STRING", "REAL").
         public static readonly IReadOnlyDictionary<string, ScalarAssertType> Registry =
@@ -101,8 +112,9 @@ namespace TcXunit.Runner.TcUnitStub
                     hasDelta: true,
                     areEqual: (expected, actual, delta) =>
                         Math.Abs(Convert.ToDouble(expected) - Convert.ToDouble(actual)) <= Convert.ToDouble(delta),
-                    formatExpected: (expected, delta) => $"{Convert.ToDouble(expected)} +/- {Convert.ToDouble(delta)}",
-                    formatActual: actual => Convert.ToDouble(actual).ToString()),
+                    formatExpected: (expected, delta) =>
+                        $"{FormatDouble(expected)} +/- {FormatDouble(delta)}",
+                    formatActual: actual => FormatDouble(actual)),
 
                 // LREAL (TcXunit-gd2.2): the 64-bit delta-based twin of REAL.
                 // Both REAL and LREAL are boxed as C# double by the time they
@@ -114,8 +126,9 @@ namespace TcXunit.Runner.TcUnitStub
                     hasDelta: true,
                     areEqual: (expected, actual, delta) =>
                         Math.Abs(Convert.ToDouble(expected) - Convert.ToDouble(actual)) <= Convert.ToDouble(delta),
-                    formatExpected: (expected, delta) => $"{Convert.ToDouble(expected)} +/- {Convert.ToDouble(delta)}",
-                    formatActual: actual => Convert.ToDouble(actual).ToString()),
+                    formatExpected: (expected, delta) =>
+                        $"{FormatDouble(expected)} +/- {FormatDouble(delta)}",
+                    formatActual: actual => FormatDouble(actual)),
 
                 // Integer-family types (TcXunit-gd2.1). The interpreter boxes
                 // these Cell values per IecNumericType.cs - SINT/USINT/BYTE/

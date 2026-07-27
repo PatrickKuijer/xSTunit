@@ -303,11 +303,22 @@ namespace TcXunit.Runner.TcUnitStub
         // each array's own real (lower-bound-relative) index - not the flat
         // position - exactly like upstream's ExpectedsIndex/ActualsIndex
         // pair.
+        //
+        // REAL/LREAL (TcXunit-gd2.7) additionally take a Delta arg, exactly
+        // like upstream AssertArrayEquals_REAL/_LREAL's VAR_INPUT Delta -
+        // an absolute per-element tolerance (ABS(Expecteds[i] - Actuals[i])
+        // > Delta fails), not scaled/proportional to the expected value
+        // despite what that method's own doc comment claims upstream.
+        // Message formatting for a per-element mismatch uses FormatActual
+        // (a plain value, no "+/- delta" suffix) for BOTH sides - matching
+        // upstream's array assert message (REAL_TO_STRING(Expecteds[i]),
+        // no delta shown), unlike the scalar AssertEquals_REAL/_LREAL
+        // failure message which does include "+/- delta" via FormatExpected.
         protected void AssertArrayEquals(
             string typeName,
             IReadOnlyList<int> expectedSizes, IReadOnlyList<int> expectedLowerBounds, object[] expectedElements,
             IReadOnlyList<int> actualSizes, IReadOnlyList<int> actualLowerBounds, object[] actualElements,
-            string message)
+            string message, object delta = null)
         {
             var type = ScalarAssertType.Registry[typeName];
 
@@ -323,13 +334,13 @@ namespace TcXunit.Runner.TcUnitStub
 
             for (var flat = 0; flat < expectedElements.Length; flat++)
             {
-                if (type.AreEqual(expectedElements[flat], actualElements[flat], null))
+                if (type.AreEqual(expectedElements[flat], actualElements[flat], delta))
                     continue;
 
                 var expectedIndex = UnflattenIndex(expectedSizes, expectedLowerBounds, flat);
                 var actualIndex = UnflattenIndex(actualSizes, actualLowerBounds, flat);
                 Fail(
-                    $"ARRAY[{string.Join(",", expectedIndex)}] = {type.FormatExpected(expectedElements[flat], null)}",
+                    $"ARRAY[{string.Join(",", expectedIndex)}] = {type.FormatActual(expectedElements[flat])}",
                     $"ARRAY[{string.Join(",", actualIndex)}] = {type.FormatActual(actualElements[flat])}",
                     message);
                 return;

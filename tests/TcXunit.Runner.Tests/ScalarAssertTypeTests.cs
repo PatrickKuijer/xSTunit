@@ -175,12 +175,12 @@ namespace TcXunit.Runner.Tests
         {
             var type = ScalarAssertType.Registry["REAL"];
 
-            // Matches production's own $"{value}" interpolation rather than
-            // a hardcoded literal, so this doesn't depend on the running
-            // culture's decimal separator (same culture-sensitivity the
-            // pre-existing AssertEquals_REAL formatting already had).
-            Assert.Equal($"{1.0} +/- {0.1}", type.FormatExpected(1.0, 0.1));
-            Assert.Equal($"{1.2}", type.FormatActual(1.2));
+            // Production formats with InvariantCulture (TcXunit-gd2.7) so
+            // the failure message doesn't vary with the running culture's
+            // decimal separator - assert against a fixed literal rather
+            // than a culture-sensitive interpolation.
+            Assert.Equal("1 +/- 0.1", type.FormatExpected(1.0, 0.1));
+            Assert.Equal("1.2", type.FormatActual(1.2));
         }
 
         // Integer-family types (TcXunit-gd2.1). Boundary values exercise
@@ -539,8 +539,10 @@ namespace TcXunit.Runner.Tests
         {
             var type = ScalarAssertType.Registry["LREAL"];
 
-            Assert.Equal($"{1.0} +/- {0.1}", type.FormatExpected(1.0, 0.1));
-            Assert.Equal($"{1.2}", type.FormatActual(1.2));
+            // Production formats with InvariantCulture (TcXunit-gd2.7); see
+            // the matching REAL test above.
+            Assert.Equal("1 +/- 0.1", type.FormatExpected(1.0, 0.1));
+            Assert.Equal("1.2", type.FormatActual(1.2));
         }
 
         // TIME (TcXunit-gd2.3): boxed C# uint milliseconds per

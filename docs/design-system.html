@@ -1,0 +1,1040 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<style>
+  /* minimal reset — the hosted artifact runtime supplies this; standalone needs its own */
+  html, body { margin: 0; padding: 0; }
+  img, svg { max-width: 100%; }
+</style>
+<title>VSIX Tool Window Design System</title>
+</head>
+<body>
+<style>
+/* ============================================================
+   DOC CHROME — namespaced --doc-*. Never leaks into specimens.
+   ============================================================ */
+:root{
+  --doc-bg:#f7f8fa;
+  --doc-surface:#ffffff;
+  --doc-surface-2:#eef0f4;
+  --doc-line:#d8dce4;
+  --doc-line-soft:#e6e9ef;
+  --doc-ink:#161a21;
+  --doc-ink-2:#4a5261;
+  --doc-ink-3:#7b8494;
+  --doc-accent:#0060c0;
+  --doc-accent-soft:rgba(0,96,192,0.08);
+
+  --doc-ui:'Segoe UI',-apple-system,BlinkMacSystemFont,system-ui,Arial,sans-serif;
+  --doc-mono:Consolas,'SF Mono',Menlo,'Courier New',monospace;
+
+  --s1:4px; --s2:8px; --s3:12px; --s4:16px; --s5:24px; --s6:32px; --s7:48px; --s8:72px;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --doc-bg:#121519;
+    --doc-surface:#191d23;
+    --doc-surface-2:#20252c;
+    --doc-line:#2c333c;
+    --doc-line-soft:#242a31;
+    --doc-ink:#e4e8ee;
+    --doc-ink-2:#a3adbb;
+    --doc-ink-3:#6d7787;
+    --doc-accent:#5aa9ff;
+    --doc-accent-soft:rgba(90,169,255,0.10);
+  }
+}
+:root[data-theme="dark"]{
+  --doc-bg:#121519;
+  --doc-surface:#191d23;
+  --doc-surface-2:#20252c;
+  --doc-line:#2c333c;
+  --doc-line-soft:#242a31;
+  --doc-ink:#e4e8ee;
+  --doc-ink-2:#a3adbb;
+  --doc-ink-3:#6d7787;
+  --doc-accent:#5aa9ff;
+  --doc-accent-soft:rgba(90,169,255,0.10);
+}
+:root[data-theme="light"]{
+  --doc-bg:#f7f8fa;
+  --doc-surface:#ffffff;
+  --doc-surface-2:#eef0f4;
+  --doc-line:#d8dce4;
+  --doc-line-soft:#e6e9ef;
+  --doc-ink:#161a21;
+  --doc-ink-2:#4a5261;
+  --doc-ink-3:#7b8494;
+  --doc-accent:#0060c0;
+  --doc-accent-soft:rgba(0,96,192,0.08);
+}
+
+*{ box-sizing:border-box; }
+
+.doc{
+  background:var(--doc-bg);
+  color:var(--doc-ink);
+  font-family:var(--doc-ui);
+  font-size:15px;
+  line-height:1.6;
+  -webkit-font-smoothing:antialiased;
+  min-height:100vh;
+  padding:var(--s6) var(--s5) var(--s8);
+}
+.doc-wrap{ max-width:1080px; margin:0 auto; display:flex; flex-direction:column; gap:var(--s8); }
+
+/* --- masthead --- */
+.mast{ display:flex; flex-direction:column; gap:var(--s4); padding-bottom:var(--s5); border-bottom:2px solid var(--doc-ink); }
+.mast-eyebrow{
+  font-size:11px; font-weight:700; letter-spacing:.16em; text-transform:uppercase;
+  color:var(--doc-accent); font-family:var(--doc-mono);
+}
+.mast h1{
+  margin:0; font-size:clamp(30px,5.2vw,50px); line-height:1.02; font-weight:700;
+  letter-spacing:-.028em; text-wrap:balance;
+}
+.mast h1 em{ font-style:normal; color:var(--doc-ink-3); font-weight:400; }
+.mast-lede{ margin:0; max-width:62ch; font-size:16px; color:var(--doc-ink-2); }
+.mast-meta{
+  display:flex; flex-wrap:wrap; gap:var(--s2) var(--s5); font-family:var(--doc-mono);
+  font-size:11.5px; color:var(--doc-ink-3); padding-top:var(--s2);
+}
+.mast-meta b{ color:var(--doc-ink-2); font-weight:600; }
+
+/* --- sections --- */
+.sec{ display:flex; flex-direction:column; gap:var(--s5); }
+.sec-head{ display:flex; flex-direction:column; gap:var(--s2); }
+.sec-num{
+  font-family:var(--doc-mono); font-size:11px; font-weight:700; letter-spacing:.14em;
+  color:var(--doc-ink-3); text-transform:uppercase;
+}
+.sec-head h2{
+  margin:0; font-size:clamp(21px,3vw,28px); font-weight:650; letter-spacing:-.018em; line-height:1.15;
+}
+.sec-head p{ margin:0; max-width:66ch; color:var(--doc-ink-2); font-size:14.5px; }
+.sub{ display:flex; flex-direction:column; gap:var(--s3); }
+.sub h3{
+  margin:0; font-size:12px; font-weight:700; letter-spacing:.1em; text-transform:uppercase;
+  color:var(--doc-ink-2); padding-bottom:var(--s2); border-bottom:1px solid var(--doc-line);
+}
+.sub > p{ margin:0; max-width:66ch; font-size:14px; color:var(--doc-ink-2); }
+code.k{
+  font-family:var(--doc-mono); font-size:.87em; background:var(--doc-surface-2);
+  border:1px solid var(--doc-line-soft); border-radius:3px; padding:1px 5px; color:var(--doc-ink);
+}
+
+/* --- token tables --- */
+.tok-scroll{ overflow-x:auto; border:1px solid var(--doc-line); border-radius:6px; background:var(--doc-surface); }
+table.tok{ width:100%; border-collapse:collapse; font-size:13px; min-width:640px; }
+table.tok th{
+  text-align:left; font-family:var(--doc-mono); font-size:10px; font-weight:700; letter-spacing:.1em;
+  text-transform:uppercase; color:var(--doc-ink-3); padding:10px 14px;
+  border-bottom:1px solid var(--doc-line); background:var(--doc-surface-2); white-space:nowrap;
+}
+table.tok td{ padding:9px 14px; border-bottom:1px solid var(--doc-line-soft); vertical-align:middle; }
+table.tok tr:last-child td{ border-bottom:none; }
+table.tok td.n{ font-family:var(--doc-mono); font-size:12px; color:var(--doc-ink); white-space:nowrap; }
+table.tok td.v{ font-family:var(--doc-mono); font-size:12px; color:var(--doc-ink-2); white-space:nowrap; font-variant-numeric:tabular-nums; }
+table.tok td.d{ color:var(--doc-ink-2); font-size:13px; }
+.chipsw{ display:flex; align-items:center; gap:8px; }
+.sw{ width:20px; height:20px; border-radius:4px; border:1px solid var(--doc-line); flex:none; }
+.sw.dual{ position:relative; overflow:hidden; }
+.sw.dual i{ position:absolute; inset:0; clip-path:polygon(0 0,100% 0,0 100%); }
+
+/* --- specimen frame --- */
+.spec{
+  display:flex; flex-direction:column; gap:var(--s3);
+}
+.spec-bar{
+  display:flex; align-items:baseline; gap:var(--s3); flex-wrap:wrap;
+  font-family:var(--doc-mono); font-size:10.5px; letter-spacing:.08em; text-transform:uppercase;
+  color:var(--doc-ink-3);
+}
+.spec-bar b{ color:var(--doc-ink-2); font-weight:700; }
+.spec-grid{ display:grid; gap:var(--s4); grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); }
+
+/* Frame that mimics a docked VS tool window */
+.frame{
+  border:1px solid var(--doc-line); border-radius:6px; overflow:hidden;
+  display:flex; flex-direction:column; background:var(--panel-bg);
+}
+.frame-cap{
+  font-family:var(--doc-mono); font-size:10px; letter-spacing:.09em; text-transform:uppercase;
+  color:var(--doc-ink-3); padding:0 0 2px 2px;
+}
+.frame-body{ padding:var(--s3); display:flex; flex-direction:column; gap:var(--s3); }
+.frame-body.flush{ padding:0; gap:0; }
+.row{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+
+/* ============================================================
+   THE SYSTEM — verbatim tokens from TcAgent chat.css.
+   Scoped to .vsix so doc chrome never collides.
+   ============================================================ */
+.vsix{
+  --panel-bg:#252526;
+  --chrome-bg:#2d2d30;
+  --chrome-bg-2:#333337;
+  --border:#3f3f42;
+  --border-soft:#383839;
+  --text:#cccccc;
+  --text-dim:#9d9d9d;
+  --text-faint:#6f6f6f;
+  --accent:#3794ff;
+  --accent-soft:rgba(55,148,255,0.14);
+  --user-bg:#2a2d2e;
+  --local:#4ec9b0;
+  --local-bg-strong:rgba(78,201,176,0.20);
+  --cloud:#d7ba7d;
+  --cloud-bg-strong:rgba(215,186,125,0.20);
+  --statusbar-bg:#007acc;
+  --error:#f48771;
+  --error-bg:rgba(244,135,113,0.12);
+  --error-border:rgba(244,135,113,0.35);
+  --ui:'Segoe UI',-apple-system,BlinkMacSystemFont,system-ui,Arial,sans-serif;
+  --mono:Consolas,'Courier New',monospace;
+
+  /* extension layer — test-result semantics, derived from the above */
+  --pass:var(--local);
+  --pass-bg:var(--local-bg-strong);
+  --fail:var(--error);
+  --fail-bg:var(--error-bg);
+  --skip:var(--text-faint);
+  --skip-bg:rgba(111,111,111,0.18);
+  --busy:var(--accent);
+  --busy-bg:var(--accent-soft);
+
+  background:var(--panel-bg);
+  color:var(--text);
+  font-family:var(--ui);
+  font-size:12.5px;
+  line-height:1.5;
+}
+.vsix[data-vs="light"]{
+  --panel-bg:#f6f6f6;
+  --chrome-bg:#e8e8ea;
+  --chrome-bg-2:#f0f0f1;
+  --border:#d6d6d8;
+  --border-soft:#e0e0e2;
+  --text:#1e1e1e;
+  --text-dim:#3c3c3c;
+  --text-faint:#767676;
+  --accent:#0060c0;
+  --accent-soft:rgba(0,96,192,0.10);
+  --user-bg:#e5f0fb;
+  --local:#0e7a63;
+  --local-bg-strong:rgba(14,122,99,0.15);
+  --cloud:#8a5c00;
+  --cloud-bg-strong:rgba(138,92,0,0.15);
+  --error:#b3261e;
+  --error-bg:rgba(179,38,30,0.08);
+  --error-border:rgba(179,38,30,0.25);
+  --skip-bg:rgba(118,118,118,0.14);
+}
+
+/* -- system components -- */
+.vsix .tw-tabs{
+  display:flex; align-items:center; gap:4px; padding:6px 9px 0;
+  background:var(--chrome-bg-2); border-bottom:1px solid var(--border); flex:none;
+}
+.vsix .tw-tab{
+  padding:6px 4px 7px; font-size:11.5px; color:var(--text-faint);
+  cursor:pointer; border-bottom:2px solid transparent;
+}
+.vsix .tw-tab.active{ color:var(--text); border-bottom-color:var(--accent); }
+.vsix .tw-tab:hover:not(.active){ color:var(--text-dim); }
+
+.vsix .send-btn,.vsix .ghost-btn{
+  border-radius:3px; padding:4px 10px; font-size:11.5px; font-family:var(--ui); cursor:pointer;
+}
+.vsix .send-btn{ background:var(--accent); color:#fff; border:none; }
+.vsix .send-btn:hover{ filter:brightness(1.08); }
+.vsix .send-btn.stop-btn{ background:var(--error); }
+.vsix .ghost-btn{ background:transparent; color:var(--text-dim); border:1px solid var(--border); }
+.vsix .ghost-btn:hover{ color:var(--text); border-color:var(--border-soft); }
+.vsix .ghost-btn[disabled]{ opacity:.35; cursor:default; }
+
+.vsix .seg{ display:flex; border:1px solid var(--border); border-radius:4px; overflow:hidden; flex:none; }
+.vsix .seg button{
+  border:none; background:var(--chrome-bg); color:var(--text-faint);
+  font-size:10.5px; font-family:var(--ui); padding:5px 8px; cursor:pointer;
+}
+.vsix .seg button.active[data-v="local"]{ background:var(--local-bg-strong); color:var(--local); font-weight:600; }
+.vsix .seg button.active[data-v="remote"]{ background:var(--cloud-bg-strong); color:var(--cloud); font-weight:600; }
+.vsix .seg button.active[data-v="plain"]{ background:var(--accent-soft); color:var(--text); font-weight:600; }
+
+.vsix .field{
+  width:100%; font-family:var(--ui); font-size:11.5px; padding:5px 7px;
+  border-radius:3px; border:1px solid var(--border); background:var(--chrome-bg); color:var(--text);
+}
+.vsix .field::placeholder{ color:var(--text-faint); }
+.vsix .field:focus{ outline:none; border-color:var(--accent); }
+
+.vsix .chip{
+  display:inline-flex; align-items:center; gap:5px; max-width:220px;
+  padding:2px 8px; border-radius:11px; font-size:11px; line-height:1.6;
+  border:1px solid var(--border); background:var(--chrome-bg-2); color:var(--text-dim);
+}
+.vsix .chip.accepted{ background:var(--accent-soft); border-color:transparent; color:var(--text); }
+.vsix .chip.suggestion{ border-style:dashed; color:var(--text-faint); cursor:pointer; }
+
+.vsix .empty-state{
+  padding:18px 16px; border:1px dashed var(--border); border-radius:8px;
+  background:var(--chrome-bg); color:var(--text-dim); font-size:12.5px;
+}
+.vsix .empty-state strong{ display:block; margin-bottom:6px; font-size:12px; color:var(--text); }
+
+.vsix .group-label{
+  font-size:9.5px; text-transform:uppercase; letter-spacing:.06em;
+  color:var(--text-faint); padding:7px 10px 3px;
+}
+.vsix .picker-menu{
+  background:var(--panel-bg); border:1px solid var(--border); border-radius:3px;
+  box-shadow:0 12px 28px rgba(0,0,0,0.45); overflow:hidden; min-width:220px;
+}
+.vsix .picker-opt{ display:flex; align-items:center; gap:8px; padding:6px 10px; cursor:pointer; font-size:12px; }
+.vsix .picker-opt:hover,.vsix .picker-opt.active{ background:var(--accent-soft); }
+.vsix .picker-opt .opt-model{ color:var(--text); flex:1; }
+.vsix .picker-opt .opt-note{ color:var(--text-faint); font-size:10.5px; }
+.vsix .picker-dot{ width:7px; height:7px; border-radius:50%; flex:none; }
+
+.vsix .tw-statusbar{
+  flex:none; height:20px; background:var(--statusbar-bg); color:#fff; font-size:10px;
+  display:flex; align-items:center; gap:8px; padding:0 9px;
+}
+.vsix .tw-statusbar .dot{ width:6px; height:6px; border-radius:50%; background:#8fe3c7; }
+.vsix .status-spacer{ opacity:.7; }
+
+.vsix .details-panel{
+  padding:8px 10px; background:var(--chrome-bg-2); border:1px solid var(--border);
+  border-radius:4px; font-family:var(--mono); font-size:11px; color:var(--text-dim);
+  white-space:pre-wrap; word-break:break-word;
+}
+.vsix .error-details{
+  padding:8px 10px; background:var(--error-bg); border:1px solid var(--error-border);
+  border-radius:4px; font-family:var(--mono); font-size:11px; color:var(--text-dim);
+  white-space:pre-wrap; word-break:break-word;
+}
+
+/* -- extension layer: results components -- */
+.vsix .toolbar{
+  display:flex; align-items:center; gap:6px; padding:6px 9px;
+  background:var(--chrome-bg-2); border-bottom:1px solid var(--border); flex:none;
+}
+.vsix .toolbar .field{ flex:1 1 auto; min-width:80px; }
+.vsix .counts{ display:flex; gap:4px; margin-left:auto; flex:none; }
+
+.vsix .count{
+  display:inline-flex; align-items:center; gap:5px; padding:2px 8px; border-radius:10px;
+  font-size:10.5px; font-weight:600; font-variant-numeric:tabular-nums;
+  border:1px solid transparent; line-height:1.6;
+}
+.vsix .count .n{ font-family:var(--mono); }
+.vsix .count.pass{ background:var(--pass-bg); color:var(--pass); }
+.vsix .count.fail{ background:var(--fail-bg); color:var(--fail); border-color:var(--error-border); }
+.vsix .count.skip{ background:var(--skip-bg); color:var(--skip); }
+.vsix .count.zero{ background:transparent; color:var(--text-faint); border-color:var(--border); font-weight:400; }
+
+.vsix .tree{ padding:4px 0; font-size:12px; }
+.vsix .node{
+  display:flex; align-items:center; gap:6px; padding:3px 9px 3px 6px;
+  cursor:default; position:relative; border-left:2px solid transparent;
+}
+.vsix .node:hover{ background:var(--accent-soft); }
+.vsix .node.selected{ background:var(--accent-soft); border-left-color:var(--accent); }
+.vsix .node.depth1{ padding-left:24px; }
+.vsix .node.depth2{ padding-left:42px; }
+.vsix .twisty{
+  width:12px; flex:none; text-align:center; color:var(--text-faint); font-size:8px; line-height:1;
+  transform:translateY(-1px);
+}
+.vsix .glyph{ width:13px; flex:none; text-align:center; font-size:11px; line-height:1; font-weight:700; }
+.vsix .glyph.pass{ color:var(--pass); }
+.vsix .glyph.fail{ color:var(--fail); }
+.vsix .glyph.skip{ color:var(--skip); }
+.vsix .glyph.busy{ color:var(--busy); }
+.vsix .node-name{ color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.vsix .node.fail .node-name{ color:var(--text); }
+.vsix .node.skip .node-name{ color:var(--text-dim); }
+.vsix .node-src{
+  font-size:10.5px; color:var(--text-faint); font-family:var(--mono);
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0;
+}
+.vsix .node-dur{
+  margin-left:auto; flex:none; font-family:var(--mono); font-size:10px;
+  color:var(--text-faint); font-variant-numeric:tabular-nums;
+}
+.vsix .node-open{
+  flex:none; opacity:0; color:var(--accent); font-size:10px; padding-left:2px;
+}
+.vsix .node:hover .node-open{ opacity:1; }
+
+.vsix .assert{
+  margin:1px 9px 4px 42px; padding:6px 9px;
+  background:var(--error-bg); border-left:2px solid var(--error-border); border-radius:0 3px 3px 0;
+  font-family:var(--mono); font-size:10.5px; line-height:1.5; color:var(--text-dim);
+  white-space:pre-wrap;
+}
+.vsix .assert b{ color:var(--error); font-weight:400; }
+
+.vsix .banner{
+  margin:3px 9px 5px 24px; padding:7px 10px;
+  background:var(--error-bg); border:1px solid var(--error-border); border-radius:4px;
+  font-size:11px; color:var(--text-dim);
+}
+.vsix .banner strong{ display:block; color:var(--error); font-weight:600; margin-bottom:3px; font-size:11px; }
+.vsix .banner code{ font-family:var(--mono); font-size:10.5px; }
+
+.vsix .prog{ height:2px; background:var(--border); overflow:hidden; flex:none; }
+.vsix .prog i{ display:block; height:100%; width:38%; background:var(--accent); animation:sweep 1.4s ease-in-out infinite; }
+@keyframes sweep{ 0%{ transform:translateX(-100%);} 100%{ transform:translateX(300%);} }
+@media (prefers-reduced-motion: reduce){
+  .vsix .prog i{ animation:none; width:100%; opacity:.5; }
+}
+
+/* --- rules / do-don't --- */
+.rules{ display:grid; gap:var(--s3); grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); }
+.rule{
+  background:var(--doc-surface); border:1px solid var(--doc-line); border-radius:6px;
+  padding:var(--s3) var(--s4); display:flex; flex-direction:column; gap:6px;
+}
+.rule-tag{
+  font-family:var(--doc-mono); font-size:10px; font-weight:700; letter-spacing:.1em; text-transform:uppercase;
+}
+.rule.do .rule-tag{ color:#0e7a63; }
+.rule.dont .rule-tag{ color:#b3261e; }
+@media (prefers-color-scheme: dark){
+  .rule.do .rule-tag{ color:#4ec9b0; }
+  .rule.dont .rule-tag{ color:#f48771; }
+}
+:root[data-theme="dark"] .rule.do .rule-tag{ color:#4ec9b0; }
+:root[data-theme="dark"] .rule.dont .rule-tag{ color:#f48771; }
+:root[data-theme="light"] .rule.do .rule-tag{ color:#0e7a63; }
+:root[data-theme="light"] .rule.dont .rule-tag{ color:#b3261e; }
+.rule p{ margin:0; font-size:13.5px; color:var(--doc-ink-2); }
+.rule p b{ color:var(--doc-ink); font-weight:600; }
+
+/* --- code block --- */
+pre.code{
+  margin:0; padding:var(--s3) var(--s4); background:var(--doc-surface); color:var(--doc-ink-2);
+  border:1px solid var(--doc-line); border-radius:6px; overflow-x:auto;
+  font-family:var(--doc-mono); font-size:12px; line-height:1.65;
+}
+pre.code .c{ color:var(--doc-ink-3); }
+pre.code .p{ color:var(--doc-accent); }
+
+/* --- type scale specimen --- */
+.scale{ display:flex; flex-direction:column; border:1px solid var(--doc-line); border-radius:6px; overflow:hidden; background:var(--doc-surface); }
+.scale-row{
+  display:grid; grid-template-columns:64px 1fr auto; gap:var(--s3); align-items:baseline;
+  padding:9px 14px; border-bottom:1px solid var(--doc-line-soft);
+}
+.scale-row:last-child{ border-bottom:none; }
+.scale-row .sz{ font-family:var(--doc-mono); font-size:11px; color:var(--doc-ink-3); font-variant-numeric:tabular-nums; }
+.scale-row .sm{ font-family:'Segoe UI',system-ui,sans-serif; color:var(--doc-ink); }
+.scale-row .use{ font-family:var(--doc-mono); font-size:10.5px; color:var(--doc-ink-3); text-align:right; white-space:nowrap; }
+
+.foot{
+  border-top:1px solid var(--doc-line); padding-top:var(--s4);
+  font-family:var(--doc-mono); font-size:11.5px; color:var(--doc-ink-3);
+  display:flex; flex-wrap:wrap; gap:var(--s2) var(--s5);
+}
+
+@media (max-width:640px){
+  .doc{ padding:var(--s5) var(--s3) var(--s7); }
+  .scale-row{ grid-template-columns:52px 1fr; }
+  .scale-row .use{ display:none; }
+}
+</style>
+
+<div class="doc">
+<div class="doc-wrap">
+
+  <header class="mast">
+    <div class="mast-eyebrow">Internal spec &middot; v1</div>
+    <h1>VSIX Tool Window<br /><em>Design System</em></h1>
+    <p class="mast-lede">
+      One visual language for every WebView2-hosted tool window docked in TwinCAT XAE Shell.
+      The tokens are lifted verbatim from the shipping TcAgent chat panel — this document
+      codifies them and adds the result-tree layer that TcXunit needs, so both panels read as
+      one product sitting in the same sidebar.
+    </p>
+    <div class="mast-meta">
+      <span><b>Source of truth</b> src/TcAgent/Resources/chat.css</span>
+      <span><b>Consumers</b> TcAgent &middot; TcXunit results</span>
+      <span><b>Host</b> WebView2 in a VS UserControl</span>
+    </div>
+  </header>
+
+  <!-- ============ 1 FOUNDATIONS: COLOR ============ -->
+  <section class="sec">
+    <div class="sec-head">
+      <div class="sec-num">Foundations — Color</div>
+      <h2>Two themes, one token set</h2>
+      <p>
+        Every surface, border, and text color comes from a custom property. Components never name a
+        hex value. Theming is one block of redefinitions on <code class="k">body[data-theme="light"]</code>,
+        which is what lets the panel follow the shell's theme without touching component CSS.
+      </p>
+    </div>
+
+    <div class="sub">
+      <h3>Surface &amp; text</h3>
+      <div class="tok-scroll">
+        <table class="tok">
+          <thead>
+            <tr><th>Token</th><th>Dark / Light</th><th>Role</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="n">--panel-bg</td>
+              <td><div class="chipsw"><span class="sw dual" style="background:#f6f6f6"><i style="background:#252526"></i></span><span class="v" style="font-family:var(--doc-mono)">#252526 / #f6f6f6</span></div></td>
+              <td class="d">The panel floor. Also the ground for popovers so they read as lifted.</td>
+            </tr>
+            <tr>
+              <td class="n">--chrome-bg</td>
+              <td><div class="chipsw"><span class="sw dual" style="background:#e8e8ea"><i style="background:#2d2d30"></i></span><span class="v" style="font-family:var(--doc-mono)">#2d2d30 / #e8e8ea</span></div></td>
+              <td class="d">Inset controls — inputs, code blocks, segmented buttons.</td>
+            </tr>
+            <tr>
+              <td class="n">--chrome-bg-2</td>
+              <td><div class="chipsw"><span class="sw dual" style="background:#f0f0f1"><i style="background:#333337"></i></span><span class="v" style="font-family:var(--doc-mono)">#333337 / #f0f0f1</span></div></td>
+              <td class="d">Raised chrome — tab strip, toolbar, control bar. Everything docked to an edge.</td>
+            </tr>
+            <tr>
+              <td class="n">--border</td>
+              <td><div class="chipsw"><span class="sw dual" style="background:#d6d6d8"><i style="background:#3f3f42"></i></span><span class="v" style="font-family:var(--doc-mono)">#3f3f42 / #d6d6d8</span></div></td>
+              <td class="d">Structural separation — chrome edges, control outlines.</td>
+            </tr>
+            <tr>
+              <td class="n">--border-soft</td>
+              <td><div class="chipsw"><span class="sw dual" style="background:#e0e0e2"><i style="background:#383839"></i></span><span class="v" style="font-family:var(--doc-mono)">#383839 / #e0e0e2</span></div></td>
+              <td class="d">In-content hairlines — table cells, inline code, message cards.</td>
+            </tr>
+            <tr>
+              <td class="n">--text</td>
+              <td><div class="chipsw"><span class="sw dual" style="background:#1e1e1e"><i style="background:#cccccc"></i></span><span class="v" style="font-family:var(--doc-mono)">#cccccc / #1e1e1e</span></div></td>
+              <td class="d">Primary content. Never pure white on dark — #ccc is the VS convention.</td>
+            </tr>
+            <tr>
+              <td class="n">--text-dim</td>
+              <td><div class="chipsw"><span class="sw dual" style="background:#3c3c3c"><i style="background:#9d9d9d"></i></span><span class="v" style="font-family:var(--doc-mono)">#9d9d9d / #3c3c3c</span></div></td>
+              <td class="d">Secondary — tool output, help text, resting state of ghost buttons.</td>
+            </tr>
+            <tr>
+              <td class="n">--text-faint</td>
+              <td><div class="chipsw"><span class="sw dual" style="background:#767676"><i style="background:#6f6f6f"></i></span><span class="v" style="font-family:var(--doc-mono)">#6f6f6f / #767676</span></div></td>
+              <td class="d">Tertiary — placeholders, group labels, inactive tabs, timings.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="sub">
+      <h3>Accent &amp; identity</h3>
+      <p>
+        One accent carries every interactive affordance. <code class="k">--local</code> and
+        <code class="k">--cloud</code> are the second tier: in TcAgent they mark where a model runs;
+        anywhere else they are the general-purpose "affirmative" and "caution" hues. They are not
+        decoration and never appear without meaning.
+      </p>
+      <div class="tok-scroll">
+        <table class="tok">
+          <thead><tr><th>Token</th><th>Dark / Light</th><th>Role</th></tr></thead>
+          <tbody>
+            <tr>
+              <td class="n">--accent</td>
+              <td><div class="chipsw"><span class="sw dual" style="background:#0060c0"><i style="background:#3794ff"></i></span><span class="v" style="font-family:var(--doc-mono)">#3794ff / #0060c0</span></div></td>
+              <td class="d">Primary action, focus ring, active tab underline, links.</td>
+            </tr>
+            <tr>
+              <td class="n">--accent-soft</td>
+              <td><div class="chipsw"><span class="sw dual" style="background:rgba(0,96,192,0.10)"><i style="background:rgba(55,148,255,0.14)"></i></span><span class="v" style="font-family:var(--doc-mono)">14% / 10% alpha</span></div></td>
+              <td class="d">Hover and selection wash. The only correct row-highlight background.</td>
+            </tr>
+            <tr>
+              <td class="n">--local</td>
+              <td><div class="chipsw"><span class="sw dual" style="background:#0e7a63"><i style="background:#4ec9b0"></i></span><span class="v" style="font-family:var(--doc-mono)">#4ec9b0 / #0e7a63</span></div></td>
+              <td class="d">Runs on this machine. Reused as the pass hue — see the results layer.</td>
+            </tr>
+            <tr>
+              <td class="n">--cloud</td>
+              <td><div class="chipsw"><span class="sw dual" style="background:#8a5c00"><i style="background:#d7ba7d"></i></span><span class="v" style="font-family:var(--doc-mono)">#d7ba7d / #8a5c00</span></div></td>
+              <td class="d">Leaves the machine. Also the favourite/starred marker.</td>
+            </tr>
+            <tr>
+              <td class="n">--error</td>
+              <td><div class="chipsw"><span class="sw dual" style="background:#b3261e"><i style="background:#f48771"></i></span><span class="v" style="font-family:var(--doc-mono)">#f48771 / #b3261e</span></div></td>
+              <td class="d">Failure text and the stop button. Paired with 12% bg + 35% border.</td>
+            </tr>
+            <tr>
+              <td class="n">--statusbar-bg</td>
+              <td><div class="chipsw"><span class="sw" style="background:#007acc"></span><span class="v" style="font-family:var(--doc-mono)">#007acc &middot; both</span></div></td>
+              <td class="d">VS blue. Deliberately theme-invariant — the strip anchors the panel to the IDE.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="sub">
+      <h3>Extension: result status</h3>
+      <p>
+        TcXunit needs a pass/fail/skip vocabulary. Rather than introduce hues, it aliases the ones
+        already in the system — so a green check in the test tree is literally the same green as the
+        "Local" segment in TcAgent. Aliasing, not addition, is how this system grows.
+      </p>
+      <div class="tok-scroll">
+        <table class="tok">
+          <thead><tr><th>Alias</th><th>Resolves to</th><th>Encodes</th></tr></thead>
+          <tbody>
+            <tr><td class="n">--pass</td><td class="v">var(--local)</td><td class="d">Assertion held. Glyph <code class="k">&#10003;</code>, 20% wash.</td></tr>
+            <tr><td class="n">--fail</td><td class="v">var(--error)</td><td class="d">Assertion failed or suite threw. Glyph <code class="k">&#10007;</code>, 12% wash + border.</td></tr>
+            <tr><td class="n">--skip</td><td class="v">var(--text-faint)</td><td class="d">Not run. Deliberately colorless — absence is not a warning.</td></tr>
+            <tr><td class="n">--busy</td><td class="v">var(--accent)</td><td class="d">In flight. Same blue as every other "the tool is working" signal.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 2 TYPE ============ -->
+  <section class="sec">
+    <div class="sec-head">
+      <div class="sec-num">Foundations — Type</div>
+      <h2>Segoe UI at IDE density</h2>
+      <p>
+        Two faces only. <b>Segoe UI</b> for all interface text — it is the shell's own face, so the
+        panel doesn't announce itself as a web view. <b>Consolas</b> for anything the user could paste
+        into an editor: paths, identifiers, assertion output, durations. Sizes run 9.5&ndash;12.5px.
+        That is not small for the web; it is correct for a docked tool window sharing a screen with
+        Solution Explorer.
+      </p>
+    </div>
+    <div class="scale">
+      <div class="scale-row"><span class="sz">12.5px</span><span class="sm" style="font-size:12.5px">Assertion expected 42, but got 41</span><span class="use">body / messages</span></div>
+      <div class="scale-row"><span class="sz">12px</span><span class="sm" style="font-size:12px">FB_RemoteWireRecordsTests</span><span class="use">tree rows, list options</span></div>
+      <div class="scale-row"><span class="sz">11.5px</span><span class="sm" style="font-size:11.5px">Run Tests</span><span class="use">buttons, tabs, inputs</span></div>
+      <div class="scale-row"><span class="sz">11px</span><span class="sm" style="font-size:11px">3 suites &middot; 1 failing</span><span class="use">chips, banners, detail panels</span></div>
+      <div class="scale-row"><span class="sz">10.5px</span><span class="sm" style="font-size:10.5px">FB_RemoteWireRecordsTests.TcPOU</span><span class="use">metadata, counts, secondary controls</span></div>
+      <div class="scale-row"><span class="sz">10px</span><span class="sm" style="font-size:10px">Ready &nbsp;|&nbsp; last run 14:22:07</span><span class="use">status bar, durations</span></div>
+      <div class="scale-row"><span class="sz">9.5px</span><span class="sm" style="font-size:9.5px;text-transform:uppercase;letter-spacing:.06em">Failing suites</span><span class="use">group labels — always uppercase +.06em</span></div>
+    </div>
+  </section>
+
+  <!-- ============ 3 GEOMETRY ============ -->
+  <section class="sec">
+    <div class="sec-head">
+      <div class="sec-num">Foundations — Geometry</div>
+      <h2>Radius, elevation, motion</h2>
+      <p>
+        The panel is flat. Depth exists only where something genuinely floats above the content, and
+        the values are small because the whole window is often under 400px wide.
+      </p>
+    </div>
+    <div class="tok-scroll">
+      <table class="tok">
+        <thead><tr><th>Property</th><th>Value</th><th>Applies to</th></tr></thead>
+        <tbody>
+          <tr><td class="n">radius</td><td class="v">3px</td><td class="d">Buttons, inputs, popovers, code spans — the default.</td></tr>
+          <tr><td class="n">radius</td><td class="v">4px</td><td class="d">Grouped controls: segmented control, settings panel, tree selection.</td></tr>
+          <tr><td class="n">radius</td><td class="v">6px</td><td class="d">Content blocks: pre, message cards.</td></tr>
+          <tr><td class="n">radius</td><td class="v">8px</td><td class="d">Empty state only. Softness signals "nothing here yet".</td></tr>
+          <tr><td class="n">radius</td><td class="v">11px</td><td class="d">Pills — file chips, result counts. Full-round by intent.</td></tr>
+          <tr><td class="n">elevation</td><td class="v">0 12px 28px rgba(0,0,0,.45)</td><td class="d">Popovers only: model picker, hash picker, settings.</td></tr>
+          <tr><td class="n">gap</td><td class="v">4 / 6 / 8 / 14px</td><td class="d">Control clusters use 6&ndash;8. Message stack uses 14. Nothing between.</td></tr>
+          <tr><td class="n">chrome padding</td><td class="v">6&ndash;9px</td><td class="d">Tab strip, toolbar, control bar, status bar.</td></tr>
+          <tr><td class="n">status bar</td><td class="v">20px fixed</td><td class="d">Never grows. One line, always.</td></tr>
+          <tr><td class="n">transition</td><td class="v">0.1s opacity</td><td class="d">Hover reveals only. No layout animation, no easing curves.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ============ 4 CORE COMPONENTS ============ -->
+  <section class="sec">
+    <div class="sec-head">
+      <div class="sec-num">Components — Core</div>
+      <h2>Shared across every panel</h2>
+      <p>Rendered live at true size. Left column dark, right column light — same markup, same classes.</p>
+    </div>
+
+    <div class="sub">
+      <h3>Tab strip</h3>
+      <div class="spec-grid">
+        <div class="spec">
+          <div class="frame-cap">dark</div>
+          <div class="frame vsix">
+            <div class="tw-tabs">
+              <div class="tw-tab active">Results</div>
+              <div class="tw-tab">Output</div>
+              <button class="ghost-btn" style="margin-left:auto;margin-bottom:6px" type="button">Run all</button>
+            </div>
+            <div class="frame-body"><span style="color:var(--text-dim);font-size:11.5px">Active tab: 2px accent underline, full-strength text.</span></div>
+          </div>
+        </div>
+        <div class="spec">
+          <div class="frame-cap">light</div>
+          <div class="frame vsix" data-vs="light">
+            <div class="tw-tabs">
+              <div class="tw-tab active">Results</div>
+              <div class="tw-tab">Output</div>
+              <button class="ghost-btn" style="margin-left:auto;margin-bottom:6px" type="button">Run all</button>
+            </div>
+            <div class="frame-body"><span style="color:var(--text-dim);font-size:11.5px">Inactive tabs sit at --text-faint until hover.</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sub">
+      <h3>Buttons</h3>
+      <p>Exactly two. <code class="k">.send-btn</code> is the one primary action per panel; everything else is <code class="k">.ghost-btn</code>. A destructive or interrupting primary swaps its fill to <code class="k">--error</code> rather than becoming a third variant.</p>
+      <div class="spec-grid">
+        <div class="spec">
+          <div class="frame-cap">dark</div>
+          <div class="frame vsix">
+            <div class="frame-body">
+              <div class="row">
+                <button class="send-btn" type="button">Run tests</button>
+                <button class="send-btn stop-btn" type="button">Stop</button>
+                <button class="ghost-btn" type="button">Refresh</button>
+                <button class="ghost-btn" type="button" disabled>Rerun failed</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="spec">
+          <div class="frame-cap">light</div>
+          <div class="frame vsix" data-vs="light">
+            <div class="frame-body">
+              <div class="row">
+                <button class="send-btn" type="button">Run tests</button>
+                <button class="send-btn stop-btn" type="button">Stop</button>
+                <button class="ghost-btn" type="button">Refresh</button>
+                <button class="ghost-btn" type="button" disabled>Rerun failed</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sub">
+      <h3>Segmented control, input, chips</h3>
+      <div class="spec-grid">
+        <div class="spec">
+          <div class="frame-cap">dark</div>
+          <div class="frame vsix">
+            <div class="frame-body">
+              <div class="row">
+                <div class="seg">
+                  <button class="active" data-v="plain" type="button">All</button>
+                  <button data-v="plain" type="button">Failed</button>
+                  <button data-v="plain" type="button">Skipped</button>
+                </div>
+              </div>
+              <input class="field" type="text" placeholder="Filter tests..." />
+              <div class="row">
+                <span class="chip">FB_WireTests.TcPOU <span style="opacity:.7">&times;</span></span>
+                <span class="chip accepted">Selection &middot; 12 lines</span>
+                <span class="chip suggestion">+ open file</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="spec">
+          <div class="frame-cap">light</div>
+          <div class="frame vsix" data-vs="light">
+            <div class="frame-body">
+              <div class="row">
+                <div class="seg">
+                  <button class="active" data-v="plain" type="button">All</button>
+                  <button data-v="plain" type="button">Failed</button>
+                  <button data-v="plain" type="button">Skipped</button>
+                </div>
+              </div>
+              <input class="field" type="text" placeholder="Filter tests..." />
+              <div class="row">
+                <span class="chip">FB_WireTests.TcPOU <span style="opacity:.7">&times;</span></span>
+                <span class="chip accepted">Selection &middot; 12 lines</span>
+                <span class="chip suggestion">+ open file</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sub">
+      <h3>Popover list, empty state, status bar</h3>
+      <div class="spec-grid">
+        <div class="spec">
+          <div class="frame-cap">dark</div>
+          <div class="frame vsix">
+            <div class="frame-body">
+              <div class="picker-menu">
+                <div class="group-label">Suites</div>
+                <div class="picker-opt active"><span class="picker-dot" style="background:var(--pass)"></span><span class="opt-model">FB_WireTests</span><span class="opt-note">8 passed</span></div>
+                <div class="picker-opt"><span class="picker-dot" style="background:var(--fail)"></span><span class="opt-model">FB_RecordTests</span><span class="opt-note">2 failed</span></div>
+              </div>
+              <div class="empty-state">
+                <strong>No results yet.</strong>
+                Run the suites in this solution to see pass and fail output here.
+              </div>
+            </div>
+            <div class="tw-statusbar">
+              <span class="dot"></span><span>Ready</span>
+              <span class="status-spacer">|</span><span>3 suites &middot; 24 tests</span>
+            </div>
+          </div>
+        </div>
+        <div class="spec">
+          <div class="frame-cap">light</div>
+          <div class="frame vsix" data-vs="light">
+            <div class="frame-body">
+              <div class="picker-menu">
+                <div class="group-label">Suites</div>
+                <div class="picker-opt active"><span class="picker-dot" style="background:var(--pass)"></span><span class="opt-model">FB_WireTests</span><span class="opt-note">8 passed</span></div>
+                <div class="picker-opt"><span class="picker-dot" style="background:var(--fail)"></span><span class="opt-model">FB_RecordTests</span><span class="opt-note">2 failed</span></div>
+              </div>
+              <div class="empty-state">
+                <strong>No results yet.</strong>
+                Run the suites in this solution to see pass and fail output here.
+              </div>
+            </div>
+            <div class="tw-statusbar">
+              <span class="dot"></span><span>Ready</span>
+              <span class="status-spacer">|</span><span>3 suites &middot; 24 tests</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 5 RESULTS LAYER ============ -->
+  <section class="sec">
+    <div class="sec-head">
+      <div class="sec-num">Components — Results layer</div>
+      <h2>The test tree</h2>
+      <p>
+        New components, built only from tokens above. The tree is the whole product for TcXunit, so it
+        gets the density budget: status is encoded in glyph <em>and</em> color, the source file rides
+        along at 10.5px mono because double-click opens it, and duration right-aligns in tabular
+        figures so slow tests are findable by scanning one column.
+      </p>
+    </div>
+
+    <div class="sub">
+      <h3>Node anatomy</h3>
+      <div class="tok-scroll">
+        <table class="tok">
+          <thead><tr><th>Slot</th><th>Spec</th><th>Rule</th></tr></thead>
+          <tbody>
+            <tr><td class="n">.twisty</td><td class="v">12px, --text-faint</td><td class="d">Suite nodes only. Leaf tests reserve the space, never draw it.</td></tr>
+            <tr><td class="n">.glyph</td><td class="v">13px, status hue</td><td class="d">&#10003; pass &middot; &#10007; fail &middot; &#8210; skip &middot; &#9679; running. Shape carries meaning without color.</td></tr>
+            <tr><td class="n">.node-name</td><td class="v">12px, --text</td><td class="d">Truncates with ellipsis. Never wraps — the panel is narrow.</td></tr>
+            <tr><td class="n">.node-src</td><td class="v">10.5px mono, --text-faint</td><td class="d">Suite rows only. It is the double-click target hint, not decoration.</td></tr>
+            <tr><td class="n">.node-dur</td><td class="v">10px mono, tabular</td><td class="d">Right-aligned. Omitted entirely when a test didn't run.</td></tr>
+            <tr><td class="n">.node-open</td><td class="v">accent, 0&rarr;1 on hover</td><td class="d">The affordance that says this row opens a .TcPOU in the editor.</td></tr>
+            <tr><td class="n">selection</td><td class="v">accent-soft + 2px left rail</td><td class="d">Selection persists; hover is the wash alone. They must be distinguishable.</td></tr>
+            <tr><td class="n">indent</td><td class="v">6 / 24 / 42px</td><td class="d">18px per level. Deeper than two levels is a modelling error, not a UI one.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="sub">
+      <h3>Populated tree — dark</h3>
+      <div class="frame vsix">
+        <div class="toolbar">
+          <button class="send-btn" type="button">Run tests</button>
+          <button class="ghost-btn" type="button">Rerun failed</button>
+          <div class="counts">
+            <span class="count pass">&#10003;<span class="n">21</span></span>
+            <span class="count fail">&#10007;<span class="n">2</span></span>
+            <span class="count skip">&#8210;<span class="n">1</span></span>
+          </div>
+        </div>
+        <div class="frame-body flush">
+          <div class="tree">
+            <div class="node"><span class="twisty">&#9660;</span><span class="glyph pass">&#10003;</span><span class="node-name">FB_WireRecordTests</span><span class="node-src">FB_WireRecordTests.TcPOU</span><span class="node-dur">12 ms</span><span class="node-open">&#8599;</span></div>
+            <div class="node depth1"><span class="glyph pass">&#10003;</span><span class="node-name">EncodesSingleRecord</span><span class="node-dur">3 ms</span></div>
+            <div class="node depth1"><span class="glyph pass">&#10003;</span><span class="node-name">RoundTripsEmptyPayload</span><span class="node-dur">2 ms</span></div>
+            <div class="node depth1 skip"><span class="glyph skip">&#8210;</span><span class="node-name">HandlesLegacyHeader</span></div>
+
+            <div class="node selected"><span class="twisty">&#9660;</span><span class="glyph fail">&#10007;</span><span class="node-name">FB_RemoteWireRecordsTests</span><span class="node-src">FB_RemoteWireRecordsTests.TcPOU</span><span class="node-dur">31 ms</span><span class="node-open">&#8599;</span></div>
+            <div class="node depth1"><span class="glyph pass">&#10003;</span><span class="node-name">ConnectsToRemote</span><span class="node-dur">9 ms</span></div>
+            <div class="node depth1 fail"><span class="glyph fail">&#10007;</span><span class="node-name">RetriesOnTimeout</span><span class="node-dur">18 ms</span><span class="node-open">&#8599;</span></div>
+            <div class="assert">AssertEquals_UINT failed<br /><b>expected</b> 3 &nbsp; <b>actual</b> 1<br />retry counter not incremented after timeout</div>
+            <div class="node depth1 fail"><span class="glyph fail">&#10007;</span><span class="node-name">DropsMalformedFrame</span><span class="node-dur">4 ms</span><span class="node-open">&#8599;</span></div>
+
+            <div class="node"><span class="twisty">&#9654;</span><span class="glyph fail">&#10007;</span><span class="node-name">FB_ChecksumTests</span><span class="node-src">FB_ChecksumTests.TcPOU</span><span class="node-open">&#8599;</span></div>
+            <div class="banner">
+              <strong>Suite failed to load</strong>
+              Unresolved type <code>FB_CrcHelper</code> referenced from VAR block. No tests were run.
+            </div>
+          </div>
+        </div>
+        <div class="tw-statusbar">
+          <span class="dot" style="background:#ffd7cc"></span><span>2 failed, 21 passed, 1 skipped</span>
+          <span class="status-spacer">|</span><span>last run 14:22:07</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="sub">
+      <h3>Running &amp; empty — light</h3>
+      <div class="spec-grid">
+        <div class="spec">
+          <div class="frame-cap">running</div>
+          <div class="frame vsix" data-vs="light">
+            <div class="toolbar">
+              <button class="send-btn stop-btn" type="button">Stop</button>
+              <div class="counts">
+                <span class="count pass">&#10003;<span class="n">6</span></span>
+                <span class="count zero">&#10007;<span class="n">0</span></span>
+              </div>
+            </div>
+            <div class="prog"><i></i></div>
+            <div class="frame-body flush">
+              <div class="tree">
+                <div class="node"><span class="twisty">&#9660;</span><span class="glyph pass">&#10003;</span><span class="node-name">FB_WireRecordTests</span><span class="node-dur">12 ms</span></div>
+                <div class="node"><span class="twisty">&#9660;</span><span class="glyph busy">&#9679;</span><span class="node-name">FB_RemoteWireRecordsTests</span><span class="node-src">running...</span></div>
+                <div class="node depth1"><span class="glyph pass">&#10003;</span><span class="node-name">ConnectsToRemote</span><span class="node-dur">9 ms</span></div>
+                <div class="node depth1"><span class="glyph busy">&#9679;</span><span class="node-name">RetriesOnTimeout</span></div>
+              </div>
+            </div>
+            <div class="tw-statusbar">
+              <span class="dot" style="background:#cfe6ff"></span><span>Running suite 2 of 3</span>
+            </div>
+          </div>
+        </div>
+        <div class="spec">
+          <div class="frame-cap">first run</div>
+          <div class="frame vsix" data-vs="light">
+            <div class="toolbar">
+              <button class="send-btn" type="button">Run tests</button>
+              <input class="field" type="text" placeholder="Filter tests..." />
+            </div>
+            <div class="frame-body">
+              <div class="empty-state">
+                <strong>No results yet.</strong>
+                Run the suites in this solution to see pass and fail output here. Double-click any
+                result to open its .TcPOU in the editor.
+              </div>
+            </div>
+            <div class="tw-statusbar">
+              <span class="dot"></span><span>Ready</span>
+              <span class="status-spacer">|</span><span>3 suites discovered</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sub">
+      <h3>Count badges</h3>
+      <p>State is in the fill, not only the number. A zero count drops to an outline so "nothing failed" doesn't read as an alert at a glance.</p>
+      <div class="spec-grid">
+        <div class="spec">
+          <div class="frame-cap">dark</div>
+          <div class="frame vsix"><div class="frame-body"><div class="row">
+            <span class="count pass">&#10003;<span class="n">21</span></span>
+            <span class="count fail">&#10007;<span class="n">2</span></span>
+            <span class="count skip">&#8210;<span class="n">1</span></span>
+            <span class="count zero">&#10007;<span class="n">0</span></span>
+          </div></div></div>
+        </div>
+        <div class="spec">
+          <div class="frame-cap">light</div>
+          <div class="frame vsix" data-vs="light"><div class="frame-body"><div class="row">
+            <span class="count pass">&#10003;<span class="n">21</span></span>
+            <span class="count fail">&#10007;<span class="n">2</span></span>
+            <span class="count skip">&#8210;<span class="n">1</span></span>
+            <span class="count zero">&#10007;<span class="n">0</span></span>
+          </div></div></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 6 SHELL ============ -->
+  <section class="sec">
+    <div class="sec-head">
+      <div class="sec-num">Pattern</div>
+      <h2>Tool window anatomy</h2>
+      <p>Every panel stacks the same regions. Only the middle one is optional in shape; the edges are fixed.</p>
+    </div>
+    <pre class="code"><span class="c">/* top to bottom — flex column, height:100vh, overflow:hidden */</span>
+<span class="p">.tw-tabs</span>       flex:none   chrome-bg-2   <span class="c">optional — only with 2+ views</span>
+<span class="p">.toolbar</span>       flex:none   chrome-bg-2   <span class="c">primary action left, counts right</span>
+<span class="p">.prog</span>          flex:none   2px           <span class="c">only while work is in flight</span>
+<span class="p">.tw-body</span>       flex:1      panel-bg      <span class="c">min-height:0 — the scroll region</span>
+<span class="p">.tw-inputwrap</span>  flex:none   chrome-bg-2   <span class="c">optional — input-driven panels only</span>
+<span class="p">.tw-ctrlbar</span>    flex:none   chrome-bg-2   <span class="c">optional — persistent settings</span>
+<span class="p">.tw-statusbar</span>  flex:none   20px #007acc  <span class="c">required — never omitted</span></pre>
+    <div class="rules">
+      <div class="rule do"><span class="rule-tag">Always</span><p><b>min-height:0</b> on the scroll region. Without it the flex child refuses to shrink and the status bar gets pushed off the bottom of the panel.</p></div>
+      <div class="rule do"><span class="rule-tag">Always</span><p><b>One primary action</b> per panel, leftmost in the toolbar. Counts and status push right with <code class="k">margin-left:auto</code>.</p></div>
+      <div class="rule dont"><span class="rule-tag">Never</span><p><b>Horizontal body scroll.</b> Long paths truncate with ellipsis; code and tables get their own <code class="k">overflow-x:auto</code> container.</p></div>
+      <div class="rule dont"><span class="rule-tag">Never</span><p><b>A second elevation level.</b> If it isn't a popover, it doesn't get a shadow. Separation is done with borders.</p></div>
+    </div>
+  </section>
+
+  <!-- ============ 7 RULES ============ -->
+  <section class="sec">
+    <div class="sec-head">
+      <div class="sec-num">Rules</div>
+      <h2>How to extend this without breaking it</h2>
+    </div>
+    <div class="rules">
+      <div class="rule do"><span class="rule-tag">Do</span><p><b>Alias before adding.</b> A new semantic gets a token that resolves to an existing hue. Two panels drift the moment one of them invents a green.</p></div>
+      <div class="rule do"><span class="rule-tag">Do</span><p><b>Encode state twice.</b> Color plus shape — glyph, pill fill, left rail. Contrast on a projector, or a colorblind reviewer, must still read pass from fail.</p></div>
+      <div class="rule do"><span class="rule-tag">Do</span><p><b>Style through tokens.</b> Components reference custom properties only; the light theme stays a single block of redefinitions.</p></div>
+      <div class="rule do"><span class="rule-tag">Do</span><p><b>Make the click target look clickable.</b> Rows that navigate reveal the <code class="k">&#8599;</code> on hover. Rows that don't, don't.</p></div>
+      <div class="rule dont"><span class="rule-tag">Don't</span><p><b>Write a hex in a component rule.</b> The only literal colors in the system are <code class="k">#fff</code> on filled buttons and the status bar's own text.</p></div>
+      <div class="rule dont"><span class="rule-tag">Don't</span><p><b>Scale up for comfort.</b> 12px rows are correct here. A panel that out-sizes Solution Explorer next to it reads as a foreign object.</p></div>
+      <div class="rule dont"><span class="rule-tag">Don't</span><p><b>Animate layout.</b> Opacity reveals at 0.1s are the ceiling. Motion in a docked panel is noise in someone's peripheral vision.</p></div>
+      <div class="rule dont"><span class="rule-tag">Don't</span><p><b>Use emoji as status.</b> They render inconsistently in WebView2 across Windows versions and break the density budget. Glyphs and hues only.</p></div>
+    </div>
+  </section>
+
+  <!-- ============ 8 IMPL ============ -->
+  <section class="sec">
+    <div class="sec-head">
+      <div class="sec-num">Implementation</div>
+      <h2>Sharing the sheet between panels</h2>
+      <p>
+        The tokens and core components want to live in one file both VSIX projects embed; each panel
+        adds only its own layer. TcXunit's layer is the results tree — nothing else.
+      </p>
+    </div>
+    <pre class="code"><span class="c">Resources/</span>
+  <span class="p">vsix-tokens.css</span>     <span class="c">:root + body[data-theme="light"] — shared, never forked</span>
+  <span class="p">vsix-shell.css</span>      <span class="c">tabs, buttons, seg, field, chip, picker, statusbar</span>
+  <span class="p">results.css</span>         <span class="c">TcXunit only: .toolbar .tree .node .assert .banner .count</span>
+  <span class="p">chat.css</span>            <span class="c">TcAgent only: .msg-* .md-content .tw-inputbox</span>
+
+<span class="c">// theme follows the shell, set once from the host</span>
+document.body.dataset.theme = hostIsLightTheme ? <span class="p">"light"</span> : <span class="p">"dark"</span>;</pre>
+    <div class="rules">
+      <div class="rule do"><span class="rule-tag">Host</span><p><b>Theme comes from VS,</b> not from <code class="k">prefers-color-scheme</code>. WebView2 does not inherit the shell's theme — the host pushes it in and re-pushes on theme change.</p></div>
+      <div class="rule do"><span class="rule-tag">Data</span><p><b>Tree rows bind to the CLI's JSON:</b> <code class="k">suites[].name</code>, <code class="k">suites[].filePath</code>, <code class="k">suites[].error</code>, <code class="k">suites[].tests[]</code>. <code class="k">filePath</code> is what <code class="k">ItemOperations.OpenFile</code> receives on double-click.</p></div>
+      <div class="rule dont"><span class="rule-tag">Fonts</span><p><b>No web fonts.</b> Segoe UI and Consolas are already on every machine running XAE Shell. A CDN request from a WebView2 panel is a support ticket waiting to happen.</p></div>
+      <div class="rule do"><span class="rule-tag">A11y</span><p><b>Keyboard parity:</b> arrow keys move selection, Enter opens the file, Space toggles the twisty. Focus gets a visible <code class="k">--accent</code> outline everywhere.</p></div>
+    </div>
+  </section>
+
+  <footer class="foot">
+    <span>TcXunit-6nt &middot; VSIX test-result viewer</span>
+    <span>Tokens: TcAgentPlugin/src/TcAgent/Resources/chat.css</span>
+  </footer>
+
+</div>
+</div>
+</body>
+</html>

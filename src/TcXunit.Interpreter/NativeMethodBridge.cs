@@ -65,6 +65,33 @@ namespace TcXunit.Interpreter
                         return null;
                     }
                 default:
+                    // TcXunit-gd2.6: table-driven ARRAY[*] equality dispatch,
+                    // same shape as the scalar dispatch below but keyed off
+                    // the AssertArrayEquals_<TYPE> suffix - checked first
+                    // since it's the more specific prefix ("AssertEquals_"
+                    // doesn't match an "AssertArrayEquals_..." name, but
+                    // checking array first keeps the two dispatches visually
+                    // paired). Restricted to ArrayAssertSupportedTypes rather
+                    // than the full ScalarAssertType registry: unlike the
+                    // 12 non-float types here, upstream's
+                    // AssertArrayEquals_REAL/_LREAL take a Delta VAR_INPUT
+                    // (a different param list shape this one dispatcher
+                    // doesn't support - it always passes delta := null to
+                    // AreEqual, which REAL/LREAL's compare would reject) -
+                    // wiring those needs a second dispatcher, not a bigger
+                    // allow-list here (grow-on-demand, out of scope for
+                    // TcXunit-gd2.6).
+                    if (methodName.StartsWith("AssertArrayEquals_", StringComparison.Ordinal))
+                    {
+                        var typeName = methodName.Substring("AssertArrayEquals_".Length);
+                        if (ArrayAssertSupportedTypes.Contains(typeName))
+                        {
+                            var args = ResolveArgs(ArrayAssertParamNames, positional, named);
+                            host.AssertArrayEqualsCall(typeName, (ArrayValue)args["Expecteds"], (ArrayValue)args["Actuals"], (string)args["Message"]);
+                            return null;
+                        }
+                    }
+
                     // TcXunit-gd2.11: table-driven scalar dispatch. Parses
                     // the AssertEquals_<TYPE> suffix from the native call
                     // name, looks up the ScalarAssertType registry to know
@@ -92,6 +119,17 @@ namespace TcXunit.Interpreter
         private static readonly string[] ConditionAssertParamNames = { "Condition", "Message" };
         private static readonly string[] ScalarAssertParamNames = { "Expected", "Actual", "Message" };
         private static readonly string[] ScalarAssertWithDeltaParamNames = { "Expected", "Actual", "Delta", "Message" };
+        private static readonly string[] ArrayAssertParamNames = { "Expecteds", "Actuals", "Message" };
+
+        // The upstream AssertArrayEquals_<TYPE> overloads this dispatcher
+        // backs (TcXunit-gd2.6) - every non-float, non-string, non-time
+        // scalar type in the registry except LWORD (upstream has
+        // AssertArrayEquals_LWORD too, but it's not part of this ticket's
+        // scope - grow-on-demand).
+        private static readonly HashSet<string> ArrayAssertSupportedTypes = new HashSet<string>
+        {
+            "BOOL", "BYTE", "DINT", "DWORD", "INT", "LINT", "SINT", "UDINT", "UINT", "ULINT", "USINT", "WORD",
+        };
 
         // TEST_ORDERED/TEST_FINISHED_NAMED/IS_TEST_FINISHED take a single
         // TestName input in upstream - accept it either positionally or by

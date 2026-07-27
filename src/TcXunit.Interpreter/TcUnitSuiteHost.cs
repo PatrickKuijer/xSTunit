@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using TcXunit.Runner.TcUnitStub;
 
 namespace TcXunit.Interpreter
@@ -49,6 +50,25 @@ namespace TcXunit.Interpreter
             string actualTypeName, object actualValue,
             string message) =>
             AssertEqualsAny(expectedTypeName, expectedValue, actualTypeName, actualValue, message);
+
+        // ARRAY[*] equality dispatch (TcXunit-gd2.6): flattens each
+        // ArrayValue's per-dimension (Lo, Hi) bounds into the plain
+        // size/lower-bound primitive lists AssertArrayEquals (Runner
+        // project, no ArrayValue reference) expects, then forwards its own
+        // already-flattened Elements storage straight through - no copy
+        // needed since AssertArrayEquals only reads.
+        public void AssertArrayEqualsCall(string typeName, ArrayValue expected, ArrayValue actual, string message) =>
+            AssertArrayEquals(
+                typeName,
+                DimensionSizes(expected), DimensionLowerBounds(expected), expected.Elements,
+                DimensionSizes(actual), DimensionLowerBounds(actual), actual.Elements,
+                message);
+
+        private static List<int> DimensionSizes(ArrayValue array) =>
+            array.Dimensions.Select(d => d.Hi - d.Lo + 1).ToList();
+
+        private static List<int> DimensionLowerBounds(ArrayValue array) =>
+            array.Dimensions.Select(d => d.Lo).ToList();
 
         public IReadOnlyList<TestCaseResult> Collect() => Run();
     }

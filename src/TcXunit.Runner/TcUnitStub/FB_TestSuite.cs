@@ -283,6 +283,77 @@ namespace TcXunit.Runner.TcUnitStub
         protected void AssertEquals_LTIME(ulong expected, ulong actual, string message) =>
             AssertEqualsScalar("LTIME", expected, actual, null, message);
 
+        // Table-driven ARRAY[*] equality dispatch (TcXunit-gd2.6), the
+        // array-typed counterpart to AssertEqualsScalar (gd2.11): one
+        // dimension-agnostic generic method backs every AssertArrayEquals_
+        // <TYPE> overload, reusing each type's compare/format delegate from
+        // the ScalarAssertType registry instead of a bespoke per-type
+        // method. This project doesn't reference TcXunit.Interpreter (the
+        // reference points the other way, Interpreter -> Runner, so there's
+        // no ArrayValue type here) - the caller (TcUnitSuiteHost) flattens
+        // an ArrayValue into element/size/lower-bound primitives first.
+        //
+        // Mirrors upstream AssertArrayEquals_<TYPE> (FB_TestSuite.TcPOU): a
+        // per-dimension size mismatch (not exact bounds - two arrays are
+        // allowed to start at different lower bounds, per upstream's own
+        // comment) fails immediately with a "SIZE = n" EXP/ACT pair and
+        // never touches the elements; otherwise elements are compared
+        // pairwise in flattened order, stopping at the first mismatch
+        // (upstream's FOR/EXIT), and reporting "ARRAY[i] = value" using
+        // each array's own real (lower-bound-relative) index - not the flat
+        // position - exactly like upstream's ExpectedsIndex/ActualsIndex
+        // pair.
+        protected void AssertArrayEquals(
+            string typeName,
+            IReadOnlyList<int> expectedSizes, IReadOnlyList<int> expectedLowerBounds, object[] expectedElements,
+            IReadOnlyList<int> actualSizes, IReadOnlyList<int> actualLowerBounds, object[] actualElements,
+            string message)
+        {
+            var type = ScalarAssertType.Registry[typeName];
+
+            var sizeEquals = expectedSizes.Count == actualSizes.Count;
+            for (var d = 0; sizeEquals && d < expectedSizes.Count; d++)
+                sizeEquals = expectedSizes[d] == actualSizes[d];
+
+            if (!sizeEquals)
+            {
+                Fail($"SIZE = {string.Join("x", expectedSizes)}", $"SIZE = {string.Join("x", actualSizes)}", message);
+                return;
+            }
+
+            for (var flat = 0; flat < expectedElements.Length; flat++)
+            {
+                if (type.AreEqual(expectedElements[flat], actualElements[flat], null))
+                    continue;
+
+                var expectedIndex = UnflattenIndex(expectedSizes, expectedLowerBounds, flat);
+                var actualIndex = UnflattenIndex(actualSizes, actualLowerBounds, flat);
+                Fail(
+                    $"ARRAY[{string.Join(",", expectedIndex)}] = {type.FormatExpected(expectedElements[flat], null)}",
+                    $"ARRAY[{string.Join(",", actualIndex)}] = {type.FormatActual(actualElements[flat])}",
+                    message);
+                return;
+            }
+        }
+
+        // Reverses the row-major flattening in Engine.Statements.cs'
+        // FlattenIndex: given a 0-based flat element position, recovers
+        // each dimension's real (lower-bound-relative) index.
+        private static int[] UnflattenIndex(IReadOnlyList<int> sizes, IReadOnlyList<int> lowerBounds, int flat)
+        {
+            var offsets = new int[sizes.Count];
+            for (var d = sizes.Count - 1; d >= 0; d--)
+            {
+                offsets[d] = flat % sizes[d];
+                flat /= sizes[d];
+            }
+
+            var result = new int[sizes.Count];
+            for (var d = 0; d < sizes.Count; d++)
+                result[d] = lowerBounds[d] + offsets[d];
+            return result;
+        }
+
         // Type-erased AssertEquals(Expected: ANY, Actual: ANY, Message)
         // dispatcher (TcXunit-gd2.5, upstream FB_TestSuite.TcPOU ~line
         // 2215). Upstream compares the ANY parameters' TypeClass tags

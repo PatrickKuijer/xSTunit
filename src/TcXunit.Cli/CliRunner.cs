@@ -20,6 +20,12 @@ namespace TcXunit.Cli
             // both "--format json" and "--format=json"; everything else is a path.
             var format = "text";
             var paths = new List<string>();
+            // --suite <name> (TcXunit-6fb.3): repeatable, restricts the run to
+            // the named suite(s) instead of everything SuiteDiscovery finds -
+            // e.g. a VSIX "rerun failed" action re-running only the suites it
+            // cares about. Parsed the same way as --format (both "--suite x"
+            // and "--suite=x"), interleaved freely with paths/--format.
+            var suiteFilters = new List<string>();
             for (var i = 0; i < args.Length; i++)
             {
                 var arg = args[i];
@@ -35,6 +41,19 @@ namespace TcXunit.Cli
                         return 2;
                     }
                     format = args[++i];
+                }
+                else if (arg.StartsWith("--suite=", StringComparison.OrdinalIgnoreCase))
+                {
+                    suiteFilters.Add(arg.Substring("--suite=".Length));
+                }
+                else if (string.Equals(arg, "--suite", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (i + 1 >= args.Length)
+                    {
+                        output.WriteLine("error: --suite requires a value (suite type name)");
+                        return 2;
+                    }
+                    suiteFilters.Add(args[++i]);
                 }
                 else
                 {
@@ -138,6 +157,17 @@ namespace TcXunit.Cli
             var registry = new TypeRegistry(types, structTypes, gvls, aliases, enumMembers);
             var suiteNames = SuiteDiscovery.FindSuiteTypeNames(registry, types.Select(t => t.Name));
             var suiteFilePaths = loaded.ToDictionary(l => l.Pou.Name, l => l.FilePath);
+
+            if (suiteFilters.Count > 0)
+            {
+                var discovered = new HashSet<string>(suiteNames, StringComparer.Ordinal);
+                var missing = suiteFilters.Where(name => !discovered.Contains(name)).Distinct().ToList();
+                if (missing.Count > 0)
+                    return WriteError($"suite not found: {string.Join(", ", missing)}");
+
+                var requested = new HashSet<string>(suiteFilters, StringComparer.Ordinal);
+                suiteNames = suiteNames.Where(name => requested.Contains(name)).ToList();
+            }
 
             if (suiteNames.Count == 0)
                 return WriteError($"no TcUnit suites found under {string.Join(", ", args)}");

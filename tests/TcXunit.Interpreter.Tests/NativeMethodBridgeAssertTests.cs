@@ -59,6 +59,33 @@ namespace TcXunit.Interpreter.Tests
             Assert.True(Assert.Single(engine.RunSuite("FB_MySuite")).Passed);
         }
 
+        // TcXunit-gd2.4: WSTRING assert, wired the same way STRING is -
+        // WSTRING literals use "..." rather than STRING's '...'.
+        [Fact]
+        public void RunSuite_AssertEqualsWString_ReachableThroughInterpreter()
+        {
+            var engine = NewSuiteEngine(
+                "TEST('t');\n" +
+                "AssertEquals_WSTRING(Expected := \"abc\", Actual := \"abc\", Message := 'ok');\n" +
+                "TEST_FINISHED();");
+
+            Assert.True(Assert.Single(engine.RunSuite("FB_MySuite")).Passed);
+        }
+
+        [Fact]
+        public void RunSuite_AssertEqualsWString_ReachableAndReportsFailure()
+        {
+            var engine = NewSuiteEngine(
+                "TEST('t');\n" +
+                "AssertEquals_WSTRING(Expected := \"abc\", Actual := \"xyz\", Message := 'mismatch');\n" +
+                "TEST_FINISHED();");
+
+            var result = Assert.Single(engine.RunSuite("FB_MySuite"));
+
+            Assert.False(result.Passed);
+            Assert.Contains("EXP: 'abc', ACT: 'xyz'", result.Failures[0].Message);
+        }
+
         [Fact]
         public void RunSuite_AssertEqualsReal_ReachableAndRespectsDelta()
         {

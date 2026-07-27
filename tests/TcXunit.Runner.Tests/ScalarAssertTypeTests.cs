@@ -114,6 +114,40 @@ namespace TcXunit.Runner.Tests
             Assert.Equal("'xyz'", type.FormatActual("xyz"));
         }
 
+        // WSTRING (TcXunit-gd2.4): identical behavior to STRING, since the
+        // interpreter has no narrower wide-char representation than C#
+        // string - only the registry key differs.
+        [Fact]
+        public void WString_AreEqual_TrueForSameValue()
+        {
+            var type = ScalarAssertType.Registry["WSTRING"];
+
+            Assert.True(type.AreEqual("abc", "abc", null));
+        }
+
+        [Fact]
+        public void WString_AreEqual_FalseForDifferentValue()
+        {
+            var type = ScalarAssertType.Registry["WSTRING"];
+
+            Assert.False(type.AreEqual("abc", "xyz", null));
+        }
+
+        [Fact]
+        public void WString_HasDelta_IsFalse()
+        {
+            Assert.False(ScalarAssertType.Registry["WSTRING"].HasDelta);
+        }
+
+        [Fact]
+        public void WString_Format_WrapsValueInQuotes()
+        {
+            var type = ScalarAssertType.Registry["WSTRING"];
+
+            Assert.Equal("'abc'", type.FormatExpected("abc", null));
+            Assert.Equal("'xyz'", type.FormatActual("xyz"));
+        }
+
         [Fact]
         public void Real_AreEqual_TrueWithinDelta()
         {

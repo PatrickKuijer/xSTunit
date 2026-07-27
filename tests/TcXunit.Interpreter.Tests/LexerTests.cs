@@ -83,5 +83,33 @@ namespace TcXunit.Interpreter.Tests
             var literal = Assert.Single(tokens, t => t.Type == TokenType.StringLiteral);
             Assert.Equal("plain text", literal.Text);
         }
+
+        // WSTRING literals use "..." rather than STRING's '...' (TcXunit-gd2.4).
+        [Fact]
+        public void Tokenize_DoubleQuotedLiteral_ProducesStringLiteralToken()
+        {
+            var tokens = Lexer.Tokenize("\"wide text\"");
+
+            var literal = Assert.Single(tokens, t => t.Type == TokenType.StringLiteral);
+            Assert.Equal("wide text", literal.Text);
+        }
+
+        [Fact]
+        public void Tokenize_DoubleQuotedLiteral_DollarEscapedQuote_ProducesEmbeddedDoubleQuotes()
+        {
+            var tokens = Lexer.Tokenize("\"Failed to find test $\"%s$\"\"");
+
+            var literal = Assert.Single(tokens, t => t.Type == TokenType.StringLiteral);
+            Assert.Equal("Failed to find test \"%s\"", literal.Text);
+        }
+
+        [Fact]
+        public void Tokenize_DoubleQuotedLiteral_DoesNotTreatEmbeddedSingleQuoteAsDelimiter()
+        {
+            var tokens = Lexer.Tokenize("\"it's wide\"");
+
+            var literal = Assert.Single(tokens, t => t.Type == TokenType.StringLiteral);
+            Assert.Equal("it's wide", literal.Text);
+        }
     }
 }

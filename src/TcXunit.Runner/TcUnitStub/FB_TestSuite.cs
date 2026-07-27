@@ -226,6 +226,9 @@ namespace TcXunit.Runner.TcUnitStub
         protected void AssertEquals_STRING(string expected, string actual, string message) =>
             AssertEqualsScalar("STRING", expected, actual, null, message);
 
+        protected void AssertEquals_WSTRING(string expected, string actual, string message) =>
+            AssertEqualsScalar("WSTRING", expected, actual, null, message);
+
         protected void AssertEquals_REAL(double expected, double actual, double delta, string message) =>
             AssertEqualsScalar("REAL", expected, actual, delta, message);
 

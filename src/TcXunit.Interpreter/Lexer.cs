@@ -98,15 +98,20 @@ namespace TcXunit.Interpreter
                     continue;
                 }
 
-                if (c == '\'')
+                // STRING literals use '...' and WSTRING literals use "..."
+                // (TcXunit-gd2.4) - both produce the same StringLiteral
+                // token since Cell values are plain C# strings regardless
+                // of the variable's declared STRING/WSTRING type.
+                if (c == '\'' || c == '"')
                 {
+                    var quote = c;
                     var sb = new StringBuilder();
                     i++;
-                    while (i < text.Length && text[i] != '\'')
+                    while (i < text.Length && text[i] != quote)
                     {
                         if (text[i] == '$' && i + 1 < text.Length)
                         {
-                            var escaped = TryConsumeDollarEscape(text, ref i);
+                            var escaped = TryConsumeDollarEscape(text, ref i, quote);
                             if (escaped.HasValue)
                             {
                                 sb.Append(escaped.Value);
@@ -198,18 +203,19 @@ namespace TcXunit.Interpreter
         }
 
         // Recognizes IEC 61131-3 '$'-escape sequences inside single-quoted STRING
-        // literals (e.g. $$ -> '$', $' -> '\'', $hh -> two-hex-digit character
-        // code). On a match, advances i past the escape sequence and returns the
-        // decoded character; returns null (and leaves i untouched) if text[i..]
-        // is not a recognized escape, so the caller falls back to treating '$'
-        // as a literal character.
-        private static char? TryConsumeDollarEscape(string text, ref int i)
+        // or double-quoted WSTRING literals (e.g. $$ -> '$', $' -> '\'' (or
+        // $" -> '"' for WSTRING), $hh -> two-hex-digit character code). quote
+        // is the literal's own delimiter ('\'' or '"'), so $<quote> escapes
+        // that literal's embedded quote character. On a match, advances i past
+        // the escape sequence and returns the decoded character; returns null
+        // (and leaves i untouched) if text[i..] is not a recognized escape, so
+        // the caller falls back to treating '$' as a literal character.
+        private static char? TryConsumeDollarEscape(string text, ref int i, char quote)
         {
             var next = text[i + 1];
-            char? decoded = next switch
+            char? decoded = next == quote ? quote : next switch
             {
                 '$' => '$',
-                '\'' => '\'',
                 'L' or 'l' => '\n',
                 'N' or 'n' => '\n',
                 'P' or 'p' => '\f',

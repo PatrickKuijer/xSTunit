@@ -85,6 +85,17 @@ namespace TcXunit.Runner.TcUnitStub
                     formatExpected: (expected, delta) => $"'{expected}'",
                     formatActual: actual => $"'{actual}'"),
 
+                // WSTRING (TcXunit-gd2.4): the interpreter has no narrower
+                // wide-char representation than C# string (already UTF-16),
+                // so this is identical to STRING's entry - only the IEC type
+                // name differs.
+                ["WSTRING"] = new ScalarAssertType(
+                    "WSTRING",
+                    hasDelta: false,
+                    areEqual: (expected, actual, delta) => (string)expected == (string)actual,
+                    formatExpected: (expected, delta) => $"'{expected}'",
+                    formatActual: actual => $"'{actual}'"),
+
                 ["REAL"] = new ScalarAssertType(
                     "REAL",
                     hasDelta: true,

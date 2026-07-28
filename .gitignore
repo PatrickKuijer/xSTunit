@@ -11,6 +11,7 @@ obj/
 
 # Classic packages.config restore output (src/TcXunit.Vsix)
 packages/
+.nuget/
 
 # Visual Studio
 .vs/

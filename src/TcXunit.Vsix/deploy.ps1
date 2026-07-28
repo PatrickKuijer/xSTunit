@@ -97,7 +97,6 @@ $includeFiles = @(
     'TcXunit.Vsix.pdb'
     'TcXunit.Vsix.pkgdef'
     'extension.vsixmanifest'
-    'WebView2Loader.dll'
     'Microsoft.Web.WebView2.Core.dll'
     'Microsoft.Web.WebView2.Wpf.dll'
     'System.Text.Json.dll'
@@ -125,11 +124,15 @@ foreach ($file in $includeFiles) {
     Copy-Item -Path $src -Destination $destDir -Force
 }
 
-# Resources\ is mirrored (not just copied) so a file removed from the source
-# tree doesn't linger in an old deploy.
-robocopy (Join-Path $sourceDir 'Resources') (Join-Path $destDir 'Resources') /MIR /NFL /NDL /NJH /NJS | Out-Null
-if ($LASTEXITCODE -ge 8) {
-    throw "robocopy failed mirroring Resources\ (exit code $LASTEXITCODE)"
+# Resources\, x86\, and x64\ are mirrored (not just copied) so a file removed
+# from the source tree doesn't linger in an old deploy. x86\/x64\ hold the
+# two arch-specific WebView2Loader.dll builds (see TcXunit.Vsix.csproj);
+# ResultsToolWindowControl picks the right one at runtime by process bitness.
+foreach ($folder in @('Resources', 'x86', 'x64')) {
+    robocopy (Join-Path $sourceDir $folder) (Join-Path $destDir $folder) /MIR /NFL /NDL /NJH /NJS | Out-Null
+    if ($LASTEXITCODE -ge 8) {
+        throw "robocopy failed mirroring $folder\ (exit code $LASTEXITCODE)"
+    }
 }
 
 Write-Host "Deployed to $destDir"

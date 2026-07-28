@@ -266,13 +266,21 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
     <!--
-      WebView2's native loader. VS2017/XAE Shell's devenv.exe is a 32-bit process, so
-      this is the x86 build regardless of this project's AnyCPU platform setting. Not
-      auto-copied the way an SDK-style project's "runtimes" folder would be; this
-      classic project needs it listed explicitly; mirrors TcAgent.csproj.
+      WebView2's native loader. devenv.exe's bitness varies by host: VS2017/older XAE
+      Shell is 32-bit, VS2022/XAE x64 is 64-bit. A single flat WebView2Loader.dll can't
+      serve both, so both builds ship into arch subfolders and
+      ResultsToolWindowControl_Loaded preloads the matching one via LoadLibraryEx
+      (keyed on Environment.Is64BitProcess) before CoreWebView2Environment.CreateAsync
+      triggers the implicit load. Not auto-copied the way an SDK-style project's
+      "runtimes" folder would be; this classic project needs it listed explicitly.
     -->
     <Content Include="..\..\packages\Microsoft.Web.WebView2.1.0.2592.51\runtimes\win-x86\native\WebView2Loader.dll">
-      <Link>WebView2Loader.dll</Link>
+      <Link>x86\WebView2Loader.dll</Link>
+      <IncludeInVSIX>true</IncludeInVSIX>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="..\..\packages\Microsoft.Web.WebView2.1.0.2592.51\runtimes\win-x64\native\WebView2Loader.dll">
+      <Link>x64\WebView2Loader.dll</Link>
       <IncludeInVSIX>true</IncludeInVSIX>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>

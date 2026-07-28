@@ -104,5 +104,22 @@ namespace TcXunit.Interpreter.Tests
             var ptr = Assert.IsType<Pointer>(result);
             Assert.Equal(40, ptr.Target.Value);
         }
+
+        [Fact]
+        public void Adr_PlusUdintOffset_DoesNotThrowInvalidCast()
+        {
+            // The 'FOR i := 0 TO inSize - 1 DO (ipA + i)^' buffer-compare
+            // idiom uses a UDINT loop index, which boxes as long. Pointer
+            // arithmetic must narrow it (Convert.ToInt32), not direct (int)
+            // unbox it - the latter threw InvalidCastException (Int64 -> Int32)
+            // and surfaced whole suites as "(parse error)".
+            var (engine, instance, frame) = NewHolder(
+                "VAR\n\tbuf : ARRAY[0..3] OF BYTE := [10, 20, 30, 40];\n\ti : UDINT := 2;\nEND_VAR");
+
+            var result = engine.Evaluate(Parser.ParseExpression("ADR(buf) + i"), frame);
+
+            var ptr = Assert.IsType<Pointer>(result);
+            Assert.Equal(30, ptr.Target.Value);
+        }
     }
 }

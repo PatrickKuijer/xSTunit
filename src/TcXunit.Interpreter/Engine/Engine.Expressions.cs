@@ -253,7 +253,15 @@ namespace TcXunit.Interpreter
                 throw new NotSupportedException("Pointer-minus-pointer is not supported");
 
             var (ptr, offsetVal) = leftVal is Pointer p ? (p, rightVal) : ((Pointer)rightVal, leftVal);
-            var delta = (int)offsetVal;
+            // Convert.ToInt32 rather than a direct (int) cast: the offset is
+            // an arbitrary user expression that boxes as long when it is a
+            // DINT/UDINT/LINT/ULINT/DWORD value (e.g. the UDINT loop index in
+            // the 'FOR i := 0 TO inSize - 1 DO (ipA + i)^' buffer-compare
+            // idiom) or uint for TIME/DATE, and a direct (int) cast throws
+            // InvalidCastException on those boxed types instead of narrowing
+            // them (same widening-unbox pitfall fixed in FlattenIndex,
+            // TcXunit-iyd.5).
+            var delta = Convert.ToInt32(offsetVal);
             if (op == "-")
                 delta = -delta;
 
@@ -581,7 +589,7 @@ namespace TcXunit.Interpreter
                     return MemCopy(
                         RequirePointerArg(call.MethodName, "destAddr", args, frame),
                         RequirePointerArg(call.MethodName, "srcAddr", args, frame),
-                        (int)Evaluate(RequireIntrinsicArg(call.MethodName, "n", args), frame),
+                        Convert.ToInt32(Evaluate(RequireIntrinsicArg(call.MethodName, "n", args), frame)),
                         overlapSafe: call.MethodName == "MEMMOVE",
                         frame);
                 }
@@ -592,7 +600,7 @@ namespace TcXunit.Interpreter
                     return MemSet(
                         RequirePointerArg(call.MethodName, "destAddr", args, frame),
                         Evaluate(RequireIntrinsicArg(call.MethodName, "value", args), frame),
-                        (int)Evaluate(RequireIntrinsicArg(call.MethodName, "n", args), frame),
+                        Convert.ToInt32(Evaluate(RequireIntrinsicArg(call.MethodName, "n", args), frame)),
                         frame);
                 }
 

@@ -29,14 +29,14 @@ namespace TcXunit.Interpreter.Tests
                 "nResult := F_Double(nValue);");
 
             var fb = new PouAst(
-                "FB_RemotePparClient",
+                "FB_Widget",
                 null,
                 "VAR\n\tnValue : INT := 21;\n\tnResult : INT;\nEND_VAR",
                 "",
                 new List<MethodAst> { caller });
 
             var engine = new Engine(new TypeRegistry(new[] { fb, function }));
-            var instance = engine.NewInstance("FB_RemotePparClient");
+            var instance = engine.NewInstance("FB_Widget");
 
             engine.CallMethod(instance, "bAdd", new Expr[0], new NamedArg[0], null, null);
 
@@ -64,14 +64,14 @@ namespace TcXunit.Interpreter.Tests
                 "nResult := F_Double(nValue);");
 
             var fb = new PouAst(
-                "FB_RemotePparClient",
+                "FB_Widget",
                 null,
                 "VAR\n\tnValue : INT := 21;\n\tnResult : INT;\nEND_VAR",
                 "",
                 new List<MethodAst> { caller });
 
             var engine = new Engine(new TypeRegistry(new[] { fb, function }));
-            var instance = engine.NewInstance("FB_RemotePparClient");
+            var instance = engine.NewInstance("FB_Widget");
 
             engine.CallMethod(instance, "bAdd", new Expr[0], new NamedArg[0], null, null);
 

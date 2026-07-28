@@ -177,6 +177,19 @@ namespace TcXunit.Interpreter
                     return NativeMethodBridge.Invoke(instance.NativeSuiteHost, methodName, evaluatedPositional, evaluatedNamed, anyTypeNames);
                 }
 
+                // Unqualified call inside a METHOD body naming neither an
+                // ancestor method nor a callee field: falls back to a
+                // top-level global FUNCTION POU of the same name
+                // (TcXunit-9su) - a plain FUNCTION has no Method children and
+                // no FUNCTION_BLOCK/PROGRAM declaration keyword, so it never
+                // matched the ancestry walk above. Runs with no receiver
+                // instance (a FUNCTION can't see the caller's FB fields,
+                // only its own params/locals and GVLs via
+                // TryResolveGlobalCell).
+                var globalFunctionDef = _registry.Get(methodName);
+                if (globalFunctionDef != null && GlobalFunctionDeclarationPattern.IsMatch(globalFunctionDef.DeclarationText))
+                    return CallGlobalFunction(globalFunctionDef, positionalArgs, namedArgs, callerFrame);
+
                 throw new InvalidOperationException($"Method '{methodName}' not found starting from type '{startType}'");
             }
 
@@ -195,6 +208,36 @@ namespace TcXunit.Interpreter
             WriteBackOutputArgs(paramDecls, namedArgs, newFrame, callerFrame);
 
             return newFrame.Locals.TryGetValue(methodName, out var returnCell) ? returnCell.Value : null;
+        }
+
+        private static readonly System.Text.RegularExpressions.Regex GlobalFunctionDeclarationPattern =
+            new System.Text.RegularExpressions.Regex(@"^\s*FUNCTION(?!_BLOCK)\b", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+        // Global FUNCTION invocation (TcXunit-9su): same body-execution shape
+        // as the METHOD path above, but with no receiver instance - a
+        // FUNCTION's return value is written to a Local named after the
+        // function itself (functionDef.Name), same IEC convention as METHOD.
+        private object CallGlobalFunction(
+            TcXunit.Parser.PouAst functionDef,
+            IReadOnlyList<Expr> positionalArgs,
+            IReadOnlyList<NamedArg> namedArgs,
+            Frame callerFrame)
+        {
+            var newFrame = new Frame(null, functionDef.Name);
+            var paramDecls = _registry.GetDecls(functionDef.DeclarationText);
+            BindParams(paramDecls, positionalArgs, namedArgs, callerFrame, newFrame);
+
+            try
+            {
+                ExecuteStatements(_registry.GetStatements(functionDef.ImplementationText), newFrame);
+            }
+            catch (MethodReturnSignal)
+            {
+            }
+
+            WriteBackOutputArgs(paramDecls, namedArgs, newFrame, callerFrame);
+
+            return newFrame.Locals.TryGetValue(functionDef.Name, out var returnCell) ? returnCell.Value : null;
         }
 
         // Name => expr call args (TcXunit-mym.5) bind a VAR_OUTPUT param's

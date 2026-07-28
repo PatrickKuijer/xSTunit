@@ -35,8 +35,8 @@ namespace TcXunit.Interpreter.Tests
         [Fact]
         public void QualifiedEnumLiteral_ScalarAssignment_ResolvesToMemberValue()
         {
-            var enumMembers = EnumMembers("eModuleParameterDataTypes", ("TypeBool", 0), ("TypeLreal", 3));
-            var engine = NewEngine("result := eModuleParameterDataTypes.TypeLreal;", enumMembers);
+            var enumMembers = EnumMembers("eWidgetValueKind", ("TypeBool", 0), ("TypeLreal", 3));
+            var engine = NewEngine("result := eWidgetValueKind.TypeLreal;", enumMembers);
             var instance = engine.NewInstance("FB_Wrapper");
 
             engine.CallMethod(instance, "StepCycles", new Expr[] { new IntLiteralExpr(1) }, new NamedArg[0], null, null);
@@ -49,8 +49,8 @@ namespace TcXunit.Interpreter.Tests
         {
             // TcXunit-rk3 user story 4: first explicit initializer is 5,
             // gaps/offsets in the DUT source must be respected exactly.
-            var enumMembers = EnumMembers("eModuleParameterDataTypes", ("TypeBool", 5), ("TypeByte", 6), ("TypeInt", 7));
-            var engine = NewEngine("result := eModuleParameterDataTypes.TypeInt;", enumMembers);
+            var enumMembers = EnumMembers("eWidgetValueKind", ("TypeBool", 5), ("TypeByte", 6), ("TypeInt", 7));
+            var engine = NewEngine("result := eWidgetValueKind.TypeInt;", enumMembers);
             var instance = engine.NewInstance("FB_Wrapper");
 
             engine.CallMethod(instance, "StepCycles", new Expr[] { new IntLiteralExpr(1) }, new NamedArg[0], null, null);
@@ -66,9 +66,9 @@ STRUCT
 	eType : INT;
 END_STRUCT
 END_TYPE");
-            var enumMembers = EnumMembers("eModuleParameterDataTypes", ("TypeBool", 0), ("TypeLreal", 3));
+            var enumMembers = EnumMembers("eWidgetValueKind", ("TypeBool", 0), ("TypeLreal", 3));
             var engine = NewEngine(
-                "aValues[1].eType := eModuleParameterDataTypes.TypeLreal;",
+                "aValues[1].eType := eWidgetValueKind.TypeLreal;",
                 enumMembers,
                 varBlock: "VAR\n\taValues : ARRAY[0..1] OF ST_SendValue;\nEND_VAR",
                 structTypes: new[] { stSendValue });
@@ -84,9 +84,9 @@ END_TYPE");
         [Fact]
         public void QualifiedEnumLiteral_ComparedAgainstAssignedField_AreEqual()
         {
-            var enumMembers = EnumMembers("eModuleParameterDataTypes", ("TypeBool", 0), ("TypeLreal", 3));
+            var enumMembers = EnumMembers("eWidgetValueKind", ("TypeBool", 0), ("TypeLreal", 3));
             var engine = NewEngine(
-                "actual := eModuleParameterDataTypes.TypeLreal;\nresult := (actual = eModuleParameterDataTypes.TypeLreal);",
+                "actual := eWidgetValueKind.TypeLreal;\nresult := (actual = eWidgetValueKind.TypeLreal);",
                 enumMembers,
                 varBlock: "VAR\n\tactual : INT;\n\tresult : BOOL;\nEND_VAR");
             var instance = engine.NewInstance("FB_Wrapper");
@@ -99,14 +99,14 @@ END_TYPE");
         [Fact]
         public void QualifiedEnumLiteral_UnknownMember_ThrowsMatchingBuiltinEnumErrorShape()
         {
-            var enumMembers = EnumMembers("eModuleParameterDataTypes", ("TypeBool", 0), ("TypeLreal", 3));
-            var engine = NewEngine("result := eModuleParameterDataTypes.Bogus;", enumMembers);
+            var enumMembers = EnumMembers("eWidgetValueKind", ("TypeBool", 0), ("TypeLreal", 3));
+            var engine = NewEngine("result := eWidgetValueKind.Bogus;", enumMembers);
             var instance = engine.NewInstance("FB_Wrapper");
 
             var ex = Assert.Throws<System.InvalidOperationException>(() =>
                 engine.CallMethod(instance, "StepCycles", new Expr[] { new IntLiteralExpr(1) }, new NamedArg[0], null, null));
 
-            Assert.Equal("Unknown enum member 'eModuleParameterDataTypes.Bogus'", ex.Message);
+            Assert.Equal("Unknown enum member 'eWidgetValueKind.Bogus'", ex.Message);
         }
 
         [Theory]
@@ -116,13 +116,13 @@ END_TYPE");
         {
             // TcXunit-ohn: EnumType.Member: used as a CASE label must dispatch
             // like any other label, not fail to parse as a CASE-arm boundary.
-            var enumMembers = EnumMembers("eRemoteRegistrationOpcode", ("Add", 0), ("Remove", 1));
+            var enumMembers = EnumMembers("eWidgetOpcode", ("Add", 0), ("Remove", 1));
             var engine = NewEngine(
                 $"eOpcode := {opcode};\n" +
                 "CASE eOpcode OF\n" +
-                "eRemoteRegistrationOpcode.Add:\n" +
+                "eWidgetOpcode.Add:\n" +
                 "\tresult := 1;\n" +
-                "eRemoteRegistrationOpcode.Remove:\n" +
+                "eWidgetOpcode.Remove:\n" +
                 "\tresult := 2;\n" +
                 "END_CASE",
                 enumMembers,
@@ -145,11 +145,11 @@ STRUCT
 	TypeLreal : INT;
 END_STRUCT
 END_TYPE");
-            var enumMembers = EnumMembers("eModuleParameterDataTypes", ("TypeBool", 0), ("TypeLreal", 3));
+            var enumMembers = EnumMembers("eWidgetValueKind", ("TypeBool", 0), ("TypeLreal", 3));
             var engine = NewEngine(
-                "result := eModuleParameterDataTypes.TypeLreal;",
+                "result := eWidgetValueKind.TypeLreal;",
                 enumMembers,
-                varBlock: "VAR\n\teModuleParameterDataTypes : ST_Value := (TypeLreal := 42);\n\tresult : INT;\nEND_VAR",
+                varBlock: "VAR\n\teWidgetValueKind : ST_Value := (TypeLreal := 42);\n\tresult : INT;\nEND_VAR",
                 structTypes: new[] { stValue });
             var instance = engine.NewInstance("FB_Wrapper");
 

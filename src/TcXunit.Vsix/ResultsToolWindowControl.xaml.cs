@@ -38,8 +38,7 @@ namespace TcXunit.Vsix
     /// Browser_WebMessageReceived envelope pattern (ChatToolWindowControl.xaml.cs). It is
     /// distinguished from 'run'/'stop' by TryGetWebMessageAsString throwing for a non-string
     /// payload; the catch falls back to parsing WebMessageAsJson and opens the file via
-    /// EnvDTE.DTE.ItemOperations.OpenFile, obtained the same way ResolveProjectDirectory below
-    /// already does (Package.GetGlobalService(typeof(EnvDTE.DTE))).
+    /// VsShellUtilities.OpenDocument (see OpenFile below).
     ///
     /// TcXunit-1tt.8 (rerun failed) adds a third message under the same JSON envelope:
     /// {type:'rerunFailed'}, posted by results.js's #rerunFailedButton. Unlike openFile it
@@ -284,13 +283,12 @@ namespace TcXunit.Vsix
 
         /// <summary>Opens filePath (a suite's, or -- for a failed leaf test row -- its
         /// parent suite's, per the epic's explicit "no per-test file granularity" design
-        /// decision) in the XAE Shell editor via EnvDTE, the interaction
-        /// TcXunit.Vsix/README.md flagged as deferred pending exactly this data. Uses the
-        /// same Package.GetGlobalService(typeof(EnvDTE.DTE)) lookup ResolveProjectDirectory
-        /// already relies on elsewhere in this file, rather than caching a DTE field the way
-        /// ChatToolWindowControl does -- this path is click-driven and infrequent, so a
-        /// fresh lookup per click is simpler than keeping a cached reference valid across
-        /// the control's Loaded/Unloaded churn.</summary>
+        /// decision) in the XAE Shell editor, the interaction TcXunit.Vsix/README.md flagged
+        /// as deferred pending exactly this data. Uses VsShellUtilities.OpenDocument (a thin
+        /// wrapper over the native IVsUIShellOpenDocument shell service), not EnvDTE --
+        /// EnvDTE._DTE.ItemOperations threw the same MissingMethodException on x64 TwinCAT
+        /// XAE Shell that _DTE.Solution did (see ResolveProjectDirectory), so EnvDTE
+        /// automation is unreliable there across the board.</summary>
         private void OpenFile(string filePath)
         {
             ThreadHelper.ThrowIfNotOnUIThread();
@@ -302,14 +300,7 @@ namespace TcXunit.Vsix
 
             try
             {
-                if (Package.GetGlobalService(typeof(EnvDTE.DTE)) is EnvDTE.DTE dte)
-                {
-                    dte.ItemOperations.OpenFile(filePath);
-                }
-                else
-                {
-                    this.ShowError("Could not open file: no DTE available.");
-                }
+                VsShellUtilities.OpenDocument(ServiceProvider.GlobalProvider, filePath);
             }
             catch (Exception ex)
             {

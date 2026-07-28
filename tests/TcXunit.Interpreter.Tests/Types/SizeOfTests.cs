@@ -86,9 +86,9 @@ namespace TcXunit.Interpreter.Tests
         [Fact]
         public void SizeOf_StringSizedByGvlQualifiedConstant_ReturnsLengthPlusNull()
         {
-            var gvl = new GvlAst("cFramework", "VAR_GLOBAL CONSTANT\n\tMAX_PAR_STRING_SIZE : UINT := 32;\nEND_VAR");
+            var gvl = new GvlAst("cScratchConstants", "VAR_GLOBAL CONSTANT\n\tMAX_LABEL_STRING_SIZE : UINT := 32;\nEND_VAR");
             var fb = new PouAst(
-                "FB_Holder", null, "VAR\n\ts : STRING(cFramework.MAX_PAR_STRING_SIZE);\nEND_VAR", "", new List<MethodAst>());
+                "FB_Holder", null, "VAR\n\ts : STRING(cScratchConstants.MAX_LABEL_STRING_SIZE);\nEND_VAR", "", new List<MethodAst>());
             var engine = new Engine(new TypeRegistry(new[] { fb }, null, new[] { gvl }));
             var instance = engine.NewInstance("FB_Holder");
             var frame = new Frame(instance, "FB_Holder");
@@ -190,9 +190,9 @@ END_TYPE");
         [Fact]
         public void SizeOf_EnumWithExplicitBaseType_ReturnsBaseTypeByteWidth()
         {
-            var aliases = new[] { new KeyValuePair<string, string>("eModuleParameterDataTypes", "DINT") };
+            var aliases = new[] { new KeyValuePair<string, string>("eWidgetValueKind", "DINT") };
             var (engine, _, frame) = NewHolder(
-                "VAR\n\td : eModuleParameterDataTypes;\nEND_VAR", aliases: aliases);
+                "VAR\n\td : eWidgetValueKind;\nEND_VAR", aliases: aliases);
 
             var result = engine.Evaluate(Parser.ParseExpression("SIZEOF(d)"), frame);
 
@@ -208,14 +208,14 @@ END_TYPE");
         public void SizeOf_PackedStruct_HasNoAlignmentPadding()
         {
             var structType = StructDeclParser.Parse(@"{attribute 'pack_mode' := '1'}
-TYPE uRemoteParamValue :
+TYPE uGadgetSettingValue :
 STRUCT
 	nIndex : UINT;
 	eType : UINT;
 	rValue : LREAL;
 END_STRUCT
 END_TYPE");
-            var (engine, _, frame) = NewHolder("VAR\n\tm : uRemoteParamValue;\nEND_VAR", new[] { structType });
+            var (engine, _, frame) = NewHolder("VAR\n\tm : uGadgetSettingValue;\nEND_VAR", new[] { structType });
 
             var result = engine.Evaluate(Parser.ParseExpression("SIZEOF(m)"), frame);
 
@@ -225,14 +225,14 @@ END_TYPE");
         [Fact]
         public void SizeOf_SameFieldsWithoutPackMode_PadsToNaturalAlignment()
         {
-            var structType = StructDeclParser.Parse(@"TYPE uRemoteParamValue :
+            var structType = StructDeclParser.Parse(@"TYPE uGadgetSettingValue :
 STRUCT
 	nIndex : UINT;
 	eType : UINT;
 	rValue : LREAL;
 END_STRUCT
 END_TYPE");
-            var (engine, _, frame) = NewHolder("VAR\n\tm : uRemoteParamValue;\nEND_VAR", new[] { structType });
+            var (engine, _, frame) = NewHolder("VAR\n\tm : uGadgetSettingValue;\nEND_VAR", new[] { structType });
 
             var result = engine.Evaluate(Parser.ParseExpression("SIZEOF(m)"), frame);
 

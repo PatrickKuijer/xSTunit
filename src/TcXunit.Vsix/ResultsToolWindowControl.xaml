@@ -33,7 +33,7 @@
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <TextBlock Grid.Row="0" x:Name="StatusText" Margin="8,8,8,8" TextWrapping="Wrap" />
+        <TextBlock Grid.Row="0" x:Name="StatusText" Margin="8,8,8,8" TextWrapping="Wrap" Visibility="Collapsed" />
 
         <wv2:WebView2 Grid.Row="1" x:Name="Browser" />
     </Grid>

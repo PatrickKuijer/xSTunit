@@ -378,6 +378,14 @@ namespace TcXunit.Interpreter
             return resolved;
         }
 
+        // CONCAT(STR1, STR2, ..., STR10): TwinCAT's Tc2_Standard signature -
+        // STR1/STR2 required, STR3..STR10 optional trailing args - resolved
+        // by name or IEC positional order same as the other intrinsics
+        // (ResolveIntrinsicArgs), then appended in this declared order
+        // regardless of how the caller mixed named/positional args.
+        private static readonly string[] ConcatParamNames =
+            { "STR1", "STR2", "STR3", "STR4", "STR5", "STR6", "STR7", "STR8", "STR9", "STR10" };
+
         private static Expr RequireIntrinsicArg(string methodName, string paramName, IReadOnlyDictionary<string, Expr> args)
         {
             if (args.TryGetValue(paramName, out var value))
@@ -393,6 +401,19 @@ namespace TcXunit.Interpreter
                 throw new InvalidOperationException(
                     $"{methodName} argument '{paramName}' must be a POINTER TO BYTE (e.g. ADR(buf) or ADR(buf[i])), got {value?.GetType().Name}");
             return ptr;
+        }
+
+        // Mirrors the STRING-only guard in EvaluateBinary ("STRING can only
+        // be compared against another STRING") - CONCAT's STR* args are
+        // ANY_STRING per the IEC signature, so a non-string arg is a type
+        // error, not something to coerce via Convert.ToString.
+        private string RequireStringArg(string methodName, string paramName, Expr argExpr, Frame frame)
+        {
+            var value = Evaluate(argExpr, frame);
+            if (!(value is string s))
+                throw new NotSupportedException(
+                    $"{methodName} argument '{paramName}' must be a STRING, got {value?.GetType().Name ?? "null"}");
+            return s;
         }
 
         // MEMCPY (overlapSafe: false) copies forward regardless of overlap,
@@ -620,6 +641,19 @@ namespace TcXunit.Interpreter
 
                 if (call.MethodName == "SIZEOF")
                     return EvaluateSizeOf(call.PositionalArgs[0], frame);
+
+                if (call.MethodName == "CONCAT")
+                {
+                    var args = ResolveIntrinsicArgs(ConcatParamNames, call.PositionalArgs, call.NamedArgs);
+                    RequireIntrinsicArg("CONCAT", "STR1", args);
+                    RequireIntrinsicArg("CONCAT", "STR2", args);
+
+                    var sb = new System.Text.StringBuilder();
+                    foreach (var paramName in ConcatParamNames)
+                        if (args.TryGetValue(paramName, out var argExpr))
+                            sb.Append(RequireStringArg("CONCAT", paramName, argExpr, frame));
+                    return sb.ToString();
+                }
 
                 if (TryEvaluateCast(call, frame, out var castResult))
                     return castResult;

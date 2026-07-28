@@ -90,9 +90,9 @@ namespace TcXunit.Interpreter.Tests
             // boundary rather than letting ParseCaseBody misparse it as a statement.
             var stmts = Parser.ParseStatements(
                 "CASE eOpcode OF\n" +
-                "eRemoteRegistrationOpcode.Add:\n" +
+                "eWidgetOpcode.Add:\n" +
                 "\tresult := 1;\n" +
-                "eRemoteRegistrationOpcode.Remove:\n" +
+                "eWidgetOpcode.Remove:\n" +
                 "\tresult := 2;\n" +
                 "END_CASE");
 

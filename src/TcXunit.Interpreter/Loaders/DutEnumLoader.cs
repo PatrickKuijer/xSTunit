@@ -7,7 +7,7 @@ using TcXunit.Parser;
 namespace TcXunit.Interpreter
 {
     // Parses ENUM .TcDUT definitions - e.g. "TYPE E_Color : (Red, Green,
-    // Blue); END_TYPE" or "TYPE eModuleParameterDataTypes : (A, B) DINT;
+    // Blue); END_TYPE" or "TYPE eWidgetValueKind : (A, B) DINT;
     // END_TYPE" - across the merged set of POU directories, mirroring
     // DutAliasLoader's shape (TcXunit-fyu): registered into the same
     // name -> underlying-type-text map TypeRegistry's alias mechanism
@@ -35,15 +35,14 @@ namespace TcXunit.Interpreter
         // DUTs with pragma attributes and/or a declaration comment. Neither
         // is part of the enum's declaration shape, so they're stripped
         // before EnumPattern is tried (mirrors real .TcDUT declaration text
-        // - see PLC repo's eModuleParameterDataTypes.TcDUT/
-        // eRemoteRegistrationOpcode.TcDUT).
+        // - see e.g. eWidgetValueKind.TcDUT/eWidgetOpcode.TcDUT).
         private static readonly Regex LeadingPragmaOrCommentLine = new Regex(
             @"\A\s*(\{[^\n\}]*\}|//[^\n]*)\s*", RegexOptions.Compiled);
 
         // Extracts (name, underlyingTypeName, members) from an ENUM DUT's
         // declaration text - e.g. "E_Color" / "INT" (the IEC 61131-3
         // default) from "TYPE E_Color : (Red, Green, Blue); END_TYPE", or
-        // "eModuleParameterDataTypes" / "DINT" when the DUT declares an
+        // "eWidgetValueKind" / "DINT" when the DUT declares an
         // explicit base type after the member list's closing paren. members
         // is the member-name -> ordinal-value table (TcXunit-rk3), parsed
         // from the same body capture group used above - never a second scan

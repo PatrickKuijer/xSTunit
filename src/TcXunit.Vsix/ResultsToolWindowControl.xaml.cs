@@ -12,6 +12,7 @@ using Microsoft.VisualStudio.PlatformUI;
 using Microsoft.VisualStudio.Shell;
 using Microsoft.Web.WebView2.Core;
 using TcXunit.Vsix.TestRunner;
+using Task = System.Threading.Tasks.Task;
 
 namespace TcXunit.Vsix
 {
@@ -209,7 +210,7 @@ namespace TcXunit.Vsix
         /// stays synchronous internally, just called from this now-async method.</summary>
         private async Task HandleJsonMessageAsync(string json)
         {
-            ThreadHelper.ThrowIfNotOnUIThread();
+            await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
 
             if (string.IsNullOrEmpty(json))
             {
@@ -350,14 +351,14 @@ namespace TcXunit.Vsix
         /// call below; a rerun-failed result is not merged into the existing tree.</summary>
         private async Task StartRunAsync(IReadOnlyList<string> suiteNames = null)
         {
-            ThreadHelper.ThrowIfNotOnUIThread();
+            await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
 
             if (this._runCts != null)
             {
                 return;
             }
 
-            this.StatusText.Text = string.Empty;
+            this.SetStatusText(string.Empty);
             this._runCts = new CancellationTokenSource();
             this.PushSetRunning(true);
 
@@ -370,7 +371,7 @@ namespace TcXunit.Vsix
 
                 if (!string.IsNullOrEmpty(result.Error))
                 {
-                    this.StatusText.Text = "Error: " + result.Error;
+                    this.SetStatusText("Error: " + result.Error);
                     // No new TcxunitRunResult worth trusting (early-exit error shape has no
                     // Suites) -- leave _lastFailedSuiteNames exactly as it was rather than
                     // clearing it, so a transient failure (e.g. Stop racing the process's own
@@ -394,11 +395,11 @@ namespace TcXunit.Vsix
                 // #tree itself; only a completed run's window.tcxunitRenderResult call
                 // does), per the acceptance criteria's "results already rendered ... stay
                 // visible ... during a subsequent run".
-                this.StatusText.Text = "Stopped.";
+                this.SetStatusText("Stopped.");
             }
             catch (Exception ex)
             {
-                this.StatusText.Text = "Error: " + ex.Message;
+                this.SetStatusText("Error: " + ex.Message);
             }
             finally
             {
@@ -474,7 +475,16 @@ namespace TcXunit.Vsix
 
         private void ShowError(string message)
         {
-            this.StatusText.Text = message;
+            this.SetStatusText(message);
+        }
+
+        /// <summary>Sets StatusText's content and collapses its row when there is nothing to
+        /// show, so an empty status line doesn't leave dead space above the WebView2 (Row 0
+        /// is Auto-height, but an empty TextBlock with Margin still reserves a line).</summary>
+        private void SetStatusText(string text)
+        {
+            this.StatusText.Text = text ?? string.Empty;
+            this.StatusText.Visibility = string.IsNullOrEmpty(text) ? Visibility.Collapsed : Visibility.Visible;
         }
 
         // Resolves the open solution's directory via DTE (mirrors TcAgentPlugin's

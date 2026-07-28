@@ -9,5 +9,8 @@
 bin/
 obj/
 
+# Classic packages.config restore output (src/TcXunit.Vsix)
+packages/
+
 # Visual Studio
 .vs/

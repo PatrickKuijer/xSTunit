@@ -7,9 +7,9 @@ namespace TcXunit.Interpreter.Tests
 {
     // TcXunit-71o: GVL-qualified globals (GvlName.field) must resolve as
     // lvalues/rvalues anywhere in interpreted ST, backed by zero-initialized
-    // storage of the declared type, and support REF= to a GVL member - same
-    // as b_beckhoff_framework/PLC's FB_UnitModuleBase.FB_init doing
-    // "sstMachine REF= gFrameworkTemp.stMachine" unconditionally.
+    // storage of the declared type, and support REF= to a GVL member -
+    // mirrors a common FB_init REF= pattern seen in real PLC code doing
+    // "sstWidget REF= gScratchGlobals.stWidget" unconditionally.
     public class GvlGlobalsTests
     {
         private static Engine NewEngine(string implementation, IReadOnlyList<GvlAst> gvls, IReadOnlyList<StructAst> structs = null)
@@ -53,12 +53,12 @@ namespace TcXunit.Interpreter.Tests
         [Fact]
         public void QualifiedWrite_ConstantModifierGvl_StillResolvesAndCanBeRead()
         {
-            var gvl = new GvlAst("cFramework", "VAR_GLOBAL CONSTANT\n\tMAX_UNITS : UINT := 16;\nEND_VAR");
+            var gvl = new GvlAst("cScratchConstants", "VAR_GLOBAL CONSTANT\n\tMAX_UNITS : UINT := 16;\nEND_VAR");
             var engine = NewEngine("", new[] { gvl });
             var instance = engine.NewInstance("FB_Suite");
             var frame = new Frame(instance, "FB_Suite");
 
-            engine.ExecuteStatements(Parser.ParseStatements("result := cFramework.MAX_UNITS;"), frame);
+            engine.ExecuteStatements(Parser.ParseStatements("result := cScratchConstants.MAX_UNITS;"), frame);
 
             Assert.Equal(16, frame.Locals["result"].Value);
         }
@@ -66,16 +66,16 @@ namespace TcXunit.Interpreter.Tests
         [Fact]
         public void QualifiedRead_StructTypedGvlMember_ZeroInitializesDeclaredFields()
         {
-            var structAst = new StructAst("uMachine", new[]
+            var structAst = new StructAst("uWidget", new[]
             {
                 new VarDecl("state", "INT", null, VarSection.Local),
             });
-            var gvl = new GvlAst("gFrameworkTemp", "VAR_GLOBAL\n\tstMachine : uMachine;\nEND_VAR");
+            var gvl = new GvlAst("gScratchGlobals", "VAR_GLOBAL\n\tstWidget : uWidget;\nEND_VAR");
             var engine = NewEngine("", new[] { gvl }, new[] { structAst });
             var instance = engine.NewInstance("FB_Suite");
             var frame = new Frame(instance, "FB_Suite");
 
-            engine.ExecuteStatements(Parser.ParseStatements("result := gFrameworkTemp.stMachine.state;"), frame);
+            engine.ExecuteStatements(Parser.ParseStatements("result := gScratchGlobals.stWidget.state;"), frame);
 
             Assert.Equal(0, frame.Locals["result"].Value);
         }
@@ -83,17 +83,17 @@ namespace TcXunit.Interpreter.Tests
         [Fact]
         public void RefAssign_ToGvlStructMember_AliasesTheSameCellAsQualifiedAccess()
         {
-            var structAst = new StructAst("uMachine", new[]
+            var structAst = new StructAst("uWidget", new[]
             {
                 new VarDecl("state", "INT", null, VarSection.Local),
             });
-            var gvl = new GvlAst("gFrameworkTemp", "VAR_GLOBAL\n\tstMachine : uMachine;\nEND_VAR");
+            var gvl = new GvlAst("gScratchGlobals", "VAR_GLOBAL\n\tstWidget : uWidget;\nEND_VAR");
             var engine = NewEngine("", new[] { gvl }, new[] { structAst });
             var instance = engine.NewInstance("FB_Suite");
             var frame = new Frame(instance, "FB_Suite");
 
             engine.ExecuteStatements(Parser.ParseStatements(
-                "sstMachine REF= gFrameworkTemp.stMachine;\ngFrameworkTemp.stMachine.state := 7;\nresult := sstMachine.state;"), frame);
+                "sstWidget REF= gScratchGlobals.stWidget;\ngScratchGlobals.stWidget.state := 7;\nresult := sstWidget.state;"), frame);
 
             Assert.Equal(7, frame.Locals["result"].Value);
         }
@@ -104,7 +104,7 @@ namespace TcXunit.Interpreter.Tests
         [Fact]
         public void UnqualifiedRead_GvlConstant_ResolvesWithoutGvlPrefix()
         {
-            var gvl = new GvlAst("cFramework", "VAR_GLOBAL CONSTANT\n\tMAX_UNITS : UINT := 16;\nEND_VAR");
+            var gvl = new GvlAst("cScratchConstants", "VAR_GLOBAL CONSTANT\n\tMAX_UNITS : UINT := 16;\nEND_VAR");
             var engine = NewEngine("", new[] { gvl });
             var instance = engine.NewInstance("FB_Suite");
             var frame = new Frame(instance, "FB_Suite");
@@ -120,13 +120,13 @@ namespace TcXunit.Interpreter.Tests
         [Fact]
         public void UnqualifiedRead_GvlConstant_ResolvesFromAnotherGvlDuringConstruction()
         {
-            var cGvl = new GvlAst("cFramework", "VAR_GLOBAL CONSTANT\n\tTCP_MESSAGE_SIZE : UINT := 16;\nEND_VAR");
-            var gGvl = new GvlAst("gFrameworkTemp", "VAR_GLOBAL\n\tbufferSize : UINT := TCP_MESSAGE_SIZE;\nEND_VAR");
+            var cGvl = new GvlAst("cScratchConstants", "VAR_GLOBAL CONSTANT\n\tTCP_MESSAGE_SIZE : UINT := 16;\nEND_VAR");
+            var gGvl = new GvlAst("gScratchGlobals", "VAR_GLOBAL\n\tbufferSize : UINT := TCP_MESSAGE_SIZE;\nEND_VAR");
             var engine = NewEngine("", new[] { cGvl, gGvl });
             var instance = engine.NewInstance("FB_Suite");
             var frame = new Frame(instance, "FB_Suite");
 
-            engine.ExecuteStatements(Parser.ParseStatements("result := gFrameworkTemp.bufferSize;"), frame);
+            engine.ExecuteStatements(Parser.ParseStatements("result := gScratchGlobals.bufferSize;"), frame);
 
             Assert.Equal(16, frame.Locals["result"].Value);
         }
@@ -137,30 +137,30 @@ namespace TcXunit.Interpreter.Tests
         [Fact]
         public void UnqualifiedRead_GvlConstant_ResolvesRegardlessOfGvlRegistrationOrder()
         {
-            var gGvl = new GvlAst("gFrameworkTemp", "VAR_GLOBAL\n\tbufferSize : UINT := TCP_MESSAGE_SIZE;\nEND_VAR");
-            var cGvl = new GvlAst("cFramework", "VAR_GLOBAL CONSTANT\n\tTCP_MESSAGE_SIZE : UINT := 16;\nEND_VAR");
+            var gGvl = new GvlAst("gScratchGlobals", "VAR_GLOBAL\n\tbufferSize : UINT := TCP_MESSAGE_SIZE;\nEND_VAR");
+            var cGvl = new GvlAst("cScratchConstants", "VAR_GLOBAL CONSTANT\n\tTCP_MESSAGE_SIZE : UINT := 16;\nEND_VAR");
             var engine = NewEngine("", new[] { gGvl, cGvl });
             var instance = engine.NewInstance("FB_Suite");
             var frame = new Frame(instance, "FB_Suite");
 
-            engine.ExecuteStatements(Parser.ParseStatements("result := gFrameworkTemp.bufferSize;"), frame);
+            engine.ExecuteStatements(Parser.ParseStatements("result := gScratchGlobals.bufferSize;"), frame);
 
             Assert.Equal(16, frame.Locals["result"].Value);
         }
 
         // TcXunit-654: ARRAY bounds are IEC 61131-3 constant expressions, so
-        // a GVL-qualified constant (e.g. cTcpDataServerClient.MAX_REMOTE_UNITS,
+        // a GVL-qualified constant (e.g. cRemoteClientConfig.MAX_REMOTE_ITEMS,
         // mirroring the reported repro) is legal as a bound and must resolve
         // through the normal GVL lookup rather than crashing ArrayTypeInfo's
         // raw int.Parse with a FormatException.
         [Fact]
         public void NewInstance_ArrayFieldBoundByGvlQualifiedConstant_BuildsArrayOfDeclaredLength()
         {
-            var gvl = new GvlAst("cTcpDataServerClient", "VAR_GLOBAL CONSTANT\n\tMAX_REMOTE_UNITS : UINT := 10;\nEND_VAR");
+            var gvl = new GvlAst("cRemoteClientConfig", "VAR_GLOBAL CONSTANT\n\tMAX_REMOTE_ITEMS : UINT := 10;\nEND_VAR");
             var fb = new PouAst(
                 "FB_Holder",
                 null,
-                "VAR\n\taUnits : ARRAY[1..cTcpDataServerClient.MAX_REMOTE_UNITS] OF INT;\nEND_VAR",
+                "VAR\n\taUnits : ARRAY[1..cRemoteClientConfig.MAX_REMOTE_ITEMS] OF INT;\nEND_VAR",
                 "",
                 new List<MethodAst>());
             var engine = new Engine(new TypeRegistry(new[] { fb }, null, new[] { gvl }));
@@ -179,19 +179,19 @@ namespace TcXunit.Interpreter.Tests
         [Fact]
         public void NewInstance_StructFieldArrayBoundByGvlQualifiedConstant_BuildsArrayOfDeclaredLength()
         {
-            var gvl = new GvlAst("cTcpDataServerClient", "VAR_GLOBAL CONSTANT\n\tMAX_REMOTE_UNITS : UINT := 10;\nEND_VAR");
-            var structAst = new StructAst("uRemoteMachine", new[]
+            var gvl = new GvlAst("cRemoteClientConfig", "VAR_GLOBAL CONSTANT\n\tMAX_REMOTE_ITEMS : UINT := 10;\nEND_VAR");
+            var structAst = new StructAst("uRemoteItemSet", new[]
             {
-                new VarDecl("aUnits", "ARRAY[1..cTcpDataServerClient.MAX_REMOTE_UNITS] OF INT", null, VarSection.Local),
+                new VarDecl("aItems", "ARRAY[1..cRemoteClientConfig.MAX_REMOTE_ITEMS] OF INT", null, VarSection.Local),
             });
-            var fb = new PouAst("FB_Holder", null, "VAR\n\tmachine : uRemoteMachine;\nEND_VAR", "", new List<MethodAst>());
+            var fb = new PouAst("FB_Holder", null, "VAR\n\tmachine : uRemoteItemSet;\nEND_VAR", "", new List<MethodAst>());
             var engine = new Engine(new TypeRegistry(new[] { fb }, new[] { structAst }, new[] { gvl }));
 
             var instance = engine.NewInstance("FB_Holder");
             var machine = Assert.IsType<StructInstance>(instance.Fields["machine"].Value);
-            var aUnits = Assert.IsType<ArrayValue>(machine.Fields["aUnits"].Value);
+            var aItems = Assert.IsType<ArrayValue>(machine.Fields["aItems"].Value);
 
-            Assert.Equal(10, aUnits.Elements.Length);
+            Assert.Equal(10, aItems.Elements.Length);
         }
 
         // A single GVL whose default-value expression throws (unresolvable

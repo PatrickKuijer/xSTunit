@@ -24,8 +24,22 @@ namespace TcXunit.Interpreter
             if (_registry.Get(typeName) != null || NativeTimerTypes.Contains(typeName) || typeName == "Loopback" || NativeEdgeTriggerTypes.Contains(typeName))
                 return NewInstance(typeName);
 
+            // TcXunit-5qs: a bare (unsuffixed) decimal literal like 2.5 lexes
+            // as a REAL/float (Lexer.cs numeric-literal scan, RealLiteral is
+            // the no-suffix default), so 'lrGain : LREAL := 2.5;' would
+            // otherwise store a boxed float into a Cell declared LREAL - no
+            // exception, just silent REAL-precision arithmetic for the rest
+            // of that variable's life. Route through CoerceForAssignment
+            // against the type's own zero value (same widening rule as every
+            // other assignment) so the initializer widens the same way
+            // 'lrGain := 2.5;' would post-declaration.
             if (decl.DefaultValueText != null)
-                return Evaluate(Parser.ParseExpression(decl.DefaultValueText), new Frame(owningInstance, typeName));
+            {
+                var initValue = Evaluate(Parser.ParseExpression(decl.DefaultValueText), new Frame(owningInstance, typeName));
+                return IecNumericType.TryGetDefault(typeName, out var initNumericDefault)
+                    ? CoerceForAssignment(initNumericDefault, initValue)
+                    : initValue;
+            }
 
             if (StringTypeInfo.IsStringType(typeName))
                 return "";

@@ -226,6 +226,29 @@ namespace TcXunit.Interpreter.Tests
             Assert.Equal(0d, instance.Fields["lrValue"].Value);
         }
 
+        // TcXunit-5qs: a bare decimal literal (no LREAL#/REAL# prefix) always
+        // lexes as a float (RealLiteralExpr) - 'lrValue : LREAL := 2.5;' must
+        // still widen that float to double at declaration time, the same way
+        // 'lrValue := 2.5;' widens post-declaration, or the field would
+        // silently run at REAL precision for its whole life despite being
+        // declared LREAL.
+        [Fact]
+        public void NewInstance_LrealFieldWithBareDecimalInitializer_WidensToDouble()
+        {
+            var pou = new PouAst(
+                "FB_LrealInit",
+                null,
+                "VAR\n\tlrGain : LREAL := 2.5;\nEND_VAR",
+                "",
+                new List<MethodAst>());
+
+            var engine = new Engine(new TypeRegistry(new[] { pou }));
+            var instance = engine.NewInstance("FB_LrealInit");
+
+            Assert.IsType<double>(instance.Fields["lrGain"].Value);
+            Assert.Equal(2.5d, instance.Fields["lrGain"].Value);
+        }
+
         // TcXunit-6af.1: struct-field UDINT and FB-field UDINT must agree on
         // CLR representation - both go through IecNumericType now instead of
         // each defaulting path (Engine.BuildStructDefault vs. Engine.NewInstance)

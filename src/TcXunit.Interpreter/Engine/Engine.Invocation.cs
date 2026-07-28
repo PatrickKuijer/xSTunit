@@ -187,7 +187,7 @@ namespace TcXunit.Interpreter
                 // only its own params/locals and GVLs via
                 // TryResolveGlobalCell).
                 var globalFunctionDef = _registry.Get(methodName);
-                if (globalFunctionDef != null && GlobalFunctionDeclarationPattern.IsMatch(globalFunctionDef.DeclarationText))
+                if (globalFunctionDef != null && GlobalFunctionDeclarationPattern.IsMatch(StripLeadingComments(globalFunctionDef.DeclarationText)))
                     return CallGlobalFunction(globalFunctionDef, positionalArgs, namedArgs, callerFrame);
 
                 throw new InvalidOperationException($"Method '{methodName}' not found starting from type '{startType}'");
@@ -210,8 +210,36 @@ namespace TcXunit.Interpreter
             return newFrame.Locals.TryGetValue(methodName, out var returnCell) ? returnCell.Value : null;
         }
 
+        // No ^ anchor: DeclarationText may lead with a (* ... *) block
+        // comment or // line comment (this codebase's standard convention -
+        // see TcXunit-9k6), so instead of anchoring to the very start of the
+        // string, the leading comment/whitespace run is stripped first (see
+        // StripLeadingComments) and the resulting text is anchored with ^.
         private static readonly System.Text.RegularExpressions.Regex GlobalFunctionDeclarationPattern =
             new System.Text.RegularExpressions.Regex(@"^\s*FUNCTION(?!_BLOCK)\b", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+        // Strips leading (* ... *) block comments and // line comments (with
+        // any interleaved whitespace) from the start of IEC declaration text,
+        // so keyword-anchored regexes like GlobalFunctionDeclarationPattern
+        // can match declarations that open with a purpose comment.
+        private static readonly System.Text.RegularExpressions.Regex LeadingCommentPattern =
+            new System.Text.RegularExpressions.Regex(
+                @"\G\s*(\(\*.*?\*\)|//[^\n]*)",
+                System.Text.RegularExpressions.RegexOptions.Singleline);
+
+        private static string StripLeadingComments(string declarationText)
+        {
+            var index = 0;
+            while (index < declarationText.Length)
+            {
+                var match = LeadingCommentPattern.Match(declarationText, index);
+                if (!match.Success || match.Length == 0)
+                    break;
+                index = match.Index + match.Length;
+            }
+
+            return declarationText.Substring(index);
+        }
 
         // Global FUNCTION invocation (TcXunit-9su): same body-execution shape
         // as the METHOD path above, but with no receiver instance - a

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -90,6 +91,30 @@ namespace TcXunit.Vsix
         // do.
         private List<string> _lastFailedSuiteNames = new List<string>();
 
+        [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+        private static extern IntPtr LoadLibraryEx(string lpFileName, IntPtr hFile, uint dwFlags);
+
+        private const uint LOAD_WITH_ALTERED_SEARCH_PATH = 0x00000008;
+
+        // WebView2Loader.dll ships as two arch-specific copies (x86\ and x64\, see the csproj
+        // comment) because devenv.exe's bitness varies by host -- VS2017/older XAE Shell is
+        // 32-bit, VS2022/XAE x64 is 64-bit. Microsoft.Web.WebView2.Core's DllImport just names
+        // "WebView2Loader.dll" with no path, so whichever copy the OS loader finds first via
+        // the default search order wins; explicitly preloading the correct one here by full
+        // path means that implicit load resolves to the already-loaded module instead of
+        // guessing. Loading the wrong arch fails as a BadImageFormatException
+        // (HRESULT 0x8007000B) surfaced from CoreWebView2Environment.CreateAsync.
+        private static void PreloadWebView2Loader()
+        {
+            var archFolder = Environment.Is64BitProcess ? "x64" : "x86";
+            var dllPath = Path.Combine(
+                Path.GetDirectoryName(typeof(ResultsToolWindowControl).Assembly.Location) ?? string.Empty,
+                archFolder,
+                "WebView2Loader.dll");
+
+            LoadLibraryEx(dllPath, IntPtr.Zero, LOAD_WITH_ALTERED_SEARCH_PATH);
+        }
+
         public ResultsToolWindowControl()
         {
             this.InitializeComponent();
@@ -109,6 +134,8 @@ namespace TcXunit.Vsix
 
             try
             {
+                PreloadWebView2Loader();
+
                 var userDataFolder = Path.Combine(
                     Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
                     "TcXunit",
@@ -506,18 +533,27 @@ namespace TcXunit.Vsix
         // Resolves the open solution's directory via DTE (mirrors TcAgentPlugin's
         // ChatToolWindowControl_Loaded pattern: dte.Solution.FullName is the .sln path,
         // empty when no solution is open). Falls back to the process's current directory
-        // so this still works if no solution/DTE is available (e.g. a quick manual test).
+        // so this still works if no solution/DTE is available (e.g. a quick manual test),
+        // and also if the DTE object doesn't implement Solution at all -- x64 TwinCAT XAE
+        // Shell's DTE has thrown MissingMethodException on EnvDTE._DTE.get_Solution().
         private static string ResolveProjectDirectory()
         {
             ThreadHelper.ThrowIfNotOnUIThread();
 
-            if (Package.GetGlobalService(typeof(EnvDTE.DTE)) is EnvDTE.DTE dte)
+            try
             {
-                var solutionPath = dte.Solution?.FullName;
-                if (!string.IsNullOrEmpty(solutionPath))
+                if (Package.GetGlobalService(typeof(EnvDTE.DTE)) is EnvDTE.DTE dte)
                 {
-                    return Path.GetDirectoryName(solutionPath);
+                    var solutionPath = dte.Solution?.FullName;
+                    if (!string.IsNullOrEmpty(solutionPath))
+                    {
+                        return Path.GetDirectoryName(solutionPath);
+                    }
                 }
+            }
+            catch (Exception)
+            {
+                // Fall through to Environment.CurrentDirectory below.
             }
 
             return Environment.CurrentDirectory;

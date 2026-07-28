@@ -82,6 +82,85 @@ END_VAR
             Assert.Equal("GetValue := value;", getValue.ImplementationText);
         }
 
+        // TcXunit-sxv: TcPouParser never looked for <Property>/<Get>/<Set>
+        // elements at all, so a PROPERTY member was silently dropped from
+        // the parsed POU AST during load.
+        [Fact]
+        public void Parse_FunctionBlockWithGetSetProperty_ReadsPropertyNameAndBothAccessorBodies()
+        {
+            const string xml = @"<?xml version=""1.0"" encoding=""utf-8""?>
+<TcPlcObject Version=""1.1.0.1"">
+  <POU Name=""FB_Foo"" Id=""{a1b2c3d4-0006-4a1a-8b1b-000000000001}"" SpecialFunc=""None"">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_Foo
+VAR
+	snCounter : UINT;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[]]></ST>
+    </Implementation>
+    <Property Name=""nCounter"" Id=""{a1b2c3d4-0006-4a1a-8b1b-000000000002}"">
+      <Declaration><![CDATA[PROPERTY PUBLIC nCounter : UINT]]></Declaration>
+      <Get Name=""Get"" Id=""{a1b2c3d4-0006-4a1a-8b1b-000000000003}"">
+        <Declaration><![CDATA[]]></Declaration>
+        <Implementation>
+          <ST><![CDATA[nCounter := snCounter;]]></ST>
+        </Implementation>
+      </Get>
+      <Set Name=""Set"" Id=""{a1b2c3d4-0006-4a1a-8b1b-000000000004}"">
+        <Declaration><![CDATA[]]></Declaration>
+        <Implementation>
+          <ST><![CDATA[snCounter := nCounter;]]></ST>
+        </Implementation>
+      </Set>
+    </Property>
+  </POU>
+</TcPlcObject>";
+
+            var ast = TcPouParser.Parse(xml);
+
+            Assert.Single(ast.Properties);
+            var property = ast.Properties[0];
+            Assert.Equal("nCounter", property.Name);
+            Assert.Contains("PROPERTY PUBLIC nCounter", property.DeclarationText);
+            Assert.True(property.HasGet);
+            Assert.True(property.HasSet);
+            Assert.Equal("nCounter := snCounter;", property.GetImplementationText);
+            Assert.Equal("snCounter := nCounter;", property.SetImplementationText);
+        }
+
+        [Fact]
+        public void Parse_FunctionBlockWithGetOnlyProperty_SetAccessorIsAbsentNotEmpty()
+        {
+            const string xml = @"<?xml version=""1.0"" encoding=""utf-8""?>
+<TcPlcObject Version=""1.1.0.1"">
+  <POU Name=""FB_Foo"" Id=""{a1b2c3d4-0007-4a1a-8b1b-000000000001}"" SpecialFunc=""None"">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_Foo
+VAR
+	snCounter : UINT;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[]]></ST>
+    </Implementation>
+    <Property Name=""nCounter"" Id=""{a1b2c3d4-0007-4a1a-8b1b-000000000002}"">
+      <Declaration><![CDATA[PROPERTY nCounter : UINT]]></Declaration>
+      <Get Name=""Get"" Id=""{a1b2c3d4-0007-4a1a-8b1b-000000000003}"">
+        <Declaration><![CDATA[]]></Declaration>
+        <Implementation>
+          <ST><![CDATA[nCounter := snCounter;]]></ST>
+        </Implementation>
+      </Get>
+    </Property>
+  </POU>
+</TcPlcObject>";
+
+            var ast = TcPouParser.Parse(xml);
+
+            var property = Assert.Single(ast.Properties);
+            Assert.True(property.HasGet);
+            Assert.False(property.HasSet);
+            Assert.Null(property.SetImplementationText);
+        }
+
         [Fact]
         public void Parse_ExtendsAnotherFunctionBlock_ReadsBaseTypeName()
         {

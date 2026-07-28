@@ -91,10 +91,22 @@ namespace TcXunit.Interpreter
                         return gvlCell.Value;
                     }
 
-                    var fields = FieldsOf(Evaluate(fieldAccess.Receiver, frame));
-                    if (!fields.TryGetValue(fieldAccess.FieldName, out var cell))
-                        throw new InvalidOperationException($"Unknown field '{fieldAccess.FieldName}'");
-                    return cell.Value;
+                    var receiverValue = Evaluate(fieldAccess.Receiver, frame);
+                    var fields = FieldsOf(receiverValue);
+                    if (fields.TryGetValue(fieldAccess.FieldName, out var cell))
+                        return cell.Value;
+
+                    // No VAR-block field matches - the receiver may be an FB
+                    // instance exposing a PROPERTY of this name instead
+                    // (TcXunit-sxv); a get-only PROPERTY was never
+                    // materialized into Fields at NewInstance time, so this
+                    // falls back to running its Get accessor rather than
+                    // treating the miss as "Unknown field".
+                    if (receiverValue is FbInstance fbReceiver &&
+                        TryFindProperty(fbReceiver.ActualTypeName, fieldAccess.FieldName, out var definingType, out var property))
+                        return InvokePropertyGet(fbReceiver, definingType, property);
+
+                    throw new InvalidOperationException($"Unknown field '{fieldAccess.FieldName}'");
                 }
                 case StructLiteralExpr structLit:
                 {

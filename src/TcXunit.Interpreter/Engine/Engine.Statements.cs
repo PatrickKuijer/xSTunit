@@ -185,11 +185,27 @@ namespace TcXunit.Interpreter
                         break;
                     }
 
-                    var fields = FieldsOf(Evaluate(fieldAccess.Receiver, frame));
-                    if (!fields.TryGetValue(fieldAccess.FieldName, out var cell))
-                        throw new InvalidOperationException($"Unknown field '{fieldAccess.FieldName}'");
-                    cell.Value = CoerceForAssignment(cell.Value, value);
-                    break;
+                    var receiverValue = Evaluate(fieldAccess.Receiver, frame);
+                    var fields = FieldsOf(receiverValue);
+                    if (fields.TryGetValue(fieldAccess.FieldName, out var cell))
+                    {
+                        cell.Value = CoerceForAssignment(cell.Value, value);
+                        break;
+                    }
+
+                    // Same PROPERTY fallback as the read side
+                    // (Engine.Expressions.cs's FieldAccessExpr case,
+                    // TcXunit-sxv): a plain field assignment target that
+                    // isn't in Fields may instead be a PROPERTY's Set
+                    // accessor.
+                    if (receiverValue is FbInstance fbReceiver &&
+                        TryFindProperty(fbReceiver.ActualTypeName, fieldAccess.FieldName, out var definingType, out var property))
+                    {
+                        InvokePropertySet(fbReceiver, definingType, property, value);
+                        break;
+                    }
+
+                    throw new InvalidOperationException($"Unknown field '{fieldAccess.FieldName}'");
                 }
                 case IndexExpr index:
                 {

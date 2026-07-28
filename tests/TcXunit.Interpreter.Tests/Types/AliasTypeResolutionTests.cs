@@ -148,6 +148,30 @@ END_TYPE");
         }
 
         [Fact]
+        public void DefaultValue_ArrayOfAliasToSizedString_DefaultsEachElementToEmptyStringAndIsAssignable()
+        {
+            var fb = new PouAst(
+                "FB_Test",
+                null,
+                "VAR\n\tsaLowBound : ARRAY[1..4] OF T_SampleValueString;\nEND_VAR",
+                "saLowBound[1] := 'x';",
+                new List<MethodAst>());
+
+            var registry = new TypeRegistry(
+                new[] { fb }, null, null, Alias("T_SampleValueString", "STRING(80)"));
+            var engine = new Engine(registry);
+
+            var instance = engine.NewInstance("FB_Test");
+            var arr = Assert.IsType<ArrayValue>(instance.Fields["saLowBound"].Value);
+            Assert.All(arr.Elements, e => Assert.Equal("", e));
+
+            var frame = new Frame(instance, "FB_Test");
+            engine.ExecuteStatements(Parser.ParseStatements(fb.ImplementationText), frame);
+
+            Assert.Equal("x", arr.Elements[0]);
+        }
+
+        [Fact]
         public void StructBoundaryBuilder_AliasToScalar_BoundaryValuesUseUnderlyingBounds()
         {
             var structAst = StructDeclParser.Parse(@"TYPE ST_Step :

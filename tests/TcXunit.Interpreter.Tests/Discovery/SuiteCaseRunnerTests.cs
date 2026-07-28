@@ -350,6 +350,88 @@ TEST_FINISHED();]]></ST>
             }
         }
 
+        private const string SampleValueStringAliasDutXml = @"<?xml version=""1.0"" encoding=""utf-8""?>
+<TcPlcObject Version=""1.1.0.1"" ProductVersion=""3.1.4026.18"">
+  <DUT Name=""T_SampleValueString"" Id=""{a1b2c3d4-000b-4a1a-8b1b-0000000000ff}"">
+    <Declaration><![CDATA[TYPE T_SampleValueString : STRING(80);
+END_TYPE]]></Declaration>
+  </DUT>
+</TcPlcObject>";
+
+        private const string ProcessGuardPouXml = @"<?xml version=""1.0"" encoding=""utf-8""?>
+<TcPlcObject Version=""1.1.0.1"" ProductVersion=""3.1.4026.18"">
+  <POU Name=""FB_ProcessGuard"" Id=""{a1b2c3d4-000c-4a1a-8b1b-0000000000ff}"" SpecialFunc=""None"">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_ProcessGuard
+VAR
+	saLowBound  : ARRAY[1..4] OF T_SampleValueString;
+	saHighBound : ARRAY[1..4] OF T_SampleValueString;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[]]></ST>
+    </Implementation>
+    <Method Name=""SomeMethod"" Id=""{a1b2c3d4-000c-4a1a-8b1b-000000000002}"">
+      <Declaration><![CDATA[METHOD PUBLIC SomeMethod]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[saLowBound[1] := 'x';]]></ST>
+      </Implementation>
+    </Method>
+  </POU>
+</TcPlcObject>";
+
+        private const string ProcessGuardTestsPouXml = @"<?xml version=""1.0"" encoding=""utf-8""?>
+<TcPlcObject Version=""1.1.0.1"" ProductVersion=""3.1.4026.18"">
+  <POU Name=""FB_ProcessGuardTests"" Id=""{a1b2c3d4-000d-4a1a-8b1b-0000000000ff}"" SpecialFunc=""None"">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_ProcessGuardTests EXTENDS TcUnit.FB_TestSuite]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[ArrayOfStringAliasDutFieldIsAssignable();]]></ST>
+    </Implementation>
+    <Method Name=""ArrayOfStringAliasDutFieldIsAssignable"" Id=""{a1b2c3d4-000d-4a1a-8b1b-000000000002}"">
+      <Declaration><![CDATA[METHOD PRIVATE ArrayOfStringAliasDutFieldIsAssignable
+VAR
+	guard : FB_ProcessGuard;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('ArrayOfStringAliasDutFieldIsAssignable');
+
+guard.SomeMethod();
+
+AssertEquals_STRING(Expected := 'x',
+                     Actual := guard.saLowBound[1],
+                     Message := 'array element of custom STRING-alias DUT');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+  </POU>
+</TcPlcObject>";
+
+        [Fact]
+        public void DiscoverCases_ArrayOfCustomStringAliasDutField_ResolvesAndSupportsReadWrite()
+        {
+            var tempDir = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "tcxunit-arrayaliasdut-" + Guid.NewGuid()));
+            try
+            {
+                File.WriteAllText(Path.Combine(tempDir.FullName, "T_SampleValueString.TcDUT"), SampleValueStringAliasDutXml);
+                File.WriteAllText(Path.Combine(tempDir.FullName, "FB_ProcessGuard.TcPOU"), ProcessGuardPouXml);
+                File.WriteAllText(Path.Combine(tempDir.FullName, "FB_ProcessGuardTests.TcPOU"), ProcessGuardTestsPouXml);
+
+                var cases = SuiteCaseRunner.DiscoverCases(tempDir.FullName);
+                Assert.Equal(
+                    new[] { ("FB_ProcessGuardTests", "ArrayOfStringAliasDutFieldIsAssignable") },
+                    cases.Select(c => (c.SuiteName, c.CaseName)));
+
+                var result = SuiteCaseRunner.RunCase(
+                    tempDir.FullName, "FB_ProcessGuardTests", "ArrayOfStringAliasDutFieldIsAssignable");
+
+                Assert.True(result.Passed, result.ToString());
+            }
+            finally
+            {
+                Directory.Delete(tempDir.FullName, recursive: true);
+            }
+        }
+
         private const string ModuleParameterDataTypesDutXml = @"<?xml version=""1.0"" encoding=""utf-8""?>
 <TcPlcObject Version=""1.1.0.1"" ProductVersion=""3.1.4026.18"">
   <DUT Name=""eModuleParameterDataTypes"" Id=""{a1b2c3d4-000a-4a1a-8b1b-0000000000ff}"">

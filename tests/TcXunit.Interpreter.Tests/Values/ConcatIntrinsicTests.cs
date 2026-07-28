@@ -10,8 +10,8 @@ namespace TcXunit.Interpreter.Tests
     // extends it to a variadic STR1..STR10 form, Tc2_Standard) with no
     // intrinsic dispatch in EvaluateCall - a bare CONCAT(...) call fell
     // through to CallMethod and threw "Method 'CONCAT' not found starting
-    // from type '<fb>'" (surfaced running tcxunit against a real-work POU,
-    // FB_RemotePparServer).
+    // from type '<fb>'" (surfaced running tcxunit against a real-world POU
+    // with a CONCAT call inside a METHOD body).
     public class ConcatIntrinsicTests
     {
         private static (Engine Engine, FbInstance Instance, Frame Frame) NewHolder(string varBlock)
@@ -81,18 +81,18 @@ namespace TcXunit.Interpreter.Tests
                 "sResult := CONCAT(sPrefix, sSuffix);");
 
             var fb = new PouAst(
-                "FB_RemotePparServer",
+                "FB_WidgetLabelBuilder",
                 null,
-                "VAR\n\tsPrefix : STRING := 'ppar_';\n\tsSuffix : STRING := 'server';\n\tsResult : STRING;\nEND_VAR",
+                "VAR\n\tsPrefix : STRING := 'widget_';\n\tsSuffix : STRING := 'label';\n\tsResult : STRING;\nEND_VAR",
                 "",
                 new List<MethodAst> { caller });
 
             var engine = new Engine(new TypeRegistry(new[] { fb }));
-            var instance = engine.NewInstance("FB_RemotePparServer");
+            var instance = engine.NewInstance("FB_WidgetLabelBuilder");
 
             engine.CallMethod(instance, "bBuild", new Expr[0], new NamedArg[0], null, null);
 
-            Assert.Equal("ppar_server", instance.Fields["sResult"].Value);
+            Assert.Equal("widget_label", instance.Fields["sResult"].Value);
         }
     }
 }

@@ -168,6 +168,16 @@ body[data-theme="light"] {
 .node.fail .node-name { color: var(--text); }
 .node.skip .node-name { color: var(--text-dim); }
 
+/* Path row: drawn below the suite name row instead of inline next to it --
+   an absolute filePath overlapping a suite name was the original complaint.
+   Same left indent as .node.depth1 so it reads as "belonging to" the suite
+   row above it; folds into the suite's own expand/collapse (see
+   results.js's renderSuite -- it's part of childRows). */
+.node-src-row {
+  padding: 0 9px 3px 24px;
+}
+.node-src-row[hidden] { display: none; }
+
 .node-src {
   font-size: 10.5px;
   color: var(--text-faint);
@@ -176,6 +186,7 @@ body[data-theme="light"] {
   overflow: hidden;
   text-overflow: ellipsis;
   min-width: 0;
+  display: block;
 }
 
 .node-dur {

@@ -326,23 +326,18 @@
       node.appendChild(textEl('span', 'node-dur', testDur));
     }
 
-    // node-open (click-to-navigate affordance, TcXunit-1tt.4): only failed
-    // tests inherit their suite's filePath as a navigation target per the
-    // epic's design decision, so only failed rows get the hover affordance --
-    // and only those with an actual filePath to navigate to get the
-    // double-click handler wired (defensive: postOpenFile no-ops without one
-    // regardless, but 'has-open' should only claim the affordance is live
-    // when it is).
-    if (status === 'fail') {
-      node.appendChild(textEl('span', 'node-open', '↗'));
-
-      if (suiteFilePath) {
-        node.classList.add('has-open');
-        node.dataset.filePath = suiteFilePath;
-        node.addEventListener('dblclick', function () {
-          openNodeFile(node);
-        });
-      }
+    // Click-to-navigate (TcXunit-1tt.4): only failed tests inherit their
+    // suite's filePath as a navigation target. No .node-open arrow here --
+    // feedback: the arrow only ever actually opened via the suite header row,
+    // never from the test row itself, so drawing it on this row was a false
+    // affordance. 'has-open' (cursor: pointer, results.css) + the dblclick
+    // handler stay -- double-click still opens the suite's file.
+    if (status === 'fail' && suiteFilePath) {
+      node.classList.add('has-open');
+      node.dataset.filePath = suiteFilePath;
+      node.addEventListener('dblclick', function () {
+        openNodeFile(node);
+      });
     }
 
     return node;
@@ -367,10 +362,6 @@
     suiteNode.appendChild(textEl('span', 'glyph ' + suiteStatus, glyphFor(suiteStatus)));
     suiteNode.appendChild(textEl('span', 'node-name', (suite && suite.name) || ''));
 
-    if (suite && suite.filePath) {
-      suiteNode.appendChild(textEl('span', 'node-src', suite.filePath));
-    }
-
     // A suite that failed to load never ran -- same "didn't run" rule as a
     // skipped test, so no .node-dur slot at all (matches the mockup's
     // failed-to-load suite row, which also omits it; the CLI backs this up by
@@ -391,17 +382,42 @@
 
     rows.push(suiteNode);
 
+    // Path row: a suite row's own name can be arbitrarily overlapped by a
+    // long absolute filePath if drawn inline (feedback: "the FB_CounterTest
+    // is overlapped by the path") -- drawn as its own row below the name
+    // instead, folded into childRows/toggleExpand below so it collapses with
+    // the rest of the suite rather than always taking up a line.
+    var childRows = [];
+    if (suite && suite.filePath) {
+      var srcRow = el('div', 'node-src-row');
+      srcRow.appendChild(textEl('span', 'node-src', suite.filePath));
+      rows.push(srcRow);
+      childRows.push(srcRow);
+    }
+
     if (hasError) {
-      // Nothing to expand/collapse -- draw the twisty in its "closed" resting
-      // state and leave it non-interactive. The banner is never gated behind
-      // it; a broken suite is not something a user should have to expand to
-      // discover.
-      twisty.textContent = '▶';
-      rows.push(buildBanner(suite.error));
+      var bannerRow = buildBanner(suite.error);
+      rows.push(bannerRow);
+      childRows.push(bannerRow);
+
+      // Feedback: a failed-to-load suite couldn't be collapsed into its
+      // parent result -- give it the same twisty/toggleExpand wiring a
+      // normal suite gets below, gating the path row + banner instead of
+      // test/assert rows.
+      var errorExpanded = true;
+      function toggleErrorExpand() {
+        errorExpanded = !errorExpanded;
+        twisty.textContent = errorExpanded ? '▼' : '▶';
+        childRows.forEach(function (rowEl) {
+          rowEl.hidden = !errorExpanded;
+        });
+      }
+      twisty.addEventListener('click', toggleErrorExpand);
+      suiteNode.toggleExpand = toggleErrorExpand;
+
       return rows;
     }
 
-    var childRows = [];
     var suiteFilePath = suite && suite.filePath;
     tests.forEach(function (test) {
       var testNode = buildTestNode(test, suiteFilePath);
@@ -421,11 +437,9 @@
     // TcXunit-1tt.7: named (not an inline closure passed straight to
     // addEventListener) and stashed on suiteNode itself so the Space-key
     // handler below can call the identical function a twisty click uses --
-    // "reuse, don't duplicate" for expand/collapse. Only reachable here (the
-    // hasError branch above returns before this point), so a failed-to-load
-    // suite's suiteNode never gets a toggleExpand property -- Space on it is
-    // naturally a no-op via the handler's `typeof selectedRow.toggleExpand
-    // === 'function'` guard, no separate check needed.
+    // "reuse, don't duplicate" for expand/collapse. The hasError branch above
+    // returns before this point with its own toggleErrorExpand wired instead
+    // (same shape, gating the path row + banner rather than test/assert rows).
     var expanded = true;
     function toggleExpand() {
       expanded = !expanded;
@@ -481,6 +495,13 @@
       }
 
       var suiteMatches = query === '' || nameOf(suiteRow).indexOf(query) !== -1;
+
+      var srcRow = null;
+      if (i < rows.length && rows[i].classList.contains('node-src-row')) {
+        srcRow = rows[i];
+        i++;
+      }
+
       var testEntries = [];
       var anyTestMatches = false;
 
@@ -509,6 +530,9 @@
 
       var suiteVisible = suiteMatches || anyTestMatches;
       suiteRow.hidden = !suiteVisible;
+      if (srcRow) {
+        srcRow.hidden = !suiteVisible;
+      }
       if (bannerRow) {
         bannerRow.hidden = !suiteVisible;
       }

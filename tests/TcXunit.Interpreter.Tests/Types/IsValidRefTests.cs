@@ -8,8 +8,8 @@ namespace TcXunit.Interpreter.Tests
 {
     // TcXunit-7gz: __ISVALIDREF(ref) intrinsic - TRUE when a REFERENCE TO
     // variable currently aliases a valid target, FALSE when unassigned.
-    // Mirrors the framework guard-clause pattern (e.g. FB_SFC2's
-    // IF __ISVALIDREF(istMachine) THEN) that this unblocks.
+    // Mirrors a common guard-clause pattern seen in real PLC code:
+    // IF __ISVALIDREF(refToSomeFb) THEN ... that this unblocks.
     public class IsValidRefTests
     {
         private static (Engine Engine, FbInstance Instance, Frame Frame) NewHolder(string varBlock)
@@ -61,7 +61,7 @@ namespace TcXunit.Interpreter.Tests
         [InlineData(true, true)]
         public void IsValidRef_GuardClause_SkipsBodyWhenReferenceInvalid(bool bindReference, bool expectedFlag)
         {
-            // Mirrors FB_SFC2's guard: bail out early unless the machine
+            // Mirrors a typical FB guard clause: bail out early unless the
             // reference is valid, otherwise run the trailing work.
             var bind = bindReference ? "refInt REF= target;\n" : "";
             var body =
@@ -92,7 +92,7 @@ namespace TcXunit.Interpreter.Tests
         [Fact]
         public void IsValidRef_ReferenceBoundInOneCall_PersistsAcrossLaterCall()
         {
-            // TcXunit-t6p: the FB_SFC2 pattern binds an instance-level
+            // TcXunit-t6p: the common real-world pattern binds an instance-level
             // REFERENCE TO once (e.g. in a setter) and guards on it in a
             // later, separate method call - the binding must survive past
             // the Frame that performed the REF=, not just within it.
@@ -152,12 +152,12 @@ namespace TcXunit.Interpreter.Tests
 
         // TcXunit-cnn: every test above binds REFERENCE TO INT, but the
         // motivating real-world use case cited by this file's own header
-        // comment (FB_SFC2's IF __ISVALIDREF(istMachine) THEN) is a
+        // comment (IF __ISVALIDREF(refToSomeFb) THEN ...) is a
         // REFERENCE TO of an FB/STRUCT container, not a scalar. The two
         // tests below cover that shape directly: a REFERENCE TO of a
         // user-defined FB type and of a STRUCT type, bound to an actual
         // FB instance/struct field rather than a plain scalar, mirroring
-        // FB_SFC2's istMachine guard.
+        // that same real-world guard shape.
         private static (Engine Engine, FbInstance Instance, Frame Frame) NewFbTargetHolder()
         {
             var target = new PouAst(
@@ -196,7 +196,7 @@ namespace TcXunit.Interpreter.Tests
         [Fact]
         public void IsValidRef_UnassignedFbReference_ReturnsFalse()
         {
-            // istMachine-shaped REFERENCE TO of a user FB type, never bound.
+            // Real-world-shaped REFERENCE TO of a user FB type, never bound.
             var (engine, _, frame) = NewFbTargetHolder();
 
             var result = engine.Evaluate(Parser.ParseExpression("__ISVALIDREF(refMachine)"), frame);
@@ -207,7 +207,7 @@ namespace TcXunit.Interpreter.Tests
         [Fact]
         public void IsValidRef_FbReferenceBoundViaRefAssign_ReturnsTrueAndAliasesFields()
         {
-            // Mirrors FB_SFC2's actual guard shape: a REFERENCE TO an FB
+            // Mirrors the actual real-world guard shape: a REFERENCE TO an FB
             // type (not REFERENCE TO INT), bound to a real FB instance
             // field via REF=.
             var (engine, instance, frame) = NewFbTargetHolder();
@@ -232,8 +232,8 @@ namespace TcXunit.Interpreter.Tests
         [Fact]
         public void IsValidRef_UnassignedStructReference_ReturnsFalse()
         {
-            // Same shape as istMachine, but the target is a STRUCT
-            // container rather than an FB instance.
+            // Same shape as the motivating real-world guard, but the target
+            // is a STRUCT container rather than an FB instance.
             var (engine, _, frame) = NewStructTargetHolder();
 
             var result = engine.Evaluate(Parser.ParseExpression("__ISVALIDREF(refPayload)"), frame);

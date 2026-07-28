@@ -475,6 +475,12 @@
   // segmented status control (results.css's .tree.filter-fail/-skip) purely
   // by both being independently necessary for visibility -- no interaction
   // between the two is coded here.
+  // Segmented control's current value ('fail'/'skip'/null for "All"), read by
+  // applyTextFilter's suite-visibility check below. Kept as its own var
+  // (rather than re-reading #tree's filter-fail/filter-skip class back out)
+  // since setStatusFilter is the single place that already knows it.
+  var statusFilter = null;
+
   function applyTextFilter() {
     if (!treeEl) {
       return;
@@ -528,7 +534,24 @@
         i++;
       }
 
-      var suiteVisible = suiteMatches || anyTestMatches;
+      // Feedback: selecting "Failed" in the segmented control hid failing
+      // rows' non-matching siblings but left the suite header itself (and a
+      // passing suite's now-childless header) visible -- results.css's
+      // .tree.filter-fail/.filter-skip rules deliberately only prune
+      // .node.depth1 rows for suite context, but that leaves an
+      // all-passing suite showing an empty header under "Failed". A suite
+      // only earns visibility under an active status filter if it actually
+      // has a row of that status: a load error or a failing test for
+      // "fail", a skipped test for "skip".
+      var suiteHasError = !!bannerRow;
+      var statusOk = true;
+      if (statusFilter === 'fail') {
+        statusOk = suiteHasError || testEntries.some(function (e) { return e.row.classList.contains('fail'); });
+      } else if (statusFilter === 'skip') {
+        statusOk = testEntries.some(function (e) { return e.row.classList.contains('skip'); });
+      }
+
+      var suiteVisible = (suiteMatches || anyTestMatches) && statusOk;
       suiteRow.hidden = !suiteVisible;
       if (srcRow) {
         srcRow.hidden = !suiteVisible;
@@ -554,13 +577,19 @@
   // existing `.seg button.active[data-v]` rule keys its highlight off; the
   // separate data-status attribute is only for this handler to read).
   function setStatusFilter(status) {
+    statusFilter = (status === 'fail' || status === 'skip') ? status : null;
     if (!treeEl) {
       return;
     }
     treeEl.classList.remove('filter-fail', 'filter-skip');
-    if (status === 'fail' || status === 'skip') {
-      treeEl.classList.add('filter-' + status);
+    if (statusFilter) {
+      treeEl.classList.add('filter-' + statusFilter);
     }
+    // Suite headers' own visibility depends on statusFilter too (see
+    // applyTextFilter's suiteHasError/statusOk check) -- rerun it here since
+    // this is the one path (segment click) that changes statusFilter without
+    // also going through the text-input or render paths that already call it.
+    applyTextFilter();
   }
 
   // TcXunit-1tt.7: keyboard nav's selection state. Tracks the currently

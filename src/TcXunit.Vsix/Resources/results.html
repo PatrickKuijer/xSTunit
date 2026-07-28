@@ -42,6 +42,14 @@
     .tw-statusbar region is required per docs/design-system.html section 6
     (tool-window anatomy) and is never omitted, even in this empty state.
 
+    tabindex="0" (TcXunit-1tt.7) makes #tree itself the one tabbable element
+    for keyboard nav -- a "roving selection" over its .node rows tracked in
+    JS (.node.selected, results.css), not per-row tabindex/real DOM focus.
+    See results.js's keydown handler: Up/Down move the selection, Enter opens
+    the selected row's file (reuses TcXunit-1tt.4's postOpenFile), Space
+    toggles a selected suite row's twisty (reuses TcXunit-1tt.2's expand/
+    collapse), per docs/design-system.html section 8's A11y rule.
+
     #statusSeg (TcXunit-1tt.5) is design-system.html section 5's All/Failed/
     Skipped .seg control -- data-status is a separate attribute from data-v
     ("plain", already styled by vsix-shell.css's .seg button.active[data-v]
@@ -88,7 +96,7 @@
       Run the suites in this solution to see pass and fail output here. Double-click any
       result to open its .TcPOU in the editor.
     </div>
-    <div class="tree" id="tree" hidden></div>
+    <div class="tree" id="tree" hidden tabindex="0"></div>
   </div>
 
   <div class="tw-statusbar">

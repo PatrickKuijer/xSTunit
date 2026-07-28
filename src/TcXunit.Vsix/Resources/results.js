@@ -80,12 +80,24 @@
 // failures OR a run is currently in flight (updateRerunFailedButton, wired
 // into both tcxunitRenderResult and tcxunitSetRunning below).
 //
-// Not implemented here (separate sibling ticket under TcXunit-1tt):
-// keyboard nav, per-node "currently executing" state (the CLI emits one JSON
-// blob at the end of a run, not an incremental stream, so there is no data
-// to know which suite is currently executing -- only that a run is or isn't
-// in flight). Plain script (no ES modules) since this page has exactly one
-// small render concern, unlike TcAgent's chat.html.
+// TcXunit-1tt.7 adds keyboard nav: #tree carries tabindex="0" (results.html)
+// as the one tabbable element for a "roving selection" over its .node rows
+// -- Up/Down move a tracked selectedRow (.node.selected, results.css) through
+// the currently *visible* rows (visibleRows() below skips both TcXunit-1tt.5
+// mechanisms -- the text filter's `hidden` attribute and the segmented
+// control's CSS-class-driven display:none -- via offsetParent rather than
+// duplicating either rule here), Enter opens the selected row's file by
+// calling the same openNodeFile() a dblclick uses (TcXunit-1tt.4), and Space
+// toggles a selected suite row's twisty by calling the same toggleExpand()
+// a twisty click uses (TcXunit-1tt.2). No Left/Right binding is added --
+// docs/design-system.html section 8's A11y rule only specifies arrows/Enter/
+// Space.
+//
+// Not implemented here: per-node "currently executing" state (the CLI emits
+// one JSON blob at the end of a run, not an incremental stream, so there is
+// no data to know which suite is currently executing -- only that a run is
+// or isn't in flight). Plain script (no ES modules) since this page has
+// exactly one small render concern, unlike TcAgent's chat.html.
 (function () {
   'use strict';
 
@@ -143,6 +155,19 @@
       return;
     }
     window.chrome.webview.postMessage({ type: 'openFile', filePath: filePath });
+  }
+
+  // TcXunit-1tt.7: the shared "open" step a row's dblclick handler and the
+  // Enter key both call -- reads the filePath a node's dblclick wiring
+  // already stashed on its own dataset (see buildTestNode/renderSuite below)
+  // rather than each caller re-deriving it from the suite/test data a second
+  // time. No-op for a row with no filePath (e.g. a passing/skipped test, or
+  // Enter pressed with nothing selected) -- postOpenFile already guards that
+  // case, so nothing further is needed here.
+  function openNodeFile(node) {
+    if (node) {
+      postOpenFile(node.dataset.filePath);
+    }
   }
 
   // No "skipped" concept exists in the interpreter/CLI today (TestResult.Passed
@@ -313,8 +338,9 @@
 
       if (suiteFilePath) {
         node.classList.add('has-open');
+        node.dataset.filePath = suiteFilePath;
         node.addEventListener('dblclick', function () {
-          postOpenFile(suiteFilePath);
+          openNodeFile(node);
         });
       }
     }
@@ -357,8 +383,9 @@
     if (suite && suite.filePath) {
       suiteNode.appendChild(textEl('span', 'node-open', '↗'));
       suiteNode.classList.add('has-open');
+      suiteNode.dataset.filePath = suite.filePath;
       suiteNode.addEventListener('dblclick', function () {
-        postOpenFile(suite.filePath);
+        openNodeFile(suiteNode);
       });
     }
 
@@ -391,14 +418,24 @@
       }
     });
 
+    // TcXunit-1tt.7: named (not an inline closure passed straight to
+    // addEventListener) and stashed on suiteNode itself so the Space-key
+    // handler below can call the identical function a twisty click uses --
+    // "reuse, don't duplicate" for expand/collapse. Only reachable here (the
+    // hasError branch above returns before this point), so a failed-to-load
+    // suite's suiteNode never gets a toggleExpand property -- Space on it is
+    // naturally a no-op via the handler's `typeof selectedRow.toggleExpand
+    // === 'function'` guard, no separate check needed.
     var expanded = true;
-    twisty.addEventListener('click', function () {
+    function toggleExpand() {
       expanded = !expanded;
       twisty.textContent = expanded ? '▼' : '▶';
       childRows.forEach(function (rowEl) {
         rowEl.hidden = !expanded;
       });
-    });
+    }
+    twisty.addEventListener('click', toggleExpand);
+    suiteNode.toggleExpand = toggleExpand;
 
     return rows;
   }
@@ -502,6 +539,116 @@
     }
   }
 
+  // TcXunit-1tt.7: keyboard nav's selection state. Tracks the currently
+  // selected .node element, or null when nothing is selected (fresh page,
+  // just after a render, or the previous selection scrolled out of the
+  // visible set -- see moveSelection below, which treats all three the
+  // same way).
+  var selectedRow = null;
+
+  // The rows keyboard nav is allowed to land on: every .node currently
+  // rendered as actually visible. Deliberately uses offsetParent rather than
+  // re-deriving visibility from `hidden`/the segmented control's filter-fail/
+  // filter-skip class by hand -- that would mean keeping a second copy of
+  // results.css's hide rules in sync here. offsetParent is null for both
+  // TcXunit-1tt.5 mechanisms (the text filter's `hidden` attribute, via
+  // results.css's `.node[hidden] { display: none; }`, and the segmented
+  // control's CSS-class-driven display:none) without this file needing to
+  // know which one applies.
+  function visibleRows() {
+    if (!treeEl) {
+      return [];
+    }
+    var rows = Array.prototype.slice.call(treeEl.querySelectorAll('.node'));
+    return rows.filter(function (row) {
+      return !row.hidden && row.offsetParent !== null;
+    });
+  }
+
+  // Applies/clears .node.selected (results.css) and keeps selectedRow in
+  // sync. Passing null clears the selection entirely (used on every render,
+  // since a rerun/rerun-failed replaces #tree's rows -- see
+  // tcxunitRenderResult below -- and a stale element reference would only
+  // ever be wrong).
+  function setSelectedRow(row) {
+    if (selectedRow) {
+      selectedRow.classList.remove('selected');
+    }
+    selectedRow = row || null;
+    if (selectedRow) {
+      selectedRow.classList.add('selected');
+      if (typeof selectedRow.scrollIntoView === 'function') {
+        selectedRow.scrollIntoView({ block: 'nearest' });
+      }
+    }
+  }
+
+  // Moves the selection through visibleRows(): direction is +1 (ArrowDown) or
+  // -1 (ArrowUp). Clamps at the ends rather than wrapping -- design-system.
+  // html's A11y rule doesn't specify wraparound, and clamping is the more
+  // common convention for this kind of list. If selectedRow isn't found in
+  // the current visible set (nothing selected yet, or it was filtered/
+  // rerendered away since), this falls back to the first visible row for
+  // either direction rather than guessing an offset from a stale position.
+  function moveSelection(direction) {
+    var rows = visibleRows();
+    if (rows.length === 0) {
+      setSelectedRow(null);
+      return;
+    }
+
+    var currentIndex = selectedRow ? rows.indexOf(selectedRow) : -1;
+    var nextIndex;
+    if (currentIndex === -1) {
+      nextIndex = 0;
+    } else {
+      nextIndex = currentIndex + direction;
+      if (nextIndex < 0) {
+        nextIndex = 0;
+      } else if (nextIndex >= rows.length) {
+        nextIndex = rows.length - 1;
+      }
+    }
+
+    setSelectedRow(rows[nextIndex]);
+  }
+
+  // #tree is the sole tabbable element this feature adds (tabindex="0" in
+  // results.html) -- a "roving selection" tracked here in JS, not real
+  // per-row DOM focus. Enter/Space only act when they'd do something (an
+  // open target / a toggleExpand function present, respectively), mirroring
+  // how the equivalent mouse paths (dblclick / twisty click) are themselves
+  // only wired onto rows that support them -- see buildTestNode/renderSuite.
+  if (treeEl) {
+    treeEl.addEventListener('keydown', function (event) {
+      switch (event.key) {
+        case 'ArrowDown':
+          event.preventDefault();
+          moveSelection(1);
+          break;
+        case 'ArrowUp':
+          event.preventDefault();
+          moveSelection(-1);
+          break;
+        case 'Enter':
+          if (selectedRow && selectedRow.classList.contains('has-open')) {
+            event.preventDefault();
+            openNodeFile(selectedRow);
+          }
+          break;
+        case ' ':
+        case 'Spacebar': // legacy IE/Edge key name for the space bar
+          if (selectedRow && typeof selectedRow.toggleExpand === 'function') {
+            event.preventDefault();
+            selectedRow.toggleExpand();
+          }
+          break;
+        default:
+          break;
+      }
+    });
+  }
+
   if (filterInput) {
     filterInput.addEventListener('input', applyTextFilter);
   }
@@ -526,6 +673,12 @@
     while (treeEl.firstChild) {
       treeEl.removeChild(treeEl.firstChild);
     }
+
+    // TcXunit-1tt.7: every render (a normal run or a rerun-failed) replaces
+    // #tree's rows outright, so any previous selection is a stale element
+    // reference the moment this runs -- clear it rather than leave
+    // selectedRow pointing at a detached node.
+    setSelectedRow(null);
 
     var suites = (result && result.suites) || [];
     suites.forEach(function (suite) {

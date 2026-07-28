@@ -111,6 +111,18 @@ body[data-theme="light"] {
    the UA default for them. */
 .node[hidden] { display: none; }
 
+/* TcXunit-1tt.7: #tree is the sole tabbable element the keyboard-nav feature
+   adds (results.js wires tabindex="0" via results.html, plus a roving
+   .node.selected -- see that class above, already present for this ticket).
+   design-system.html section 8's A11y rule requires "a visible --accent
+   outline everywhere" a focusable element gets focus; inset (negative
+   offset) so it draws inside .tree's own box rather than risk being clipped
+   by body's `overflow:hidden` (vsix-shell.css) at the panel's edges. Matches
+   vsix-shell.css's existing `.field:focus` convention of a plain :focus
+   selector (not :focus-visible) -- this panel has no other convention to
+   follow. */
+.tree:focus { outline: 2px solid var(--accent); outline-offset: -2px; }
+
 /* Indent: 6 / 24 / 42px (18px per level). Two-level max -- suite (no depth
    class) then depth1 (leaf test). depth2 exists only as a defensive ceiling;
    deeper nesting is a modelling error per design-system.html section 5, not a

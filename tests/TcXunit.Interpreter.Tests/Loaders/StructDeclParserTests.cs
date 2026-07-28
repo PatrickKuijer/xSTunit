@@ -24,7 +24,7 @@ END_TYPE");
         public void Parse_PackModeAttribute_IsCapturedOnStructAst()
         {
             var structAst = StructDeclParser.Parse(@"{attribute 'pack_mode' := '1'}
-TYPE uRemoteParamValue :
+TYPE uGadgetSettingValue :
 STRUCT
 	nIndex : UINT;
 	rValue : LREAL;
@@ -39,7 +39,7 @@ END_TYPE");
         {
             var structAst = StructDeclParser.Parse(@"{attribute 'pack_mode' := '1'}
 // Value channel wire record
-TYPE uRemoteParamValue :
+TYPE uGadgetSettingValue :
 STRUCT
 	nIndex : UINT;
 	rValue : LREAL;
@@ -47,7 +47,7 @@ END_STRUCT
 END_TYPE");
 
             Assert.Equal(1, structAst.PackMode);
-            Assert.Equal("uRemoteParamValue", structAst.Name);
+            Assert.Equal("uGadgetSettingValue", structAst.Name);
         }
     }
 }

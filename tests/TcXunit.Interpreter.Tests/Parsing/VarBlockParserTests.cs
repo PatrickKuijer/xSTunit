@@ -179,13 +179,13 @@ END_VAR";
             const string declaration = @"{attribute 'qualified_only'}
 {attribute 'global_init_slot' := '49989'}
 VAR_GLOBAL
-	stMachine : uMachine;
-	stUnit : uUnit;
+	stWidget : uWidget;
+	stPart : uPart;
 END_VAR";
 
             var vars = VarBlockParser.Parse(declaration);
 
-            Assert.Equal(new[] { "stMachine", "stUnit" }, vars.Select(v => v.Name));
+            Assert.Equal(new[] { "stWidget", "stPart" }, vars.Select(v => v.Name));
             Assert.All(vars, v => Assert.Equal(VarSection.Global, v.Section));
         }
 
@@ -209,16 +209,16 @@ END_VAR";
 
         // TcXunit-988: a STRING/WSTRING size need not be a bare integer
         // literal - a GVL-qualified constant (e.g.
-        // cFramework.MAX_PAR_STRING_SIZE) is a legal IEC 61131-3 constant
+        // cScratchConstants.MAX_LABEL_STRING_SIZE) is a legal IEC 61131-3 constant
         // expression there too. Previously VarLinePattern only accepted
         // \d+ inside the parens, so the whole line silently failed to
         // match and the field was dropped from the VarDecl list entirely.
         [Fact]
         public void Parse_StringSizedByGvlQualifiedConstant_ReadsFullTypeName()
         {
-            const string declaration = @"TYPE uRemoteRegistrationRecord :
+            const string declaration = @"TYPE uWidgetRegistrationRecord :
 STRUCT
-	sDefaultValue : STRING(cFramework.MAX_PAR_STRING_SIZE);
+	sDefaultValue : STRING(cScratchConstants.MAX_LABEL_STRING_SIZE);
 END_STRUCT
 END_TYPE";
 
@@ -226,7 +226,7 @@ END_TYPE";
 
             var value = Assert.Single(vars);
             Assert.Equal("sDefaultValue", value.Name);
-            Assert.Equal("STRING(cFramework.MAX_PAR_STRING_SIZE)", value.TypeName);
+            Assert.Equal("STRING(cScratchConstants.MAX_LABEL_STRING_SIZE)", value.TypeName);
         }
 
         // TcXunit-3g7: VAR_TEMP (method/action-scoped, re-initialized-to-zero-
@@ -257,14 +257,14 @@ END_VAR";
         {
             const string declaration = @"FUNCTION_BLOCK FB_Holder
 VAR
-	label : WSTRING(cFramework.BASE_SIZE * 2);
+	label : WSTRING(cScratchConstants.BASE_SIZE * 2);
 END_VAR";
 
             var vars = VarBlockParser.Parse(declaration);
 
             var value = Assert.Single(vars);
             Assert.Equal("label", value.Name);
-            Assert.Equal("WSTRING(cFramework.BASE_SIZE * 2)", value.TypeName);
+            Assert.Equal("WSTRING(cScratchConstants.BASE_SIZE * 2)", value.TypeName);
         }
     }
 }

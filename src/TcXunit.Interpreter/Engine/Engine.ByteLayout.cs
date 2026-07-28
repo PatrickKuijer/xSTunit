@@ -86,11 +86,12 @@ namespace TcXunit.Interpreter
             if (structAst != null)
             {
                 var instance = (StructInstance)value;
+                var packBound = PackBound(structAst);
                 var fieldOffset = 0;
                 foreach (var field in structAst.Fields)
                 {
                     var (fieldSize, fieldAlign) = SizeOfType(field.TypeName, frame);
-                    fieldOffset = RoundUp(fieldOffset, fieldAlign);
+                    fieldOffset = RoundUp(fieldOffset, Math.Min(fieldAlign, packBound));
                     PackValue(buffer, offset + fieldOffset, instance.Fields[field.Name].Value, field.TypeName, frame);
                     fieldOffset += fieldSize;
                 }
@@ -192,11 +193,12 @@ namespace TcXunit.Interpreter
             if (structAst != null)
             {
                 var instance = new StructInstance(resolved);
+                var packBound = PackBound(structAst);
                 var fieldOffset = 0;
                 foreach (var field in structAst.Fields)
                 {
                     var (fieldSize, fieldAlign) = SizeOfType(field.TypeName, frame);
-                    fieldOffset = RoundUp(fieldOffset, fieldAlign);
+                    fieldOffset = RoundUp(fieldOffset, Math.Min(fieldAlign, packBound));
                     instance.Fields[field.Name] = new Cell
                     {
                         Value = UnpackValue(buffer, offset + fieldOffset, field.TypeName, frame),

@@ -12,12 +12,31 @@ namespace TcXunit.Interpreter
         private static readonly Regex TypeNamePattern = new Regex(
             @"^TYPE\s+(?<name>\w+)\s*:", RegexOptions.Compiled);
 
+        // A leading "{attribute 'pack_mode' := 'N'}" pragma line (TcXunit-eub)
+        // - TwinCAT emits this before the "TYPE Name :" header, alongside any
+        // other attribute pragmas or a declaration comment (same leading-line
+        // shape DutEnumLoader's LeadingPragmaOrCommentLine already skips for
+        // ENUM DUTs). Only scanned up to the TYPE header line below, since
+        // that's the only place TwinCAT puts it.
+        private static readonly Regex PackModeAttributePattern = new Regex(
+            @"^\{attribute\s+'pack_mode'\s*:=\s*'(?<value>\d+)'\}$", RegexOptions.Compiled);
+
         public static StructAst Parse(string declarationText)
         {
             string name = null;
+            var packMode = 0;
             foreach (var rawLine in declarationText.Split('\n'))
             {
-                var match = TypeNamePattern.Match(rawLine.Trim());
+                var line = rawLine.Trim();
+
+                var packModeMatch = PackModeAttributePattern.Match(line);
+                if (packModeMatch.Success)
+                {
+                    packMode = int.Parse(packModeMatch.Groups["value"].Value);
+                    continue;
+                }
+
+                var match = TypeNamePattern.Match(line);
                 if (match.Success)
                 {
                     name = match.Groups["name"].Value;
@@ -26,7 +45,7 @@ namespace TcXunit.Interpreter
             }
 
             var fields = VarBlockParser.Parse(declarationText);
-            return new StructAst(name, fields);
+            return new StructAst(name, fields, packMode);
         }
     }
 }

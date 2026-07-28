@@ -199,6 +199,46 @@ END_TYPE");
             Assert.Equal(4, result);
         }
 
+        // TcXunit-eub: a struct with {attribute 'pack_mode' := '1'} is
+        // byte-packed - no per-field alignment padding, unlike the default
+        // (pack_mode 0/absent) natural-alignment case this same field
+        // layout would otherwise get (UINT+UINT then LREAL needing 8-byte
+        // alignment would pad the struct to 16 bytes).
+        [Fact]
+        public void SizeOf_PackedStruct_HasNoAlignmentPadding()
+        {
+            var structType = StructDeclParser.Parse(@"{attribute 'pack_mode' := '1'}
+TYPE uRemoteParamValue :
+STRUCT
+	nIndex : UINT;
+	eType : UINT;
+	rValue : LREAL;
+END_STRUCT
+END_TYPE");
+            var (engine, _, frame) = NewHolder("VAR\n\tm : uRemoteParamValue;\nEND_VAR", new[] { structType });
+
+            var result = engine.Evaluate(Parser.ParseExpression("SIZEOF(m)"), frame);
+
+            Assert.Equal(12, result);
+        }
+
+        [Fact]
+        public void SizeOf_SameFieldsWithoutPackMode_PadsToNaturalAlignment()
+        {
+            var structType = StructDeclParser.Parse(@"TYPE uRemoteParamValue :
+STRUCT
+	nIndex : UINT;
+	eType : UINT;
+	rValue : LREAL;
+END_STRUCT
+END_TYPE");
+            var (engine, _, frame) = NewHolder("VAR\n\tm : uRemoteParamValue;\nEND_VAR", new[] { structType });
+
+            var result = engine.Evaluate(Parser.ParseExpression("SIZEOF(m)"), frame);
+
+            Assert.Equal(16, result);
+        }
+
         [Fact]
         public void SizeOf_StructFieldOfEnumType_ComputesRecursively()
         {

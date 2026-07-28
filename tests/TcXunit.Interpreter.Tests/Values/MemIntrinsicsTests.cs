@@ -186,6 +186,72 @@ END_TYPE");
             Assert.Equal(9, m.Fields["count"].Value);
         }
 
+        // TcXunit-eub: whole-struct MEMCPY (ADR(m), not ADR(m.field)) must
+        // honor the struct's {attribute 'pack_mode' := '1'} pragma - rValue
+        // packed right after eType at byte offset 4, not the naturally-
+        // aligned offset 8 an 8-byte LREAL would otherwise land at.
+        [Fact]
+        public void Memcpy_WholePackedStruct_PacksFieldsWithNoAlignmentPadding()
+        {
+            var structType = StructDeclParser.Parse(@"{attribute 'pack_mode' := '1'}
+TYPE uRemoteParamValue :
+STRUCT
+	nIndex : UINT;
+	eType : UINT;
+	rValue : LREAL;
+END_STRUCT
+END_TYPE");
+            var fb = new PouAst(
+                "FB_Holder", null,
+                "VAR\n\tm : uRemoteParamValue;\n\tout : ARRAY[0..11] OF BYTE;\n\tresult : LREAL;\nEND_VAR",
+                "", new List<MethodAst>());
+            var engine = new Engine(new TypeRegistry(new[] { fb }, new[] { structType }));
+            var instance = engine.NewInstance("FB_Holder");
+            var frame = new Frame(instance, "FB_Holder");
+            var m = (StructInstance)instance.Fields["m"].Value;
+            m.Fields["nIndex"].Value = 1;
+            m.Fields["eType"].Value = 2;
+            m.Fields["rValue"].Value = 3.5;
+
+            engine.Evaluate(Parser.ParseExpression("MEMCPY(ADR(out), ADR(m), 12)"), frame);
+            engine.Evaluate(Parser.ParseExpression("MEMCPY(ADR(result), ADR(out[4]), 8)"), frame);
+
+            Assert.Equal(3.5, instance.Fields["result"].Value);
+        }
+
+        // TcXunit-eub: the inverse direction of the test above - bytes
+        // copied into a whole packed struct (ADR(m), exercising
+        // UnpackValue's struct branch) must be read back at the packed
+        // offsets, not the naturally-aligned ones. rValue's 8 bytes start
+        // right at offset 4 in the 12-byte packed source, not offset 8.
+        [Fact]
+        public void Memcpy_IntoWholePackedStruct_UnpacksFieldsWithNoAlignmentPadding()
+        {
+            var structType = StructDeclParser.Parse(@"{attribute 'pack_mode' := '1'}
+TYPE uRemoteParamValue :
+STRUCT
+	nIndex : UINT;
+	eType : UINT;
+	rValue : LREAL;
+END_STRUCT
+END_TYPE");
+            var fb = new PouAst(
+                "FB_Holder", null,
+                "VAR\n\tm : uRemoteParamValue;\n\tsrc : ARRAY[0..11] OF BYTE := [1, 0, 2, 0, 0, 0, 0, 0, 0, 0, 12, 64];\nEND_VAR",
+                "", new List<MethodAst>());
+            var engine = new Engine(new TypeRegistry(new[] { fb }, new[] { structType }));
+            var instance = engine.NewInstance("FB_Holder");
+            var frame = new Frame(instance, "FB_Holder");
+
+            // src bytes: nIndex=1, eType=2, rValue=3.5 (IEEE754 LE: 00 00 00 00 00 00 0C 40)
+            engine.Evaluate(Parser.ParseExpression("MEMCPY(ADR(m), ADR(src), 12)"), frame);
+
+            var m = (StructInstance)instance.Fields["m"].Value;
+            Assert.Equal(1, m.Fields["nIndex"].Value);
+            Assert.Equal(2, m.Fields["eType"].Value);
+            Assert.Equal(3.5, m.Fields["rValue"].Value);
+        }
+
         // TcXunit-fsz: ADR(struct.field) where the field is STRING(n) - the
         // Beckhoff wire-record round-trip case (uRemoteRegistrationRecord's
         // sModuleName). PackValue must byte-pack the string (ASCII,

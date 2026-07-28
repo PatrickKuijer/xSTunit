@@ -17,8 +17,9 @@ namespace TcXunit.Interpreter
         // struct packing - each field aligned to its own size (no >8-byte
         // alignment case exists among the supported scalar sizes) and the
         // struct's overall size padded up to its largest member's alignment.
-        // There's no {attribute 'pack_mode'} support - nothing in the
-        // fixtures uses non-default packing yet (grow-on-demand).
+        // A struct's {attribute 'pack_mode' := 'N'} pragma (TcXunit-eub,
+        // StructAst.PackMode) caps that per-field alignment at N bytes
+        // instead - see PackBound/SizeOfStruct below.
         private static readonly IReadOnlyDictionary<string, int> ScalarByteSizes = new Dictionary<string, int>
         {
             ["SINT"] = 1,
@@ -108,18 +109,27 @@ namespace TcXunit.Interpreter
 
         private (int Size, int Align) SizeOfStruct(StructAst structAst, Frame frame)
         {
+            var packBound = PackBound(structAst);
             var offset = 0;
             var maxAlign = 1;
             foreach (var field in structAst.Fields)
             {
                 var (fieldSize, fieldAlign) = SizeOfType(field.TypeName, frame);
-                offset = RoundUp(offset, fieldAlign);
+                var effectiveAlign = Math.Min(fieldAlign, packBound);
+                offset = RoundUp(offset, effectiveAlign);
                 offset += fieldSize;
-                maxAlign = Math.Max(maxAlign, fieldAlign);
+                maxAlign = Math.Max(maxAlign, effectiveAlign);
             }
 
             return (RoundUp(offset, maxAlign), maxAlign);
         }
+
+        // pack_mode 0 (absent/default) means "no cap" - natural alignment,
+        // same as before TcXunit-eub. A positive pack_mode caps every
+        // field's alignment at that many bytes (pack_mode 1 == fully
+        // byte-packed, no padding anywhere).
+        private static int PackBound(StructAst structAst) =>
+            structAst.PackMode > 0 ? structAst.PackMode : int.MaxValue;
 
         private static int RoundUp(int value, int align) => (value + align - 1) / align * align;
     }

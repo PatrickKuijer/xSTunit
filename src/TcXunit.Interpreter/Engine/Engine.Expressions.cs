@@ -165,7 +165,8 @@ namespace TcXunit.Interpreter
                 return EvaluatePointerArithmetic(binary.Op, leftVal, rightVal, frame);
 
             if ((binary.Op == "=" || binary.Op == "<>") &&
-                (leftVal is Pointer || rightVal is Pointer || leftVal == null || rightVal == null))
+                (leftVal is Pointer || rightVal is Pointer || leftVal is FbInstance || rightVal is FbInstance ||
+                 leftVal == null || rightVal == null))
                 return EvaluatePointerEquality(binary.Op, leftVal, rightVal);
 
             if (binary.Op == "AND" || binary.Op == "OR" || binary.Op == "XOR")
@@ -301,12 +302,27 @@ namespace TcXunit.Interpreter
         // real (ADR-bound) pointers are compared by target-Cell identity;
         // a bound pointer is never "null"/zero, so it compares unequal to
         // both null and any int literal.
+        //
+        // TcXunit-dba: an interface-typed (or plain FB-reference) variable
+        // follows the same "= 0 is the assigned/null check" idiom (e.g.
+        // 'IF (iipRecipeParams <> 0) AND iipRecipeParams.bAdd(...) THEN'),
+        // but it has no dedicated Pointer/null representation of its own -
+        // an unassigned interface field has no POU registered under its
+        // interface type name (TcPouParser never parses <Itf> POUs), so
+        // DefaultValue's lookups all miss and it falls through to the
+        // int-0 default; once assigned (itf := concreteFb), the field holds
+        // the concrete FB's FbInstance directly. Route FbInstance through
+        // the same null-check semantics as Pointer: assigned (FbInstance)
+        // compares unequal to zero/null, and two assigned interface
+        // variables compare by referenced-instance identity.
         private static object EvaluatePointerEquality(string op, object leftVal, object rightVal)
         {
             bool equal;
             if (leftVal is Pointer leftPtr && rightVal is Pointer rightPtr)
                 equal = PointerTargetsEqual(leftPtr.Target, rightPtr.Target);
-            else if (leftVal is Pointer || rightVal is Pointer)
+            else if (leftVal is FbInstance leftFb && rightVal is FbInstance rightFb)
+                equal = ReferenceEquals(leftFb, rightFb);
+            else if (leftVal is Pointer || rightVal is Pointer || leftVal is FbInstance || rightVal is FbInstance)
                 equal = false;
             else if (leftVal == null && rightVal == null)
                 equal = true;

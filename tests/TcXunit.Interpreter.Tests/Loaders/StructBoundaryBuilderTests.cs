@@ -140,10 +140,10 @@ END_TYPE");
         {
             var structAst = StructDeclParser.Parse(@"TYPE ST_Msg :
 STRUCT
-	label : STRING(cFramework.MAX_PAR_STRING_SIZE);
+	label : STRING(cScratchConstants.MAX_LABEL_STRING_SIZE);
 END_STRUCT
 END_TYPE");
-            var gvl = new GvlAst("cFramework", "VAR_GLOBAL CONSTANT\n\tMAX_PAR_STRING_SIZE : UINT := 32;\nEND_VAR");
+            var gvl = new GvlAst("cScratchConstants", "VAR_GLOBAL CONSTANT\n\tMAX_LABEL_STRING_SIZE : UINT := 32;\nEND_VAR");
             var registry = new TypeRegistry(System.Array.Empty<PouAst>(), new[] { structAst }, new[] { gvl });
             var builder = new StructBoundaryBuilder(registry);
 

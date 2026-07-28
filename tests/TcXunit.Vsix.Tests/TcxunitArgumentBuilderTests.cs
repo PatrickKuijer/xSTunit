@@ -42,10 +42,10 @@ namespace TcXunit.Vsix.Tests
             var arguments = TcxunitArgumentBuilder.BuildArguments(
                 "tcxunit",
                 new[] { "C:\\proj\\Pous" },
-                new[] { "FB_RemoteWireRecordsTests" });
+                new[] { "FB_WidgetWireRecordsTests" });
 
             Assert.Equal(
-                "\"tcxunit\" \"C:\\proj\\Pous\" --format json --suite \"FB_RemoteWireRecordsTests\"",
+                "\"tcxunit\" \"C:\\proj\\Pous\" --format json --suite \"FB_WidgetWireRecordsTests\"",
                 arguments);
         }
 
@@ -55,10 +55,10 @@ namespace TcXunit.Vsix.Tests
             var arguments = TcxunitArgumentBuilder.BuildArguments(
                 "tcxunit",
                 new[] { "C:\\proj\\Pous" },
-                new[] { "FB_RemoteWireRecordsTests", "FB_ChecksumTests" });
+                new[] { "FB_WidgetWireRecordsTests", "FB_ChecksumTests" });
 
             Assert.Equal(
-                "\"tcxunit\" \"C:\\proj\\Pous\" --format json --suite \"FB_RemoteWireRecordsTests\" --suite \"FB_ChecksumTests\"",
+                "\"tcxunit\" \"C:\\proj\\Pous\" --format json --suite \"FB_WidgetWireRecordsTests\" --suite \"FB_ChecksumTests\"",
                 arguments);
         }
 

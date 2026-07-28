@@ -100,19 +100,38 @@ namespace TcXunit.Interpreter
         public IReadOnlyList<TestCaseResult> RunSuite(string suiteTypeName, out long elapsedMilliseconds)
         {
             var stopwatch = Stopwatch.StartNew();
-            var instance = NewInstance(suiteTypeName);
-            var def = _registry.Get(suiteTypeName);
-            var frame = new Frame(instance, suiteTypeName);
+
+            // TcXunit-p3t.1: the one place interpreter faults are wrapped with
+            // their PLC source location. It is deliberately the OUTERMOST
+            // boundary rather than every CallMethod level, for two reasons:
+            // the innermost body has already stamped itself onto the exception
+            // by the time it gets here (see Engine.Diagnostics.cs), and public
+            // Engine.CallMethod keeps throwing the exact exception types its
+            // callers already switch on. Instantiation is inside the try too -
+            // an FB_init body is interpreted ST and can fault just as the
+            // suite body can.
             try
             {
-                ExecuteStatements(_registry.GetStatements(def.ImplementationText), frame);
+                var instance = NewInstance(suiteTypeName);
+                var def = _registry.Get(suiteTypeName);
+                // A suite body is a POU body, not a METHOD, so the frame
+                // carries no method name - a fault here reports just "FB_X".
+                ExecuteBody(_registry.GetStatements(def.ImplementationText), new Frame(instance, suiteTypeName, null, def.BodyStartLine));
+                stopwatch.Stop();
+                elapsedMilliseconds = stopwatch.ElapsedMilliseconds;
+                return instance.NativeSuiteHost.Collect();
             }
-            catch (MethodReturnSignal)
+            catch (Exception ex)
             {
+                var located = TryCreateSourceLocationException(ex);
+                if (located != null)
+                    throw located;
+
+                // Nothing ST-level claimed it (e.g. an unresolvable type hit
+                // while building default values): rethrow untouched rather
+                // than inventing a location.
+                throw;
             }
-            stopwatch.Stop();
-            elapsedMilliseconds = stopwatch.ElapsedMilliseconds;
-            return instance.NativeSuiteHost.Collect();
         }
 
         public FbInstance NewInstance(string typeName)

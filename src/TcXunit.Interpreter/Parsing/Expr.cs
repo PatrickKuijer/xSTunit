@@ -4,6 +4,12 @@ namespace TcXunit.Interpreter
 {
     public abstract class Expr
     {
+        // 1-based line within the ST body this expression was parsed from -
+        // the token that STARTS it, so a BinaryExpr reports its left
+        // operand's line (TcXunit-p3t.2). See Token.Line for the convention
+        // and the BodyStartLine + Line - 1 file-line formula; 0 means
+        // "unknown", the value hand-built (non-parsed) nodes keep.
+        public int Line { get; set; }
     }
 
     public sealed class IntLiteralExpr : Expr

@@ -193,17 +193,19 @@ namespace TcXunit.Interpreter
                 throw new InvalidOperationException($"Method '{methodName}' not found starting from type '{startType}'");
             }
 
-            var newFrame = new Frame(instance, definingType);
+            // definingType (not instance.ActualTypeName) is the POU that owns
+            // the body about to run, so an inherited method is attributed to
+            // the base FB that actually declares it (TcXunit-p3t.1). Same
+            // reason methodDef's own BodyStartLine is what travels: an
+            // override and the method it overrides share nothing but a name,
+            // and TypeRegistry caches parsed statements by body TEXT, so the
+            // offset has to ride the frame rather than the statement list
+            // (TcXunit-p3t.4).
+            var newFrame = new Frame(instance, definingType, methodName, methodDef.BodyStartLine);
             var paramDecls = _registry.GetDecls(methodDef.DeclarationText);
             BindParams(paramDecls, positionalArgs, namedArgs, callerFrame, newFrame);
 
-            try
-            {
-                ExecuteStatements(_registry.GetStatements(methodDef.ImplementationText), newFrame);
-            }
-            catch (MethodReturnSignal)
-            {
-            }
+            ExecuteBody(_registry.GetStatements(methodDef.ImplementationText), newFrame);
 
             WriteBackOutputArgs(paramDecls, namedArgs, newFrame, callerFrame);
 
@@ -398,14 +400,8 @@ namespace TcXunit.Interpreter
                     cell.Value = Evaluate(arg.Value, callerFrame);
 
             var def = _registry.Get(callee.ActualTypeName);
-            var calleeFrame = new Frame(callee, callee.ActualTypeName);
-            try
-            {
-                ExecuteStatements(_registry.GetStatements(def.ImplementationText), calleeFrame);
-            }
-            catch (MethodReturnSignal)
-            {
-            }
+            var calleeFrame = new Frame(callee, callee.ActualTypeName, null, def.BodyStartLine);
+            ExecuteBody(_registry.GetStatements(def.ImplementationText), calleeFrame);
         }
 
         private void BindParams(

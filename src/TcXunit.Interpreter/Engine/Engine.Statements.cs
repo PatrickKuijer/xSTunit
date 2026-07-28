@@ -14,6 +14,16 @@ namespace TcXunit.Interpreter
 
         private void ExecuteStatement(Stmt stmt, Frame frame)
         {
+            // TcXunit-p3t.4: the frame's "you are here" marker, at statement
+            // granularity. Nested bodies (IF/FOR/CASE arms) come back through
+            // here with their own line, so the marker always names the
+            // innermost statement actually running - and a callee runs against
+            // its own Frame, so a call never clobbers its caller's marker.
+            // Deliberately unconditional: a statement with no line (Line == 0,
+            // hand-built AST) must degrade to "unknown" rather than leave the
+            // previous statement's line standing and misreport it.
+            frame.CurrentLine = stmt.Line;
+
             switch (stmt)
             {
                 case AssignStmt assign:

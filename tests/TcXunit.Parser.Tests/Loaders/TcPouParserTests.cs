@@ -283,5 +283,84 @@ END_VAR]]></Declaration>
 
             Assert.Contains("Tc2_System", ex.Message);
         }
+
+        [Fact]
+        public void Parse_RecordsBodyStartLinePerScope_SoInBodyLinesMapBackToTheFile()
+        {
+            // Line numbers are load-bearing here: the ST bodies below sit on
+            // XML lines 9 (POU), 18 (Increment) and 26 (GetValue) of this
+            // literal, counting the <?xml ...?> line as 1 (TcXunit-p3t.3).
+            const string xml = @"<?xml version=""1.0"" encoding=""utf-8""?>
+<TcPlcObject Version=""1.1.0.1"">
+  <POU Name=""FB_Counter"" Id=""{a1b2c3d4-0001-4a1a-8b1b-000000000001}"" SpecialFunc=""None"">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_Counter
+VAR
+	value : INT;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[value := 0;]]></ST>
+    </Implementation>
+    <Method Name=""Increment"" Id=""{a1b2c3d4-0001-4a1a-8b1b-000000000003}"">
+      <Declaration><![CDATA[METHOD PUBLIC Increment
+VAR_INPUT
+	delta : INT := 1;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[value := value + delta;
+value := value + 0;]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name=""GetValue"" Id=""{a1b2c3d4-0001-4a1a-8b1b-000000000005}"">
+      <Declaration><![CDATA[METHOD PUBLIC GetValue : INT
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[GetValue := value;]]></ST>
+      </Implementation>
+    </Method>
+  </POU>
+</TcPlcObject>";
+
+            var ast = TcPouParser.Parse(xml);
+
+            Assert.Equal(9, ast.BodyStartLine);
+            Assert.Equal(18, ast.Methods[0].BodyStartLine);
+            Assert.Equal(26, ast.Methods[1].BodyStartLine);
+
+            // The contract: BodyStartLine + zero-based line within the body ==
+            // the real file line. Increment's second statement is body line 1,
+            // and lives on file line 19.
+            var increment = ast.Methods[0];
+            Assert.Equal(
+                19,
+                increment.BodyStartLine + increment.ImplementationText.Split('\n').Length - 1);
+        }
+
+        [Fact]
+        public void Parse_CdataOpeningWithNewline_CountsThatNewlineAsTheBodysFirstLine()
+        {
+            // TwinCAT sometimes emits `<ST><![CDATA[` followed immediately by a
+            // newline. That newline is part of the body string, so body line 0
+            // is the empty tail of the <ST> line and the offset still holds.
+            const string xml = @"<?xml version=""1.0"" encoding=""utf-8""?>
+<TcPlcObject Version=""1.1.0.1"">
+  <POU Name=""FB_Blank"" Id=""{00000000-0000-0000-0000-000000000009}"" SpecialFunc=""None"">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_Blank]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[
+first := 1;]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>";
+
+            var ast = TcPouParser.Parse(xml);
+
+            Assert.Equal(6, ast.BodyStartLine);
+
+            var bodyLines = ast.ImplementationText.Split('\n');
+            Assert.Equal("", bodyLines[0]);
+            Assert.Equal("first := 1;", bodyLines[1]);
+            Assert.Equal(7, ast.BodyStartLine + 1);
+        }
     }
 }

@@ -14,7 +14,7 @@ namespace TcXunit.Interpreter
             while (IsKeyword("OR"))
             {
                 Advance();
-                left = new BinaryExpr("OR", left, ParseXor());
+                left = new BinaryExpr("OR", left, ParseXor()) { Line = left.Line };
             }
             return left;
         }
@@ -25,7 +25,7 @@ namespace TcXunit.Interpreter
             while (IsKeyword("XOR"))
             {
                 Advance();
-                left = new BinaryExpr("XOR", left, ParseAnd());
+                left = new BinaryExpr("XOR", left, ParseAnd()) { Line = left.Line };
             }
             return left;
         }
@@ -36,7 +36,7 @@ namespace TcXunit.Interpreter
             while (IsKeyword("AND"))
             {
                 Advance();
-                left = new BinaryExpr("AND", left, ParseComparison());
+                left = new BinaryExpr("AND", left, ParseComparison()) { Line = left.Line };
             }
             return left;
         }
@@ -59,7 +59,7 @@ namespace TcXunit.Interpreter
 
             Advance();
             var right = ParseAdditive();
-            return new BinaryExpr(op, left, right);
+            return new BinaryExpr(op, left, right) { Line = left.Line };
         }
 
         private Expr ParseAdditive()
@@ -70,7 +70,7 @@ namespace TcXunit.Interpreter
                 var op = Current.Type == TokenType.Plus ? "+" : "-";
                 Advance();
                 var right = ParseMod();
-                left = new BinaryExpr(op, left, right);
+                left = new BinaryExpr(op, left, right) { Line = left.Line };
             }
             return left;
         }
@@ -88,27 +88,42 @@ namespace TcXunit.Interpreter
                 else
                     op = "MOD";
                 Advance();
-                left = new BinaryExpr(op, left, ParseUnary());
+                left = new BinaryExpr(op, left, ParseUnary()) { Line = left.Line };
             }
             return left;
         }
 
         private Expr ParseUnary()
         {
+            var line = Current.Line;
             if (IsKeyword("NOT"))
             {
                 Advance();
-                return new UnaryExpr("NOT", ParseUnary());
+                return new UnaryExpr("NOT", ParseUnary()) { Line = line };
             }
             if (Current.Type == TokenType.Minus)
             {
                 Advance();
-                return new UnaryExpr("-", ParseUnary());
+                return new UnaryExpr("-", ParseUnary()) { Line = line };
             }
             return ParsePostfix(ParsePrimary());
         }
 
+        // Stamps every leaf/parenthesized/literal-initializer node with the
+        // line of the token that opened it (TcXunit-p3t.2). Only stamps when
+        // the node has no line yet: "(a + b)" hands back the inner node,
+        // which already knows where it started, and the [n(v)] array-repeat
+        // shorthand shares one Expr instance across n slots.
         private Expr ParsePrimary()
+        {
+            var line = Current.Line;
+            var expr = ParsePrimaryCore();
+            if (expr.Line == 0)
+                expr.Line = line;
+            return expr;
+        }
+
+        private Expr ParsePrimaryCore()
         {
             switch (Current.Type)
             {
@@ -181,7 +196,9 @@ namespace TcXunit.Interpreter
         }
 
         // Applies postfix ^ (deref) and .Member(args) (call) operators to an
-        // already-parsed primary/THIS^/SUPER^ node.
+        // already-parsed primary/THIS^/SUPER^ node. Each wrapper node inherits
+        // the receiver's line, since that is where the whole postfix chain
+        // starts (TcXunit-p3t.2).
         private Expr ParsePostfix(Expr node)
         {
             while (true)
@@ -189,7 +206,7 @@ namespace TcXunit.Interpreter
                 if (Current.Type == TokenType.Caret)
                 {
                     Advance();
-                    node = new DerefExpr(node);
+                    node = new DerefExpr(node) { Line = node.Line };
                     continue;
                 }
 
@@ -197,9 +214,11 @@ namespace TcXunit.Interpreter
                 {
                     Advance();
                     var memberName = Expect(TokenType.Identifier).Text;
-                    node = Current.Type == TokenType.LParen
+                    Expr member = Current.Type == TokenType.LParen
                         ? ParseCallArgs(node, memberName)
                         : new FieldAccessExpr(node, memberName);
+                    member.Line = node.Line;
+                    node = member;
                     continue;
                 }
 
@@ -213,7 +232,7 @@ namespace TcXunit.Interpreter
                         indices.Add(ParseExpr());
                     }
                     Expect(TokenType.RBracket);
-                    node = new IndexExpr(node, indices);
+                    node = new IndexExpr(node, indices) { Line = node.Line };
                     continue;
                 }
 

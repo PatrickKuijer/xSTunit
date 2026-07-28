@@ -9,6 +9,14 @@ namespace TcXunit.Cli.Tests
     internal static class TestFixtures
     {
         public static string FbCounterFixtureDir([CallerFilePath] string callerFile = "") =>
-            Path.GetFullPath(Path.Combine(Path.GetDirectoryName(callerFile)!, "..", "Fixtures", "FbCounterFixture"));
+            FixtureDir("FbCounterFixture", callerFile);
+
+        // Suite + helper POU that fault on a known, not-first body line
+        // (TcXunit-p3t.4).
+        public static string FailingLineFixtureDir([CallerFilePath] string callerFile = "") =>
+            FixtureDir("FailingLineFixture", callerFile);
+
+        private static string FixtureDir(string name, string callerFile) =>
+            Path.GetFullPath(Path.Combine(Path.GetDirectoryName(callerFile)!, "..", "Fixtures", name));
     }
 }

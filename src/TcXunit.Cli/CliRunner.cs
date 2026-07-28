@@ -241,11 +241,33 @@ namespace TcXunit.Cli
                     // file so this doesn't need re-instrumenting to diagnose.
                     TcXunitLog.LogException($"CliRunner.Run: suite '{suiteName}' failed to run", ex);
                     if (!asJson)
-                        output.WriteLine($"{suiteName}: FAIL ({ex.Message})");
+                    {
+                        // TcXunit-p3t.1: name the PLC POU + method that was
+                        // executing when it threw, not just the suite. Engine
+                        // only produces a PlcSourceLocationException when an
+                        // interpreted ST body actually faulted; a load-level
+                        // failure (unresolvable type in default-value
+                        // construction, say) has no location and keeps the
+                        // original single-line shape.
+                        // located.Message rather than Location + inner message
+                        // (TcXunit-p3t.4): the exception owns the one rendering
+                        // of "where", so the .TcPOU line appears here and in the
+                        // JSON error string below without two formatters to keep
+                        // in step - and degrades to the bare "FB_Y.MethodZ: ..."
+                        // shape by itself when no line is known.
+                        var detail = ex is PlcSourceLocationException located
+                            ? $"in {located.Message}"
+                            : ex.Message;
+                        output.WriteLine($"{suiteName}: FAIL ({detail})");
+                    }
                     suiteFilePaths.TryGetValue(suiteName, out var failFilePath);
                     // No suite ran to completion here (load/instantiation/default-value
                     // failure), so there's no elapsed time to report - null, not a
-                    // fabricated zero (TcXunit-6fb.2).
+                    // fabricated zero (TcXunit-6fb.2). ex.Message already carries the
+                    // "FB_Y.MethodZ(142): ..." prefix for an interpreted fault
+                    // (TcXunit-p3t.1/.4), so the error string gets richer without the
+                    // JSON wire format changing shape - suites[].error stays a
+                    // plain string.
                     suiteReports.Add(new SuiteReport(suiteName, failFilePath, ex.Message, Array.Empty<TestReport>(), null));
                     failCount++;
                     anyFailed = true;

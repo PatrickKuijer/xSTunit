@@ -11,13 +11,17 @@ namespace TcXunit.Parser
         public IReadOnlyList<MethodAst> Methods { get; }
         public IReadOnlyList<PropertyAst> Properties { get; }
 
+        // See MethodAst.BodyStartLine - same contract, for the POU's own body
+        // (TcXunit-p3t.3).
+        public int BodyStartLine { get; }
+
         public PouAst(
             string name,
             string baseTypeName,
             string declarationText,
             string implementationText,
             IReadOnlyList<MethodAst> methods,
-            IReadOnlyList<PropertyAst> properties = null)
+            IReadOnlyList<PropertyAst> properties = null, int bodyStartLine = 1)
         {
             Name = name;
             BaseTypeName = baseTypeName;
@@ -25,6 +29,7 @@ namespace TcXunit.Parser
             ImplementationText = implementationText;
             Methods = methods;
             Properties = properties ?? new List<PropertyAst>();
+            BodyStartLine = bodyStartLine;
         }
     }
 }

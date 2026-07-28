@@ -18,17 +18,11 @@ namespace TcXunit.Interpreter
             var statements = _registry.GetStatements(def.ImplementationText);
             for (var i = 0; i < cycles; i++)
             {
-                var frame = new Frame(instance, instance.ActualTypeName);
-                try
-                {
-                    ExecuteStatements(statements, frame);
-                }
-                catch (MethodReturnSignal)
-                {
-                    // A top-level RETURN inside the FB's cyclic body only ends
-                    // this cycle; it must not unwind into whatever ST call
-                    // (e.g. a TcUnit test method) invoked StepCycles.
-                }
+                // ExecuteBody owns the "a top-level RETURN inside the FB's
+                // cyclic body only ends this cycle; it must not unwind into
+                // whatever ST call (e.g. a TcUnit test method) invoked
+                // StepCycles" rule, plus fault attribution (TcXunit-p3t.1).
+                ExecuteBody(statements, new Frame(instance, instance.ActualTypeName, null, def.BodyStartLine));
             }
         }
 

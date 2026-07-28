@@ -62,7 +62,19 @@ namespace TcXunit.Interpreter
             return stmts;
         }
 
+        // Stamps every parsed statement with the in-body line of the token
+        // that started it (TcXunit-p3t.2). Nested statements are stamped by
+        // their own pass through here, so IF/FOR/CASE bodies get real lines
+        // rather than their enclosing statement's.
         private Stmt ParseStatement()
+        {
+            var line = Current.Line;
+            var stmt = ParseStatementCore();
+            stmt.Line = line;
+            return stmt;
+        }
+
+        private Stmt ParseStatementCore()
         {
             if (IsKeyword("IF"))
                 return ParseIf();
@@ -158,6 +170,10 @@ namespace TcXunit.Interpreter
             var elseBranch = new List<Stmt>();
             if (IsKeyword("ELSIF"))
             {
+                // The synthesized IfStmt for an ELSIF never passes through
+                // ParseStatement, so stamp it here from the ELSIF keyword
+                // itself (TcXunit-p3t.2).
+                var elsifLine = Current.Line;
                 Advance();
                 var elsifCondition = ParseExpr();
                 if (!IsKeyword("THEN"))
@@ -165,7 +181,9 @@ namespace TcXunit.Interpreter
                 Advance();
 
                 var elsifThen = ParseStatementList();
-                elseBranch = new List<Stmt> { ParseIfTail(elsifCondition, elsifThen) };
+                var elsifStmt = ParseIfTail(elsifCondition, elsifThen);
+                elsifStmt.Line = elsifLine;
+                elseBranch = new List<Stmt> { elsifStmt };
                 return new IfStmt(condition, thenBranch, elseBranch);
             }
 

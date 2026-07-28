@@ -14,8 +14,22 @@ namespace TcXunit.Interpreter
             var tokens = new List<Token>();
             var i = 0;
 
+            // Line tracking (TcXunit-p3t.2). `i` only ever moves forward, so
+            // folding whatever was consumed since the previous token into the
+            // counter once per loop turn is O(n) overall and covers skipped
+            // whitespace, // comments and multi-line (* *) comments alike -
+            // no per-branch bookkeeping to forget.
+            var line = 1;
+            var counted = 0;
+
             while (i < text.Length)
             {
+                CountLineBreaks(text, ref counted, i, ref line);
+
+                // Stamped on whatever token this turn produces: a token's
+                // Line is where it STARTS, so a multi-line string literal
+                // keeps its opening line.
+                var tokenLine = line;
                 var c = text[i];
 
                 if (char.IsWhiteSpace(c))
@@ -48,7 +62,7 @@ namespace TcXunit.Interpreter
                     if (word == "REF" && i < text.Length && text[i] == '=')
                     {
                         i++;
-                        tokens.Add(new Token(TokenType.RefAssign, "REF="));
+                        tokens.Add(new Token(TokenType.RefAssign, "REF=", tokenLine));
                         continue;
                     }
 
@@ -60,7 +74,7 @@ namespace TcXunit.Interpreter
                             i++;
                         ConsumeFraction(text, ref i);
                         var numText = text.Substring(numStart, i - numStart);
-                        tokens.Add(new Token(word == "REAL" ? TokenType.RealLiteral : TokenType.LrealLiteral, numText));
+                        tokens.Add(new Token(word == "REAL" ? TokenType.RealLiteral : TokenType.LrealLiteral, numText, tokenLine));
                         continue;
                     }
 
@@ -70,7 +84,7 @@ namespace TcXunit.Interpreter
                         var durStart = i;
                         while (i < text.Length && char.IsLetterOrDigit(text[i]))
                             i++;
-                        tokens.Add(new Token(TokenType.LtimeLiteral, text.Substring(durStart, i - durStart)));
+                        tokens.Add(new Token(TokenType.LtimeLiteral, text.Substring(durStart, i - durStart), tokenLine));
                         continue;
                     }
 
@@ -80,7 +94,7 @@ namespace TcXunit.Interpreter
                         var durStart = i;
                         while (i < text.Length && char.IsLetterOrDigit(text[i]))
                             i++;
-                        tokens.Add(new Token(TokenType.TimeLiteral, text.Substring(durStart, i - durStart)));
+                        tokens.Add(new Token(TokenType.TimeLiteral, text.Substring(durStart, i - durStart), tokenLine));
                         continue;
                     }
 
@@ -94,7 +108,7 @@ namespace TcXunit.Interpreter
                         var litStart = i;
                         while (i < text.Length && IsDateTimeLiteralChar(text[i]))
                             i++;
-                        tokens.Add(new Token(TokenType.DateAndTimeLiteral, text.Substring(litStart, i - litStart)));
+                        tokens.Add(new Token(TokenType.DateAndTimeLiteral, text.Substring(litStart, i - litStart), tokenLine));
                         continue;
                     }
 
@@ -104,7 +118,7 @@ namespace TcXunit.Interpreter
                         var litStart = i;
                         while (i < text.Length && IsDateTimeLiteralChar(text[i]))
                             i++;
-                        tokens.Add(new Token(TokenType.TimeOfDayLiteral, text.Substring(litStart, i - litStart)));
+                        tokens.Add(new Token(TokenType.TimeOfDayLiteral, text.Substring(litStart, i - litStart), tokenLine));
                         continue;
                     }
 
@@ -114,11 +128,11 @@ namespace TcXunit.Interpreter
                         var litStart = i;
                         while (i < text.Length && IsDateTimeLiteralChar(text[i]))
                             i++;
-                        tokens.Add(new Token(TokenType.DateLiteral, text.Substring(litStart, i - litStart)));
+                        tokens.Add(new Token(TokenType.DateLiteral, text.Substring(litStart, i - litStart), tokenLine));
                         continue;
                     }
 
-                    tokens.Add(new Token(TokenType.Identifier, word));
+                    tokens.Add(new Token(TokenType.Identifier, word, tokenLine));
                     continue;
                 }
 
@@ -141,12 +155,12 @@ namespace TcXunit.Interpreter
                             i++;
                         var digits = text.Substring(digitsStart, i - digitsStart).Replace("_", string.Empty);
                         var value = ParseBasedLiteral(digits, numberBase, text, hashPos);
-                        tokens.Add(new Token(TokenType.IntLiteral, value.ToString()));
+                        tokens.Add(new Token(TokenType.IntLiteral, value.ToString(), tokenLine));
                         continue;
                     }
 
                     var isReal = ConsumeFraction(text, ref i);
-                    tokens.Add(new Token(isReal ? TokenType.RealLiteral : TokenType.IntLiteral, text.Substring(start, i - start)));
+                    tokens.Add(new Token(isReal ? TokenType.RealLiteral : TokenType.IntLiteral, text.Substring(start, i - start), tokenLine));
                     continue;
                 }
 
@@ -175,83 +189,104 @@ namespace TcXunit.Interpreter
                         i++;
                     }
                     i++; // closing quote
-                    tokens.Add(new Token(TokenType.StringLiteral, sb.ToString()));
+                    tokens.Add(new Token(TokenType.StringLiteral, sb.ToString(), tokenLine));
                     continue;
                 }
 
                 if (c == ':' && i + 1 < text.Length && text[i + 1] == '=')
                 {
-                    tokens.Add(new Token(TokenType.Assign, ":="));
+                    tokens.Add(new Token(TokenType.Assign, ":=", tokenLine));
                     i += 2;
                     continue;
                 }
 
                 if (c == ':')
                 {
-                    tokens.Add(new Token(TokenType.Colon, ":"));
+                    tokens.Add(new Token(TokenType.Colon, ":", tokenLine));
                     i++;
                     continue;
                 }
 
                 if (c == '.' && i + 1 < text.Length && text[i + 1] == '.')
                 {
-                    tokens.Add(new Token(TokenType.DotDot, ".."));
+                    tokens.Add(new Token(TokenType.DotDot, "..", tokenLine));
                     i += 2;
                     continue;
                 }
 
                 if (c == '<' && i + 1 < text.Length && text[i + 1] == '=')
                 {
-                    tokens.Add(new Token(TokenType.Le, "<="));
+                    tokens.Add(new Token(TokenType.Le, "<=", tokenLine));
                     i += 2;
                     continue;
                 }
 
                 if (c == '>' && i + 1 < text.Length && text[i + 1] == '=')
                 {
-                    tokens.Add(new Token(TokenType.Ge, ">="));
+                    tokens.Add(new Token(TokenType.Ge, ">=", tokenLine));
                     i += 2;
                     continue;
                 }
 
                 if (c == '<' && i + 1 < text.Length && text[i + 1] == '>')
                 {
-                    tokens.Add(new Token(TokenType.Ne, "<>"));
+                    tokens.Add(new Token(TokenType.Ne, "<>", tokenLine));
                     i += 2;
                     continue;
                 }
 
                 if (c == '=' && i + 1 < text.Length && text[i + 1] == '>')
                 {
-                    tokens.Add(new Token(TokenType.Arrow, "=>"));
+                    tokens.Add(new Token(TokenType.Arrow, "=>", tokenLine));
                     i += 2;
                     continue;
                 }
 
                 switch (c)
                 {
-                    case '=': tokens.Add(new Token(TokenType.Eq, "=")); i++; continue;
-                    case '<': tokens.Add(new Token(TokenType.Lt, "<")); i++; continue;
-                    case '>': tokens.Add(new Token(TokenType.Gt, ">")); i++; continue;
-                    case '+': tokens.Add(new Token(TokenType.Plus, "+")); i++; continue;
-                    case '-': tokens.Add(new Token(TokenType.Minus, "-")); i++; continue;
-                    case '*': tokens.Add(new Token(TokenType.Asterisk, "*")); i++; continue;
-                    case '/': tokens.Add(new Token(TokenType.Slash, "/")); i++; continue;
-                    case '^': tokens.Add(new Token(TokenType.Caret, "^")); i++; continue;
-                    case '.': tokens.Add(new Token(TokenType.Dot, ".")); i++; continue;
-                    case ',': tokens.Add(new Token(TokenType.Comma, ",")); i++; continue;
-                    case ';': tokens.Add(new Token(TokenType.Semicolon, ";")); i++; continue;
-                    case '(': tokens.Add(new Token(TokenType.LParen, "(")); i++; continue;
-                    case ')': tokens.Add(new Token(TokenType.RParen, ")")); i++; continue;
-                    case '[': tokens.Add(new Token(TokenType.LBracket, "[")); i++; continue;
-                    case ']': tokens.Add(new Token(TokenType.RBracket, "]")); i++; continue;
+                    case '=': tokens.Add(new Token(TokenType.Eq, "=", tokenLine)); i++; continue;
+                    case '<': tokens.Add(new Token(TokenType.Lt, "<", tokenLine)); i++; continue;
+                    case '>': tokens.Add(new Token(TokenType.Gt, ">", tokenLine)); i++; continue;
+                    case '+': tokens.Add(new Token(TokenType.Plus, "+", tokenLine)); i++; continue;
+                    case '-': tokens.Add(new Token(TokenType.Minus, "-", tokenLine)); i++; continue;
+                    case '*': tokens.Add(new Token(TokenType.Asterisk, "*", tokenLine)); i++; continue;
+                    case '/': tokens.Add(new Token(TokenType.Slash, "/", tokenLine)); i++; continue;
+                    case '^': tokens.Add(new Token(TokenType.Caret, "^", tokenLine)); i++; continue;
+                    case '.': tokens.Add(new Token(TokenType.Dot, ".", tokenLine)); i++; continue;
+                    case ',': tokens.Add(new Token(TokenType.Comma, ",", tokenLine)); i++; continue;
+                    case ';': tokens.Add(new Token(TokenType.Semicolon, ";", tokenLine)); i++; continue;
+                    case '(': tokens.Add(new Token(TokenType.LParen, "(", tokenLine)); i++; continue;
+                    case ')': tokens.Add(new Token(TokenType.RParen, ")", tokenLine)); i++; continue;
+                    case '[': tokens.Add(new Token(TokenType.LBracket, "[", tokenLine)); i++; continue;
+                    case ']': tokens.Add(new Token(TokenType.RBracket, "]", tokenLine)); i++; continue;
                     default:
                         throw new FormatException($"Unexpected character '{c}' at position {i} in: {text}");
                 }
             }
 
-            tokens.Add(new Token(TokenType.Eof, string.Empty));
+            // Eof sits at the very end of the body, so fold whatever trailing
+            // whitespace/comment tail is left before stamping it.
+            CountLineBreaks(text, ref counted, text.Length, ref line);
+            tokens.Add(new Token(TokenType.Eof, string.Empty, line));
             return tokens;
+        }
+
+        // Folds the line breaks in text[counted..end) into line, advancing
+        // counted to end (TcXunit-p3t.2). "\r\n" counts as ONE break -
+        // TwinCAT writes CRLF into .TcPOU bodies while the fixtures on disk
+        // are LF, and both must yield the same line numbers - as does a bare
+        // "\n" or a lone "\r".
+        private static void CountLineBreaks(string text, ref int counted, int end, ref int line)
+        {
+            while (counted < end)
+            {
+                var c = text[counted];
+                if (c == '\n')
+                    line++;
+                else if (c == '\r' && (counted + 1 >= text.Length || text[counted + 1] != '\n'))
+                    line++;
+                counted++;
+            }
         }
 
         // Recognizes IEC 61131-3 '$'-escape sequences inside single-quoted STRING

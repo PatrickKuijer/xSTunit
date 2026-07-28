@@ -4,6 +4,16 @@ namespace TcXunit.Interpreter
 {
     public abstract class Stmt
     {
+        // 1-based line within the ST body this statement was parsed from -
+        // the token that STARTS the statement (TcXunit-p3t.2). See Token.Line
+        // for the convention and for the BodyStartLine + Line - 1 formula
+        // that turns it into a .TcPOU file line.
+        //
+        // Settable rather than a constructor parameter: Stmt/Expr subclasses
+        // are constructed in hundreds of places (mostly hand-built ASTs in
+        // the tests), and the parser is the only caller that has a line to
+        // give. 0 means "unknown", which is what hand-built nodes keep.
+        public int Line { get; set; }
     }
 
     public sealed class AssignStmt : Stmt

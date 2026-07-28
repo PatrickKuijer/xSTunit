@@ -1,4 +1,6 @@
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using Xunit;
 
 namespace TcXunit.Parser.Tests
@@ -46,6 +48,41 @@ namespace TcXunit.Parser.Tests
                     "ClampedCounterIncrementRespectsCeiling",
                 },
                 MethodNames(ast));
+        }
+
+        [Fact]
+        public void Parse_FB_Counter_RecordsBodyStartLinesMatchingTheFileOnDisk()
+        {
+            var ast = ParseFixture("FB_Counter.TcPOU");
+            var fileLines = File.ReadAllLines(Path.Combine(FixturePouDir, "FB_Counter.TcPOU"));
+
+            // Rather than hard-coding line numbers that drift whenever the
+            // fixture is edited, re-read the file and check that every body
+            // line lands on the file line BodyStartLine claims it does
+            // (TcXunit-p3t.3).
+            AssertBodyLinesLandOnFile(fileLines, ast.BodyStartLine, ast.ImplementationText);
+            foreach (var method in ast.Methods)
+                AssertBodyLinesLandOnFile(fileLines, method.BodyStartLine, method.ImplementationText);
+
+            // Per-method offsets must actually differ, i.e. they are not all
+            // defaulting to the same value.
+            Assert.Equal(ast.Methods.Count, new HashSet<int>(ast.Methods.Select(m => m.BodyStartLine)).Count);
+        }
+
+        // A body line is "on" its file line when the file line ends with it:
+        // the first body line shares its file line with the `<ST><![CDATA[`
+        // prologue, and the last one is followed by `]]></ST>`.
+        private static void AssertBodyLinesLandOnFile(string[] fileLines, int bodyStartLine, string implementationText)
+        {
+            var bodyLines = implementationText.Split('\n');
+            for (var i = 0; i < bodyLines.Length; i++)
+            {
+                var fileLine = fileLines[bodyStartLine + i - 1].TrimEnd('\r');
+                var bodyLine = bodyLines[i].TrimEnd('\r');
+                var isLast = i == bodyLines.Length - 1;
+                var expectedTail = isLast ? bodyLine + "]]></ST>" : bodyLine;
+                Assert.EndsWith(expectedTail, fileLine);
+            }
         }
 
         private static PouAst ParseFixture(string fileName)

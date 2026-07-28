@@ -355,6 +355,11 @@ namespace TcXunit.Vsix
 
             if (this._runCts != null)
             {
+                // A run is already in flight -- the button should already read Stop, so this
+                // is defensive rather than an expected path (see class-level remarks above).
+                // Still worth a status line rather than a bare no-op: a silently-ignored click
+                // looks identical to a dead button from the user's side.
+                this.SetStatusText("A run is already in progress.");
                 return;
             }
 
@@ -371,7 +376,7 @@ namespace TcXunit.Vsix
 
                 if (!string.IsNullOrEmpty(result.Error))
                 {
-                    this.SetStatusText("Error: " + result.Error);
+                    this.ShowError("Error: " + result.Error);
                     // No new TcxunitRunResult worth trusting (early-exit error shape has no
                     // Suites) -- leave _lastFailedSuiteNames exactly as it was rather than
                     // clearing it, so a transient failure (e.g. Stop racing the process's own
@@ -399,7 +404,12 @@ namespace TcXunit.Vsix
             }
             catch (Exception ex)
             {
-                this.SetStatusText("Error: " + ex.Message);
+                // Covers TcxunitConfig.Load/ResolveProjectDirectory failures too (e.g. a
+                // missing/misplaced tcxunit.json) -- both happen inside this try block, above,
+                // so their exceptions land here same as a runner failure. Routed through
+                // ShowError, not a direct SetStatusText call, for consistency with every other
+                // host-level error path in this file (see ShowError's remarks below).
+                this.ShowError("Error: " + ex.Message);
             }
             finally
             {
@@ -473,6 +483,12 @@ namespace TcXunit.Vsix
                 + "if(document.readyState!=='loading'){apply();}else{document.addEventListener('DOMContentLoaded',apply);}})();";
         }
 
+        /// <summary>Canonical entry point for reporting a host-level failure (as opposed to
+        /// SetStatusText's non-error uses: clearing the line at the start of a run, or the
+        /// benign "Stopped." message). Currently just forwards to SetStatusText, but keeping
+        /// error reporting behind this one seam -- rather than every call site formatting and
+        /// calling SetStatusText directly -- means a future change to how errors are surfaced
+        /// (e.g. a distinct visual style, logging, telemetry) only has one place to change.</summary>
         private void ShowError(string message)
         {
             this.SetStatusText(message);

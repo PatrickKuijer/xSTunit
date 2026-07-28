@@ -30,12 +30,12 @@ namespace TcXunit.Interpreter.Tests
         public void TryParseEnum_ExplicitBaseType_ExtractsBaseType()
         {
             const string declaration =
-                "TYPE eModuleParameterDataTypes : (\n\tIDT_BOOL,\n\tIDT_BYTE,\n\tIDT_INT\n) DINT;\nEND_TYPE";
+                "TYPE eWidgetValueKind : (\n\tIDT_BOOL,\n\tIDT_BYTE,\n\tIDT_INT\n) DINT;\nEND_TYPE";
 
             var parsed = DutEnumLoader.TryParseEnum(declaration, out var name, out var underlying, out _);
 
             Assert.True(parsed);
-            Assert.Equal("eModuleParameterDataTypes", name);
+            Assert.Equal("eWidgetValueKind", name);
             Assert.Equal("DINT", underlying);
         }
 
@@ -55,12 +55,12 @@ namespace TcXunit.Interpreter.Tests
         public void TryParseEnum_LeadingAttributePragmas_AreSkipped()
         {
             const string declaration =
-                "{attribute 'qualified_only'}\n{attribute 'strict'}\nTYPE eModuleParameterDataTypes :\n(\n\tTypeBool := 0,\n\tTypeInt := 1\n);\nEND_TYPE";
+                "{attribute 'qualified_only'}\n{attribute 'strict'}\nTYPE eWidgetValueKind :\n(\n\tTypeBool := 0,\n\tTypeInt := 1\n);\nEND_TYPE";
 
             var parsed = DutEnumLoader.TryParseEnum(declaration, out var name, out var underlying, out _);
 
             Assert.True(parsed);
-            Assert.Equal("eModuleParameterDataTypes", name);
+            Assert.Equal("eWidgetValueKind", name);
             Assert.Equal("INT", underlying);
         }
 
@@ -68,12 +68,12 @@ namespace TcXunit.Interpreter.Tests
         public void TryParseEnum_LeadingAttributePragmasAndComment_AreSkipped()
         {
             const string declaration =
-                "{attribute 'qualified_only'}\n{attribute 'strict'}\n// Registration channel opcode\nTYPE eRemoteRegistrationOpcode :\n(\n\tAdd := 0,\n\tRemove := 1\n);\nEND_TYPE";
+                "{attribute 'qualified_only'}\n{attribute 'strict'}\n// Channel opcode\nTYPE eWidgetOpcode :\n(\n\tAdd := 0,\n\tRemove := 1\n);\nEND_TYPE";
 
             var parsed = DutEnumLoader.TryParseEnum(declaration, out var name, out var underlying, out _);
 
             Assert.True(parsed);
-            Assert.Equal("eRemoteRegistrationOpcode", name);
+            Assert.Equal("eWidgetOpcode", name);
             Assert.Equal("INT", underlying);
         }
 
@@ -120,7 +120,7 @@ namespace TcXunit.Interpreter.Tests
         public void TryParseEnum_MixedExplicitAndImplicit_ImplicitContinuesFromLastExplicitValue()
         {
             const string declaration =
-                "TYPE eModuleParameterDataTypes :\n(\n\tTypeBool := 5,\n\tTypeByte,\n\tTypeInt\n);\nEND_TYPE";
+                "TYPE eWidgetValueKind :\n(\n\tTypeBool := 5,\n\tTypeByte,\n\tTypeInt\n);\nEND_TYPE";
 
             DutEnumLoader.TryParseEnum(declaration, out _, out _, out var members);
 
@@ -133,7 +133,7 @@ namespace TcXunit.Interpreter.Tests
         public void TryParseEnum_LeadingAttributePragmasAndComment_MemberTableIsExtracted()
         {
             const string declaration =
-                "{attribute 'qualified_only'}\n{attribute 'strict'}\n// Registration channel opcode\nTYPE eRemoteRegistrationOpcode :\n(\n\tAdd := 0,\n\tRemove := 1\n);\nEND_TYPE";
+                "{attribute 'qualified_only'}\n{attribute 'strict'}\n// Channel opcode\nTYPE eWidgetOpcode :\n(\n\tAdd := 0,\n\tRemove := 1\n);\nEND_TYPE";
 
             DutEnumLoader.TryParseEnum(declaration, out _, out _, out var members);
 
@@ -144,17 +144,17 @@ namespace TcXunit.Interpreter.Tests
         [Fact]
         public void TryParseEnum_MemberWithTrailingLineComment_CommentIsIgnored()
         {
-            // Regression: a real TwinCAT ENUM DUT member can carry a
-            // trailing "// ..." explanation on the same line as its
-            // initializer (e.g. PLC1's suite fixture) - int.Parse must never
-            // see that comment text as part of the initializer value.
+            // Regression: an ENUM DUT member can carry a trailing "// ..."
+            // explanation on the same line as its initializer (a
+            // representative ENUM DUT member fixture) - int.Parse must
+            // never see that comment text as part of the initializer value.
             const string declaration =
-                "TYPE eSlaveRampMode :\n(\n\tTypeA := 1\t\t\t// Slave ramps in depending on progress of master position. Dynamic limits are not considered\n\t,\n\tTypeB\n);\nEND_TYPE";
+                "TYPE eFollowerRampMode :\n(\n\tTypeA := 1\t\t\t// Ramp behavior depends on another axis's progress; limits are not considered\n\t,\n\tTypeB\n);\nEND_TYPE";
 
             var parsed = DutEnumLoader.TryParseEnum(declaration, out var name, out _, out var members);
 
             Assert.True(parsed);
-            Assert.Equal("eSlaveRampMode", name);
+            Assert.Equal("eFollowerRampMode", name);
             Assert.Equal(1, members["TypeA"]);
             Assert.Equal(2, members["TypeB"]);
         }

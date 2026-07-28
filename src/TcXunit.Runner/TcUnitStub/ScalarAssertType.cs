@@ -74,13 +74,19 @@ namespace TcXunit.Runner.TcUnitStub
                 // narrower INT representation), but the compare wraps both
                 // operands to 16 bits first so out-of-range values that
                 // would collide as INT compare equal here too (TcXunit-k28.4).
+                // Uses WrapShort (AsLong64-based) rather than a direct
+                // (short)(int) cast: unlike every other integer-family entry
+                // below, this one used to unbox straight to int and threw
+                // InvalidCastException (Int64->Int32) whenever expected/
+                // actual was actually a long-boxed value (e.g. a UDINT/DWORD
+                // value or long-promoted arithmetic result reaching an INT
+                // assert) - TcXunit-vh7.
                 ["INT"] = new ScalarAssertType(
                     "INT",
                     hasDelta: false,
-                    areEqual: (expected, actual, delta) =>
-                        unchecked((short)(int)expected) == unchecked((short)(int)actual),
-                    formatExpected: (expected, delta) => unchecked((short)(int)expected).ToString(),
-                    formatActual: actual => unchecked((short)(int)actual).ToString()),
+                    areEqual: (expected, actual, delta) => WrapShort(expected) == WrapShort(actual),
+                    formatExpected: (expected, delta) => WrapShort(expected).ToString(),
+                    formatActual: actual => WrapShort(actual).ToString()),
 
                 ["BOOL"] = new ScalarAssertType(
                     "BOOL",
@@ -310,6 +316,8 @@ namespace TcXunit.Runner.TcUnitStub
         private static byte WrapByte(object value) => unchecked((byte)AsLong64(value));
 
         private static ushort WrapUShort(object value) => unchecked((ushort)AsLong64(value));
+
+        private static short WrapShort(object value) => unchecked((short)AsLong64(value));
 
         private static int WrapInt(object value) => unchecked((int)AsLong64(value));
 

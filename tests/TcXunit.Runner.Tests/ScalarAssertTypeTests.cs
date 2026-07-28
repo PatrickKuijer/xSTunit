@@ -36,6 +36,30 @@ namespace TcXunit.Runner.Tests
             Assert.True(type.AreEqual(32768, -32768, null));
         }
 
+        // TcXunit-vh7: unlike every other integer-family entry in this
+        // registry (DINT/UDINT/LINT/etc, all built on AsLong64/WrapXxx),
+        // INT used to unbox expected/actual straight to C# int, throwing
+        // InvalidCastException (Int64->Int32) whenever a long-boxed value
+        // (e.g. a UDINT/DWORD value or long-promoted arithmetic result)
+        // reached an INT assert.
+        [Fact]
+        public void Int_AreEqual_AcceptsLongBoxedValue()
+        {
+            var type = ScalarAssertType.Registry["INT"];
+
+            Assert.True(type.AreEqual(5L, 5, null));
+            Assert.True(type.AreEqual(5, 5L, null));
+        }
+
+        [Fact]
+        public void Int_Format_AcceptsLongBoxedValue()
+        {
+            var type = ScalarAssertType.Registry["INT"];
+
+            Assert.Equal("5", type.FormatExpected(5L, null));
+            Assert.Equal("5", type.FormatActual(5L));
+        }
+
         [Fact]
         public void Int_HasDelta_IsFalse()
         {

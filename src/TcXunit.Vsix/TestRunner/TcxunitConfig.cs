@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Web.Script.Serialization;
+using System.Text.Json;
 
 namespace TcXunit.Vsix.TestRunner
 {
@@ -16,6 +16,16 @@ namespace TcXunit.Vsix.TestRunner
     /// </summary>
     internal sealed class TcxunitConfig
     {
+        // Matches JavaScriptSerializer's default case-insensitive member binding, which this
+        // class's deserialization relied on before the System.Text.Json swap (see
+        // TcXunit-cmp) -- tcxunit.json's actual keys are already lowercase/camelCase and match
+        // RawConfig's fields exactly, but this keeps the contract from being case-sensitive by
+        // accident if either side's casing ever drifts.
+        private static readonly JsonSerializerOptions SerializerOptions = new JsonSerializerOptions
+        {
+            PropertyNameCaseInsensitive = true,
+        };
+
         public List<string> Paths { get; set; } = new List<string>();
 
         public string CliPath { get; set; } = "tcxunit";
@@ -29,8 +39,7 @@ namespace TcXunit.Vsix.TestRunner
             }
 
             var json = File.ReadAllText(configPath);
-            var serializer = new JavaScriptSerializer();
-            var raw = serializer.Deserialize<RawConfig>(json);
+            var raw = JsonSerializer.Deserialize<RawConfig>(json, SerializerOptions);
 
             if (raw.paths == null || raw.paths.Length == 0)
             {
@@ -57,7 +66,8 @@ namespace TcXunit.Vsix.TestRunner
             };
         }
 
-        // Field names match tcxunit.json's camelCase keys for JavaScriptSerializer's default binding.
+        // Field names match tcxunit.json's camelCase keys (SerializerOptions above makes the
+        // match case-insensitive regardless).
         private sealed class RawConfig
         {
             public string[] paths { get; set; }

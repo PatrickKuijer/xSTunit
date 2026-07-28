@@ -3,9 +3,9 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
-using System.Web.Script.Serialization;
 using System.Windows;
 using System.Windows.Controls;
 using Microsoft.VisualStudio.PlatformUI;
@@ -59,6 +59,12 @@ namespace TcXunit.Vsix
     public partial class ResultsToolWindowControl : UserControl
     {
         private const string VirtualHostName = "tcxunit.results";
+
+        // results.js's postMessage envelopes use camelCase keys ("type", "filePath").
+        private static readonly JsonSerializerOptions MessageEnvelopeSerializerOptions = new JsonSerializerOptions
+        {
+            PropertyNameCaseInsensitive = true,
+        };
 
         // WPF re-fires Loaded on tool-window redock/retab without disposing the control, but
         // EnsureCoreWebView2Async only tolerates being called once per environment -- a second
@@ -195,15 +201,12 @@ namespace TcXunit.Vsix
         }
 
         /// <summary>Handles the non-string postMessage shapes: click-to-navigate's
-        /// {type:'openFile', filePath} and rerun-failed's {type:'rerunFailed'}.
-        /// JavaScriptSerializer is already referenced by this project via
-        /// System.Web.Extensions (see TcxunitProcessRunner.RunAsync) -- reused here rather
-        /// than adding a JSON dependency for these small envelopes. Any parse failure or
-        /// unrecognized/missing "type" is ignored rather than surfaced as an error: a
-        /// malformed or future/foreign message from the page is not a host-level failure
-        /// worth alarming the user over. Async (rather than the old sync HandleJsonMessage)
-        /// because rerunFailed has to await StartRunAsync -- openFile stays synchronous
-        /// internally, just called from this now-async method.</summary>
+        /// {type:'openFile', filePath} and rerun-failed's {type:'rerunFailed'}. Any parse
+        /// failure or unrecognized/missing "type" is ignored rather than surfaced as an
+        /// error: a malformed or future/foreign message from the page is not a host-level
+        /// failure worth alarming the user over. Async (rather than the old sync
+        /// HandleJsonMessage) because rerunFailed has to await StartRunAsync -- openFile
+        /// stays synchronous internally, just called from this now-async method.</summary>
         private async Task HandleJsonMessageAsync(string json)
         {
             ThreadHelper.ThrowIfNotOnUIThread();
@@ -213,31 +216,29 @@ namespace TcXunit.Vsix
                 return;
             }
 
-            Dictionary<string, object> envelope;
+            MessageEnvelope envelope;
             try
             {
-                envelope = new JavaScriptSerializer().Deserialize<Dictionary<string, object>>(json);
+                envelope = JsonSerializer.Deserialize<MessageEnvelope>(json, MessageEnvelopeSerializerOptions);
             }
-            catch (Exception)
+            catch (JsonException)
             {
                 return;
             }
 
-            if (envelope == null || !envelope.TryGetValue("type", out var typeObj))
+            if (envelope == null || string.IsNullOrEmpty(envelope.Type))
             {
                 return;
             }
 
-            var type = typeObj as string;
-
-            if (string.Equals(type, "openFile", StringComparison.Ordinal))
+            if (string.Equals(envelope.Type, "openFile", StringComparison.Ordinal))
             {
-                if (envelope.TryGetValue("filePath", out var filePathObj) && filePathObj is string filePath)
+                if (!string.IsNullOrEmpty(envelope.FilePath))
                 {
-                    this.OpenFile(filePath);
+                    this.OpenFile(envelope.FilePath);
                 }
             }
-            else if (string.Equals(type, "rerunFailed", StringComparison.Ordinal))
+            else if (string.Equals(envelope.Type, "rerunFailed", StringComparison.Ordinal))
             {
                 // No suite names travel in the envelope -- this host already knows them
                 // from the last completed run (_lastFailedSuiteNames). A click that somehow
@@ -494,6 +495,18 @@ namespace TcXunit.Vsix
             }
 
             return Environment.CurrentDirectory;
+        }
+
+        // Shape of results.js's postMessage JSON envelopes -- {type:'openFile', filePath}
+        // or {type:'rerunFailed'} (filePath simply absent/null for the latter). A typed
+        // class rather than Dictionary&lt;string, object&gt; because System.Text.Json hands
+        // back boxed JsonElement values for the latter, not plain strings -- this avoids
+        // the JsonElement-vs-string mismatch entirely.
+        private sealed class MessageEnvelope
+        {
+            public string Type { get; set; }
+
+            public string FilePath { get; set; }
         }
     }
 }

@@ -3,9 +3,9 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Text;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
-using System.Web.Script.Serialization;
 
 namespace TcXunit.Vsix.TestRunner
 {
@@ -17,6 +17,13 @@ namespace TcXunit.Vsix.TestRunner
     /// </summary>
     internal sealed class TcxunitProcessRunner
     {
+        // TcxunitModels.cs's properties are PascalCase; the CLI's JSON is camelCase (see
+        // TcxunitModelsDeserializationTests.cs, which asserts against this same option set).
+        private static readonly JsonSerializerOptions SerializerOptions = new JsonSerializerOptions
+        {
+            PropertyNameCaseInsensitive = true,
+        };
+
         /// <summary>
         /// Async, cancellable version of the (former) synchronous Run(...) --
         /// added by TcXunit-1tt.3 so ResultsToolWindowControl's UI thread isn't
@@ -76,9 +83,8 @@ namespace TcXunit.Vsix.TestRunner
                     };
                 }
 
-                var serializer = new JavaScriptSerializer();
                 var stdoutText = stdout.ToString();
-                var result = serializer.Deserialize<TcxunitRunResult>(stdoutText);
+                var result = JsonSerializer.Deserialize<TcxunitRunResult>(stdoutText, SerializerOptions);
                 result.ExitCode = process.ExitCode;
                 // Keep the CLI's own JSON text around (see TcxunitRunResult.RawJson)
                 // so the WebView2 host can forward it verbatim rather than
@@ -92,9 +98,8 @@ namespace TcXunit.Vsix.TestRunner
         {
             // Argument construction (including --suite <name> per suiteNames, and the
             // Win32-style quoting each token needs) lives in TcxunitArgumentBuilder --
-            // pulled out to a class with no JavaScriptSerializer/VS SDK dependency so it
-            // can be unit tested under net8.0 (see that file's own comment and
-            // tests/TcXunit.Vsix.Tests).
+            // pulled out to a class with no VS SDK dependency so it can be unit tested
+            // under net8.0 (see that file's own comment and tests/TcXunit.Vsix.Tests).
             var arguments = TcxunitArgumentBuilder.BuildArguments(config.CliPath, config.Paths, suiteNames);
 
             // Run via "cmd.exe /c" rather than invoking config.CliPath directly.

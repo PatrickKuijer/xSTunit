@@ -27,10 +27,13 @@ TcXunit.sln` from the CLI will skip or fail on this project; build it via
   guess — see `tcxunit.json.sample`).
 - `TestRunner/TcxunitProcessRunner.cs` + `TcxunitModels.cs` — shells out to
   `tcxunit run <path> --format json` via `Process.Start` and deserializes the
-  JSON with `JavaScriptSerializer` (System.Web.Extensions). `RunAsync` (added
-  by TcXunit-1tt.3) is async/cancellable — cancelling kills the whole child
-  process tree (`taskkill /T`, since a plain `Process.Kill()` on net472 only
-  kills the immediate `cmd.exe` wrapper, not the `tcxunit.exe` it launched).
+  JSON with `System.Text.Json` (swapped off `JavaScriptSerializer`/
+  `System.Web.Extensions` per TcXunit-cmp, so `TcxunitConfig.cs` and
+  `TcxunitModels.cs` can be unit-tested under net8.0 in
+  `tests/TcXunit.Vsix.Tests`). `RunAsync` (added by TcXunit-1tt.3) is
+  async/cancellable — cancelling kills the whole child process tree
+  (`taskkill /T`, since a plain `Process.Kill()` on net472 only kills the
+  immediate `cmd.exe` wrapper, not the `tcxunit.exe` it launched).
 - `ResultsToolWindowControl.xaml(.cs)` — a `Microsoft.Web.WebView2.Wpf.WebView2`
   that loads `Resources/results.html`, plus a `StatusText` line for host-level
   errors the page itself can't show (WebView2 failing to initialize,

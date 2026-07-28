@@ -6,15 +6,14 @@ namespace TcXunit.Vsix.TestRunner
     /// <summary>
     /// Pure command-line construction for a `tcxunit &lt;path-a&gt; [&lt;path-b&gt; ...]
     /// --format json [--suite &lt;name&gt; ...]` invocation. Split out of
-    /// TcxunitProcessRunner (TcXunit-1tt.8) so it can be unit tested under net8.0:
-    /// TcxunitProcessRunner.cs itself uses
-    /// System.Web.Script.Serialization.JavaScriptSerializer, a net472-only API with no
-    /// net8.0-compatible package, so it (and TcxunitConfig.cs, whose Load method has the
-    /// same dependency) cannot be source-linked into tests/TcXunit.Vsix.Tests -- see that
-    /// project's own comment. This class takes plain strings/lists instead of a
-    /// TcxunitConfig instance for exactly that reason: referencing TcxunitConfig's type
-    /// would drag its file (and JavaScriptSerializer) along at compile time even though
-    /// only its Paths/CliPath properties are used here.
+    /// TcxunitProcessRunner (TcXunit-1tt.8) so it can be unit tested under net8.0. At the
+    /// time this class was split out, TcxunitProcessRunner.cs and TcxunitConfig.cs both
+    /// used System.Web.Script.Serialization.JavaScriptSerializer (net472-only, no net8.0
+    /// package), which blocked source-linking either into tests/TcXunit.Vsix.Tests --
+    /// TcXunit-cmp later swapped both to System.Text.Json, removing that blocker (see
+    /// TcxunitConfig.cs, now linked into that test project too). This class still takes
+    /// plain strings/lists rather than a TcxunitConfig instance regardless, since that
+    /// remains the simpler seam for pure argument-construction logic.
     ///
     /// suiteNames is TcXunit-1tt.8's "rerun failed" feature: the WPF host passes the last
     /// run's failed suite names back in here, one repeated --suite &lt;name&gt; per name

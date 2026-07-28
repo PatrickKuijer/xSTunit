@@ -432,10 +432,10 @@ TEST_FINISHED();]]></ST>
             }
         }
 
-        private const string ModuleParameterDataTypesDutXml = @"<?xml version=""1.0"" encoding=""utf-8""?>
+        private const string WidgetValueKindDutXml = @"<?xml version=""1.0"" encoding=""utf-8""?>
 <TcPlcObject Version=""1.1.0.1"" ProductVersion=""3.1.4026.18"">
-  <DUT Name=""eModuleParameterDataTypes"" Id=""{a1b2c3d4-000a-4a1a-8b1b-0000000000ff}"">
-    <Declaration><![CDATA[TYPE eModuleParameterDataTypes :
+  <DUT Name=""eWidgetValueKind"" Id=""{a1b2c3d4-000a-4a1a-8b1b-0000000000ff}"">
+    <Declaration><![CDATA[TYPE eWidgetValueKind :
 (
 	TypeBool,
 	TypeByte,
@@ -463,7 +463,7 @@ END_VAR
       <Implementation>
         <ST><![CDATA[TEST('QualifiedEnumLiteralResolvesToMemberValue');
 
-actual := eModuleParameterDataTypes.TypeLreal;
+actual := eWidgetValueKind.TypeLreal;
 
 AssertEquals_INT(Expected := 4,
                   Actual := actual,
@@ -479,15 +479,16 @@ TEST_FINISHED();]]></ST>
         public void DiscoverCases_QualifiedEnumDutLiteral_ResolvesAndAssertsMemberValue()
         {
             // TcXunit-rk3 end-to-end regression: a fully-qualified ENUM DUT
-            // literal (eModuleParameterDataTypes.TypeLreal) referenced from a
+            // literal (eWidgetValueKind.TypeLreal) referenced from a
             // suite method body must resolve through DutEnumLoader's member
-            // table registered on TypeRegistry, unblocking the PLC repo's
-            // FB_RemoteWireRecordsTests suite pattern.
+            // table registered on TypeRegistry, unblocking suites that
+            // reference a qualified ENUM DUT literal from a nested FB
+            // method body.
             var tempDir = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "tcxunit-enumliteral-" + Guid.NewGuid()));
             try
             {
                 File.WriteAllText(
-                    Path.Combine(tempDir.FullName, "eModuleParameterDataTypes.TcDUT"), ModuleParameterDataTypesDutXml);
+                    Path.Combine(tempDir.FullName, "eWidgetValueKind.TcDUT"), WidgetValueKindDutXml);
                 File.WriteAllText(Path.Combine(tempDir.FullName, "FB_EnumTests.TcPOU"), EnumTestsPouXml);
 
                 var cases = SuiteCaseRunner.DiscoverCases(tempDir.FullName);

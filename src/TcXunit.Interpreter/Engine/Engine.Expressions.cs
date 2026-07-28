@@ -162,7 +162,7 @@ namespace TcXunit.Interpreter
             var rightVal = Evaluate(binary.Right, frame);
 
             if ((binary.Op == "+" || binary.Op == "-") && (leftVal is Pointer || rightVal is Pointer))
-                return EvaluatePointerArithmetic(binary.Op, leftVal, rightVal);
+                return EvaluatePointerArithmetic(binary.Op, leftVal, rightVal, frame);
 
             if ((binary.Op == "=" || binary.Op == "<>") &&
                 (leftVal is Pointer || rightVal is Pointer || leftVal == null || rightVal == null))
@@ -241,13 +241,20 @@ namespace TcXunit.Interpreter
         // ADR(x) +/- offset: offset moves in whole array elements, not raw
         // bytes - correct as literal byte arithmetic when the pointee is a
         // BYTE/SINT/USINT array (the buffer-packing case MEMCPY/MEMSET/MEMMOVE
-        // exist for), an approximation for wider element types. Only pointers
+        // exist for), an approximation for wider element types. A pointer
         // whose target is an array element (ArrayElementCell, including the
-        // ADR(arr)-decays-to-element-0 case) support arithmetic - a pointer to
-        // a scalar or whole STRUCT has no element to step through, and this
-        // interpreter has no byte-level STRUCT layout model (flagged gap,
-        // TcXunit-sej.2).
-        private static object EvaluatePointerArithmetic(string op, object leftVal, object rightVal)
+        // ADR(arr)-decays-to-element-0 case) steps directly on the real
+        // backing ArrayValue. A pointer to a scalar or whole STRUCT has no
+        // array element to step through, but does have a known declared
+        // type (Cell.DeclaredTypeName) - reuse the MEMCPY/MEMSET byte-layout
+        // packer (PackCellToByteView, Engine.ByteLayout.cs) to snapshot it
+        // into a synthetic BYTE-array view and step through that instead,
+        // walking across STRUCT field/array-of-struct boundaries the same
+        // way SIZEOF's layout math does (TcXunit-sej.2). Read-only: ptr^ :=
+        // isn't a supported assignment target yet (Parser.RequireLValue), so
+        // there is no live backing store to write through for this case, only
+        // a fresh-packed snapshot good for dereferencing.
+        private object EvaluatePointerArithmetic(string op, object leftVal, object rightVal, Frame frame)
         {
             if (op == "-" && leftVal is Pointer && rightVal is Pointer)
                 throw new NotSupportedException("Pointer-minus-pointer is not supported");
@@ -266,10 +273,17 @@ namespace TcXunit.Interpreter
                 delta = -delta;
 
             if (!(ptr.Target is ArrayElementCell aec))
-                throw new NotSupportedException(
-                    "Pointer arithmetic (ADR(x) +/- offset) is only supported when the pointer targets an " +
-                    "array element (e.g. ADR(byteBuf) or ADR(byteBuf[i])); byte-offset into a scalar or " +
-                    "the interior of a STRUCT is not modeled.");
+            {
+                if (ptr.Target.DeclaredTypeName == null)
+                    throw new NotSupportedException(
+                        "Pointer arithmetic (ADR(x) +/- offset) is only supported when the pointer targets an " +
+                        "array element (e.g. ADR(byteBuf) or ADR(byteBuf[i])) or a variable/field with a known " +
+                        "declared type; byte-offset into an untyped Cell isn't modeled.");
+
+                var typeName = _registry.ResolveAlias(ptr.Target.DeclaredTypeName);
+                var (view, _) = PackCellToByteView(ptr.Target, typeName, frame);
+                aec = new ArrayElementCell(view, 0);
+            }
 
             var newIndex = aec.Index + delta;
             if (newIndex < 0 || newIndex >= aec.Array.Elements.Length)

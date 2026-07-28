@@ -30,6 +30,30 @@ namespace TcXunit.Interpreter
             }
 
             var typeName = _registry.ResolveAlias(cell.DeclaredTypeName);
+            var (view, size) = PackCellToByteView(cell, typeName, frame);
+
+            void Commit()
+            {
+                var outBytes = new byte[size];
+                for (var i = 0; i < size; i++)
+                    outBytes[i] = (byte)(int)view.Elements[i];
+                cell.Value = UnpackValue(outBytes, 0, typeName, frame);
+            }
+
+            return (view, 0, Commit);
+        }
+
+        // Packs cell's current value into a fresh BYTE-array view the same
+        // way ResolveByteTarget does, but without the write-back Commit -
+        // used by pointer arithmetic (EvaluatePointerArithmetic,
+        // TcXunit-sej.2), which only needs to read through a struct/scalar
+        // byte offset (ptr^ := x isn't a supported assignment target yet -
+        // Parser.RequireLValue - so there is nothing to commit back to).
+        // Rebuilt fresh on every call rather than cached: cheap enough for
+        // the sizes these fixtures use, and it means a repeated ADR(x) + i
+        // always reflects x's current live value instead of a stale snapshot.
+        private (ArrayValue View, int Size) PackCellToByteView(Cell cell, string typeName, Frame frame)
+        {
             var (size, _) = SizeOfType(typeName, frame);
 
             var bytes = new byte[size];
@@ -39,17 +63,7 @@ namespace TcXunit.Interpreter
             for (var i = 0; i < size; i++)
                 elements[i] = (int)bytes[i];
 
-            var view = new ArrayValue(new[] { (0, size - 1) }, "BYTE", elements);
-
-            void Commit()
-            {
-                var outBytes = new byte[size];
-                for (var i = 0; i < size; i++)
-                    outBytes[i] = (byte)(int)elements[i];
-                cell.Value = UnpackValue(outBytes, 0, typeName, frame);
-            }
-
-            return (view, 0, Commit);
+            return (new ArrayValue(new[] { (0, size - 1) }, "BYTE", elements), size);
         }
 
         // Writes value (already known to be of IEC type typeName) into

@@ -84,7 +84,7 @@ namespace TcXunit.Interpreter.Tests
         // unlike INT which boxes as int - FlattenIndex used to (int)-cast the
         // evaluated index directly and threw InvalidCastException whenever it
         // was handed a boxed long, a real-usage find (TcXunit-iyd.5) against
-        // FB_RemoteWireRecordsTests.
+        // FB_WidgetWireRecordsTests.
         [Fact]
         public void ExecuteStatements_IndexAssignment_AcceptsUdintIndexVariable()
         {

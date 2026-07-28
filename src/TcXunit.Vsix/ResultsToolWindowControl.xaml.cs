@@ -11,6 +11,7 @@ using System.Windows;
 using System.Windows.Controls;
 using Microsoft.VisualStudio.PlatformUI;
 using Microsoft.VisualStudio.Shell;
+using Microsoft.VisualStudio.Shell.Interop;
 using Microsoft.Web.WebView2.Core;
 using TcXunit.Vsix.TestRunner;
 using Task = System.Threading.Tasks.Task;
@@ -530,31 +531,26 @@ namespace TcXunit.Vsix
             this.StatusText.Visibility = string.IsNullOrEmpty(text) ? Visibility.Collapsed : Visibility.Visible;
         }
 
-        // Resolves the open solution's directory via DTE (mirrors TcAgentPlugin's
-        // ChatToolWindowControl_Loaded pattern: dte.Solution.FullName is the .sln path,
-        // empty when no solution is open). Falls back to the process's current directory
-        // so this still works if no solution/DTE is available (e.g. a quick manual test),
-        // and also if the DTE object doesn't implement Solution at all -- x64 TwinCAT XAE
-        // Shell's DTE has thrown MissingMethodException on EnvDTE._DTE.get_Solution().
-        // The actual dte.Solution access lives in GetSolutionPath below, NOT inline here:
-        // a MissingMethodException from a bad interop type load surfaces when the JIT
-        // compiles the METHOD containing the call, not when the call executes, so a
-        // try/catch wrapped around the call in the same method can't catch it. Splitting
-        // it into its own [MethodImpl(NoInlining)] method means only THAT method fails to
-        // JIT (on first call, lazily) and the failure then surfaces as a normal, catchable
-        // exception at the call site here.
+        // Resolves the open solution's directory via IVsSolution -- a core shell service,
+        // not the EnvDTE automation model. EnvDTE._DTE.Solution threw MissingMethodException
+        // on x64 TwinCAT XAE Shell (interop type mismatch on that isolated shell), and even
+        // caught, the only fallback left was Environment.CurrentDirectory, which on XAE is
+        // C:\Windows\System32 -- useless. IVsSolution.GetSolutionInfo is the native shell
+        // service EnvDTE.Solution wraps, so it works even where the DTE automation layer is
+        // trimmed/broken. Falls back to Environment.CurrentDirectory only if no solution is
+        // open at all (e.g. a quick manual test) or the service is unavailable.
         private static string ResolveProjectDirectory()
         {
             ThreadHelper.ThrowIfNotOnUIThread();
 
             try
             {
-                if (Package.GetGlobalService(typeof(EnvDTE.DTE)) is EnvDTE.DTE dte)
+                if (Package.GetGlobalService(typeof(SVsSolution)) is IVsSolution solution)
                 {
-                    var solutionPath = GetSolutionPath(dte);
-                    if (!string.IsNullOrEmpty(solutionPath))
+                    solution.GetSolutionInfo(out string solutionDirectory, out _, out _);
+                    if (!string.IsNullOrEmpty(solutionDirectory))
                     {
-                        return Path.GetDirectoryName(solutionPath);
+                        return solutionDirectory;
                     }
                 }
             }
@@ -564,12 +560,6 @@ namespace TcXunit.Vsix
             }
 
             return Environment.CurrentDirectory;
-        }
-
-        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
-        private static string GetSolutionPath(EnvDTE.DTE dte)
-        {
-            return dte.Solution?.FullName;
         }
 
         // Shape of results.js's postMessage JSON envelopes -- {type:'openFile', filePath}

@@ -28,12 +28,17 @@ body{
 
 /* -- body scroll region (section 6 tool-window anatomy: flex:1, panel-bg,
    min-height:0 -- without min-height:0 the flex child refuses to shrink and
-   the status bar gets pushed off the bottom of the panel) -- */
+   the status bar gets pushed off the bottom of the panel) -- overflow-y:auto
+   is what actually makes a results tree taller than the panel scroll instead
+   of growing .tw-body past its flex-constrained height and overlapping the
+   footer/statusbar below it (body itself is overflow:hidden, so without this
+   the overflow was clipped/overlapping, never scrollable). -- */
 .tw-body{
   flex:1;
   min-height:0;
   display:flex;
   flex-direction:column;
+  overflow-y:auto;
 }
 
 /* -- tabs -- */

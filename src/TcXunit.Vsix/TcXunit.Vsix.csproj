@@ -190,6 +190,7 @@
     <Compile Include="ResultsToolWindow.cs" />
     <Compile Include="Guids.cs" />
     <Compile Include="Commands\ShowResultsToolWindowCommand.cs" />
+    <Compile Include="TestRunner\TcxunitArgumentBuilder.cs" />
     <Compile Include="TestRunner\TcxunitConfig.cs" />
     <Compile Include="TestRunner\TcxunitModels.cs" />
     <Compile Include="TestRunner\TcxunitProcessRunner.cs" />

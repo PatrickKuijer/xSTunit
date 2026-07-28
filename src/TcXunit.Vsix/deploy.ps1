@@ -19,24 +19,43 @@
 .PARAMETER Configuration
     Build configuration to deploy from (Debug or Release). Default: Debug.
 
+.PARAMETER TcVersion
+    TwinCAT XAE Shell version to deploy into: 4024 (x86 install, the default)
+    or 4026 (x64 install). Selects the corresponding default -ExtensionsRoot;
+    ignored if -ExtensionsRoot is passed explicitly.
+
 .PARAMETER ExtensionsRoot
-    Root Extensions folder to deploy into. Default: the TwinCAT XAE Shell
-    installation's Extensions folder.
+    Root Extensions folder to deploy into. Overrides -TcVersion. Default:
+    derived from -TcVersion.
 
 .EXAMPLE
     .\deploy.ps1
-    Builds nothing; deploys the existing Debug output to the XAE Shell.
+    Builds nothing; deploys the existing Debug output to the TC 4024 (x86) XAE Shell.
 
 .EXAMPLE
-    .\deploy.ps1 -Configuration Release -ExtensionsRoot "C:\Program Files (x86)\Beckhoff\TcXaeShell\Common7\IDE\Extensions"
+    .\deploy.ps1 -Configuration Release -TcVersion 4026
+    Deploys the Release output to the TC 4026 (x64) XAE Shell.
+
+.EXAMPLE
+    .\deploy.ps1 -ExtensionsRoot "D:\Custom\Extensions"
 #>
 [CmdletBinding()]
 param(
     [ValidateSet('Debug', 'Release')]
     [string]$Configuration = 'Debug',
 
-    [string]$ExtensionsRoot = 'C:\Program Files (x86)\Beckhoff\TcXaeShell\Common7\IDE\Extensions'
+    [ValidateSet('4024', '4026')]
+    [string]$TcVersion = '4024',
+
+    [string]$ExtensionsRoot
 )
+
+if (-not $ExtensionsRoot) {
+    $ExtensionsRoot = switch ($TcVersion) {
+        '4024' { 'C:\Program Files (x86)\Beckhoff\TcXaeShell\Common7\IDE\Extensions' }
+        '4026' { 'C:\Program Files\Beckhoff\TcXaeShell\Common7\IDE\Extensions' }
+    }
+}
 
 $ErrorActionPreference = 'Stop'
 

@@ -215,7 +215,14 @@ namespace TcXunit.Interpreter
             for (var d = 0; d < array.Dimensions.Count; d++)
             {
                 var (lo, hi) = array.Dimensions[d];
-                var idx = (int)Evaluate(indexExprs[d], frame);
+                // Convert.ToInt32 rather than a direct (int) cast: index
+                // expressions can evaluate to a boxed long (DINT/UDINT/LINT-
+                // typed index variables box as long per NumericCoercion) or
+                // uint (TIME/DATE-typed, unlikely but possible), and a direct
+                // (int) cast throws InvalidCastException on those boxed
+                // types instead of narrowing them (real-usage find, TcXunit-
+                // iyd.5).
+                var idx = Convert.ToInt32(Evaluate(indexExprs[d], frame));
                 if (idx < lo || idx > hi)
                     throw new IndexOutOfRangeException($"Array index {idx} out of bounds [{lo}..{hi}] in dimension {d}");
 

@@ -80,6 +80,33 @@ namespace TcXunit.Interpreter.Tests
                 engine.ExecuteStatements(Parser.ParseStatements("buf[4] := 1;"), frame));
         }
 
+        // DINT/UDINT/LINT-typed index variables box as long (NumericCoercion),
+        // unlike INT which boxes as int - FlattenIndex used to (int)-cast the
+        // evaluated index directly and threw InvalidCastException whenever it
+        // was handed a boxed long, a real-usage find (TcXunit-iyd.5) against
+        // FB_RemoteWireRecordsTests.
+        [Fact]
+        public void ExecuteStatements_IndexAssignment_AcceptsUdintIndexVariable()
+        {
+            var fb = new PouAst(
+                "FB_Holder",
+                null,
+                "VAR\n\tbuf : ARRAY[1..3] OF INT;\n\ti : UDINT;\nEND_VAR",
+                "",
+                new List<MethodAst>());
+            var engine = new Engine(new TypeRegistry(new[] { fb }));
+            var instance = engine.NewInstance("FB_Holder");
+            var frame = new Frame(instance, "FB_Holder");
+
+            engine.ExecuteStatements(Parser.ParseStatements("i := 2;\nbuf[i] := 99;"), frame);
+
+            var buf = (ArrayValue)instance.Fields["buf"].Value;
+            Assert.Equal(new object[] { 0, 99, 0 }, buf.Elements);
+
+            var result = engine.Evaluate(Parser.ParseExpression("buf[i]"), frame);
+            Assert.Equal(99, result);
+        }
+
         [Fact]
         public void ExecuteStatements_FieldAssignment_WritesStructField()
         {

@@ -6,7 +6,7 @@ using Xunit;
 namespace TcXunit.Interpreter.Tests
 {
     // TcXunit-dba: the standard IEC 61131-3 "is the interface assigned?"
-    // null-check idiom 'IF (iipRecipeParams <> 0) AND iipRecipeParams.bAdd(...) THEN'
+    // null-check idiom 'IF (iipHandler <> 0) AND iipHandler.bDoWork(...) THEN'
     // must work without throwing. An interface-typed field has no dedicated
     // Pointer/null representation (TcPouParser never parses <Itf> POUs, so
     // an unassigned interface field's DefaultValue lookups all miss and it

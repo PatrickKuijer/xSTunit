@@ -57,7 +57,10 @@
     Clicking a segment toggles a "filter-fail"/"filter-skip" class on #tree
     itself (see results.css); "All" clears it. #filterInput (design-system.html's
     .field, "Filter tests...") live-filters by suite/test name substring --
-    see results.js's applyTextFilter for how the two compose.
+    see results.js's applyTextFilter for how the two compose. Per TcXunit-qwh.3,
+    both controls live in a second .toolbar-styled row (.tw-footerbar, results.css)
+    docked below .tw-body/#tree and above .tw-statusbar, not in the top toolbar --
+    results.js only ever looks these up by id, so the move is layout-only.
 
     #rerunFailedButton (TcXunit-1tt.8) is design-system.html section 5's
     ".ghost-btn" "Rerun failed" affordance (populated-tree example): a click
@@ -75,12 +78,6 @@
   <div class="toolbar">
     <button class="send-btn" type="button" id="runButton">Run tests</button>
     <button class="ghost-btn" type="button" id="rerunFailedButton" disabled>Rerun failed</button>
-    <div class="seg" id="statusSeg">
-      <button class="active" data-v="plain" data-status="all" type="button">All</button>
-      <button data-v="plain" data-status="fail" type="button">Failed</button>
-      <button data-v="plain" data-status="skip" type="button">Skipped</button>
-    </div>
-    <input class="field" type="text" id="filterInput" placeholder="Filter tests..." autocomplete="off" />
     <div class="counts" id="counts">
       <span class="count zero" id="countPass">✓<span class="n">0</span></span>
       <span class="count zero" id="countFail">✗<span class="n">0</span></span>
@@ -97,6 +94,15 @@
       result to open its .TcPOU in the editor.
     </div>
     <div class="tree" id="tree" hidden tabindex="0"></div>
+  </div>
+
+  <div class="toolbar tw-footerbar">
+    <div class="seg" id="statusSeg">
+      <button class="active" data-v="plain" data-status="all" type="button">All</button>
+      <button data-v="plain" data-status="fail" type="button">Failed</button>
+      <button data-v="plain" data-status="skip" type="button">Skipped</button>
+    </div>
+    <input class="field" type="text" id="filterInput" placeholder="Filter tests..." autocomplete="off" />
   </div>
 
   <div class="tw-statusbar">

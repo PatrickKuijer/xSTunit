@@ -66,6 +66,18 @@ body[data-theme="light"] {
 .toolbar .field { flex: 1 1 auto; min-width: 80px; }
 .counts { display: flex; gap: 4px; margin-left: auto; flex: none; }
 
+/* -- footer bar (TcXunit-qwh.3): #statusSeg + #filterInput moved out of the
+   top .toolbar into a second .toolbar-styled row docked below #tree/.tw-body
+   and above the required .tw-statusbar (vsix-shell.css), instead of sharing
+   the run/rerun/counts row. Same flex layout as .toolbar (row, 6px gap, same
+   padding) so the seg control and field align exactly as they did up top --
+   only the border edge flips, since this row sits above the statusbar rather
+   than below the run/rerun row above #tree. */
+.tw-footerbar {
+  border-bottom: none;
+  border-top: 1px solid var(--border);
+}
+
 /* -- count badges: state is in the fill, not only the number. A zero count
    drops to an outline so "nothing failed" doesn't read as an alert. -- */
 .count {

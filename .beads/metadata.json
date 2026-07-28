@@ -2,6 +2,5 @@
   "database": "dolt",
   "backend": "dolt",
   "dolt_mode": "embedded",
-  "dolt_database": "TcXunit",
-  "project_id": "ac1d0d5d-0155-464e-83d4-341571c63216"
+  "dolt_database": "beads"
 }

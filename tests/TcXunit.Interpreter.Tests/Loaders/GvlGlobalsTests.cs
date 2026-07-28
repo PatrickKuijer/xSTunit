@@ -184,12 +184,12 @@ namespace TcXunit.Interpreter.Tests
             {
                 new VarDecl("aItems", "ARRAY[1..cRemoteClientConfig.MAX_REMOTE_ITEMS] OF INT", null, VarSection.Local),
             });
-            var fb = new PouAst("FB_Holder", null, "VAR\n\tmachine : uRemoteItemSet;\nEND_VAR", "", new List<MethodAst>());
+            var fb = new PouAst("FB_Holder", null, "VAR\n\titem : uRemoteItemSet;\nEND_VAR", "", new List<MethodAst>());
             var engine = new Engine(new TypeRegistry(new[] { fb }, new[] { structAst }, new[] { gvl }));
 
             var instance = engine.NewInstance("FB_Holder");
-            var machine = Assert.IsType<StructInstance>(instance.Fields["machine"].Value);
-            var aItems = Assert.IsType<ArrayValue>(machine.Fields["aItems"].Value);
+            var item = Assert.IsType<StructInstance>(instance.Fields["item"].Value);
+            var aItems = Assert.IsType<ArrayValue>(item.Fields["aItems"].Value);
 
             Assert.Equal(10, aItems.Elements.Length);
         }

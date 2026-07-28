@@ -194,7 +194,7 @@ END_TYPE");
         public void Memcpy_WholePackedStruct_PacksFieldsWithNoAlignmentPadding()
         {
             var structType = StructDeclParser.Parse(@"{attribute 'pack_mode' := '1'}
-TYPE uRemoteParamValue :
+TYPE uGadgetSettingValue :
 STRUCT
 	nIndex : UINT;
 	eType : UINT;
@@ -203,7 +203,7 @@ END_STRUCT
 END_TYPE");
             var fb = new PouAst(
                 "FB_Holder", null,
-                "VAR\n\tm : uRemoteParamValue;\n\tout : ARRAY[0..11] OF BYTE;\n\tresult : LREAL;\nEND_VAR",
+                "VAR\n\tm : uGadgetSettingValue;\n\tout : ARRAY[0..11] OF BYTE;\n\tresult : LREAL;\nEND_VAR",
                 "", new List<MethodAst>());
             var engine = new Engine(new TypeRegistry(new[] { fb }, new[] { structType }));
             var instance = engine.NewInstance("FB_Holder");
@@ -228,7 +228,7 @@ END_TYPE");
         public void Memcpy_IntoWholePackedStruct_UnpacksFieldsWithNoAlignmentPadding()
         {
             var structType = StructDeclParser.Parse(@"{attribute 'pack_mode' := '1'}
-TYPE uRemoteParamValue :
+TYPE uGadgetSettingValue :
 STRUCT
 	nIndex : UINT;
 	eType : UINT;
@@ -237,7 +237,7 @@ END_STRUCT
 END_TYPE");
             var fb = new PouAst(
                 "FB_Holder", null,
-                "VAR\n\tm : uRemoteParamValue;\n\tsrc : ARRAY[0..11] OF BYTE := [1, 0, 2, 0, 0, 0, 0, 0, 0, 0, 12, 64];\nEND_VAR",
+                "VAR\n\tm : uGadgetSettingValue;\n\tsrc : ARRAY[0..11] OF BYTE := [1, 0, 2, 0, 0, 0, 0, 0, 0, 0, 12, 64];\nEND_VAR",
                 "", new List<MethodAst>());
             var engine = new Engine(new TypeRegistry(new[] { fb }, new[] { structType }));
             var instance = engine.NewInstance("FB_Holder");
@@ -253,8 +253,8 @@ END_TYPE");
         }
 
         // TcXunit-fsz: ADR(struct.field) where the field is STRING(n) - the
-        // Beckhoff wire-record round-trip case (uRemoteRegistrationRecord's
-        // sModuleName). PackValue must byte-pack the string (ASCII,
+        // byte-buffer wire-record round-trip case (uWidgetRegistrationRecord's
+        // sWidgetName). PackValue must byte-pack the string (ASCII,
         // null-terminated) instead of throwing NotSupportedException.
         [Fact]
         public void Memcpy_StringStructField_RoundTripsThroughByteBuffer()

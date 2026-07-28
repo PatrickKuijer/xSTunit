@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Text.Json;
 using TcXunit.Interpreter;
+using TcXunit.Interpreter.Logging;
 using TcXunit.Parser;
 
 namespace TcXunit.Cli
@@ -234,6 +235,11 @@ namespace TcXunit.Cli
                 }
                 catch (Exception ex)
                 {
+                    // Same rationale as SuiteCaseRunner's catch sites (TcXunit-2v8): the
+                    // "FAIL (...)" line/SuiteReport.Error only carries ex.Message, the full
+                    // ex.ToString() (stack trace + inner exceptions) goes to the TcXunit log
+                    // file so this doesn't need re-instrumenting to diagnose.
+                    TcXunitLog.LogException($"CliRunner.Run: suite '{suiteName}' failed to run", ex);
                     if (!asJson)
                         output.WriteLine($"{suiteName}: FAIL ({ex.Message})");
                     suiteFilePaths.TryGetValue(suiteName, out var failFilePath);

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using TcXunit.Interpreter.Logging;
 using TcXunit.Parser;
 using TcXunit.Runner.TcUnitStub;
 
@@ -47,7 +48,7 @@ namespace TcXunit.Interpreter
                 {
                     results = engine.RunSuite(suiteName);
                 }
-                catch (Exception)
+                catch (Exception ex)
                 {
                     // A suite whose transitive default-value building hits an
                     // interpreter gap (e.g. TcXunit-654's unresolved
@@ -56,6 +57,13 @@ namespace TcXunit.Interpreter
                     // scan (PLC-b62-style fix, extended to runtime failures
                     // rather than just parse failures). Surfaced as its own
                     // failing synthetic case instead.
+                    //
+                    // The synthetic case only carries ex.Message; the full
+                    // ex.ToString() (stack trace + inner exceptions) goes to
+                    // the TcXunit log file instead (TcXunit-2v8) so the
+                    // failing call site doesn't require re-instrumenting this
+                    // catch block to find.
+                    TcXunitLog.LogException($"SuiteCaseRunner.DiscoverCases: suite '{suiteName}' failed to run", ex);
                     cases.Add(new SuiteCase(suiteName, ParseErrorCaseName));
                     continue;
                 }
@@ -107,6 +115,10 @@ namespace TcXunit.Interpreter
                 }
                 catch (Exception ex)
                 {
+                    // Same rationale as DiscoverCases' catch above (TcXunit-2v8): the
+                    // AssertionFailure the caller sees only carries ex.Message, the full
+                    // ex.ToString() goes to the TcXunit log file.
+                    TcXunitLog.LogException($"SuiteCaseRunner.RunCase: suite '{suiteName}' failed to run", ex);
                     return new TestCaseResult(caseName, new[] { new AssertionFailure(ex.Message) });
                 }
 
@@ -166,6 +178,7 @@ namespace TcXunit.Interpreter
                     // file happened to be parsed first. The full path is also
                     // surfaced as the synthetic case's SuiteName, so the
                     // failing file is unambiguous to the user.
+                    TcXunitLog.LogDebug("SuiteCaseRunner.BuildRegistry: skipped POU {File} ({Reason})", file, ex.Message);
                     skipped.Add(new SkippedFile(file, ex.Message));
                 }
             }
@@ -192,6 +205,7 @@ namespace TcXunit.Interpreter
                 }
                 catch (TcXunit.Parser.DuplicatePouTypeException ex)
                 {
+                    TcXunitLog.LogDebug("SuiteCaseRunner.BuildRegistry: dropped duplicate POU type {TypeName} ({Reason})", ex.TypeName, ex.Message);
                     skipped.Add(new SkippedFile(ex.TypeName, ex.Message));
                     loaded.RemoveAll(l => l.Pou.Name == ex.TypeName);
                 }

@@ -107,6 +107,11 @@ $includeFiles = @(
     'System.Numerics.Vectors.dll'
     'System.Runtime.CompilerServices.Unsafe.dll'
     'System.Threading.Tasks.Extensions.dll'
+    # TcXunit-qwh.4: completes System.Text.Json's net461 dependency closure;
+    # previously missing here (and from the csproj), which is what produced
+    # the OnAssemblyResolve failure / FileNotFoundException under TcXaeShell.
+    'Microsoft.Bcl.AsyncInterfaces.dll'
+    'System.ValueTuple.dll'
 )
 
 New-Item -ItemType Directory -Path $destDir -Force | Out-Null

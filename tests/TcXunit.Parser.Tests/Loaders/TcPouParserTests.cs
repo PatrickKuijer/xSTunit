@@ -206,8 +206,8 @@ END_VAR]]></Declaration>
         {
             const string xml = @"<?xml version=""1.0"" encoding=""utf-8""?>
 <TcPlcObject Version=""1.1.0.1"">
-  <POU Name=""FB_UnitProdModuleBase"" Id=""{a1b2c3d4-0004-4a1a-8b1b-000000000001}"" SpecialFunc=""None"">
-    <Declaration><![CDATA[FUNCTION_BLOCK ABSTRACT FB_UnitProdModuleBase EXTENDS FB_UnitModuleBase]]></Declaration>
+  <POU Name=""FB_WidgetModuleBase"" Id=""{a1b2c3d4-0004-4a1a-8b1b-000000000001}"" SpecialFunc=""None"">
+    <Declaration><![CDATA[FUNCTION_BLOCK ABSTRACT FB_WidgetModuleBase EXTENDS FB_ModuleBase]]></Declaration>
     <Implementation>
       <ST><![CDATA[]]></ST>
     </Implementation>
@@ -216,7 +216,7 @@ END_VAR]]></Declaration>
 
             var ast = TcPouParser.Parse(xml);
 
-            Assert.Equal("FB_UnitModuleBase", ast.BaseTypeName);
+            Assert.Equal("FB_ModuleBase", ast.BaseTypeName);
         }
 
         [Fact]

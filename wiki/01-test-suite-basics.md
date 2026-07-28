@@ -101,3 +101,8 @@ dotnet run --project src/TcXunit.Cli -- run <path-to-POUs-directory>
 ```
 
 Exit codes: `0` all pass, `1` any fail, `2` usage/discovery error.
+
+Unloadable files (POUs outside the v1 parse subset, malformed XML, unsupported
+DUT/GVL shapes) are skipped and reported per file (`skipped: <path> (<reason>)`;
+a `skipped` array under `--format json`) instead of aborting the run — skips
+never produce exit `2`.

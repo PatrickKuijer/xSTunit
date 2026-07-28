@@ -77,12 +77,23 @@ namespace TcXunit.Cli
                 return 2;
             }
 
+            // Files that couldn't be loaded but must not abort the run
+            // (TcXunit-iyd.7) - reported individually at the end of the run
+            // instead of collapsing the whole invocation into a discovery
+            // error.
+            var skipped = new List<SkippedFile>();
+
             int WriteError(string message)
             {
                 if (asJson)
-                    output.WriteLine(JsonSerializer.Serialize(new ErrorReport(message), JsonOptions));
+                {
+                    output.WriteLine(JsonSerializer.Serialize(new ErrorReport(message, ToSkipReports(skipped)), JsonOptions));
+                }
                 else
+                {
+                    WriteSkipLines(output, skipped);
                     output.WriteLine($"error: {message}");
+                }
                 return 2;
             }
 
@@ -92,16 +103,47 @@ namespace TcXunit.Cli
                     return WriteError($"path does not exist: {path}");
             }
 
-            IReadOnlyList<LoadedPou> loaded;
+            // Parse each *.TcPOU individually rather than via
+            // MultiDirectoryPouLoader.Load, which propagates the first
+            // TcPouRejectedException and takes the entire run down with it
+            // (TcXunit-iyd.7): a real production tree always contains POUs
+            // outside the v1 parse subset (Tc2_System, __NEW, ...), and one of
+            // them must not make every *other* suite in the tree unrunnable.
+            // Same skip-and-report shape SuiteCaseRunner.BuildRegistry already
+            // uses for Test Explorer discovery (PLC-b62/TcXunit-swk), keyed by
+            // full file path for the same collision-avoidance reason
+            // (TcXunit-pvp). A suite that actually depends on a skipped POU
+            // still fails clearly at run time with an unresolved-type error.
+            var loaded = new List<LoadedPou>();
+            foreach (var file in MultiDirectoryPouLoader.FindPouFiles(args))
+            {
+                try
+                {
+                    // Structurally unexpected POUs (malformed XML, missing
+                    // Declaration/Implementation/ST, a GVL/DUT file caught by
+                    // the *.TcPOU glob) are skipped the same way.
+                    if (StructuralParseGuard.TryParseOrSkip(
+                            file, () => TcPouParser.Parse(File.ReadAllText(file)), out var pou, out var skip))
+                        loaded.Add(new LoadedPou(pou, file));
+                    else
+                        skipped.Add(skip);
+                }
+                catch (TcPouRejectedException ex)
+                {
+                    skipped.Add(new SkippedFile(file, ex.Message));
+                }
+            }
+
+            // Duplicate type names across the merged directory set stay a hard,
+            // fail-fast error here (unlike SuiteCaseRunner, which can't afford
+            // to abort a solution-wide Test Explorer scan): it means the caller
+            // pointed the CLI at an inconsistent set of directories, which is a
+            // usage/discovery error rather than an unsupported-file skip.
             try
             {
-                loaded = MultiDirectoryPouLoader.Load(args);
+                MultiDirectoryPouLoader.CheckForDuplicates(loaded);
             }
             catch (DuplicatePouTypeException ex)
-            {
-                return WriteError(ex.Message);
-            }
-            catch (TcPouRejectedException ex)
             {
                 return WriteError(ex.Message);
             }
@@ -120,7 +162,8 @@ namespace TcXunit.Cli
             IReadOnlyList<StructAst> structTypes;
             try
             {
-                structTypes = DutStructLoader.Load(args, out _);
+                structTypes = DutStructLoader.Load(args, out var dutSkipped);
+                skipped.AddRange(dutSkipped);
             }
             catch (DuplicateStructTypeException ex)
             {
@@ -131,13 +174,15 @@ namespace TcXunit.Cli
             // STRING(255)): shared with SuiteCaseRunner via DutAliasLoader
             // for the same "both entry points resolve DUTs identically"
             // reason as DutStructLoader/GvlLoader above.
-            var aliases = DutAliasLoader.Load(args, out _).ToDictionary(kv => kv.Key, kv => kv.Value);
+            var aliases = DutAliasLoader.Load(args, out var aliasSkipped).ToDictionary(kv => kv.Key, kv => kv.Value);
+            skipped.AddRange(aliasSkipped);
 
             // ENUM .TcDUT definitions (TcXunit-fyu, e.g. E_Color -> INT):
             // registered into the same alias map so SIZEOF() and every other
             // ResolveAlias call site resolves an enum type name to its
             // underlying integer type without a separate lookup path.
-            var enumAliases = DutEnumLoader.Load(args, out _, out var enumMembers);
+            var enumAliases = DutEnumLoader.Load(args, out var enumSkipped, out var enumMembers);
+            skipped.AddRange(enumSkipped);
             foreach (var enumAlias in enumAliases)
                 aliases[enumAlias.Key] = enumAlias.Value;
 
@@ -147,7 +192,8 @@ namespace TcXunit.Cli
             IReadOnlyList<GvlAst> gvls;
             try
             {
-                gvls = GvlLoader.Load(args, out _);
+                gvls = GvlLoader.Load(args, out var gvlSkipped);
+                skipped.AddRange(gvlSkipped);
             }
             catch (DuplicateGvlNameException ex)
             {
@@ -219,19 +265,38 @@ namespace TcXunit.Cli
                 suiteReports.Add(new SuiteReport(suiteName, filePath, null, testReports, suiteDurationMs));
             }
 
+            // Skipped files do not change the exit code (TcXunit-iyd.7): a run
+            // that skipped unsupported POUs but ran everything else is still a
+            // completed run (0/1 by test outcome), deliberately distinct from
+            // the exit 2 reserved for usage/discovery errors that produced no
+            // results at all. The skip list + count is what tells the caller
+            // coverage was reduced.
             var exitCode = anyFailed ? 1 : 0;
 
             if (asJson)
             {
-                output.WriteLine(JsonSerializer.Serialize(new RunReport(suiteReports, passCount, failCount, exitCode), JsonOptions));
+                output.WriteLine(JsonSerializer.Serialize(
+                    new RunReport(suiteReports, passCount, failCount, exitCode, ToSkipReports(skipped)), JsonOptions));
             }
             else
             {
-                output.WriteLine($"{passCount} passed, {failCount} failed");
+                WriteSkipLines(output, skipped);
+                output.WriteLine(skipped.Count > 0
+                    ? $"{passCount} passed, {failCount} failed, {skipped.Count} skipped"
+                    : $"{passCount} passed, {failCount} failed");
             }
 
             return exitCode;
         }
+
+        private static void WriteSkipLines(TextWriter output, IReadOnlyList<SkippedFile> skipped)
+        {
+            foreach (var skip in skipped)
+                output.WriteLine($"skipped: {skip.FileKey} ({skip.Message})");
+        }
+
+        private static IReadOnlyList<SkipReport> ToSkipReports(IReadOnlyList<SkippedFile> skipped) =>
+            skipped.Select(s => new SkipReport(s.FileKey, s.Message)).ToList();
 
         private static readonly JsonSerializerOptions JsonOptions = new JsonSerializerOptions
         {
@@ -241,12 +306,34 @@ namespace TcXunit.Cli
 
         private sealed class ErrorReport
         {
-            public ErrorReport(string error)
+            public ErrorReport(string error, IReadOnlyList<SkipReport> skipped)
             {
                 Error = error;
+                Skipped = skipped;
             }
 
             public string Error { get; }
+
+            // Skips collected before the error surfaced (TcXunit-iyd.7) - e.g.
+            // "no TcUnit suites found" in a tree where every candidate POU was
+            // outside the v1 parse subset: without this the caller sees only
+            // "nothing found" and no reason why.
+            public IReadOnlyList<SkipReport> Skipped { get; }
+        }
+
+        // One unloadable file (TcXunit-iyd.7): reported rather than aborting
+        // the run. FilePath is the full on-disk path, so the offending file is
+        // unambiguous when several merged directories contain same-named POUs.
+        private sealed class SkipReport
+        {
+            public SkipReport(string filePath, string reason)
+            {
+                FilePath = filePath;
+                Reason = reason;
+            }
+
+            public string FilePath { get; }
+            public string Reason { get; }
         }
 
         // Shapes for `--format json` (TcXunit prototype spike: structured output
@@ -255,18 +342,25 @@ namespace TcXunit.Cli
         // stable even if the interpreter's internal model changes.
         private sealed class RunReport
         {
-            public RunReport(IReadOnlyList<SuiteReport> suites, int passed, int failed, int exitCode)
+            public RunReport(
+                IReadOnlyList<SuiteReport> suites, int passed, int failed, int exitCode, IReadOnlyList<SkipReport> skipped)
             {
                 Suites = suites;
                 Passed = passed;
                 Failed = failed;
                 ExitCode = exitCode;
+                Skipped = skipped;
             }
 
             public IReadOnlyList<SuiteReport> Suites { get; }
             public int Passed { get; }
             public int Failed { get; }
             public int ExitCode { get; }
+
+            // Files that couldn't be loaded (TcXunit-iyd.7). Always present
+            // (empty array when nothing was skipped) so consumers can read it
+            // unconditionally.
+            public IReadOnlyList<SkipReport> Skipped { get; }
         }
 
         private sealed class SuiteReport

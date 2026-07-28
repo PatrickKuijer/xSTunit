@@ -42,7 +42,9 @@ dotnet run --project src/TcXunit.Cli -- <path-to-POUs-directory>
 
 Scans `<path>` recursively for `*.TcPOU` files, finds any FB type that extends `TcUnit.FB_TestSuite` (directly or transitively), and runs its test methods. Exit code is `0` if all tests pass, `1` if any fail, `2` on usage/discovery errors. Multiple directory args are supported: TcXunit unions the POU sets from each, and errors out if duplicate type names collide across directories.
 
-Pass `--format json` for structured output (suites → tests → pass/fail/failure messages, plus overall pass/fail counts and exit code) instead of plain text — useful for a tool consuming results programmatically (e.g. an IDE extension) rather than a human reading console output.
+Files TcXunit can't load — POUs outside the v1 parse subset (`Tc2_System`, `__NEW`, …), malformed XML, unsupported DUT/GVL shapes — are **skipped and reported individually** (`skipped: <path> (<reason>)`, plus a skip count in the summary line) rather than aborting the run, so a real production tree still runs every suite it can. Skips don't change the exit code: a run that completed with skips is still `0`/`1` by test outcome, distinct from the `2` reserved for usage/discovery errors that produced no results at all.
+
+Pass `--format json` for structured output (suites → tests → pass/fail/failure messages, a `skipped` array of `{filePath, reason}`, plus overall pass/fail counts and exit code) instead of plain text — useful for a tool consuming results programmatically (e.g. an IDE extension) rather than a human reading console output.
 
 ## Issue tracking
 

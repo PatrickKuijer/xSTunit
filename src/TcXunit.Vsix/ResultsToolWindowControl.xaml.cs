@@ -536,6 +536,13 @@ namespace TcXunit.Vsix
         // so this still works if no solution/DTE is available (e.g. a quick manual test),
         // and also if the DTE object doesn't implement Solution at all -- x64 TwinCAT XAE
         // Shell's DTE has thrown MissingMethodException on EnvDTE._DTE.get_Solution().
+        // The actual dte.Solution access lives in GetSolutionPath below, NOT inline here:
+        // a MissingMethodException from a bad interop type load surfaces when the JIT
+        // compiles the METHOD containing the call, not when the call executes, so a
+        // try/catch wrapped around the call in the same method can't catch it. Splitting
+        // it into its own [MethodImpl(NoInlining)] method means only THAT method fails to
+        // JIT (on first call, lazily) and the failure then surfaces as a normal, catchable
+        // exception at the call site here.
         private static string ResolveProjectDirectory()
         {
             ThreadHelper.ThrowIfNotOnUIThread();
@@ -544,7 +551,7 @@ namespace TcXunit.Vsix
             {
                 if (Package.GetGlobalService(typeof(EnvDTE.DTE)) is EnvDTE.DTE dte)
                 {
-                    var solutionPath = dte.Solution?.FullName;
+                    var solutionPath = GetSolutionPath(dte);
                     if (!string.IsNullOrEmpty(solutionPath))
                     {
                         return Path.GetDirectoryName(solutionPath);
@@ -557,6 +564,12 @@ namespace TcXunit.Vsix
             }
 
             return Environment.CurrentDirectory;
+        }
+
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+        private static string GetSolutionPath(EnvDTE.DTE dte)
+        {
+            return dte.Solution?.FullName;
         }
 
         // Shape of results.js's postMessage JSON envelopes -- {type:'openFile', filePath}

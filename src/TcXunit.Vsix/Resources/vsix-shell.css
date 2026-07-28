@@ -56,19 +56,29 @@ body{
 .tw-tab.active{ color:var(--text); border-bottom-color:var(--accent); }
 .tw-tab:hover:not(.active){ color:var(--text-dim); }
 
-/* -- buttons -- */
+/* -- buttons --
+   Padding/border here are deliberately kept in lockstep with .field's box
+   (below): same 5px vertical padding, same 1px border width (send-btn's is
+   just painted transparent instead of omitted), same inherited font-size/
+   line-height. All toolbar controls share the global `*{box-sizing:border-
+   box}` above, so matching those three inputs is what makes #runButton/
+   #rerunFailedButton compute to the same rendered height as #filterInput
+   sitting next to them in results.html's .toolbar (TcXunit-qwh.2) -- .send-btn
+   previously had `border:none` and 4px vertical padding vs. .field's 1px
+   border + 5px padding, which shorted its box by 3px. */
 .send-btn,
 .ghost-btn{
   border-radius:3px;
-  padding:4px 10px;
+  padding:5px 10px;
   font-size:11.5px;
   font-family:var(--ui);
+  border:1px solid transparent;
   cursor:pointer;
 }
-.send-btn{ background:var(--accent); color:#fff; border:none; }
+.send-btn{ background:var(--accent); color:#fff; }
 .send-btn:hover{ filter:brightness(1.08); }
 .send-btn.stop-btn{ background:var(--error); }
-.ghost-btn{ background:transparent; color:var(--text-dim); border:1px solid var(--border); }
+.ghost-btn{ background:transparent; color:var(--text-dim); border-color:var(--border); }
 .ghost-btn:hover{ color:var(--text); border-color:var(--border-soft); }
 .ghost-btn[disabled]{ opacity:.35; cursor:default; }
 

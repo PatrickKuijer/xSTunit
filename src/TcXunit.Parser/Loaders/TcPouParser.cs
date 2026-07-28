@@ -96,36 +96,6 @@ namespace TcXunit.Parser
         private static string ParseAccessorImplementation(XElement accessor) =>
             accessor?.Element("Implementation")?.Element("ST")?.Value;
 
-        // <Property> nests its Get/Set accessor bodies one level deeper than
-        // <Method> (<Property><Get><Implementation><ST>...), and either
-        // accessor is optional (a get-only property has no <Set>, and vice
-        // versa) - ParseAccessorImplementation returns null for a missing
-        // accessor rather than throwing, so PropertyAst.HasGet/HasSet can
-        // tell "not declared" apart from "declared with an empty body".
-        private static PropertyAst ParseProperty(XElement property)
-        {
-            var name = property.Attribute("Name").Value;
-            var declarationText = property.Element("Declaration")?.Value ?? string.Empty;
-
-            var getImplementationText = ParseAccessorImplementation(property.Element("Get"));
-            var setImplementationText = ParseAccessorImplementation(property.Element("Set"));
-
-            // Unlike ParseMethod (one body per scope name), a property has
-            // two independent accessor bodies - scope each rejection message
-            // to "<name>.Get"/"<name>.Set" so a rejected-construct error
-            // says which accessor it came from instead of just the
-            // ambiguous property name.
-            if (getImplementationText != null)
-                RejectIfUnsupported($"{name}.Get", getImplementationText);
-            if (setImplementationText != null)
-                RejectIfUnsupported($"{name}.Set", setImplementationText);
-
-            return new PropertyAst(name, declarationText, getImplementationText, setImplementationText);
-        }
-
-        private static string ParseAccessorImplementation(XElement accessor) =>
-            accessor?.Element("Implementation")?.Element("ST")?.Value;
-
         private static void RejectIfUnsupported(string scopeName, string implementationText)
         {
             foreach (var (pattern, constructName) in RejectedConstructs)

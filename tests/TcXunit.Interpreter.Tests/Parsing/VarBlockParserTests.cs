@@ -229,6 +229,29 @@ END_TYPE";
             Assert.Equal("STRING(cFramework.MAX_PAR_STRING_SIZE)", value.TypeName);
         }
 
+        // TcXunit-3g7: VAR_TEMP (method/action-scoped, re-initialized-to-zero-
+        // every-call locals) wasn't recognized by the section-header switch,
+        // so its header line fell through to the currentSection == null
+        // guard and every declaration inside the block was silently
+        // dropped. Mapped to VarSection.Local since BindParams already
+        // rebuilds VarSection.Local fields fresh (via DefaultValue) in a new
+        // Frame on every CallMethod call, matching VAR_TEMP's semantics.
+        [Fact]
+        public void Parse_VarTempBlock_ReadsNameAndTypeAsLocalSection()
+        {
+            const string declaration = @"METHOD PRIVATE M_UpdateConvergence
+VAR_TEMP
+	tnRegistered : UINT;
+END_VAR";
+
+            var vars = VarBlockParser.Parse(declaration);
+
+            var value = Assert.Single(vars);
+            Assert.Equal("tnRegistered", value.Name);
+            Assert.Equal("UINT", value.TypeName);
+            Assert.Equal(VarSection.Local, value.Section);
+        }
+
         [Fact]
         public void Parse_WStringSizedByConstArithmeticExpression_ReadsFullTypeName()
         {

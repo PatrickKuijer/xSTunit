@@ -83,6 +83,26 @@ namespace TcXunit.Interpreter.Tests
         }
 
         [Fact]
+        public void ParseStatements_CaseWithQualifiedEnumLabels_ProducesCaseStmt()
+        {
+            // TcXunit-ohn: EnumType.Member: is a normal CASE-label idiom;
+            // IsCaseArmBoundary must recognize the qualified name as a label
+            // boundary rather than letting ParseCaseBody misparse it as a statement.
+            var stmts = Parser.ParseStatements(
+                "CASE eOpcode OF\n" +
+                "eRemoteRegistrationOpcode.Add:\n" +
+                "\tresult := 1;\n" +
+                "eRemoteRegistrationOpcode.Remove:\n" +
+                "\tresult := 2;\n" +
+                "END_CASE");
+
+            var caseStmt = Assert.IsType<CaseStmt>(Assert.Single(stmts));
+            Assert.Equal(2, caseStmt.Arms.Count);
+            var firstLabel = Assert.IsType<FieldAccessExpr>(caseStmt.Arms[0].Labels[0].From);
+            Assert.Equal("Add", firstLabel.FieldName);
+        }
+
+        [Fact]
         public void ParseStatements_ExitInsideWhile_ProducesExitStmt()
         {
             var stmts = Parser.ParseStatements("WHILE TRUE DO\n\tEXIT;\nEND_WHILE");

@@ -325,6 +325,9 @@ namespace TcXunit.Interpreter
                     return false;
                 p++;
 
+                while (_tokens[p].Type == TokenType.Dot && _tokens[p + 1].Type == TokenType.Identifier)
+                    p += 2;
+
                 if (_tokens[p].Type == TokenType.DotDot)
                 {
                     p++;

@@ -109,6 +109,31 @@ END_TYPE");
             Assert.Equal("Unknown enum member 'eModuleParameterDataTypes.Bogus'", ex.Message);
         }
 
+        [Theory]
+        [InlineData(0, 1)]
+        [InlineData(1, 2)]
+        public void QualifiedEnumLiteral_AsCaseLabel_DispatchesOnMatchingArm(int opcode, int expected)
+        {
+            // TcXunit-ohn: EnumType.Member: used as a CASE label must dispatch
+            // like any other label, not fail to parse as a CASE-arm boundary.
+            var enumMembers = EnumMembers("eRemoteRegistrationOpcode", ("Add", 0), ("Remove", 1));
+            var engine = NewEngine(
+                $"eOpcode := {opcode};\n" +
+                "CASE eOpcode OF\n" +
+                "eRemoteRegistrationOpcode.Add:\n" +
+                "\tresult := 1;\n" +
+                "eRemoteRegistrationOpcode.Remove:\n" +
+                "\tresult := 2;\n" +
+                "END_CASE",
+                enumMembers,
+                varBlock: "VAR\n\teOpcode : INT;\n\tresult : DINT;\nEND_VAR");
+            var instance = engine.NewInstance("FB_Wrapper");
+
+            engine.CallMethod(instance, "StepCycles", new Expr[] { new IntLiteralExpr(1) }, new NamedArg[0], null, null);
+
+            Assert.Equal(expected, instance.Fields["result"].Value);
+        }
+
         [Fact]
         public void QualifiedEnumLiteral_LocalVariableSharesEnumTypeName_VariableWins()
         {

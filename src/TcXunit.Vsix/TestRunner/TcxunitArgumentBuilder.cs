@@ -5,7 +5,7 @@ namespace TcXunit.Vsix.TestRunner
 {
     /// <summary>
     /// Pure command-line construction for a `tcxunit &lt;path-a&gt; [&lt;path-b&gt; ...]
-    /// --format json [--suite &lt;name&gt; ...]` invocation. Split out of
+    /// --format json [--plugins &lt;dir&gt;] [--suite &lt;name&gt; ...]` invocation. Split out of
     /// TcxunitProcessRunner (TcXunit-1tt.8) so it can be unit tested under net8.0. At the
     /// time this class was split out, TcxunitProcessRunner.cs and TcxunitConfig.cs both
     /// used System.Web.Script.Serialization.JavaScriptSerializer (net472-only, no net8.0
@@ -22,7 +22,7 @@ namespace TcXunit.Vsix.TestRunner
     /// </summary>
     internal static class TcxunitArgumentBuilder
     {
-        public static string BuildArguments(string cliPath, IEnumerable<string> paths, IReadOnlyList<string> suiteNames)
+        public static string BuildArguments(string cliPath, IEnumerable<string> paths, IReadOnlyList<string> suiteNames, string pluginsDirectory = null)
         {
             var arguments = new StringBuilder();
             arguments.Append(EscapeArgument(cliPath)).Append(' ');
@@ -31,6 +31,11 @@ namespace TcXunit.Vsix.TestRunner
                 arguments.Append(EscapeArgument(path)).Append(' ');
             }
             arguments.Append("--format json");
+
+            if (!string.IsNullOrEmpty(pluginsDirectory))
+            {
+                arguments.Append(" --plugins ").Append(EscapeArgument(pluginsDirectory));
+            }
 
             if (suiteNames != null)
             {

@@ -30,6 +30,8 @@ namespace TcXunit.Vsix.TestRunner
 
         public string CliPath { get; set; } = "tcxunit";
 
+        public string Plugins { get; set; }
+
         public static TcxunitConfig Load(string directory)
         {
             var configPath = Path.Combine(directory, "tcxunit.json");
@@ -48,22 +50,38 @@ namespace TcXunit.Vsix.TestRunner
 
             var cliPath = string.IsNullOrEmpty(raw.cliPath) ? "tcxunit" : raw.cliPath;
 
-            // If cliPath looks like a path (relative or rooted) rather than a bare
-            // command name meant to be resolved via PATH, resolve it relative to the
-            // directory containing tcxunit.json. This lets tcxunit.json point directly
-            // at a built binary living inside a repo instead of depending on PATH
-            // resolution, which is unreliable from a long-running host process (e.g. an
-            // IDE launched before PATH was updated for a newly installed tool).
-            if (cliPath.IndexOfAny(new[] { '\\', '/' }) >= 0 && !Path.IsPathRooted(cliPath))
-            {
-                cliPath = Path.GetFullPath(Path.Combine(directory, cliPath));
-            }
+            // plugins (TcXunit-qhc): optional directory of ITcXunitNativeFunction plugin
+            // assemblies, forwarded to the CLI as --plugins <dir> (TcXunit-6k2).
+            var plugins = raw.plugins;
 
             return new TcxunitConfig
             {
                 Paths = raw.paths.ToList(),
-                CliPath = cliPath,
+                CliPath = ResolveIfRelativePath(cliPath, directory),
+                Plugins = ResolveIfRelativePath(plugins, directory),
             };
+        }
+
+        // If value looks like a path (relative or rooted) rather than a bare command
+        // name meant to be resolved via PATH, resolve it relative to the directory
+        // containing tcxunit.json. This lets tcxunit.json point directly at a file
+        // inside a repo (a built tcxunit binary, a plugins folder) instead of depending
+        // on the IDE's working directory or PATH resolution, which is unreliable from a
+        // long-running host process (e.g. an IDE launched before PATH was updated for a
+        // newly installed tool).
+        private static string ResolveIfRelativePath(string value, string directory)
+        {
+            if (string.IsNullOrEmpty(value))
+            {
+                return value;
+            }
+
+            if (value.IndexOfAny(new[] { '\\', '/' }) >= 0 && !Path.IsPathRooted(value))
+            {
+                return Path.GetFullPath(Path.Combine(directory, value));
+            }
+
+            return value;
         }
 
         // Field names match tcxunit.json's camelCase keys (SerializerOptions above makes the
@@ -72,6 +90,7 @@ namespace TcXunit.Vsix.TestRunner
         {
             public string[] paths { get; set; }
             public string cliPath { get; set; }
+            public string plugins { get; set; }
         }
     }
 }

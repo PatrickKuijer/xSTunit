@@ -32,9 +32,13 @@ namespace TcXunit.Cli.Tests
             var exitCode = CliRunner.Run(new[] { FixtureDir }, output);
             var text = output.ToString();
 
+            // TcXunit-3tx.3: the fault happens inside an open TEST() bracket,
+            // so it is charged to that test rather than discarding the suite -
+            // the FAIL line is the test's, and the located message it carries
+            // is unchanged.
             Assert.Equal(1, exitCode);
             Assert.Contains(
-                $"FB_FailingLineTests: FAIL (in FB_FailingLineHelper.ThrowsFromNestedCall({FaultBodyLine()}): ",
+                $"FaultsDeepInAHelper: FAIL (FB_FailingLineHelper.ThrowsFromNestedCall({FaultBodyLine()}): ",
                 text);
             Assert.Contains("Method 'ThisMethodDoesNotExist' not found", text);
         }
@@ -92,8 +96,10 @@ namespace TcXunit.Cli.Tests
             CliRunner.Run(new[] { FixtureDir, "--format=json" }, output);
 
             using var doc = JsonDocument.Parse(output.ToString());
-            var suite = doc.RootElement.GetProperty("suites")[0];
-            var callStack = suite.GetProperty("callStack");
+            // TcXunit-3tx.3: contained into the test that was open, so the
+            // chain rides on that test's failure - same array, same contract,
+            // same three frames as when it was a suite-level error.
+            var callStack = FirstFailure(doc).GetProperty("callStack");
 
             // Three interpreted frames: the helper method that actually
             // throws, the suite method that called it, and the suite's own
@@ -130,25 +136,27 @@ namespace TcXunit.Cli.Tests
 
             Assert.Equal(1, exitCode);
             using var doc = JsonDocument.Parse(output.ToString());
-            var suite = doc.RootElement.GetProperty("suites")[0];
-            Assert.Equal("FB_FailingLineTests", suite.GetProperty("name").GetString());
+            Assert.Equal("FB_FailingLineTests", doc.RootElement.GetProperty("suites")[0].GetProperty("name").GetString());
 
-            // error stays a plain string on the same property (TcXunit-p3t.4/gfs
-            // add no new JSON structure to it), it now carries the body-relative
-            // line rather than the raw file line.
-            var error = suite.GetProperty("error");
-            Assert.Equal(JsonValueKind.String, error.ValueKind);
+            // TcXunit-3tx.3: the fault is contained into the open test, so its
+            // message and file line ride on that test's failure rather than on
+            // suites[].error/fileLine. Both keep the shape gfs gave them: the
+            // message carries the body-relative line, and the raw .TcPOU file
+            // line stays a separate structured field for a non-interactive
+            // consumer opening the file directly rather than through XAE.
+            var failure = FirstFailure(doc);
             Assert.StartsWith(
                 $"FB_FailingLineHelper.ThrowsFromNestedCall({FaultBodyLine()}): ",
-                error.GetString());
-
-            // TcXunit-gfs: the raw .TcPOU file line - the number the text/JSON
-            // error string used to carry - is not dropped, just demoted to a
-            // dedicated structured field for a non-interactive consumer (e.g.
-            // an AI agent) opening the .TcPOU file directly rather than
-            // through XAE.
-            Assert.Equal(FaultFileLine(), suite.GetProperty("fileLine").GetInt32());
+                failure.GetProperty("message").GetString());
+            Assert.Equal(FaultFileLine(), failure.GetProperty("line").GetInt32());
         }
+
+        // The single failure of the single (faulted) test in this fixture.
+        private static JsonElement FirstFailure(JsonDocument doc) =>
+            doc.RootElement
+                .GetProperty("suites")[0]
+                .GetProperty("tests")[0]
+                .GetProperty("failures")[0];
 
         // The raw .TcPOU XML line - counted from the top of the file.
         private static int FaultFileLine() =>

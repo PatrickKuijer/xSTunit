@@ -35,14 +35,16 @@ namespace TcXunit.Cli.Tests
             Assert.Equal(1, exitCode);
             // The "(" is where TcXunit-p3t.4's file line lands; this test still
             // only pins the POU + method half of the location (the line itself
-            // is CliRunnerFailureLineTests' subject).
-            Assert.Contains("FB_NestedThrowTests: FAIL (in FB_DeepHelper.Level3(", text);
+            // is CliRunnerFailureLineTests' subject). TcXunit-3tx.3: the fault
+            // is inside an open TEST() bracket, so the FAIL line is that test's
+            // rather than the suite's - the location it carries is unchanged.
+            Assert.Contains("ThisThrows: FAIL (FB_DeepHelper.Level3(", text);
             // The original message is preserved verbatim after the location.
             Assert.Contains("Method 'ThisMethodDoesNotExist' not found", text);
         }
 
         [Fact]
-        public void Run_SuiteThrowsDeepInCallChain_JsonErrorCarriesLocation_AndWireShapeUnchanged()
+        public void Run_SuiteThrowsDeepInCallChain_JsonMessageCarriesLocation()
         {
             var output = new StringWriter();
 
@@ -53,11 +55,13 @@ namespace TcXunit.Cli.Tests
             var suite = doc.RootElement.GetProperty("suites")[0];
             Assert.Equal("FB_NestedThrowTests", suite.GetProperty("name").GetString());
 
-            // error is still a plain string on the same property - only richer.
-            var error = suite.GetProperty("error");
-            Assert.Equal(JsonValueKind.String, error.ValueKind);
-            Assert.StartsWith("FB_DeepHelper.Level3(", error.GetString());
-            Assert.Contains("Method 'ThisMethodDoesNotExist' not found", error.GetString());
+            // TcXunit-3tx.3: contained into the open test, so the located
+            // message is failures[].message rather than suites[].error - still a
+            // plain string, still the same text.
+            var message = suite.GetProperty("tests")[0].GetProperty("failures")[0].GetProperty("message");
+            Assert.Equal(JsonValueKind.String, message.ValueKind);
+            Assert.StartsWith("FB_DeepHelper.Level3(", message.GetString());
+            Assert.Contains("Method 'ThisMethodDoesNotExist' not found", message.GetString());
         }
 
         private const string DeepHelperXml = @"<?xml version=""1.0"" encoding=""utf-8""?>

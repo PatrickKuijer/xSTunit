@@ -135,7 +135,13 @@ namespace TcXunit.Interpreter
                 // eagerly here, so a lazy parse failure in the suite's own
                 // body attributes to the suite rather than escaping
                 // unattributed past this outermost boundary.
-                ExecuteBody(() => _registry.GetStatements(def.ImplementationText), new Frame(instance, suiteTypeName, null, def.BodyStartLine));
+                // TcXunit-3tx.3: ExecuteSuiteBody, not ExecuteBody - a fault
+                // inside one test's bracket fails that test and lets the rest
+                // of the suite run, instead of discarding every result.
+                ExecuteSuiteBody(
+                    () => _registry.GetStatements(def.ImplementationText),
+                    new Frame(instance, suiteTypeName, null, def.BodyStartLine),
+                    instance.NativeSuiteHost);
                 stopwatch.Stop();
                 elapsedMilliseconds = stopwatch.ElapsedMilliseconds;
                 return instance.NativeSuiteHost.Collect();

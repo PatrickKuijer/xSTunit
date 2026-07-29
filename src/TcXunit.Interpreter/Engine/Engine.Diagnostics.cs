@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
+using TcXunit.Runner.TcUnitStub;
 
 namespace TcXunit.Interpreter
 {
@@ -56,6 +58,118 @@ namespace TcXunit.Interpreter
                 throw;
             }
         }
+
+        // TcXunit-3tx.3: ExecuteBody's suite-body variant. A suite body is the
+        // one body where a fault does NOT have to be fatal to everything after
+        // it: if a TEST()/TEST_FINISHED() bracket was open when the fault
+        // escaped, that test owns the failure and the remaining top-level
+        // statements - the suite's other tests - can still run. Before this,
+        // one unsupported construct in one test method reported the whole suite
+        // as `tests: []`, `passed: 0`, which reads to a consuming agent as
+        // "your change broke everything".
+        //
+        // A fault with no open bracket has no test to charge and still takes
+        // the suite down, unchanged: it happened in setup or between tests, so
+        // nothing after it can be trusted anyway.
+        private void ExecuteSuiteBody(Func<IReadOnlyList<Stmt>> statementsFactory, Frame frame, TcUnitSuiteHost host)
+        {
+            IReadOnlyList<Stmt> statements;
+            try
+            {
+                statements = statementsFactory();
+            }
+            catch (Exception ex)
+            {
+                // A lazy parse failure of the suite's own body: nothing ran, so
+                // there is no per-test recovery to attempt (TcXunit-n65).
+                RecordFaultSite(ex, frame);
+                throw;
+            }
+
+            // Set after a fault that was raised DIRECTLY in this body (rather
+            // than unwinding out of a called method): the statements that
+            // follow are the rest of the aborted test's own bracket, so they
+            // are skipped until the next TEST()/TEST_ORDERED() opens a new one.
+            // For the far more common one-METHOD-per-test shape this never
+            // engages - the abandoned statements were the callee's, and the
+            // next top-level statement is already the next test.
+            var skippingAbortedTest = false;
+
+            foreach (var stmt in statements)
+            {
+                if (skippingAbortedTest)
+                {
+                    if (!OpensTestBracket(stmt))
+                        continue;
+                    skippingAbortedTest = false;
+                }
+
+                try
+                {
+                    ExecuteStatement(stmt, frame);
+                }
+                catch (MethodReturnSignal)
+                {
+                    // Same contract as ExecuteBody: RETURN ends this body only.
+                    return;
+                }
+                catch (Exception ex)
+                {
+                    // Whether any inner body already claimed this fault is what
+                    // separates the two suite shapes, and it has to be read
+                    // BEFORE this frame appends itself below.
+                    var raisedInThisBody = !HasRecordedCallStack(ex);
+                    RecordFaultSite(ex, frame);
+
+                    if (!host.HasOpenTestCase)
+                        throw;
+
+                    host.AbortCurrentTestCase(ToTestFailure(ex));
+                    skippingAbortedTest = raisedInThisBody;
+                }
+            }
+        }
+
+        // Renders an escaping fault as the failure line of the test it is
+        // charged to (TcXunit-3tx.3), reusing the same location rendering and
+        // the same FailureKind vocabulary a suite-level error gets - a fault is
+        // no less a fault for having been contained.
+        private static AssertionFailure ToTestFailure(Exception ex)
+        {
+            var located = TryCreateSourceLocationException(ex);
+            var kind = FailureClassifier.Classify(located ?? ex, out var construct);
+
+            // TcXunit-3tx.2/.3: a contained fault has no expected/actual pair -
+            // it never got as far as comparing anything - but it knows exactly
+            // as much about WHERE as the suite-level error it replaces did, and
+            // must carry all of it: the innermost frame plus the full chain
+            // (TcXunit-7s6/1am). Containing a fault must not cost the
+            // diagnostics that made it debuggable.
+            var site = located != null
+                ? ToAssertSite(located.CallStack[0])
+                : default(AssertSite);
+            var callStack = located?.CallStack.Select(ToAssertSite).ToArray();
+
+            return AssertionFailure.Fault((located ?? ex).Message, kind, construct, site, callStack);
+        }
+
+        private static AssertSite ToAssertSite(PlcCallStackFrame frame) =>
+            new AssertSite(frame.PouTypeName, frame.MethodName, frame.Line, frame.BodyLine);
+
+        // Whether some inner ExecuteBody already appended a frame, i.e. the
+        // fault unwound out of a called body rather than being raised by the
+        // statement this frame just ran.
+        private static bool HasRecordedCallStack(Exception ex) =>
+            ex.Data != null && ex.Data[FaultCallStackKey] is List<PlcCallStackFrame> frames && frames.Count > 0;
+
+        // A top-level statement that opens a new TEST()/TEST_ORDERED() bracket:
+        // the resume point after a test was aborted mid-bracket. Receiverless
+        // by construction - inside a suite body these are the suite's own
+        // inherited TcUnit calls, never a call on some other instance.
+        private static bool OpensTestBracket(Stmt stmt) =>
+            stmt is ExprStmt exprStmt &&
+            exprStmt.Call.Receiver == null &&
+            (exprStmt.Call.MethodName == "TEST" || exprStmt.Call.MethodName == "TEST_ORDERED");
 
         // Keys on Exception.Data rather than an Engine field: the annotation
         // then travels with the exception itself, so nothing has to be reset

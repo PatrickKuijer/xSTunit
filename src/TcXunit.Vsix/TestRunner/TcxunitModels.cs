@@ -57,7 +57,11 @@ namespace TcXunit.Vsix.TestRunner
 
         public bool Passed { get; set; }
 
-        public List<string> Failures { get; set; }
+        // TcXunit-3tx.2: each failure became an object (message + kind +
+        // expected/actual + assert name + location) instead of a bare string.
+        // `message` carries the identical formatted line the string used to be,
+        // so nothing this extension already renders changed meaning.
+        public List<TcxunitFailure> Failures { get; set; }
 
         // Added for TcXunit-1tt.6: the results tree's .node-dur slot (leaf
         // test rows). The CLI has emitted "durationMs" on TestReport since
@@ -65,5 +69,21 @@ namespace TcXunit.Vsix.TestRunner
         // the JSON ran (a suite that failed to load has no test entries at
         // all), so this is a plain long, not nullable.
         public long DurationMs { get; set; }
+    }
+
+    /// <summary>
+    /// One per-test failure (TcXunit-3tx.2). Only the field this extension
+    /// actually renders is modelled -- the CLI also emits kind, construct,
+    /// assert, expected, actual, assertMessage, pou, method, bodyLine, line and
+    /// callStack, which exist for non-interactive consumers and are ignored
+    /// here rather than carried as fields nothing reads.
+    /// </summary>
+    internal sealed class TcxunitFailure
+    {
+        /// <summary>
+        /// The formatted "FAILED TEST '<c>name</c>', EXP: ..., ACT: ..." line --
+        /// byte for byte what failures[] used to hold as a bare string.
+        /// </summary>
+        public string Message { get; set; }
     }
 }

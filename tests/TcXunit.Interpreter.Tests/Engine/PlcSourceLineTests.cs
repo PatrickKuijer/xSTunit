@@ -23,16 +23,19 @@ namespace TcXunit.Interpreter.Tests
             var suite = TcPouParser.Parse(FaultOnBodyLine4Xml);
             var engine = new Engine(new TypeRegistry(new[] { suite }));
 
-            var ex = Assert.Throws<PlcSourceLocationException>(() => engine.RunSuite("FB_LineSuite"));
+            // TcXunit-3tx.3: the fault is inside an open TEST() bracket, so it
+            // fails that test rather than the suite. The location machinery
+            // this test is about is unchanged - it now arrives on the failure.
+            var failure = Assert.Single(Assert.Single(engine.RunSuite("FB_LineSuite")).Failures);
 
             Assert.Equal(12, suite.Methods[0].BodyStartLine);
             // TcXunit-gfs: Line stays the raw .TcPOU file line (structured
             // consumers only); BodyLine is the new human-facing number and is
             // what Message now embeds.
-            Assert.Equal(15, ex.Line);
-            Assert.Equal(4, ex.BodyLine);
-            Assert.Equal("FB_LineSuite.Fails", ex.Location);
-            Assert.StartsWith("FB_LineSuite.Fails(4): ", ex.Message);
+            Assert.Equal(15, failure.Site.Line);
+            Assert.Equal(4, failure.Site.BodyLine);
+            Assert.Equal("FB_LineSuite.Fails", failure.Site.Location);
+            Assert.StartsWith("FB_LineSuite.Fails(4): ", failure.Message);
         }
 
         [Fact]
@@ -63,33 +66,35 @@ namespace TcXunit.Interpreter.Tests
             var suite = TcPouParser.Parse(NestedChainXml);
             var engine = new Engine(new TypeRegistry(new[] { suite }));
 
-            var ex = Assert.Throws<PlcSourceLocationException>(() => engine.RunSuite("FB_NestedLineSuite"));
+            // TcXunit-3tx.3: contained into the open TEST() bracket; the
+            // innermost-wins rule this test pins is unchanged.
+            var failure = Assert.Single(Assert.Single(engine.RunSuite("FB_NestedLineSuite")).Failures);
 
             var outer = suite.Methods[0];
             var inner = suite.Methods[1];
             Assert.Equal("Outer", outer.Name);
             Assert.Equal("Inner", inner.Name);
 
-            Assert.Equal("Inner", ex.MethodName);
-            Assert.Equal(inner.BodyStartLine + 2, ex.Line);
-            Assert.NotEqual(outer.BodyStartLine + 1, ex.Line);
+            Assert.Equal("Inner", failure.Site.MethodName);
+            Assert.Equal(inner.BodyStartLine + 2, failure.Site.Line);
+            Assert.NotEqual(outer.BodyStartLine + 1, failure.Site.Line);
 
             // Body-relative: Inner's fault is on its own body line 3, never
             // Outer's body line 2 (its call site) - "innermost wins" must hold
             // for BodyLine exactly as it already does for Line.
-            Assert.Equal(3, ex.BodyLine);
-            Assert.NotEqual(2, ex.BodyLine);
+            Assert.Equal(3, failure.Site.BodyLine);
+            Assert.NotEqual(2, failure.Site.BodyLine);
 
             // TcXunit-1am: each level of the chain keeps its OWN line, not
             // the innermost one - Outer's entry is its call site (body line
             // 2), never Inner's fault line (body line 3).
             Assert.Equal(
                 new[] { "Inner", "Outer", null },
-                ex.CallStack.Select(f => f.MethodName).ToArray());
-            Assert.Equal(3, ex.CallStack[0].BodyLine);
-            Assert.Equal(2, ex.CallStack[1].BodyLine);
-            Assert.Equal(inner.BodyStartLine + 2, ex.CallStack[0].Line);
-            Assert.Equal(outer.BodyStartLine + 1, ex.CallStack[1].Line);
+                failure.CallStack.Select(f => f.MethodName).ToArray());
+            Assert.Equal(3, failure.CallStack[0].BodyLine);
+            Assert.Equal(2, failure.CallStack[1].BodyLine);
+            Assert.Equal(inner.BodyStartLine + 2, failure.CallStack[0].Line);
+            Assert.Equal(outer.BodyStartLine + 1, failure.CallStack[1].Line);
         }
 
         [Fact]

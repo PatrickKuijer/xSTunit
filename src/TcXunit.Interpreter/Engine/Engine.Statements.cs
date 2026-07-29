@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using TcXunit.Runner;
 
 namespace TcXunit.Interpreter
 {
@@ -58,7 +59,8 @@ namespace TcXunit.Interpreter
                 case ReturnStmt:
                     throw new MethodReturnSignal();
                 default:
-                    throw new NotSupportedException($"Statement type {stmt.GetType().Name} not supported");
+                    throw new UnsupportedConstructException(
+                        stmt.GetType().Name, $"Statement type {stmt.GetType().Name} not supported");
             }
         }
 
@@ -213,7 +215,8 @@ namespace TcXunit.Interpreter
                     break;
                 }
                 default:
-                    throw new NotSupportedException($"Assignment target {target.GetType().Name} not supported");
+                    throw new UnsupportedConstructException(
+                        target.GetType().Name, $"Assignment target {target.GetType().Name} not supported");
             }
         }
 
@@ -286,7 +289,8 @@ namespace TcXunit.Interpreter
                 }
 
                 default:
-                    throw new NotSupportedException($"REF= target {target.GetType().Name} not supported");
+                    throw new UnsupportedConstructException(
+                        target.GetType().Name, $"REF= target {target.GetType().Name} not supported");
             }
         }
 

@@ -154,7 +154,9 @@ namespace TcXunit.Interpreter
                     return EvaluateConstExpr(Parser.ParseExpression(constDecl.DefaultValueText));
             }
 
-            throw new NotSupportedException($"Unsupported constant array-bound expression of type '{expr.GetType().Name}'");
+            throw new TcXunit.Runner.UnsupportedConstructException(
+                expr.GetType().Name,
+                $"Unsupported constant array-bound expression of type '{expr.GetType().Name}'");
         }
     }
 }

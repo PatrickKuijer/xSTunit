@@ -77,11 +77,14 @@ namespace TcXunit.Interpreter.Tests
 
             var engine = new Engine(new TypeRegistry(new[] { suite, wrapper }));
 
-            var ex = Assert.ThrowsAny<PlcSourceLocationException>(() => engine.RunSuite("FB_WidgetTests"));
+            // TcXunit-3tx.3: contained into the open TEST() bracket, so the
+            // located message and its call chain ride on that test's failure -
+            // the chain is what this test pins, and it is unchanged.
+            var failure = Assert.Single(Assert.Single(engine.RunSuite("FB_WidgetTests")).Failures);
 
-            Assert.Contains("F_NotAnywhere", ex.Message);
-            Assert.Contains(ex.CallStack, f => f.PouTypeName == "F_ComputeChecksum");
-            Assert.Contains(ex.CallStack, f => f.MethodName == "ChecksumWorks");
+            Assert.Contains("F_NotAnywhere", failure.Message);
+            Assert.Contains(failure.CallStack, f => f.PouTypeName == "F_ComputeChecksum");
+            Assert.Contains(failure.CallStack, f => f.MethodName == "ChecksumWorks");
         }
     }
 }

@@ -61,11 +61,19 @@ namespace TcXunit.Interpreter.Tests
             // API isn't wired up yet" diagnostic.
             var suite = SuiteCalling("AssertSomethingNobodyImplemented(Condition := TRUE);");
 
-            var ex = Assert.ThrowsAny<Exception>(() =>
-                new Engine(new TypeRegistry(new[] { suite })).RunSuite("FB_WidgetTests"));
+            // TcXunit-3tx.3: the call sits inside an open TEST() bracket, so
+            // the fault fails that test instead of the whole suite - the
+            // diagnostic itself is what this test is about, and it is carried
+            // verbatim on the failure.
+            var results = new Engine(new TypeRegistry(new[] { suite })).RunSuite("FB_WidgetTests");
 
-            Assert.Contains("AssertSomethingNobodyImplemented", ex.Message);
-            Assert.Contains("isn't supported yet", ex.Message);
+            var failure = Assert.Single(Assert.Single(results).Failures);
+            Assert.Contains("AssertSomethingNobodyImplemented", failure.Message);
+            Assert.Contains("isn't supported yet", failure.Message);
+            // TcXunit-3tx.1: and it is classified as an interpreter gap, not as
+            // a defect in the suite under test.
+            Assert.Equal(TcXunit.Runner.FailureKind.UnsupportedConstruct, failure.Kind);
+            Assert.Equal("AssertSomethingNobodyImplemented", failure.Construct);
         }
     }
 }

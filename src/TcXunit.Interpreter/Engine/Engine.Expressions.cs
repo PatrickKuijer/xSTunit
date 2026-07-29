@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using TcXunit.Runner;
 
 namespace TcXunit.Interpreter
 {
@@ -136,7 +137,8 @@ namespace TcXunit.Interpreter
                 case CallExpr call:
                     return EvaluateCall(call, frame);
                 default:
-                    throw new NotSupportedException($"Expression type {expr.GetType().Name} not supported");
+                    throw new UnsupportedConstructException(
+                        expr.GetType().Name, $"Expression type {expr.GetType().Name} not supported");
             }
         }
 
@@ -165,7 +167,7 @@ namespace TcXunit.Interpreter
                 }
             }
 
-            throw new NotSupportedException($"Unary operator '{unary.Op}' not supported");
+            throw new UnsupportedConstructException(unary.Op, $"Unary operator '{unary.Op}' not supported");
         }
 
         private object EvaluateBinary(BinaryExpr binary, Frame frame)
@@ -281,7 +283,7 @@ namespace TcXunit.Interpreter
         private object EvaluatePointerArithmetic(string op, object leftVal, object rightVal, Frame frame)
         {
             if (op == "-" && leftVal is Pointer && rightVal is Pointer)
-                throw new NotSupportedException("Pointer-minus-pointer is not supported");
+                throw new UnsupportedConstructException("-", "Pointer-minus-pointer is not supported");
 
             var (ptr, offsetVal) = leftVal is Pointer p ? (p, rightVal) : ((Pointer)rightVal, leftVal);
             // Convert.ToInt32 rather than a direct (int) cast: the offset is
@@ -526,7 +528,7 @@ namespace TcXunit.Interpreter
             ">=" => left >= right,
             "=" => left == right,
             "<>" => left != right,
-            _ => throw new NotSupportedException($"Operator '{op}' not supported"),
+            _ => throw new UnsupportedConstructException(op, $"Operator '{op}' not supported"),
         };
 
         private static object EvaluateNumeric(string op, float left, float right) => op switch
@@ -541,7 +543,7 @@ namespace TcXunit.Interpreter
             ">=" => left >= right,
             "=" => left == right,
             "<>" => left != right,
-            _ => throw new NotSupportedException($"Operator '{op}' not supported"),
+            _ => throw new UnsupportedConstructException(op, $"Operator '{op}' not supported"),
         };
 
         private static object EvaluateNumeric(string op, long left, long right) => op switch
@@ -556,7 +558,7 @@ namespace TcXunit.Interpreter
             ">=" => left >= right,
             "=" => left == right,
             "<>" => left != right,
-            _ => throw new NotSupportedException($"Operator '{op}' not supported"),
+            _ => throw new UnsupportedConstructException(op, $"Operator '{op}' not supported"),
         };
 
         private static object EvaluateNumeric(string op, ulong left, ulong right) => op switch
@@ -571,7 +573,7 @@ namespace TcXunit.Interpreter
             ">=" => left >= right,
             "=" => left == right,
             "<>" => left != right,
-            _ => throw new NotSupportedException($"Operator '{op}' not supported"),
+            _ => throw new UnsupportedConstructException(op, $"Operator '{op}' not supported"),
         };
 
         private static object EvaluateNumeric(string op, int left, int right) => op switch
@@ -586,7 +588,7 @@ namespace TcXunit.Interpreter
             ">=" => left >= right,
             "=" => left == right,
             "<>" => left != right,
-            _ => throw new NotSupportedException($"Operator '{op}' not supported"),
+            _ => throw new UnsupportedConstructException(op, $"Operator '{op}' not supported"),
         };
 
         // Evaluates AND_THEN/OR_ELSE. For BOOL operands this is a genuine
@@ -632,7 +634,7 @@ namespace TcXunit.Interpreter
                     "AND" => lb && rb,
                     "OR" => lb || rb,
                     "XOR" => lb ^ rb,
-                    _ => throw new NotSupportedException($"Operator '{op}' not supported"),
+                    _ => throw new UnsupportedConstructException(op, $"Operator '{op}' not supported"),
                 };
 
             if (left is int li && right is int ri)
@@ -641,7 +643,7 @@ namespace TcXunit.Interpreter
                     "AND" => li & ri,
                     "OR" => li | ri,
                     "XOR" => li ^ ri,
-                    _ => throw new NotSupportedException($"Operator '{op}' not supported"),
+                    _ => throw new UnsupportedConstructException(op, $"Operator '{op}' not supported"),
                 };
 
             if ((left is long || right is long) && (left is long || left is int) && (right is long || right is int))
@@ -650,7 +652,7 @@ namespace TcXunit.Interpreter
                     "AND" => NumericCoercion.ToLong(left) & NumericCoercion.ToLong(right),
                     "OR" => NumericCoercion.ToLong(left) | NumericCoercion.ToLong(right),
                     "XOR" => NumericCoercion.ToLong(left) ^ NumericCoercion.ToLong(right),
-                    _ => throw new NotSupportedException($"Operator '{op}' not supported"),
+                    _ => throw new UnsupportedConstructException(op, $"Operator '{op}' not supported"),
                 };
 
             if ((left is ulong || right is ulong) && (left is ulong || left is int) && (right is ulong || right is int))
@@ -659,7 +661,7 @@ namespace TcXunit.Interpreter
                     "AND" => NumericCoercion.ToULong(left) & NumericCoercion.ToULong(right),
                     "OR" => NumericCoercion.ToULong(left) | NumericCoercion.ToULong(right),
                     "XOR" => NumericCoercion.ToULong(left) ^ NumericCoercion.ToULong(right),
-                    _ => throw new NotSupportedException($"Operator '{op}' not supported"),
+                    _ => throw new UnsupportedConstructException(op, $"Operator '{op}' not supported"),
                 };
 
             throw new NotSupportedException($"Operator '{op}' requires matching BOOL or INT operands, got {left?.GetType().Name} and {right?.GetType().Name}");

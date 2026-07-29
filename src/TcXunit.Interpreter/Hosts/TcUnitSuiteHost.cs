@@ -73,5 +73,24 @@ namespace TcXunit.Interpreter
             array.Dimensions.Select(d => d.Lo).ToList();
 
         public IReadOnlyList<TestCaseResult> Collect() => Run();
+
+        // TcXunit-3tx.3: the two halves of "charge this fault to the open test
+        // instead of killing the suite". Thin forwards, same shape as every
+        // other member here - Engine (not this type) decides when a fault is
+        // one test's problem rather than the suite's.
+        public bool HasOpenTestCase => HasOpenTest;
+
+        public void AbortCurrentTestCase(AssertionFailure failure) => AbortCurrentTest(failure);
+
+        // TcXunit-3tx.2: announces which native call is about to run and where
+        // it is written, so a failure it records can name both. Called for
+        // every TcUnit native call, not just asserts - TEST()/TEST_FINISHED()
+        // simply never reach Fail(), and gating on "is this an assert name"
+        // here would duplicate NativeMethodBridge's dispatch table.
+        public void EnterNativeCall(string methodName, AssertSite site)
+        {
+            CurrentAssert = methodName;
+            CurrentSite = site;
+        }
     }
 }

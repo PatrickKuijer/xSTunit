@@ -279,6 +279,16 @@
   // back to the raw text -- "with expected/actual if present in the JSON"
   // per TcXunit-1tt.2's acceptance criteria, not a guarantee every failure
   // parses that way.
+  // TcXunit-3tx.2: failures[] entries became objects ({ message, kind,
+  // expected, actual, assert, pou, method, bodyLine, ... }) instead of bare
+  // strings. `message` is the identical formatted line the string used to be,
+  // so this renderer needs nothing else. No string fallback: the page only ever
+  // renders JSON that TcxunitProcessRunner already deserialized into
+  // TcxunitFailure, so a bare-string payload could not reach here anyway.
+  function failureText(failure) {
+    return (failure && failure.message) || '';
+  }
+
   function buildAssertBlock(message) {
     var div = el('div', 'assert');
     var match = FAILURE_PATTERN.exec(message || '');
@@ -442,8 +452,8 @@
 
       if (statusOf(test) === 'fail') {
         var failures = (test && test.failures) || [];
-        failures.forEach(function (message) {
-          var assertNode = buildAssertBlock(message);
+        failures.forEach(function (failure) {
+          var assertNode = buildAssertBlock(failureText(failure));
           rows.push(assertNode);
           childRows.push(assertNode);
         });

@@ -36,7 +36,18 @@ namespace TcXunit.Vsix.Tests
                             {
                                 ""name"": ""RetriesOnTimeout"",
                                 ""passed"": false,
-                                ""failures"": [ ""FAILED TEST 'RetriesOnTimeout', EXP: 3, ACT: 1"" ],
+                                ""failures"": [
+                                    {
+                                        ""message"": ""FAILED TEST 'RetriesOnTimeout', EXP: 3, ACT: 1"",
+                                        ""kind"": ""assertion"",
+                                        ""assert"": ""AssertEquals_INT"",
+                                        ""expected"": ""3"",
+                                        ""actual"": ""1"",
+                                        ""pou"": ""FB_WireRecordTests"",
+                                        ""method"": ""RetriesOnTimeout"",
+                                        ""bodyLine"": 6
+                                    }
+                                ],
                                 ""durationMs"": 9
                             }
                         ]
@@ -70,8 +81,11 @@ namespace TcXunit.Vsix.Tests
             Assert.False(suite.Tests[1].Passed);
             Assert.Equal("RetriesOnTimeout", suite.Tests[1].Name);
             Assert.Equal(9, suite.Tests[1].DurationMs);
+            // TcXunit-3tx.2: failures are objects now; `message` still holds
+            // the same formatted line the bare string used to be, which is what
+            // the results tree renders.
             var failure = Assert.Single(suite.Tests[1].Failures);
-            Assert.Equal("FAILED TEST 'RetriesOnTimeout', EXP: 3, ACT: 1", failure);
+            Assert.Equal("FAILED TEST 'RetriesOnTimeout', EXP: 3, ACT: 1", failure.Message);
         }
 
         [Fact]

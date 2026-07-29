@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using TcXunit.Runner;
 using TcXunit.Runner.TcUnitStub;
 
 namespace TcXunit.Interpreter
@@ -210,8 +211,14 @@ namespace TcXunit.Interpreter
         // too must still be told "this TcUnit API isn't wired up yet" rather
         // than the generic method-not-found error - the receiver being a suite
         // is what makes that the more useful of the two messages.
+        //
+        // TcXunit-3tx.1: an UnsupportedConstructException (still a
+        // NotSupportedException, so every existing catch/assert is unaffected)
+        // so the reported failure names the construct - methodName - as a field
+        // rather than only inside prose a consumer would have to regex.
         public static NotSupportedException NotSupported(string methodName) =>
-            new NotSupportedException(
+            new UnsupportedConstructException(
+                methodName,
                 $"TcUnit native call '{methodName}' isn't supported yet (grow-on-demand, TcXunit-w5x.12).");
 
         private static readonly string[] ConditionAssertParamNames = { "Condition", "Message" };

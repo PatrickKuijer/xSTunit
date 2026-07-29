@@ -1,3 +1,5 @@
+using TcXunit.Runner.TcUnitStub;
+
 namespace TcXunit.Interpreter
 {
     // One level of the interpreted call chain, captured as an exception
@@ -9,38 +11,39 @@ namespace TcXunit.Interpreter
     {
         public PlcCallStackFrame(string pouTypeName, string methodName, int line, int bodyLine)
         {
-            PouTypeName = pouTypeName;
-            MethodName = methodName;
-            Line = line;
-            BodyLine = bodyLine;
+            Site = new AssertSite(pouTypeName, methodName, line, bodyLine);
         }
 
+        // TcXunit-3tx.2/.3: the same four values, as the carrier the Runner
+        // already defines. Stored rather than mirrored in four fields of this
+        // type's own: the identical frame reaches a consumer either as part of
+        // a PlcSourceLocationException's Message or as part of a per-test
+        // failure's call stack, and one representation is what stops the two
+        // from drifting into slightly different shapes for the same data.
+        // The four properties below stay, unchanged, as this type's API.
+        public AssertSite Site { get; }
+
         // POU type whose body was executing at this level, e.g. "FB_Deep".
-        public string PouTypeName { get; }
+        public string PouTypeName => Site.PouTypeName;
 
         // METHOD whose body was executing at this level - null when this
         // frame is a POU's own top-level body (a suite body, a bare-invoked
         // FB body, or a StepCycles cycle), which has no method to name.
-        public string MethodName { get; }
+        public string MethodName => Site.MethodName;
 
         // 1-based line in the originating .TcPOU file, or
         // PlcSourceLocationException.UnknownLine.
-        public int Line { get; }
+        public int Line => Site.Line;
 
         // 1-based line within the METHOD/action/POU body, i.e. the number
         // TwinCAT XAE's implementation editor shows for that body, or
         // PlcSourceLocationException.UnknownLine.
-        public int BodyLine { get; }
+        public int BodyLine => Site.BodyLine;
 
-        // "FB_Y.MethodZ", or just "FB_Y" for a POU body.
-        public string Location => MethodName == null ? PouTypeName : PouTypeName + "." + MethodName;
+        // TcXunit-7s6: "FB_Y.MethodZ", and the same with "(bodyLine)" folded
+        // in when the line is known - defined once, on AssertSite.
+        public string Location => Site.Location;
 
-        // TcXunit-7s6: Location with "(bodyLine)" folded in when the line is
-        // known - the one place this formatting lives, shared by
-        // PlcSourceLocationException.FormatMessage (the innermost frame's
-        // Message) and CliRunner's per-frame console rendering, so the two
-        // can't drift into slightly different shapes for the same data.
-        public string LocationWithLine =>
-            BodyLine == PlcSourceLocationException.UnknownLine ? Location : Location + "(" + BodyLine + ")";
+        public string LocationWithLine => Site.LocationWithLine;
     }
 }

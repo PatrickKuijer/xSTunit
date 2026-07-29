@@ -164,6 +164,31 @@ namespace TcXunit.Runner.TcUnitStub
             return record.Finished;
         }
 
+        // TcXunit-3tx.3: whether a TEST()/TEST_FINISHED() bracket is currently
+        // open, i.e. whether there is a test to charge an escaping fault to.
+        // The engine asks this before deciding between failing one test and
+        // failing the whole suite.
+        internal bool HasOpenTest => _currentName != null;
+
+        // Charges a fault that unwound out of the current test's body to that
+        // test and closes its bracket, so the suite can carry on with the tests
+        // after it (TcXunit-3tx.3).
+        //
+        // Unlike Fail(), this deliberately records even when the test already
+        // has an assertion failure: upstream's first-failure-wins rule is about
+        // several asserts in one test, whereas a fault ENDED the test and is
+        // strictly the more informative of the two.
+        internal void AbortCurrentTest(AssertionFailure failure)
+        {
+            if (_currentName == null)
+                throw new InvalidOperationException("AbortCurrentTest called with no open TEST() bracket");
+
+            var record = _records[_currentName];
+            record.Failures.Add(failure);
+            FinishRecord(record);
+            _currentName = null;
+        }
+
         private void FinishRecord(TestRecord record)
         {
             record.Stopwatch.Stop();
@@ -206,8 +231,25 @@ namespace TcXunit.Runner.TcUnitStub
             if (!string.IsNullOrEmpty(message))
                 formatted += $", MSG: {message}";
 
-            failures.Add(new AssertionFailure(formatted));
+            // TcXunit-3tx.2: the same three substrings the line above embeds,
+            // plus the assert's name and source location, recorded as fields so
+            // a consumer never has to parse the line back apart. CurrentAssert/
+            // CurrentSite are whatever the caller last announced - both stay at
+            // their defaults for a C# fixture calling these asserts directly,
+            // which reports as nulls rather than as invented values.
+            failures.Add(new AssertionFailure(formatted, CurrentAssert, expected, actual, message, CurrentSite));
         }
+
+        // TcXunit-3tx.2: the name and source location of the assert currently
+        // being evaluated, announced by the interpreter immediately before it
+        // dispatches the call (see TcUnitSuiteHost/Engine.Invocation). They are
+        // set on this object rather than threaded through every assert
+        // signature because each of the ~40 AssertEquals_<TYPE> entry points
+        // would otherwise have to carry - and forward - four more parameters
+        // that none of them uses.
+        internal string CurrentAssert { get; set; }
+
+        internal AssertSite CurrentSite { get; set; }
 
         // Upstream delegates both through AssertEquals_BOOL(Expected:=TRUE/
         // FALSE, Actual:=Condition, Message) rather than failing with just a
@@ -410,7 +452,8 @@ namespace TcXunit.Runner.TcUnitStub
             }
 
             if (!ScalarAssertType.Registry.ContainsKey(expectedTypeName ?? string.Empty))
-                throw new NotSupportedException(
+                throw new UnsupportedConstructException(
+                    expectedTypeName,
                     $"AssertEquals(ANY) doesn't support type '{expectedTypeName}' yet (grow-on-demand, TcXunit-gd2.5).");
 
             AssertEqualsScalar(expectedTypeName, expectedValue, actualValue, 0.0, message);

@@ -191,6 +191,20 @@ namespace TcXunit.Interpreter
                         };
                     }
 
+                    // TcXunit-3tx.2: hand the host the call's name and the
+                    // caller frame's "you are here" position before dispatching,
+                    // so a failure recorded inside can say which assert failed
+                    // and where it is written. Announced here rather than
+                    // inside NativeMethodBridge because this is the only side
+                    // that has the Frame.
+                    instance.NativeSuiteHost.EnterNativeCall(
+                        methodName,
+                        new AssertSite(
+                            callerFrame.DeclaringTypeName,
+                            callerFrame.MethodName,
+                            callerFrame.CurrentFileLine,
+                            callerFrame.CurrentLine));
+
                     return NativeMethodBridge.Invoke(instance.NativeSuiteHost, methodName, evaluatedPositional, evaluatedNamed, anyTypeNames);
                 }
 

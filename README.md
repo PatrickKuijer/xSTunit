@@ -44,7 +44,24 @@ Scans `<path>` recursively for `*.TcPOU` files, finds any FB type that extends `
 
 Files TcXunit can't load — POUs outside the v1 parse subset (`Tc2_System`, `__NEW`, …), malformed XML, unsupported DUT/GVL shapes — are **skipped and reported individually** (`skipped: <path> (<reason>)`, plus a skip count in the summary line) rather than aborting the run, so a real production tree still runs every suite it can. Skips don't change the exit code: a run that completed with skips is still `0`/`1` by test outcome, distinct from the `2` reserved for usage/discovery errors that produced no results at all.
 
-Pass `--format json` for structured output (suites → tests → pass/fail/failure messages, a `skipped` array of `{filePath, reason}`, plus overall pass/fail counts and exit code) instead of plain text — useful for a tool consuming results programmatically (e.g. an IDE extension) rather than a human reading console output.
+A fault inside a test — an unsupported construct, a call to a method that doesn't exist — **fails that test and lets the rest of the suite run**. Only a fault outside any `TEST()`/`TEST_FINISHED()` bracket fails the suite as a whole.
+
+Pass `--format json` for structured output instead of plain text — useful for a tool consuming results programmatically (an IDE extension, or an agent iterating on ST) rather than a human reading console output. It carries suites → tests → failures, a `skipped` array of `{filePath, reason}`, and overall pass/fail counts and exit code.
+
+Every failure carries a machine-readable `kind`, so a consumer can tell the cases apart without parsing prose:
+
+| `kind` | Meaning | What to do |
+| --- | --- | --- |
+| `assertion` | An assert compared values and they differed | Fix the code under test, or the expectation |
+| `plc-fault` | Interpreted ST faulted at run time | Fix the code under test |
+| `unsupported-construct` | Valid IEC 61131-3 that TwinCAT compiles and TcXunit doesn't implement yet | **Stop** — escalate; never rewrite the POU to make this pass |
+| `load-error` | Discovery/parse/instantiation failed; nothing ran | Fix the invocation or the tree |
+
+That last distinction is the point: without it, an agent seeing a non-empty error deletes a correct `SEL()` call to make a test "pass" and reports success. Suite-level errors carry `errorKind`/`errorConstruct`; per-test failures carry `kind`, `construct`, and the structured detail behind the message — `assert`, `expected`, `actual`, `assertMessage`, and the location (`pou`, `method`, `bodyLine`, `line`), so which of several asserts in a method failed is unambiguous.
+
+`unsupported-construct` is deliberately **conservative**: it is claimed only where the throw site says so explicitly, never inferred from an exception's base type. The engine raises plain `NotSupportedException` for genuine defects in the code under test too (`Operator '<' is not supported between Int32 and String`), and the hand-rolled ST front end cannot tell syntax it doesn't implement from syntax that is simply wrong. Reporting either as `unsupported-construct` would halt an agent over its own bug — the same failure inverted — so anything that hasn't opted in reports as `plc-fault`. The consequence is that some real interpreter gaps (currently, anything the lexer/parser rejects) still read as `plc-fault`; widening the opt-in is incremental work.
+
+Pass `--coverage` to additionally list every non-suite POU with the suites exercising it, in both formats. The entries with no suites are the useful ones — a next-task list ("write a suite for `F_ComputeChecksum`"). Association is by direct textual reference from a suite; it's a report, never a gate, and doesn't affect the exit code.
 
 ## Issue tracking
 

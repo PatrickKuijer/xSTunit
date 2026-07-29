@@ -241,6 +241,33 @@ body[data-theme="light"] {
 .banner strong { display: block; color: var(--error); font-weight: 600; margin-bottom: 3px; font-size: 11px; }
 .banner code { font-family: var(--mono); font-size: 10.5px; }
 
+/* -- call-stack section inside a failed-to-load suite's banner (TcXunit-9fs):
+   an expandable list of suite.callStack frames, same
+   toggle-glyph-in-text-plus-hidden-children pattern the tree's own .twisty
+   uses (results.js's buildCallStackSection), scoped inside .banner rather
+   than reusing .node/.twisty since it has no glyph/dur/open columns of its
+   own to align. -- */
+.callstack { margin-top: 6px; }
+.callstack-toggle {
+  cursor: pointer;
+  color: var(--text-faint);
+  font-size: 10.5px;
+  font-weight: 600;
+}
+.callstack-toggle:hover { color: var(--text-dim); }
+.callstack-frames { margin-top: 3px; }
+.callstack-frame {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--text-dim);
+  padding: 1px 0 1px 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.callstack-frame.has-open { cursor: pointer; }
+.callstack-frame.has-open:hover { color: var(--accent); }
+
 /* -- status segmented control (TcXunit-1tt.5): All/Failed/Skipped. results.js
    toggles "filter-fail"/"filter-skip" on #tree itself when a segment other
    than "All" is active (no class at all = "All", nothing to select against).

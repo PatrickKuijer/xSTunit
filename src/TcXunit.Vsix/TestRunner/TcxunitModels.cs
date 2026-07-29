@@ -5,7 +5,7 @@ namespace TcXunit.Vsix.TestRunner
     /// <summary>
     /// Mirrors the camelCase JSON shape emitted by
     /// `tcxunit run --format json` (see TcXunit.Cli.CliRunner):
-    /// { suites: [{ name, filePath, error, durationMs, tests: [{ name, passed, failures, durationMs }] }], passed, failed, exitCode }
+    /// { suites: [{ name, filePath, error, durationMs, callStack, tests: [{ name, passed, failures, durationMs }] }], passed, failed, exitCode }
     /// and its early-exit error shape: { error }.
     /// </summary>
     internal sealed class TcxunitRunResult
@@ -49,6 +49,30 @@ namespace TcXunit.Vsix.TestRunner
         // to load (never ran, so there's nothing to time), matching this
         // model's nullable long?.
         public long? DurationMs { get; set; }
+
+        // Added for TcXunit-9fs: the CLI has emitted "callStack" on SuiteReport
+        // since TcXunit-7s6 -- the full interpreted call chain behind Error,
+        // innermost frame first. Null (not an empty list) for a passing suite
+        // or a load-level failure that never entered an interpreted ST body,
+        // matching the CLI's own null-vs-empty-array convention.
+        public List<TcxunitCallStackFrame> CallStack { get; set; }
+    }
+
+    // One frame of TcxunitSuiteResult.CallStack (TcXunit-9fs), mirroring the
+    // CLI's CallStackFrameReport shape.
+    internal sealed class TcxunitCallStackFrame
+    {
+        public string PouTypeName { get; set; }
+
+        // Null for a frame with no method to name (a suite body, a bare-
+        // invoked FB body, or a StepCycles cycle).
+        public string MethodName { get; set; }
+
+        // The raw .TcPOU XML line, or null when unknown.
+        public int? Line { get; set; }
+
+        // The XAE-implementation-editor-relative line, or null when unknown.
+        public int? BodyLine { get; set; }
     }
 
     internal sealed class TcxunitTestResult

@@ -199,6 +199,66 @@ namespace TcXunit.Vsix.Tests
         }
 
         [Fact]
+        public void Deserialize_SuiteFailedWithCallStack_MapsFramesInnermostFirst()
+        {
+            // TcXunit-7s6: suites[].callStack, innermost frame first, suite
+            // entry point last -- TcXunit-9fs's model must round-trip it.
+            const string json = @"{
+                ""suites"": [
+                    {
+                        ""name"": ""FB_ChecksumTests"",
+                        ""filePath"": ""C:\\proj\\FB_ChecksumTests.TcPOU"",
+                        ""error"": ""F_nCheckSum(1): Object reference not set to an instance of an object."",
+                        ""tests"": [],
+                        ""callStack"": [
+                            { ""pouTypeName"": ""F_nCheckSum"", ""methodName"": null, ""line"": 12, ""bodyLine"": 1 },
+                            { ""pouTypeName"": ""FB_ChecksumHelper"", ""methodName"": ""Compute"", ""line"": 30, ""bodyLine"": 4 },
+                            { ""pouTypeName"": ""FB_ChecksumTests"", ""methodName"": null, ""line"": 8, ""bodyLine"": null }
+                        ]
+                    }
+                ],
+                ""passed"": 0,
+                ""failed"": 1,
+                ""exitCode"": 1
+            }";
+
+            var result = JsonSerializer.Deserialize<TcxunitRunResult>(json, Options);
+
+            var suite = Assert.Single(result.Suites);
+            Assert.Equal(3, suite.CallStack.Count);
+
+            Assert.Equal("F_nCheckSum", suite.CallStack[0].PouTypeName);
+            Assert.Null(suite.CallStack[0].MethodName);
+            Assert.Equal(12, suite.CallStack[0].Line);
+            Assert.Equal(1, suite.CallStack[0].BodyLine);
+
+            Assert.Equal("FB_ChecksumHelper", suite.CallStack[1].PouTypeName);
+            Assert.Equal("Compute", suite.CallStack[1].MethodName);
+
+            Assert.Equal("FB_ChecksumTests", suite.CallStack[2].PouTypeName);
+            Assert.Null(suite.CallStack[2].BodyLine);
+        }
+
+        [Fact]
+        public void Deserialize_SuiteWithoutCallStackField_LeavesCallStackNull()
+        {
+            // A passing suite or a load-level failure that never entered an
+            // interpreted ST body -- the CLI omits callStack entirely rather
+            // than emitting an empty array.
+            const string json = @"{
+                ""suites"": [ { ""name"": ""FB_WireRecordTests"", ""tests"": [] } ],
+                ""passed"": 0,
+                ""failed"": 0,
+                ""exitCode"": 0
+            }";
+
+            var result = JsonSerializer.Deserialize<TcxunitRunResult>(json, Options);
+
+            var suite = Assert.Single(result.Suites);
+            Assert.Null(suite.CallStack);
+        }
+
+        [Fact]
         public void Deserialize_SuiteWithoutFilePath_LeavesFilePathNull()
         {
             // filePath is always emitted by the current CLI (TcXunit-8gj), but the

@@ -111,6 +111,15 @@
 // or isn't in flight; #runningState is a single generic placeholder, not a
 // per-suite one). Plain script (no ES modules) since this page has exactly
 // one small render concern, unlike TcAgent's chat.html.
+//
+// TcXunit-9fs adds an expandable "call stack" section to a failed-to-load
+// suite's banner (buildBanner/buildCallStackSection below), rendering
+// suite.callStack -- additive JSON the CLI has emitted since TcXunit-7s6,
+// one frame ({ pouTypeName, methodName, line, bodyLine }) per level of the
+// interpreted call chain, innermost first. Frames carry no filePath of their
+// own (only the suite does), so a frame click opens the suite's file --
+// the only navigation target this data can support -- same as the suite
+// row's own dblclick.
 (function () {
   'use strict';
 
@@ -315,15 +324,85 @@
     return div;
   }
 
+  // One callStack[] frame's label: "PouTypeName.MethodName(line)" when a
+  // method is known (an assert/method-level frame), or just "PouTypeName(line)"
+  // for a suite-body/bare-FB frame (methodName null, per CallStackFrameReport's
+  // own convention) -- mirrors the console output's own frame formatting
+  // (AssertSite.LocationWithLine, TcXunit-7s6's console path): the
+  // XAE-implementation-editor-relative bodyLine, not the raw .TcPOU XML
+  // line -- console output never uses the latter for a frame, so this
+  // doesn't either. Falls back to the raw line if bodyLine is unknown, then
+  // omits the "(...)" suffix entirely if neither is known.
+  function callStackFrameLabel(frame) {
+    var pou = (frame && frame.pouTypeName) || '?';
+    var name = (frame && frame.methodName) ? pou + '.' + frame.methodName : pou;
+    var line = (frame && typeof frame.bodyLine === 'number') ? frame.bodyLine
+      : (frame && typeof frame.line === 'number') ? frame.line : null;
+    return line === null ? name : name + '(' + line + ')';
+  }
+
+  // TcXunit-9fs: the expandable "call stack" section inside a failed-to-load
+  // suite's banner, one row per suite.callStack frame (innermost first, per
+  // the CLI's own ordering -- CallStack[0] describes the same fault as
+  // suite.error/fileLine, so no re-sorting happens here). Only drawn when the
+  // CLI actually emitted frames (null/empty for a load-level failure that
+  // never entered an interpreted ST body) -- returns null in that case so the
+  // caller can skip appending anything.
+  function buildCallStackSection(suite) {
+    var frames = (suite && suite.callStack) || [];
+    if (frames.length === 0) {
+      return null;
+    }
+
+    var section = el('div', 'callstack');
+    var toggle = textEl('div', 'callstack-toggle', '▶ call stack (' + frames.length + ' frames)');
+    var list = el('div', 'callstack-frames');
+    list.hidden = true;
+
+    var expanded = false;
+    toggle.addEventListener('click', function () {
+      expanded = !expanded;
+      toggle.textContent = (expanded ? '▼' : '▶') + ' call stack (' + frames.length + ' frames)';
+      list.hidden = !expanded;
+    });
+
+    frames.forEach(function (frame) {
+      var frameRow = textEl('div', 'callstack-frame', callStackFrameLabel(frame));
+      // No per-frame filePath in the wire shape (TcXunit-7s6's
+      // CallStackFrameReport carries POU/method/line only) -- every frame
+      // opens the suite's own file, same as the suite row's dblclick, which
+      // is the only navigation target this data can support.
+      if (suite && suite.filePath) {
+        frameRow.classList.add('has-open');
+        frameRow.addEventListener('click', function () {
+          postOpenFile(suite.filePath);
+        });
+      }
+      list.appendChild(frameRow);
+    });
+
+    section.appendChild(toggle);
+    section.appendChild(list);
+    return section;
+  }
+
   // Suite-failed-to-load banner: distinct from a swallowed empty suite, per
   // TcXunit-1tt.2's acceptance criteria. suite.error is CliRunner's caught
   // exception message (unresolved type, parse error, etc.) -- free text, not
   // HTML, so it's set via textContent even though the mockup shows a <code>
   // fragment inline; this data has no reliable way to locate that substring.
-  function buildBanner(errorMessage) {
+  // TcXunit-9fs: also appends an expandable call-stack section (see
+  // buildCallStackSection) when the CLI emitted one for this suite.
+  function buildBanner(suite) {
     var div = el('div', 'banner');
     div.appendChild(textEl('strong', null, 'Suite failed to load'));
-    div.appendChild(document.createTextNode((errorMessage || '') + ' No tests were run.'));
+    div.appendChild(document.createTextNode(((suite && suite.error) || '') + ' No tests were run.'));
+
+    var callStackSection = buildCallStackSection(suite);
+    if (callStackSection) {
+      div.appendChild(callStackSection);
+    }
+
     return div;
   }
 
@@ -422,7 +501,7 @@
     }
 
     if (hasError) {
-      var bannerRow = buildBanner(suite.error);
+      var bannerRow = buildBanner(suite);
       rows.push(bannerRow);
       childRows.push(bannerRow);
 

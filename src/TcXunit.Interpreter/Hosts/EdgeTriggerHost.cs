@@ -11,7 +11,12 @@ namespace TcXunit.Interpreter
         private bool _lastClk;
         private bool _initialized;
 
-        public static EdgeTriggerHost Create(string typeName) => typeName switch
+        // TcXunit-nch: matched case-insensitively (typeName.ToUpperInvariant()),
+        // same decision as the NativeEdgeTriggerTypes lookup in Engine.cs
+        // that decides to call Create in the first place - a lowercase/
+        // mixed-case spelling that passes that lookup must not then throw
+        // NotSupportedException here.
+        public static EdgeTriggerHost Create(string typeName) => typeName?.ToUpperInvariant() switch
         {
             "R_TRIG" => new RTrigHost(),
             "F_TRIG" => new FTrigHost(),

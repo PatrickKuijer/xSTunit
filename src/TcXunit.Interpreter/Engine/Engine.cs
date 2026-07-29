@@ -27,8 +27,14 @@ namespace TcXunit.Interpreter
         // native hosts read Clock.TotalMs whenever they're invoked.
         public Clock Clock { get; } = new Clock();
 
-        private static readonly HashSet<string> NativeTimerTypes = new HashSet<string> { "TON", "TOF", "FB_Pulse" };
-        private static readonly HashSet<string> NativeEdgeTriggerTypes = new HashSet<string> { "R_TRIG", "F_TRIG" };
+        // TcXunit-nch: IEC 61131-3 identifiers are case-insensitive (same
+        // decision as TcXunit-fzm's elementary-type lookups), so these two
+        // native-FB base-type sets are keyed with OrdinalIgnoreCase - a
+        // lowercase/mixed-case base type (e.g. 'EXTENDS ton') must still be
+        // recognized as a native timer/edge-trigger stub instead of falling
+        // through to NativeSuiteHost.
+        private static readonly HashSet<string> NativeTimerTypes = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "TON", "TOF", "FB_Pulse" };
+        private static readonly HashSet<string> NativeEdgeTriggerTypes = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "R_TRIG", "F_TRIG" };
 
         // Host-supplied stand-ins for compiled-only TwinCAT library functions
         // (TcXunit-6k2). Optional and consulted last (Engine.Invocation.cs), so
@@ -188,7 +194,7 @@ namespace TcXunit.Interpreter
                     instance.Fields["Q"] = new Cell { Value = false };
                     instance.Fields["ET"] = new Cell { Value = 0u };
                 }
-                else if (current == "Loopback")
+                else if (string.Equals(current, "Loopback", StringComparison.OrdinalIgnoreCase))
                 {
                     instance.NativeLoopbackHost = new LoopbackHost();
                     instance.Fields["LinkUp"] = new Cell { Value = true };

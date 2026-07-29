@@ -12,11 +12,16 @@ namespace TcXunit.Interpreter
         private long _lastClockTotalMs;
         private bool _initialized;
 
-        public static TimerHost Create(string typeName) => typeName switch
+        // TcXunit-nch: matched case-insensitively (typeName.ToUpperInvariant()),
+        // same decision as the NativeTimerTypes lookup in Engine.cs that
+        // decides to call Create in the first place - a lowercase/mixed-case
+        // spelling that passes that lookup must not then throw
+        // NotSupportedException here.
+        public static TimerHost Create(string typeName) => typeName?.ToUpperInvariant() switch
         {
             "TON" => new TonHost(),
             "TOF" => new TofHost(),
-            "FB_Pulse" => new PulseHost(),
+            "FB_PULSE" => new PulseHost(),
             _ => throw new NotSupportedException($"Unknown native timer type '{typeName}'"),
         };
 

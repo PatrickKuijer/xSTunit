@@ -27,6 +27,14 @@ namespace TcXunit.Interpreter
         // inheritance modifier must be followed by whitespace, so a method
         // named FINALIZE isn't read as FINAL + "IZE".
         //
+        // PROPERTY joins METHOD/FUNCTION in the keyword alternation
+        // (TcXunit-8we): a PROPERTY Get/Set accessor's Local-named-after-the-
+        // property has the exact same lazily-created-by-first-assignment
+        // shape as a METHOD/FUNCTION's return value, so its header ("PROPERTY
+        // nGain : LREAL") needs the identical parse. PROPERTY has no _BLOCK
+        // form, so the (?!_BLOCK) guard is harmless noise for it, not a
+        // second guard that needs its own reasoning.
+        //
         // The return-type alternation mirrors VarBlockParser.VarLinePattern's
         // - a W?STRING(...) length may be any IEC constant expression, and
         // POINTER/REFERENCE TO are two-word type names - with one deliberate
@@ -35,7 +43,7 @@ namespace TcXunit.Interpreter
         // the header line to work with and must not run on into the VAR block
         // below it. Keep the two in step if either grows a new type shape.
         private static readonly Regex HeaderPattern = new Regex(
-            @"^\s*(?:METHOD|FUNCTION)(?!_BLOCK)\s+" +
+            @"^\s*(?:METHOD|FUNCTION|PROPERTY)(?!_BLOCK)\s+" +
             @"(?:(?:PRIVATE|PUBLIC|PROTECTED|INTERNAL|FINAL|ABSTRACT)\s+)*" +
             @"\w+\s*:\s*" +
             @"(?<type>POINTER\s+TO\s+\w+|REFERENCE\s+TO\s+\w+|W?STRING\s*\(\s*[^()\n]+\s*\)|\w+)",

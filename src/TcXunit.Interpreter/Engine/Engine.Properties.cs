@@ -50,6 +50,16 @@ namespace TcXunit.Interpreter
                 throw new InvalidOperationException($"Property '{property.Name}' has no Get accessor");
 
             var frame = new Frame(instance, definingType);
+
+            // TcXunit-8we: same defect and same fix as CallMethod/
+            // CallGlobalFunction's SeedReturnCell (TcXunit-cq6) - the Get
+            // accessor's return value lives in a Local named after the
+            // property, left to be created lazily by its first assignment.
+            // A PROPERTY nGain : LREAL opening its Get with 'nGain := 0.0;'
+            // (a bare decimal literal, which lexes as REAL) got a REAL cell,
+            // and any later LREAL assignment into it was rejected as an
+            // implicit narrowing.
+            SeedReturnCell(frame, property.Name, property.DeclarationText);
             try
             {
                 ExecuteStatements(_registry.GetStatements(property.GetImplementationText), frame);
@@ -67,7 +77,23 @@ namespace TcXunit.Interpreter
                 throw new InvalidOperationException($"Property '{property.Name}' has no Set accessor");
 
             var frame = new Frame(instance, definingType);
-            frame.Locals[property.Name] = new Cell { Value = value };
+
+            // TcXunit-8we: tag the seeded Cell with the property's declared
+            // type, same rule (IEC numeric types only) as SeedReturnCell -
+            // the incoming value itself is kept as-is (unlike the Get side,
+            // there's no default-zero to seed with here), but leaving
+            // DeclaredTypeName null left this cell an outlier among every
+            // other Cell construction site in the interpreter (fields,
+            // params, locals) and meant anything consulting
+            // Cell.DeclaredTypeName (e.g. SIZEOF) about this Local couldn't
+            // see it.
+            var cell = new Cell { Value = value };
+            if (TryGetNumericCallableType(property.DeclarationText, out var declaredType, out _))
+            {
+                cell.DeclaredTypeName = declaredType;
+                frame.LocalTypeNames[property.Name] = declaredType;
+            }
+            frame.Locals[property.Name] = cell;
             try
             {
                 ExecuteStatements(_registry.GetStatements(property.SetImplementationText), frame);

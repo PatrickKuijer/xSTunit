@@ -21,6 +21,8 @@ namespace TcXunit.Interpreter.Tests
         [InlineData("FUNCTION F_Double : INT", "INT")]
         [InlineData("METHOD M_Read:LREAL", "LREAL")]
         [InlineData("METHOD   M_Read   :   LREAL   ", "LREAL")]
+        [InlineData("PROPERTY nGain : LREAL", "LREAL")]
+        [InlineData("PROPERTY PUBLIC nGain : REAL", "REAL")]
         public void TryGetReturnTypeName_HeaderWithReturnType_ReturnsIt(string header, string expected)
         {
             Assert.True(CallableReturnTypeParser.TryGetReturnTypeName(header, out var typeName));

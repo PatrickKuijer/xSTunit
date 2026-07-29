@@ -258,15 +258,27 @@ namespace TcXunit.Interpreter
         // once (TcXunit-fzm).
         private void SeedReturnCell(Frame frame, string name, string declarationText)
         {
-            var declaredType = _registry.GetReturnTypeName(declarationText);
-            if (declaredType == null)
-                return;
-
-            if (!IecNumericType.TryGetDefault(_registry.ResolveAlias(declaredType), out var zero))
+            if (!TryGetNumericCallableType(declarationText, out var declaredType, out var zero))
                 return;
 
             frame.Locals[name] = new Cell { Value = zero, DeclaredTypeName = declaredType };
             frame.LocalTypeNames[name] = declaredType;
+        }
+
+        // Shared by SeedReturnCell above and Engine.Properties' Get/Set
+        // accessor seeding (TcXunit-8we): resolves declarationText's header
+        // return/property type and reports it only when it's an IEC numeric
+        // type, mirroring SeedReturnCell's original (TcXunit-cq6) scoping -
+        // see that ticket's reasoning above for why non-numeric return types
+        // are deliberately left alone.
+        private bool TryGetNumericCallableType(string declarationText, out string declaredType, out object zero)
+        {
+            declaredType = _registry.GetReturnTypeName(declarationText);
+            zero = null;
+            if (declaredType == null)
+                return false;
+
+            return IecNumericType.TryGetDefault(_registry.ResolveAlias(declaredType), out zero);
         }
 
         // Global FUNCTION invocation (TcXunit-9su): same body-execution shape

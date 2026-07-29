@@ -72,6 +72,83 @@ namespace TcXunit.Interpreter.Tests
         }
 
         [Fact]
+        public void DotAccess_ReadsLrealProperty_SeededByRealLiteralThenAssignedLreal_ReturnsTheLreal()
+        {
+            // TcXunit-8we: same defect as TcXunit-cq6, but at the PROPERTY Get
+            // accessor site. InvokePropertyGet used to leave the Local named
+            // after the property to be created lazily by its first
+            // assignment, so 'nGain := 0.0;' (a bare decimal literal, which
+            // lexes as REAL) made the cell a REAL, and the later LREAL
+            // assignment was rejected as an implicit narrowing.
+            var foo = new PouAst(
+                "FB_Foo",
+                null,
+                "VAR\n\tsfGain : LREAL;\nEND_VAR",
+                "",
+                new List<MethodAst>(),
+                new List<PropertyAst>
+                {
+                    new PropertyAst(
+                        "nGain",
+                        "PROPERTY nGain : LREAL",
+                        "nGain := 0.0;\nnGain := sfGain;",
+                        null),
+                });
+
+            var engine = new Engine(new TypeRegistry(new[] { foo }));
+            var instance = engine.NewInstance("FB_Foo");
+            instance.Fields["sfGain"].Value = 2.5d;
+
+            var result = engine.Evaluate(
+                new FieldAccessExpr(new IdentifierExpr("sfbFoo"), "nGain"),
+                new Frame(WrapAsField(instance), null));
+
+            Assert.Equal(2.5d, result);
+        }
+
+        [Fact]
+        public void DotAccess_WriteThroughSetLrealProperty_SeededCellTaggedWithDeclaredType()
+        {
+            // TcXunit-8we: InvokePropertySet seeded 'new Cell { Value = value
+            // }' with no DeclaredTypeName - same class of problem as the Get
+            // side, and it left the cell untagged for anything reading
+            // Cell.DeclaredTypeName. SIZEOF resolves a bare identifier's size
+            // through exactly that tag (Engine.SizeOf's
+            // ResolveDeclaredTypeName, via Frame.LocalTypeNames) - untagged,
+            // SIZEOF(nGain) falls back to treating "nGain" itself as a type
+            // name and throws; tagged, it reports LREAL's 8 bytes.
+            var foo = new PouAst(
+                "FB_Foo",
+                null,
+                "VAR\n\tsnSize : UDINT;\nEND_VAR",
+                "",
+                new List<MethodAst>(),
+                new List<PropertyAst>
+                {
+                    new PropertyAst(
+                        "nGain",
+                        "PROPERTY nGain : LREAL",
+                        null,
+                        "snSize := SIZEOF(nGain);"),
+                });
+
+            var outer = new PouAst(
+                "FB_Outer",
+                null,
+                "VAR\n\tsfbFoo : FB_Foo;\nEND_VAR",
+                "sfbFoo.nGain := 1.25;",
+                new List<MethodAst>());
+
+            var engine = new Engine(new TypeRegistry(new[] { foo, outer }));
+            var instance = engine.NewInstance("FB_Outer");
+
+            engine.CallMethod(instance, "StepCycles", new Expr[] { new IntLiteralExpr(1) }, Array.Empty<NamedArg>(), null, null);
+
+            var nested = (FbInstance)instance.Fields["sfbFoo"].Value;
+            Assert.Equal(8L, nested.Fields["snSize"].Value);
+        }
+
+        [Fact]
         public void DotAccess_ReadingSetOnlyProperty_ThrowsDescriptiveError()
         {
             var foo = new PouAst(

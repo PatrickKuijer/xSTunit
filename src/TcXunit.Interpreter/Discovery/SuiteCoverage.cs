@@ -32,9 +32,15 @@ namespace TcXunit.Interpreter
             // Concatenating each suite's declaration and every body it owns is
             // enough: the reference that matters is a VAR declaration of the
             // type under test or a call into it, and both are in this text.
+            //
+            // Comments are stripped first (TcXunit-2o9.2): a type named only
+            // inside a (* ... *) or // comment is not a reference a suite
+            // actually exercises, and the whole-word regex below can't tell
+            // the difference between code and prose on its own. Reuses the
+            // lexer's own comment recognition instead of a second regex.
             var suiteTexts = types
                 .Where(t => suiteNameSet.Contains(t.Name))
-                .Select(t => new { t.Name, Text = AllText(t) })
+                .Select(t => new { t.Name, Text = Lexer.StripComments(AllText(t)) })
                 .ToList();
 
             return types

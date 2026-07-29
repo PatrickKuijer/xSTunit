@@ -244,6 +244,12 @@ namespace TcXunit.Interpreter
 
                 switch (c)
                 {
+                    // '&' is IEC 61131-3's alias for AND (§2.4.5, table 4) -
+                    // lexed straight to the same Identifier/"AND" token so
+                    // every AND-aware parser/evaluator path (including
+                    // AND_THEN's short-circuit precedence) handles it with
+                    // no separate token type needed.
+                    case '&': tokens.Add(new Token(TokenType.Identifier, "AND", tokenLine)); i++; continue;
                     case '=': tokens.Add(new Token(TokenType.Eq, "=", tokenLine)); i++; continue;
                     case '<': tokens.Add(new Token(TokenType.Lt, "<", tokenLine)); i++; continue;
                     case '>': tokens.Add(new Token(TokenType.Gt, ">", tokenLine)); i++; continue;

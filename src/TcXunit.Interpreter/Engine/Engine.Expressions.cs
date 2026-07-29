@@ -170,6 +170,17 @@ namespace TcXunit.Interpreter
 
         private object EvaluateBinary(BinaryExpr binary, Frame frame)
         {
+            // AND_THEN/OR_ELSE (IEC 61131-3 §2.4.5, the short-circuit forms of
+            // AND/OR) must not evaluate their RHS at all when the LHS already
+            // decides the result - unlike every other BinaryExpr, which is
+            // evaluated eagerly below. That's what lets the standard
+            // "guard AND_THEN indexed-access" idiom skip the index expression
+            // when the guard is false. Bitstring (BYTE/WORD/DWORD) operands
+            // have no short-circuit meaning, so those still evaluate both
+            // sides and fall back to plain bitwise AND/OR.
+            if (binary.Op == "AND_THEN" || binary.Op == "OR_ELSE")
+                return EvaluateShortCircuit(binary, frame);
+
             var leftVal = Evaluate(binary.Left, frame);
             var rightVal = Evaluate(binary.Right, frame);
 
@@ -577,6 +588,38 @@ namespace TcXunit.Interpreter
             "<>" => left != right,
             _ => throw new NotSupportedException($"Operator '{op}' not supported"),
         };
+
+        // Evaluates AND_THEN/OR_ELSE. For BOOL operands this is a genuine
+        // short-circuit: the RHS expression is never evaluated once the LHS
+        // already determines the result (AND_THEN stops on FALSE, OR_ELSE
+        // stops on TRUE) - this is what protects a guard-then-index idiom
+        // like 'guard AND_THEN arr[i]' from indexing out of range when the
+        // guard is false. Bitstring (BYTE/WORD/DWORD/INT) operands have no
+        // short-circuit meaning in the standard, so both sides are evaluated
+        // and the result falls back to plain bitwise AND/OR.
+        private object EvaluateShortCircuit(BinaryExpr binary, Frame frame)
+        {
+            var isAndThen = binary.Op == "AND_THEN";
+            var leftVal = Evaluate(binary.Left, frame);
+
+            if (leftVal is bool lb)
+            {
+                if (isAndThen && !lb)
+                    return false;
+                if (!isAndThen && lb)
+                    return true;
+
+                var rightVal = Evaluate(binary.Right, frame);
+                if (rightVal is bool rb)
+                    return isAndThen ? lb && rb : lb || rb;
+
+                throw new NotSupportedException(
+                    $"Operator '{binary.Op}' requires matching BOOL operands, got BOOL and {rightVal?.GetType().Name}");
+            }
+
+            var rightValEager = Evaluate(binary.Right, frame);
+            return EvaluateBitstring(isAndThen ? "AND" : "OR", leftVal, rightValEager);
+        }
 
         // MOD/AND/OR/XOR are IEC 61131-3 bitstring/logical operators, not numeric
         // arithmetic - AND/OR/XOR operate on matching BOOL or INT operands; MOD is

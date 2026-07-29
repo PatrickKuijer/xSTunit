@@ -11,10 +11,10 @@ namespace TcXunit.Interpreter
         private Expr ParseOr()
         {
             var left = ParseXor();
-            while (IsKeyword("OR"))
+            while (IsKeyword("OR") || IsKeyword("OR_ELSE"))
             {
-                Advance();
-                left = new BinaryExpr("OR", left, ParseXor()) { Line = left.Line };
+                var op = Advance().Text;
+                left = new BinaryExpr(op, left, ParseXor()) { Line = left.Line };
             }
             return left;
         }
@@ -33,10 +33,10 @@ namespace TcXunit.Interpreter
         private Expr ParseAnd()
         {
             var left = ParseComparison();
-            while (IsKeyword("AND"))
+            while (IsKeyword("AND") || IsKeyword("AND_THEN"))
             {
-                Advance();
-                left = new BinaryExpr("AND", left, ParseComparison()) { Line = left.Line };
+                var op = Advance().Text;
+                left = new BinaryExpr(op, left, ParseComparison()) { Line = left.Line };
             }
             return left;
         }

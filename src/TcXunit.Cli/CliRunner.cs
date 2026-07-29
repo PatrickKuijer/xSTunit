@@ -258,6 +258,18 @@ namespace TcXunit.Cli
                         // shape by itself when no line is known.
                         var detail = located != null ? $"in {located.Message}" : ex.Message;
                         output.WriteLine($"{suiteName}: FAIL ({detail})");
+
+                        // TcXunit-7s6: the full interpreted call chain, one frame
+                        // per indented line beneath the FAIL line, innermost
+                        // first - printed in addition to (never instead of) the
+                        // single-line Error above, so existing text-output
+                        // consumers that only look at the FAIL line are
+                        // unaffected.
+                        if (located != null)
+                        {
+                            foreach (var frame in located.CallStack)
+                                output.WriteLine($"    at {frame.LocationWithLine}");
+                        }
                     }
                     suiteFilePaths.TryGetValue(suiteName, out var failFilePath);
                     // TcXunit-gfs: the raw .TcPOU XML line, carried as a separate
@@ -265,9 +277,13 @@ namespace TcXunit.Cli
                     // agent) that opens the fixture/POU file directly by path
                     // rather than through XAE - null when the failure never
                     // entered an interpreted ST body, or its line is unknown.
-                    var fileLine = located != null && located.Line != PlcSourceLocationException.UnknownLine
-                        ? (int?)located.Line
-                        : null;
+                    var fileLine = located != null ? NullableLine(located.Line) : null;
+                    // TcXunit-7s6: the ordered call-stack, additive alongside the
+                    // pre-existing single-frame Error/FileLine fields - null (not
+                    // an empty array) when the failure never entered an
+                    // interpreted ST body, so a load-level failure keeps the same
+                    // JSON shape it always had.
+                    var callStack = located?.CallStack.Select(ToCallStackFrameReport).ToArray();
                     // No suite ran to completion here (load/instantiation/default-value
                     // failure), so there's no elapsed time to report - null, not a
                     // fabricated zero (TcXunit-6fb.2). ex.Message already carries the
@@ -275,7 +291,7 @@ namespace TcXunit.Cli
                     // (TcXunit-p3t.1/gfs), so the error string gets richer without the
                     // JSON wire format changing shape - suites[].error stays a
                     // plain string.
-                    suiteReports.Add(new SuiteReport(suiteName, failFilePath, ex.Message, Array.Empty<TestReport>(), null, fileLine));
+                    suiteReports.Add(new SuiteReport(suiteName, failFilePath, ex.Message, Array.Empty<TestReport>(), null, fileLine, callStack));
                     failCount++;
                     anyFailed = true;
                     continue;
@@ -297,7 +313,7 @@ namespace TcXunit.Cli
                 }
 
                 suiteFilePaths.TryGetValue(suiteName, out var filePath);
-                suiteReports.Add(new SuiteReport(suiteName, filePath, null, testReports, suiteDurationMs, null));
+                suiteReports.Add(new SuiteReport(suiteName, filePath, null, testReports, suiteDurationMs, null, null));
             }
 
             // Skipped files do not change the exit code (TcXunit-iyd.7): a run
@@ -323,6 +339,16 @@ namespace TcXunit.Cli
 
             return exitCode;
         }
+
+        private static CallStackFrameReport ToCallStackFrameReport(PlcCallStackFrame frame) =>
+            new CallStackFrameReport(frame.PouTypeName, frame.MethodName, NullableLine(frame.Line), NullableLine(frame.BodyLine));
+
+        // TcXunit-gfs/7s6: PlcSourceLocationException.UnknownLine (0) means
+        // "no line" the same way for a suite's single FileLine as for every
+        // per-frame Line/BodyLine - one place for that sentinel-to-null
+        // translation instead of a ternary at each call site.
+        private static int? NullableLine(int line) =>
+            line != PlcSourceLocationException.UnknownLine ? (int?)line : null;
 
         private static void WriteSkipLines(TextWriter output, IReadOnlyList<SkippedFile> skipped)
         {
@@ -400,7 +426,14 @@ namespace TcXunit.Cli
 
         private sealed class SuiteReport
         {
-            public SuiteReport(string name, string filePath, string error, IReadOnlyList<TestReport> tests, long? durationMs, int? fileLine)
+            public SuiteReport(
+                string name,
+                string filePath,
+                string error,
+                IReadOnlyList<TestReport> tests,
+                long? durationMs,
+                int? fileLine,
+                IReadOnlyList<CallStackFrameReport> callStack)
             {
                 Name = name;
                 FilePath = filePath;
@@ -408,6 +441,7 @@ namespace TcXunit.Cli
                 Tests = tests;
                 DurationMs = durationMs;
                 FileLine = fileLine;
+                CallStack = callStack;
             }
 
             public string Name { get; }
@@ -429,6 +463,45 @@ namespace TcXunit.Cli
             // the .TcPOU file directly. Null for a passing suite, a suite-load
             // failure with no PLC location, or a fault whose line is unknown.
             public int? FileLine { get; }
+
+            // TcXunit-7s6: the full interpreted call chain behind Error,
+            // innermost frame first (CallStack[0] describes the same fault as
+            // Error/FileLine above), suite entry point last. Additive - Error
+            // keeps its pre-existing single-line shape - and null (not an
+            // empty array) for a passing suite or a load-level failure that
+            // never entered an interpreted ST body.
+            public IReadOnlyList<CallStackFrameReport> CallStack { get; }
+        }
+
+        // One PLC-level frame of a call-stack JSON entry (TcXunit-7s6),
+        // mirroring PlcCallStackFrame's own fields. A separate DTO rather than
+        // serializing PlcCallStackFrame directly, same rationale as the other
+        // *Report types: the wire format stays stable even if the
+        // interpreter's internal model changes.
+        private sealed class CallStackFrameReport
+        {
+            public CallStackFrameReport(string pouTypeName, string methodName, int? line, int? bodyLine)
+            {
+                PouTypeName = pouTypeName;
+                MethodName = methodName;
+                Line = line;
+                BodyLine = bodyLine;
+            }
+
+            public string PouTypeName { get; }
+
+            // Null for a frame with no method to name (a suite body, a bare-
+            // invoked FB body, or a StepCycles cycle) - same convention as
+            // PlcSourceLocationException.MethodName.
+            public string MethodName { get; }
+
+            // The raw .TcPOU XML line, or null when unknown - same convention
+            // as SuiteReport.FileLine, applied per frame.
+            public int? Line { get; }
+
+            // The XAE-implementation-editor-relative line, or null when
+            // unknown.
+            public int? BodyLine { get; }
         }
 
         private sealed class TestReport

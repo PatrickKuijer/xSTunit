@@ -57,6 +57,70 @@ namespace TcXunit.Cli.Tests
             Assert.DoesNotContain($"ThrowsFromNestedCall({callerLine})", text);
         }
 
+        // TcXunit-7s6: the fixture's call chain is two interpreted frames deep
+        // (FB_FailingLineTests.FaultsDeepInAHelper calls
+        // helper.ThrowsFromNestedCall(), which is where the fault actually
+        // happens) - a real deep-call-chain fixture, not a hand-built AST, so
+        // this exercises the same file-line/body-line arithmetic as the rest
+        // of this test class end-to-end through both frames.
+        [Fact]
+        public void Run_SuiteFaults_TextLogPrintsTheFullCallChainBeneathTheFailLine()
+        {
+            var output = new StringWriter();
+
+            CliRunner.Run(new[] { FixtureDir }, output);
+            var text = output.ToString();
+
+            var callerBodyLine = BodyLineOf("FB_FailingLineTests.TcPOU", "helper.ThrowsFromNestedCall();");
+
+            Assert.Contains($"    at FB_FailingLineHelper.ThrowsFromNestedCall({FaultBodyLine()})", text);
+            Assert.Contains($"    at FB_FailingLineTests.FaultsDeepInAHelper({callerBodyLine})", text);
+
+            // Innermost frame's "at" line must appear before the outer one -
+            // "innermost first" is a hard contract of CallStack itself
+            // (TcXunit-1am), and the console rendering must not reorder it.
+            var innerIndex = text.IndexOf($"at FB_FailingLineHelper.ThrowsFromNestedCall({FaultBodyLine()})", StringComparison.Ordinal);
+            var outerIndex = text.IndexOf($"at FB_FailingLineTests.FaultsDeepInAHelper({callerBodyLine})", StringComparison.Ordinal);
+            Assert.True(innerIndex >= 0 && outerIndex >= 0 && innerIndex < outerIndex);
+        }
+
+        [Fact]
+        public void Run_SuiteFaults_JsonCallStackCapturesAllThreeFramesInnermostFirst()
+        {
+            var output = new StringWriter();
+
+            CliRunner.Run(new[] { FixtureDir, "--format=json" }, output);
+
+            using var doc = JsonDocument.Parse(output.ToString());
+            var suite = doc.RootElement.GetProperty("suites")[0];
+            var callStack = suite.GetProperty("callStack");
+
+            // Three interpreted frames: the helper method that actually
+            // throws, the suite method that called it, and the suite's own
+            // top-level body that invoked that method - the outermost frame
+            // has no method name (TcXunit-1am's "suite entry point last").
+            Assert.Equal(3, callStack.GetArrayLength());
+
+            var inner = callStack[0];
+            Assert.Equal("FB_FailingLineHelper", inner.GetProperty("pouTypeName").GetString());
+            Assert.Equal("ThrowsFromNestedCall", inner.GetProperty("methodName").GetString());
+            Assert.Equal(FaultFileLine(), inner.GetProperty("line").GetInt32());
+            Assert.Equal(FaultBodyLine(), inner.GetProperty("bodyLine").GetInt32());
+
+            var middle = callStack[1];
+            Assert.Equal("FB_FailingLineTests", middle.GetProperty("pouTypeName").GetString());
+            Assert.Equal("FaultsDeepInAHelper", middle.GetProperty("methodName").GetString());
+
+            var callerFileLine = LineOf("FB_FailingLineTests.TcPOU", "helper.ThrowsFromNestedCall();");
+            var callerBodyLine = BodyLineOf("FB_FailingLineTests.TcPOU", "helper.ThrowsFromNestedCall();");
+            Assert.Equal(callerFileLine, middle.GetProperty("line").GetInt32());
+            Assert.Equal(callerBodyLine, middle.GetProperty("bodyLine").GetInt32());
+
+            var outer = callStack[2];
+            Assert.Equal("FB_FailingLineTests", outer.GetProperty("pouTypeName").GetString());
+            Assert.Equal(JsonValueKind.Null, outer.GetProperty("methodName").ValueKind);
+        }
+
         [Fact]
         public void Run_SuiteFaults_JsonErrorCarriesTheBodyLine_AndFileLineMovesToItsOwnField()
         {

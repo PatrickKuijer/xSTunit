@@ -34,5 +34,13 @@ namespace TcXunit.Interpreter
 
         // "FB_Y.MethodZ", or just "FB_Y" for a POU body.
         public string Location => MethodName == null ? PouTypeName : PouTypeName + "." + MethodName;
+
+        // TcXunit-7s6: Location with "(bodyLine)" folded in when the line is
+        // known - the one place this formatting lives, shared by
+        // PlcSourceLocationException.FormatMessage (the innermost frame's
+        // Message) and CliRunner's per-frame console rendering, so the two
+        // can't drift into slightly different shapes for the same data.
+        public string LocationWithLine =>
+            BodyLine == PlcSourceLocationException.UnknownLine ? Location : Location + "(" + BodyLine + ")";
     }
 }

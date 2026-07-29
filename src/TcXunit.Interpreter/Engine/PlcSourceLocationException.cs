@@ -65,7 +65,7 @@ namespace TcXunit.Interpreter
         }
 
         private PlcSourceLocationException(IReadOnlyList<PlcCallStackFrame> callStack, Exception innerException)
-            : base(FormatMessage(callStack[0].PouTypeName, callStack[0].MethodName, callStack[0].BodyLine, innerException), innerException)
+            : base(callStack[0].LocationWithLine + ": " + innerException?.Message, innerException)
         {
             CallStack = callStack;
             PouTypeName = callStack[0].PouTypeName;
@@ -112,13 +112,5 @@ namespace TcXunit.Interpreter
         // single frame when only one body was ever on the (interpreter's)
         // stack.
         public IReadOnlyList<PlcCallStackFrame> CallStack { get; }
-
-        private static string FormatMessage(string pouTypeName, string methodName, int bodyLine, Exception innerException)
-        {
-            var location = methodName == null ? pouTypeName : pouTypeName + "." + methodName;
-            if (bodyLine != UnknownLine)
-                location += "(" + bodyLine + ")";
-            return location + ": " + innerException?.Message;
-        }
     }
 }

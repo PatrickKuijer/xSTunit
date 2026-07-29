@@ -7,8 +7,8 @@ namespace TcXunit.Interpreter.Logging
 {
     /// <summary>
     /// Process-wide structured logging for TcXunit's catch-and-summarize paths (TcXunit-2v8).
-    /// SuiteCaseRunner/CliRunner collapse exceptions down to ex.Message for the concise failure
-    /// surfaced to xUnit/Test Explorer; this additionally logs the full ex.ToString() (message +
+    /// CliRunner collapses exceptions down to ex.Message for the concise failure
+    /// surfaced in its console/JSON output; this additionally logs the full ex.ToString() (message +
     /// stack trace + inner exceptions) to a rolling log file, so a failing suite's actual call
     /// site can be reconstructed from the log instead of hand-editing a catch block, rebuilding,
     /// and reverting.

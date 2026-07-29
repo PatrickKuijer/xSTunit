@@ -3,7 +3,7 @@ using TcXunit.Parser;
 
 namespace TcXunit.Interpreter
 {
-    // Thrown by SuiteCaseRunner.BuildRegistry (TcXunit-dvd) when the same
+    // Thrown by DutStructLoader.Load (TcXunit-dvd) when the same
     // STRUCT type name is declared in more than one .TcDUT file across the
     // merged set of POU directories. Mirrors DuplicatePouTypeException's
     // shape/behavior for POU types: a duplicate STRUCT name is ambiguous and

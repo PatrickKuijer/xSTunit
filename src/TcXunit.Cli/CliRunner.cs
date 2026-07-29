@@ -130,11 +130,11 @@ namespace TcXunit.Cli
             // (TcXunit-iyd.7): a real production tree always contains POUs
             // outside the v1 parse subset (Tc2_System, __NEW, ...), and one of
             // them must not make every *other* suite in the tree unrunnable.
-            // Same skip-and-report shape SuiteCaseRunner.BuildRegistry already
-            // uses for Test Explorer discovery (PLC-b62/TcXunit-swk), keyed by
-            // full file path for the same collision-avoidance reason
-            // (TcXunit-pvp). A suite that actually depends on a skipped POU
-            // still fails clearly at run time with an unresolved-type error.
+            // Same skip-and-report shape used throughout this loader
+            // (PLC-b62/TcXunit-swk), keyed by full file path for the same
+            // collision-avoidance reason (TcXunit-pvp). A suite that actually
+            // depends on a skipped POU still fails clearly at run time with
+            // an unresolved-type error.
             var loaded = new List<LoadedPou>();
             foreach (var file in MultiDirectoryPouLoader.FindPouFiles(args))
             {
@@ -156,10 +156,9 @@ namespace TcXunit.Cli
             }
 
             // Duplicate type names across the merged directory set stay a hard,
-            // fail-fast error here (unlike SuiteCaseRunner, which can't afford
-            // to abort a solution-wide Test Explorer scan): it means the caller
-            // pointed the CLI at an inconsistent set of directories, which is a
-            // usage/discovery error rather than an unsupported-file skip.
+            // fail-fast error here: it means the caller pointed the CLI at an
+            // inconsistent set of directories, which is a usage/discovery
+            // error rather than an unsupported-file skip.
             try
             {
                 MultiDirectoryPouLoader.CheckForDuplicates(loaded);
@@ -171,15 +170,13 @@ namespace TcXunit.Cli
 
             var types = loaded.Select(l => l.Pou).ToList();
 
-            // .TcDUT STRUCT types (TcXunit-9li): shared with SuiteCaseRunner
-            // via DutStructLoader so `tcxunit run` resolves STRUCT-typed DUTs
-            // the same way Test Explorer discovery does, instead of silently
+            // .TcDUT STRUCT types (TcXunit-9li): loaded via DutStructLoader so
+            // `tcxunit run` resolves STRUCT-typed DUTs instead of silently
             // failing to resolve any suite/FB that depends on one. Per-file
             // parse failures are isolated the same resilient way
-            // DutStructLoader isolates them for SuiteCaseRunner (unsupported
-            // DUT kinds are skipped, not fatal); a duplicate STRUCT name
-            // across files is a hard error, same as a duplicate POU type
-            // name above.
+            // DutStructLoader isolates them (unsupported DUT kinds are
+            // skipped, not fatal); a duplicate STRUCT name across files is a
+            // hard error, same as a duplicate POU type name above.
             IReadOnlyList<StructAst> structTypes;
             try
             {
@@ -192,9 +189,8 @@ namespace TcXunit.Cli
             }
 
             // ALIAS .TcDUT definitions (TcXunit-6hg, e.g. T_MaxString ->
-            // STRING(255)): shared with SuiteCaseRunner via DutAliasLoader
-            // for the same "both entry points resolve DUTs identically"
-            // reason as DutStructLoader/GvlLoader above.
+            // STRING(255)): loaded via DutAliasLoader, same resolution shape
+            // as DutStructLoader/GvlLoader above.
             var aliases = DutAliasLoader.Load(args, out var aliasSkipped).ToDictionary(kv => kv.Key, kv => kv.Value);
             skipped.AddRange(aliasSkipped);
 
@@ -207,9 +203,9 @@ namespace TcXunit.Cli
             foreach (var enumAlias in enumAliases)
                 aliases[enumAlias.Key] = enumAlias.Value;
 
-            // .TcGVL global variable lists (TcXunit-71o): shared with
-            // SuiteCaseRunner via GvlLoader, same resilient/fail-fast shape
-            // as DutStructLoader above.
+            // .TcGVL global variable lists (TcXunit-71o): loaded via
+            // GvlLoader, same resilient/fail-fast shape as DutStructLoader
+            // above.
             IReadOnlyList<GvlAst> gvls;
             try
             {

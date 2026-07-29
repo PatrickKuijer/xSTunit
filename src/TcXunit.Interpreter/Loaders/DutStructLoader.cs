@@ -7,11 +7,9 @@ using TcXunit.Parser;
 
 namespace TcXunit.Interpreter
 {
-    // Shared by CliRunner and SuiteCaseRunner.BuildRegistry (TcXunit-9li): loads
-    // .TcDUT STRUCT types across the merged set of POU directories so both the
-    // CLI entry point (`tcxunit run`) and the Test Explorer discovery path
-    // (SuiteCaseRunner) resolve STRUCT-typed DUTs identically, and future
-    // changes to DUT-loading can't silently apply to only one of them again.
+    // Used by CliRunner (TcXunit-9li) to load .TcDUT STRUCT types across the
+    // merged set of POU directories, so future entry points resolve
+    // STRUCT-typed DUTs the same way rather than each growing its own copy.
     //
     // ENUM/alias/union DUTs are skipped since StructDeclParser has no model
     // for them yet, as are STRUCT DUTs using "TYPE X EXTENDS Base:" (struct

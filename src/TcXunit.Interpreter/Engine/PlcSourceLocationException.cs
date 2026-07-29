@@ -11,9 +11,9 @@ namespace TcXunit.Interpreter
     // the PLC code under test was running.
     //
     // Deliberately a *wrapper*, never a replacement: the original exception is
-    // kept verbatim as InnerException (type and message both), because callers
-    // - CliRunner, SuiteCaseRunner, tests - switch on concrete interpreter
-    // exception types. Engine wraps exactly once, at the outermost (suite)
+    // kept verbatim as InnerException (type and message both), because callers -
+    // CliRunner, tests - switch on concrete interpreter exception types. Engine
+    // wraps exactly once, at the outermost (suite)
     // boundary, so PouTypeName/MethodName describe the INNERMOST interpreted
     // body that faulted rather than whichever frame happened to be unwinding.
     public sealed class PlcSourceLocationException : Exception

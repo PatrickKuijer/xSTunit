@@ -29,11 +29,11 @@ namespace TcXunit.Interpreter
 
     public sealed class RefAssignStmt : Stmt
     {
-        public string TargetName { get; }
+        public Expr Target { get; }
         public Expr Value { get; }
-        public RefAssignStmt(string targetName, Expr value)
+        public RefAssignStmt(Expr target, Expr value)
         {
-            TargetName = targetName;
+            Target = target;
             Value = value;
         }
     }

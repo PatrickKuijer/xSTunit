@@ -76,7 +76,10 @@ namespace TcXunit.Interpreter
         {
             var instance = new StructInstance(structAst.Name);
             foreach (var field in structAst.Fields)
+            {
                 instance.Fields[field.Name] = new Cell { Value = DefaultValue(field, owningInstance), DeclaredTypeName = field.TypeName };
+                instance.FieldTypeNames[field.Name] = field.TypeName;
+            }
 
             if (literalText != null && Parser.ParseExpression(literalText) is StructLiteralExpr lit)
                 OverlayStruct(instance, lit, new Frame(owningInstance, structAst.Name));

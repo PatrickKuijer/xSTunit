@@ -10,6 +10,17 @@ namespace TcXunit.Interpreter
         public string TypeName { get; }
         public Dictionary<string, Cell> Fields { get; } = new Dictionary<string, Cell>();
 
+        // Declared IEC type text for each entry in Fields, indexed by name -
+        // populated once in BuildStructDefault and never touched afterward,
+        // same rationale as FbInstance.FieldTypeNames (TcXunit-6t0): a REF=
+        // binding of a struct member (stWidget.ipHandler REF= fbHandler)
+        // replaces that field's Cell in Fields wholesale, which would
+        // otherwise erase the field's own declared type in favor of
+        // whatever it now points at. __ISVALIDREF needs the former, not the
+        // latter, to validate that the *member being asked about* was
+        // actually declared REFERENCE TO/POINTER TO.
+        public Dictionary<string, string> FieldTypeNames { get; } = new Dictionary<string, string>();
+
         public StructInstance(string typeName)
         {
             TypeName = typeName;

@@ -151,6 +151,15 @@ namespace TcXunit.Interpreter
                 if (receiver is FbInstance fb)
                     return fb.FieldTypeNames.TryGetValue(fieldAccess.FieldName, out var fbFieldType) ? fbFieldType : null;
 
+                // TcXunit-6t0: a STRUCT's own FieldTypeNames side table,
+                // same reasoning as FbInstance.FieldTypeNames above - a
+                // struct-member REF= target (stWidget.ipHandler REF= ...)
+                // replaces that field's Cell in Fields wholesale, so
+                // Cell.DeclaredTypeName below would otherwise reflect the
+                // REF=-bound target instead of the member's own declaration.
+                if (receiver is StructInstance st)
+                    return st.FieldTypeNames.TryGetValue(fieldAccess.FieldName, out var stFieldType) ? stFieldType : null;
+
                 var fields = FieldsOf(receiver);
                 return fields.TryGetValue(fieldAccess.FieldName, out var fieldCell) ? fieldCell.DeclaredTypeName : null;
             }

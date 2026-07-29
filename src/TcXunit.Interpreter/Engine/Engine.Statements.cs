@@ -30,19 +30,7 @@ namespace TcXunit.Interpreter
                     SetLValue(assign.Target, Evaluate(assign.Value, frame), frame);
                     break;
                 case RefAssignStmt refAssign:
-                    // Method-local REFERENCE TO vars are pre-populated into
-                    // frame.Locals by BindParams, so a hit there means the
-                    // target is genuinely local. Otherwise, if it names an
-                    // instance field (e.g. declared in the FB's VAR block),
-                    // write through to instance.Fields so the binding
-                    // persists across calls (TcXunit-t6p) - Frame is
-                    // per-call and would otherwise silently drop it.
-                    if (!frame.Locals.ContainsKey(refAssign.TargetName) &&
-                        frame.Instance != null &&
-                        frame.Instance.Fields.ContainsKey(refAssign.TargetName))
-                        frame.Instance.Fields[refAssign.TargetName] = ResolveCellForLValue(refAssign.Value, frame);
-                    else
-                        frame.Locals[refAssign.TargetName] = ResolveCellForLValue(refAssign.Value, frame);
+                    BindRef(refAssign.Target, ResolveCellForLValue(refAssign.Value, frame), frame);
                     break;
                 case IfStmt ifStmt:
                     if ((bool)Evaluate(ifStmt.Condition, frame))
@@ -226,6 +214,79 @@ namespace TcXunit.Interpreter
                 }
                 default:
                     throw new NotSupportedException($"Assignment target {target.GetType().Name} not supported");
+            }
+        }
+
+        // REF= target dispatch (TcXunit-6t0): mirrors SetLValue's shape
+        // (identifier / field access / array index), but a REF= binds by
+        // aliasing the destination's storage onto sourceCell rather than
+        // copying a value into it.
+        //
+        // Identifier and field-access targets are backed by a
+        // Dictionary<string, Cell> (Locals/instance Fields/struct Fields/GVL
+        // fields) - true aliasing there means replacing the dictionary's Cell
+        // entry itself, exactly as the original identifier-only
+        // implementation already did for Locals/instance Fields (TcXunit-
+        // t6p): every later read of that name resolves straight to
+        // sourceCell, and a write through it mutates sourceCell.Value, which
+        // is also whatever the REF='s RHS still points at.
+        //
+        // An array-index target can't receive a swapped Cell: ArrayValue.
+        // Elements holds raw values, not Cell wrappers (unlike the
+        // dictionary-backed containers above), so there is no Cell slot to
+        // replace. Storing sourceCell.Value into the element still gives
+        // correct aliasing for the motivating case (an array of FB/STRUCT
+        // references - those are CLR reference types, so the stored value
+        // IS the shared target object), though unlike the dictionary-backed
+        // targets it won't propagate a later write back to a scalar
+        // REFERENCE TO's original variable.
+        private void BindRef(Expr target, Cell sourceCell, Frame frame)
+        {
+            switch (target)
+            {
+                case IdentifierExpr id:
+                    // Method-local REFERENCE TO vars are pre-populated into
+                    // frame.Locals by BindParams, so a hit there means the
+                    // target is genuinely local. Otherwise, if it names an
+                    // instance field (e.g. declared in the FB's VAR block),
+                    // write through to instance.Fields so the binding
+                    // persists across calls (TcXunit-t6p) - Frame is
+                    // per-call and would otherwise silently drop it.
+                    if (!frame.Locals.ContainsKey(id.Name) &&
+                        frame.Instance != null &&
+                        frame.Instance.Fields.ContainsKey(id.Name))
+                        frame.Instance.Fields[id.Name] = sourceCell;
+                    else
+                        frame.Locals[id.Name] = sourceCell;
+                    break;
+
+                case FieldAccessExpr fieldAccess:
+                {
+                    if (TryGetGvlFields(fieldAccess, frame, out var gvlFields))
+                    {
+                        if (!gvlFields.ContainsKey(fieldAccess.FieldName))
+                            throw new InvalidOperationException($"Unknown field '{fieldAccess.FieldName}'");
+                        gvlFields[fieldAccess.FieldName] = sourceCell;
+                        break;
+                    }
+
+                    var fields = FieldsOf(Evaluate(fieldAccess.Receiver, frame));
+                    if (!fields.ContainsKey(fieldAccess.FieldName))
+                        throw new InvalidOperationException($"Unknown field '{fieldAccess.FieldName}'");
+                    fields[fieldAccess.FieldName] = sourceCell;
+                    break;
+                }
+
+                case IndexExpr index:
+                {
+                    var array = (ArrayValue)Evaluate(index.Receiver, frame);
+                    var flat = FlattenIndex(array, index.Indices, frame);
+                    array.Elements[flat] = sourceCell.Value;
+                    break;
+                }
+
+                default:
+                    throw new NotSupportedException($"REF= target {target.GetType().Name} not supported");
             }
         }
 

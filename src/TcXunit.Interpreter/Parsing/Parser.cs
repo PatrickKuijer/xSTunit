@@ -120,7 +120,7 @@ namespace TcXunit.Interpreter
                 Advance();
                 var value = ParseExpr();
                 Expect(TokenType.Semicolon);
-                return new RefAssignStmt(RequireIdentifierName(target), value);
+                return new RefAssignStmt(RequireLValue(target), value);
             }
 
             if (target is CallExpr call)
@@ -130,13 +130,6 @@ namespace TcXunit.Interpreter
             }
 
             throw new FormatException($"Statement did not resolve to an assignment or call at token index {_pos}");
-        }
-
-        private static string RequireIdentifierName(Expr target)
-        {
-            if (target is IdentifierExpr id)
-                return id.Name;
-            throw new FormatException("Assignment target must be a plain identifier in the v1 subset");
         }
 
         // Assignment targets: plain identifier, .Member field access, or

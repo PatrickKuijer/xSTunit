@@ -105,8 +105,35 @@ namespace TcXunit.Interpreter.Tests
             Assert.Equal("ADR", adrCall.MethodName);
 
             var refAssign = Assert.IsType<RefAssignStmt>(stmts[1]);
-            Assert.Equal("refCeiling", refAssign.TargetName);
+            Assert.Equal("refCeiling", Assert.IsType<IdentifierExpr>(refAssign.Target).Name);
             Assert.IsType<IdentifierExpr>(refAssign.Value);
+        }
+
+        [Fact]
+        public void ParseStatements_RefAssignFieldAccessTarget_ProducesRefAssignStmtWithFieldAccessTarget()
+        {
+            // TcXunit-6t0: REF= must accept the same lvalue shapes as := -
+            // a struct/FB member target (stWidget.IpHandler REF= fbHandler),
+            // not just a plain identifier.
+            var stmts = Parser.ParseStatements("stWidget.IpHandler REF= fbHandler;");
+
+            var refAssign = Assert.IsType<RefAssignStmt>(Assert.Single(stmts));
+            var fieldTarget = Assert.IsType<FieldAccessExpr>(refAssign.Target);
+            Assert.Equal("IpHandler", fieldTarget.FieldName);
+            Assert.Equal("stWidget", Assert.IsType<IdentifierExpr>(fieldTarget.Receiver).Name);
+        }
+
+        [Fact]
+        public void ParseStatements_RefAssignIndexTarget_ProducesRefAssignStmtWithIndexTarget()
+        {
+            // TcXunit-6t0: REF= must also accept an array-index target
+            // (aRefs[1] REF= x).
+            var stmts = Parser.ParseStatements("aRefs[1] REF= x;");
+
+            var refAssign = Assert.IsType<RefAssignStmt>(Assert.Single(stmts));
+            var indexTarget = Assert.IsType<IndexExpr>(refAssign.Target);
+            Assert.Equal("aRefs", Assert.IsType<IdentifierExpr>(indexTarget.Receiver).Name);
+            Assert.Single(indexTarget.Indices);
         }
 
         [Fact]

@@ -63,6 +63,45 @@ That last distinction is the point: without it, an agent seeing a non-empty erro
 
 Pass `--coverage` to additionally list every non-suite POU with the suites exercising it, in both formats. The entries with no suites are the useful ones — a next-task list ("write a suite for `F_ComputeChecksum`"). Association is by direct textual reference from a suite; it's a report, never a gate, and doesn't affect the exit code.
 
+## Native-function plugins
+
+TwinCAT library functions (`Tc2_Utilities.F_CheckSum16`, `Tc2_Standard.F_ToUpper`, …) ship compiled-only — no `.TcPOU` to parse, so a suite that calls one can't resolve it from source. A native-function plugin supplies the behavior from outside the interpreter, so vendor/in-house library implementations don't have to live in this repo.
+
+Implement `ITcXunitNativeFunction` (`src/TcXunit.Interpreter/Extensibility/ITcXunitNativeFunction.cs`) against `TcXunit.Interpreter` referenced with `Private="false"`:
+
+```csharp
+using TcXunit.Interpreter.Extensibility;
+
+public sealed class CheckSum16Function : ITcXunitNativeFunction
+{
+    public string Name => "F_CheckSum16";   // matched case-insensitively
+
+    public object Invoke(NativeCallContext context)
+    {
+        var size = context.RequireInt32("nSize", 1);
+        var seed = context.RequireInt32("nSeed", 2);
+        var data = context.RequireBytes("pData", 0, size);
+
+        var sum = seed;
+        foreach (var b in data)
+            sum += b;
+
+        return sum & 0xFFFF;                // WORD -> int
+    }
+}
+```
+
+Build the plugin project and point the CLI at its output directory:
+
+```bash
+dotnet build samples/TcXunit.SamplePlugins -c Release
+tcxunit run <path-to-POUs> --plugins samples/TcXunit.SamplePlugins/bin/Release/netstandard2.0
+```
+
+Every `*.dll` in the directory is scanned for `ITcXunitNativeFunction` implementations with a public parameterless constructor; a DLL that isn't managed, fails type load, or collides on a function name already registered is skipped and reported — never fatal. Registered functions are consulted last (after intrinsics, methods, and real `FUNCTION` POUs), so a plugin only fills a hole that would otherwise be an error — it can never shadow real source. The VSIX forwards a `plugins` directory from `tcxunit.json` the same way.
+
+Full worked example, argument/return type table, and guarantees: [`samples/TcXunit.SamplePlugins/README.md`](samples/TcXunit.SamplePlugins/README.md) (epic TcXunit-rl4).
+
 ## Issue tracking
 
 This project uses `bd` (beads). Run `bd prime` for workflow context, `bd ready` for available work.

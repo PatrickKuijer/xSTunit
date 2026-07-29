@@ -30,6 +30,7 @@ namespace TcXunit.Interpreter
         // regardless of which declaration the text came from.
         private readonly Dictionary<string, IReadOnlyList<Stmt>> _statementCache = new Dictionary<string, IReadOnlyList<Stmt>>();
         private readonly Dictionary<string, IReadOnlyList<VarDecl>> _declCache = new Dictionary<string, IReadOnlyList<VarDecl>>();
+        private readonly Dictionary<string, string> _returnTypeCache = new Dictionary<string, string>();
 
         // Chained-alias (alias-of-alias) resolution depth cap (TcXunit-6hg):
         // no real IEC 61131-3 project defines a self-referential/cyclic
@@ -129,6 +130,21 @@ namespace TcXunit.Interpreter
                 _declCache[declarationText] = decls;
             }
             return decls;
+        }
+
+        // Cached equivalent of CallableReturnTypeParser.TryGetReturnTypeName
+        // (TcXunit-cq6) - same parse-once rationale as GetDecls, and it earns
+        // it for the same reason: CallMethod runs this on every invocation,
+        // including every cycle of a StepCycles loop. Null means the callable
+        // declares no return type (or the text isn't a callable header).
+        public string GetReturnTypeName(string declarationText)
+        {
+            if (!_returnTypeCache.TryGetValue(declarationText, out var typeName))
+            {
+                CallableReturnTypeParser.TryGetReturnTypeName(declarationText, out typeName);
+                _returnTypeCache[declarationText] = typeName;
+            }
+            return typeName;
         }
     }
 }

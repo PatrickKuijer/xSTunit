@@ -187,7 +187,9 @@ namespace TcXunit.Interpreter
                 // only its own params/locals and GVLs via
                 // TryResolveGlobalCell).
                 var globalFunctionDef = _registry.Get(methodName);
-                if (globalFunctionDef != null && GlobalFunctionDeclarationPattern.IsMatch(StripLeadingComments(globalFunctionDef.DeclarationText)))
+                if (globalFunctionDef != null &&
+                    GlobalFunctionDeclarationPattern.IsMatch(
+                        CallableReturnTypeParser.StripLeadingComments(globalFunctionDef.DeclarationText)))
                     return CallGlobalFunction(globalFunctionDef, positionalArgs, namedArgs, callerFrame);
 
                 throw new InvalidOperationException($"Method '{methodName}' not found starting from type '{startType}'");
@@ -202,6 +204,7 @@ namespace TcXunit.Interpreter
             // offset has to ride the frame rather than the statement list
             // (TcXunit-p3t.4).
             var newFrame = new Frame(instance, definingType, methodName, methodDef.BodyStartLine);
+            SeedReturnCell(newFrame, methodName, methodDef.DeclarationText);
             var paramDecls = _registry.GetDecls(methodDef.DeclarationText);
             BindParams(paramDecls, positionalArgs, namedArgs, callerFrame, newFrame);
 
@@ -215,32 +218,55 @@ namespace TcXunit.Interpreter
         // No ^ anchor: DeclarationText may lead with a (* ... *) block
         // comment or // line comment (this codebase's standard convention -
         // see TcXunit-9k6), so instead of anchoring to the very start of the
-        // string, the leading comment/whitespace run is stripped first (see
-        // StripLeadingComments) and the resulting text is anchored with ^.
+        // string, the leading comment/whitespace run is stripped first
+        // (CallableReturnTypeParser.StripLeadingComments - shared with the
+        // header-return-type parse, which needs the identical treatment for
+        // the identical reason) and the resulting text is anchored with ^.
         private static readonly System.Text.RegularExpressions.Regex GlobalFunctionDeclarationPattern =
             new System.Text.RegularExpressions.Regex(@"^\s*FUNCTION(?!_BLOCK)\b", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
 
-        // Strips leading (* ... *) block comments and // line comments (with
-        // any interleaved whitespace) from the start of IEC declaration text,
-        // so keyword-anchored regexes like GlobalFunctionDeclarationPattern
-        // can match declarations that open with a purpose comment.
-        private static readonly System.Text.RegularExpressions.Regex LeadingCommentPattern =
-            new System.Text.RegularExpressions.Regex(
-                @"\G\s*(\(\*.*?\*\)|//[^\n]*)",
-                System.Text.RegularExpressions.RegexOptions.Singleline);
-
-        private static string StripLeadingComments(string declarationText)
+        // TcXunit-cq6: a callable's return value lives in a Local named after
+        // the callable itself, and a Cell carries no declared-type tag - so
+        // assignment compatibility is decided purely by the CLR type already
+        // in the Cell (NumericCoercion.CoerceForAssignment). Left to be
+        // created lazily by its first assignment, an LREAL-returning method
+        // opening with 'M_Read := 0.0;' got a *REAL* cell (a bare decimal
+        // literal lexes as REAL - see Engine.Defaults' TcXunit-5qs note), and
+        // every later LREAL assignment into it was rejected as an implicit
+        // narrowing. Seeding the cell from the declared return type up front
+        // gives the narrowing rule the right type to judge against, the same
+        // way BindParams already seeds each param from its VarDecl.
+        //
+        // Only IEC numeric return types are seeded. They're the ones the
+        // narrowing/widening rule actually turns on, and their defaults are
+        // plain boxed zeros. Other return types (a DUT, an interface, a
+        // POINTER) would need DefaultValue's full construction path, which for
+        // a registered type name means materializing an instance - too much to
+        // do speculatively for a return value that carries no narrowing
+        // hazard. Those keep today's behavior: no cell until first assignment,
+        // null out of CallMethod when never assigned. The elementary
+        // non-numerics (BOOL/STRING/TIME/DATE) sit between the two and are
+        // tracked separately (TcXunit-qft).
+        //
+        // The IecNumericType lookup is case-sensitive, so a lowercase-spelled
+        // return type ("METHOD M_Read : lreal") parses but doesn't seed. That
+        // is deliberate consistency, not an oversight: every type-name lookup
+        // in the interpreter (VarBlockParser decls through Engine.Defaults'
+        // DefaultValue, StringTypeInfo, GetStruct) is likewise case-sensitive
+        // even though ST itself is case-insensitive. Fixing it here alone
+        // would just move the surprise - it needs doing across all of them at
+        // once (TcXunit-fzm).
+        private void SeedReturnCell(Frame frame, string name, string declarationText)
         {
-            var index = 0;
-            while (index < declarationText.Length)
-            {
-                var match = LeadingCommentPattern.Match(declarationText, index);
-                if (!match.Success || match.Length == 0)
-                    break;
-                index = match.Index + match.Length;
-            }
+            var declaredType = _registry.GetReturnTypeName(declarationText);
+            if (declaredType == null)
+                return;
 
-            return declarationText.Substring(index);
+            if (!IecNumericType.TryGetDefault(_registry.ResolveAlias(declaredType), out var zero))
+                return;
+
+            frame.Locals[name] = new Cell { Value = zero, DeclaredTypeName = declaredType };
+            frame.LocalTypeNames[name] = declaredType;
         }
 
         // Global FUNCTION invocation (TcXunit-9su): same body-execution shape
@@ -254,6 +280,7 @@ namespace TcXunit.Interpreter
             Frame callerFrame)
         {
             var newFrame = new Frame(null, functionDef.Name);
+            SeedReturnCell(newFrame, functionDef.Name, functionDef.DeclarationText);
             var paramDecls = _registry.GetDecls(functionDef.DeclarationText);
             BindParams(paramDecls, positionalArgs, namedArgs, callerFrame, newFrame);
 

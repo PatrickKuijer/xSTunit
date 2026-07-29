@@ -49,11 +49,21 @@ namespace TcXunit.Interpreter
                         currentSection = VarSection.InOut;
                         continue;
                     // VAR_TEMP locals are re-initialized to their default
-                    // every call, same as BindParams already does for
-                    // VarSection.Local fields (fresh Frame.Locals per
-                    // CallMethod) - TcXunit-3g7.
+                    // every call/invocation, never persisted like a VAR
+                    // field. Inside a METHOD/ACTION this falls out of
+                    // BindParams already rebuilding non-Input/InOut decls
+                    // fresh in a new Frame per CallMethod call (TcXunit-3g7);
+                    // at a FUNCTION_BLOCK/PROGRAM's own top level there is no
+                    // such per-call Frame (the field has to live in
+                    // instance.Fields for dot-access/methods to see it), so
+                    // it gets its own VarSection.Temp instead of aliasing to
+                    // Local - Engine.IsPersistedField still materializes it
+                    // into Fields at NewInstance(), but
+                    // Engine.ResetTopLevelTempFields additionally resets it
+                    // to default before every top-level body invocation
+                    // (TcXunit-9go).
                     case "VAR_TEMP":
-                        currentSection = VarSection.Local;
+                        currentSection = VarSection.Temp;
                         continue;
                     case "END_VAR":
                         currentSection = null;

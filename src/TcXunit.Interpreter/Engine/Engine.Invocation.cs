@@ -439,6 +439,7 @@ namespace TcXunit.Interpreter
                     cell.Value = Evaluate(arg.Value, callerFrame);
 
             var def = _registry.Get(callee.ActualTypeName);
+            ResetTopLevelTempFields(callee);
             var calleeFrame = new Frame(callee, callee.ActualTypeName, null, def.BodyStartLine);
             ExecuteBody(_registry.GetStatements(def.ImplementationText), calleeFrame);
         }

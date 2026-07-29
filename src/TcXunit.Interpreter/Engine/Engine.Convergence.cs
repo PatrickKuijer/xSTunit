@@ -18,6 +18,10 @@ namespace TcXunit.Interpreter
             var statements = _registry.GetStatements(def.ImplementationText);
             for (var i = 0; i < cycles; i++)
             {
+                // Top-level VAR_TEMP fields reset to default before every
+                // cycle, not just once at instantiation - TcXunit-9go.
+                ResetTopLevelTempFields(instance);
+
                 // ExecuteBody owns the "a top-level RETURN inside the FB's
                 // cyclic body only ends this cycle; it must not unwind into
                 // whatever ST call (e.g. a TcUnit test method) invoked

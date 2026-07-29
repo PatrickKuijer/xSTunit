@@ -114,6 +114,7 @@ namespace TcXunit.Interpreter
             {
                 var instance = NewInstance(suiteTypeName);
                 var def = _registry.Get(suiteTypeName);
+                ResetTopLevelTempFields(instance);
                 // A suite body is a POU body, not a METHOD, so the frame
                 // carries no method name - a fault here reports just "FB_X".
                 ExecuteBody(_registry.GetStatements(def.ImplementationText), new Frame(instance, suiteTypeName, null, def.BodyStartLine));
@@ -203,13 +204,51 @@ namespace TcXunit.Interpreter
         }
 
         // Fields materialized at NewInstance() time (VAR_INPUT/VAR_OUTPUT/
-        // VAR_IN_OUT alongside VAR/Local) - the set that must persist across
-        // calls/StepCycles and be visible to dot-access (TcXunit-0v1).
+        // VAR_IN_OUT alongside VAR/Local) - the set that must be visible to
+        // dot-access (TcXunit-0v1). VAR/Input/Output/InOut persist across
+        // calls/StepCycles. VAR_TEMP declared at a FB/PROGRAM's own top
+        // level is included here too (methods reach it only through
+        // instance.Fields, same as any other top-level field), but unlike
+        // the others it is NOT meant to persist - ResetTopLevelTempFields
+        // resets it to default before every top-level body invocation so it
+        // behaves like a fresh local rather than a persisted VAR field
+        // (TcXunit-9go).
         private static bool IsPersistedField(VarDecl decl) =>
             decl.Section == VarSection.Local ||
             decl.Section == VarSection.Input ||
             decl.Section == VarSection.Output ||
-            decl.Section == VarSection.InOut;
+            decl.Section == VarSection.InOut ||
+            decl.Section == VarSection.Temp;
+
+        // Resets every VAR_TEMP field declared directly in instance's own
+        // type ancestry's top-level declaration (as opposed to a METHOD's -
+        // those already reset per call via BindParams/Frame.Locals) back to
+        // its default value. Called immediately before each fresh
+        // invocation of a POU's own top-level body (RunSuite's single run,
+        // each StepCycles cycle, each bare/InvokeFbInstance call) so
+        // FB/PROGRAM-top-level VAR_TEMP never carries a value over from a
+        // previous invocation, matching IEC 61131-3 VAR_TEMP semantics
+        // instead of persisting like a real VAR field (TcXunit-9go).
+        private void ResetTopLevelTempFields(FbInstance instance)
+        {
+            var chain = new List<string>();
+            var current = instance.ActualTypeName;
+            while (current != null)
+            {
+                var def = _registry.Get(current);
+                if (def == null)
+                    break;
+                chain.Add(current);
+                current = def.BaseTypeName;
+            }
+
+            for (var i = chain.Count - 1; i >= 0; i--)
+            {
+                var def = _registry.Get(chain[i]);
+                foreach (var decl in _registry.GetDecls(def.DeclarationText).Where(d => d.Section == VarSection.Temp))
+                    instance.Fields[decl.Name].Value = DefaultValue(decl, instance);
+            }
+        }
 
         private static int ToCaseInt(object value) => value switch
         {

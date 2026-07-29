@@ -229,15 +229,19 @@ END_TYPE";
             Assert.Equal("STRING(cScratchConstants.MAX_LABEL_STRING_SIZE)", value.TypeName);
         }
 
-        // TcXunit-3g7: VAR_TEMP (method/action-scoped, re-initialized-to-zero-
-        // every-call locals) wasn't recognized by the section-header switch,
-        // so its header line fell through to the currentSection == null
-        // guard and every declaration inside the block was silently
-        // dropped. Mapped to VarSection.Local since BindParams already
-        // rebuilds VarSection.Local fields fresh (via DefaultValue) in a new
-        // Frame on every CallMethod call, matching VAR_TEMP's semantics.
+        // TcXunit-3g7: VAR_TEMP (re-initialized-to-zero-every-call/invocation
+        // locals) wasn't recognized by the section-header switch, so its
+        // header line fell through to the currentSection == null guard and
+        // every declaration inside the block was silently dropped.
+        // TcXunit-9go: VAR_TEMP now gets its own VarSection.Temp rather than
+        // aliasing to VarSection.Local - a METHOD-scoped VAR_TEMP still
+        // resets every call via BindParams (which treats any non-Input/
+        // InOut section the same way), but a FUNCTION_BLOCK/PROGRAM's own
+        // top-level VAR_TEMP needs to be told apart from a real top-level
+        // VAR field so it can be reset before every invocation instead of
+        // persisting forever (Engine.ResetTopLevelTempFields).
         [Fact]
-        public void Parse_VarTempBlock_ReadsNameAndTypeAsLocalSection()
+        public void Parse_VarTempBlock_ReadsNameAndTypeAsTempSection()
         {
             const string declaration = @"METHOD PRIVATE M_UpdateConvergence
 VAR_TEMP
@@ -249,7 +253,7 @@ END_VAR";
             var value = Assert.Single(vars);
             Assert.Equal("tnRegistered", value.Name);
             Assert.Equal("UINT", value.TypeName);
-            Assert.Equal(VarSection.Local, value.Section);
+            Assert.Equal(VarSection.Temp, value.Section);
         }
 
         [Fact]

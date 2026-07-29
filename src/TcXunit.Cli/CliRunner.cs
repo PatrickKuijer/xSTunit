@@ -240,35 +240,42 @@ namespace TcXunit.Cli
                     // ex.ToString() (stack trace + inner exceptions) goes to the TcXunit log
                     // file so this doesn't need re-instrumenting to diagnose.
                     TcXunitLog.LogException($"CliRunner.Run: suite '{suiteName}' failed to run", ex);
+                    // TcXunit-p3t.1: name the PLC POU + method that was
+                    // executing when it threw, not just the suite. Engine
+                    // only produces a PlcSourceLocationException when an
+                    // interpreted ST body actually faulted; a load-level
+                    // failure (unresolvable type in default-value
+                    // construction, say) has no location and keeps the
+                    // original single-line shape.
+                    var located = ex as PlcSourceLocationException;
                     if (!asJson)
                     {
-                        // TcXunit-p3t.1: name the PLC POU + method that was
-                        // executing when it threw, not just the suite. Engine
-                        // only produces a PlcSourceLocationException when an
-                        // interpreted ST body actually faulted; a load-level
-                        // failure (unresolvable type in default-value
-                        // construction, say) has no location and keeps the
-                        // original single-line shape.
                         // located.Message rather than Location + inner message
-                        // (TcXunit-p3t.4): the exception owns the one rendering
-                        // of "where", so the .TcPOU line appears here and in the
-                        // JSON error string below without two formatters to keep
+                        // (TcXunit-p3t.4/gfs): the exception owns the one rendering
+                        // of "where", so the body-relative line appears here and in
+                        // the JSON error string below without two formatters to keep
                         // in step - and degrades to the bare "FB_Y.MethodZ: ..."
                         // shape by itself when no line is known.
-                        var detail = ex is PlcSourceLocationException located
-                            ? $"in {located.Message}"
-                            : ex.Message;
+                        var detail = located != null ? $"in {located.Message}" : ex.Message;
                         output.WriteLine($"{suiteName}: FAIL ({detail})");
                     }
                     suiteFilePaths.TryGetValue(suiteName, out var failFilePath);
+                    // TcXunit-gfs: the raw .TcPOU XML line, carried as a separate
+                    // structured field for a non-interactive consumer (e.g. an AI
+                    // agent) that opens the fixture/POU file directly by path
+                    // rather than through XAE - null when the failure never
+                    // entered an interpreted ST body, or its line is unknown.
+                    var fileLine = located != null && located.Line != PlcSourceLocationException.UnknownLine
+                        ? (int?)located.Line
+                        : null;
                     // No suite ran to completion here (load/instantiation/default-value
                     // failure), so there's no elapsed time to report - null, not a
                     // fabricated zero (TcXunit-6fb.2). ex.Message already carries the
-                    // "FB_Y.MethodZ(142): ..." prefix for an interpreted fault
-                    // (TcXunit-p3t.1/.4), so the error string gets richer without the
+                    // "FB_Y.MethodZ(5): ..." prefix for an interpreted fault
+                    // (TcXunit-p3t.1/gfs), so the error string gets richer without the
                     // JSON wire format changing shape - suites[].error stays a
                     // plain string.
-                    suiteReports.Add(new SuiteReport(suiteName, failFilePath, ex.Message, Array.Empty<TestReport>(), null));
+                    suiteReports.Add(new SuiteReport(suiteName, failFilePath, ex.Message, Array.Empty<TestReport>(), null, fileLine));
                     failCount++;
                     anyFailed = true;
                     continue;
@@ -290,7 +297,7 @@ namespace TcXunit.Cli
                 }
 
                 suiteFilePaths.TryGetValue(suiteName, out var filePath);
-                suiteReports.Add(new SuiteReport(suiteName, filePath, null, testReports, suiteDurationMs));
+                suiteReports.Add(new SuiteReport(suiteName, filePath, null, testReports, suiteDurationMs, null));
             }
 
             // Skipped files do not change the exit code (TcXunit-iyd.7): a run
@@ -393,13 +400,14 @@ namespace TcXunit.Cli
 
         private sealed class SuiteReport
         {
-            public SuiteReport(string name, string filePath, string error, IReadOnlyList<TestReport> tests, long? durationMs)
+            public SuiteReport(string name, string filePath, string error, IReadOnlyList<TestReport> tests, long? durationMs, int? fileLine)
             {
                 Name = name;
                 FilePath = filePath;
                 Error = error;
                 Tests = tests;
                 DurationMs = durationMs;
+                FileLine = fileLine;
             }
 
             public string Name { get; }
@@ -412,6 +420,15 @@ namespace TcXunit.Cli
             // fabricated 0) when the suite never ran to completion - see the
             // suite-load-failure catch above.
             public long? DurationMs { get; }
+
+            // TcXunit-gfs: the raw .TcPOU XML line for a suite failure whose
+            // location is known (a PlcSourceLocationException with a known
+            // line) - Error's "FB_Y.MethodZ(N): ..." prefix carries the
+            // XAE-body-relative line instead (TcXunit-gfs), so this is the one
+            // place the raw file line still surfaces for a consumer opening
+            // the .TcPOU file directly. Null for a passing suite, a suite-load
+            // failure with no PLC location, or a fault whose line is unknown.
+            public int? FileLine { get; }
         }
 
         private sealed class TestReport

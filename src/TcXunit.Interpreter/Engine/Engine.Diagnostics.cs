@@ -70,6 +70,13 @@ namespace TcXunit.Interpreter
         // way for the two halves of a location to come from different frames.
         private const string FaultLineKey = "TcXunit.Interpreter.FaultLine";
 
+        // TcXunit-gfs: the XAE-implementation-editor-relative line - the
+        // second already-known number (Frame.CurrentLine) this change
+        // surfaces, stamped at the same point and under the same
+        // first-writer-wins rule as FaultLineKey so both numbers always come
+        // from the same (innermost) frame.
+        private const string FaultBodyLineKey = "TcXunit.Interpreter.FaultBodyLine";
+
         private static void RecordFaultSite(Exception ex, Frame frame)
         {
             // MethodReturnSignal/LoopExitSignal are unwind *signals*, not
@@ -90,6 +97,7 @@ namespace TcXunit.Interpreter
             // BodyStartLine + Line - 1 arithmetic lives in exactly one place
             // (Frame.CurrentFileLine) and nothing downstream can re-apply it.
             ex.Data[FaultLineKey] = frame.CurrentFileLine;
+            ex.Data[FaultBodyLineKey] = frame.CurrentLine;
         }
 
         private static bool IsControlFlowSignal(Exception ex) =>
@@ -112,15 +120,17 @@ namespace TcXunit.Interpreter
             if (pouTypeName == null)
                 return null;
 
-            // TcXunit-p3t.4: a fault stamped by an older/hand-built path may
+            // TcXunit-p3t.4/gfs: a fault stamped by an older/hand-built path may
             // carry no line at all, hence the UnknownLine fallback rather than
             // an unchecked unbox - the rendering then degrades to exactly the
             // POU.Method shape p3t.1 produced.
-            var line = ex.Data[FaultLineKey] is int recordedLine
-                ? recordedLine
-                : PlcSourceLocationException.UnknownLine;
+            var fileLine = RecordedLine(ex, FaultLineKey);
+            var bodyLine = RecordedLine(ex, FaultBodyLineKey);
 
-            return new PlcSourceLocationException(pouTypeName, ex.Data[FaultMethodKey] as string, line, ex);
+            return new PlcSourceLocationException(pouTypeName, ex.Data[FaultMethodKey] as string, fileLine, bodyLine, ex);
         }
+
+        private static int RecordedLine(Exception ex, string key) =>
+            ex.Data[key] is int recordedLine ? recordedLine : PlcSourceLocationException.UnknownLine;
     }
 }

@@ -62,11 +62,11 @@ namespace TcXunit.Interpreter.Tests
 
             var inner = Assert.IsType<InvalidOperationException>(ex.InnerException);
             Assert.Equal("Method 'ThisMethodDoesNotExist' not found starting from type 'FB_Deep'", inner.Message);
-            // The "(1)" is TcXunit-p3t.4: these hand-built MethodAsts take
+            // The "(1)" is TcXunit-p3t.4/gfs: these hand-built MethodAsts take
             // BodyStartLine's default of 1, and Level3's body is a single line,
-            // so the file line and the in-body line coincide at 1. What this
-            // test pins is unchanged - the inner message survives verbatim
-            // after the location.
+            // so the file line and the body-relative line (what Message now
+            // embeds) coincide at 1. What this test pins is unchanged - the
+            // inner message survives verbatim after the location.
             Assert.Equal("FB_Deep.Level3(1): " + inner.Message, ex.Message);
         }
 
@@ -244,14 +244,15 @@ namespace TcXunit.Interpreter.Tests
             // p3t.4 fills it with fileLine = MethodAst.BodyStartLine +
             // node.Line - 1. A hand-built MethodAst has no .TcPOU file, so
             // BodyStartLine keeps its documented default of 1 and the formula
-            // degrades to the identity - the body IS the file. Line stays 0
-            // only when the statement itself has no line (see
-            // PlcSourceLineTests).
+            // degrades to the identity - the body IS the file, so Line and
+            // BodyLine (TcXunit-gfs) coincide here too. Line stays 0 only when
+            // the statement itself has no line (see PlcSourceLineTests).
             var engine = NewNestedChainEngine();
 
             var ex = Assert.Throws<PlcSourceLocationException>(() => engine.RunSuite("FB_MySuite"));
 
             Assert.Equal(1, ex.Line);
+            Assert.Equal(1, ex.BodyLine);
             Assert.Equal(0, PlcSourceLocationException.UnknownLine);
         }
     }

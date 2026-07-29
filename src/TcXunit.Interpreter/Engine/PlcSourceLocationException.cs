@@ -22,16 +22,22 @@ namespace TcXunit.Interpreter
         public const int UnknownLine = 0;
 
         public PlcSourceLocationException(string pouTypeName, string methodName, Exception innerException)
-            : this(pouTypeName, methodName, UnknownLine, innerException)
+            : this(pouTypeName, methodName, UnknownLine, UnknownLine, innerException)
         {
         }
 
-        public PlcSourceLocationException(string pouTypeName, string methodName, int line, Exception innerException)
-            : base(FormatMessage(pouTypeName, methodName, line, innerException), innerException)
+        // TcXunit-gfs: two independent line numbers, both 1-based, both using
+        // the same UnknownLine sentinel - fileLine is the raw .TcPOU XML line
+        // (this type's original Line contract, TcXunit-p3t.4); bodyLine is the
+        // XAE-implementation-editor-relative line, the one a human actually
+        // wants in a log line (see FormatMessage/Message).
+        public PlcSourceLocationException(string pouTypeName, string methodName, int fileLine, int bodyLine, Exception innerException)
+            : base(FormatMessage(pouTypeName, methodName, bodyLine, innerException), innerException)
         {
             PouTypeName = pouTypeName;
             MethodName = methodName;
-            Line = line;
+            Line = fileLine;
+            BodyLine = bodyLine;
         }
 
         // POU type whose body was executing, e.g. "FB_DeepHelper". Never null.
@@ -44,10 +50,20 @@ namespace TcXunit.Interpreter
 
         // The 1-based line *in the originating .TcPOU file* (not within the
         // body), so consumers never need to know about the BodyStartLine +
-        // node.Line - 1 arithmetic that produces it (TcXunit-p3t.4).
+        // node.Line - 1 arithmetic that produces it (TcXunit-p3t.4). Kept for
+        // structured (JSON) consumers that open the .TcPOU file directly
+        // rather than through XAE (TcXunit-gfs) - it is no longer what
+        // Message embeds; see BodyLine for that.
         // UnknownLine when the faulting statement carried no line - a
         // hand-built AST, or any body that never went through the ST parser.
         public int Line { get; }
+
+        // TcXunit-gfs: the 1-based line *within the METHOD/action/POU body*,
+        // i.e. the same number TwinCAT XAE's implementation editor shows for
+        // that body - what FormatMessage/Message now embed, replacing the raw
+        // .TcPOU file line as the human-facing number. UnknownLine under the
+        // same conditions as Line.
+        public int BodyLine { get; }
 
         // "FB_Y.MethodZ", or just "FB_Y" for a POU body - the location without
         // the line. Message is what log lines want (it folds the line in when
@@ -55,11 +71,11 @@ namespace TcXunit.Interpreter
         // parts apart.
         public string Location => MethodName == null ? PouTypeName : PouTypeName + "." + MethodName;
 
-        private static string FormatMessage(string pouTypeName, string methodName, int line, Exception innerException)
+        private static string FormatMessage(string pouTypeName, string methodName, int bodyLine, Exception innerException)
         {
             var location = methodName == null ? pouTypeName : pouTypeName + "." + methodName;
-            if (line != UnknownLine)
-                location += "(" + line + ")";
+            if (bodyLine != UnknownLine)
+                location += "(" + bodyLine + ")";
             return location + ": " + innerException?.Message;
         }
     }

@@ -14,7 +14,7 @@ namespace TcXunit.Interpreter.Tests
     public class PlcSourceLineTests
     {
         [Fact]
-        public void RunSuite_FaultInMethodBody_ReportsTheTcPouFileLineNotTheInBodyLine()
+        public void RunSuite_FaultInMethodBody_ReportsTheTcPouFileLineAndTheBodyRelativeLine()
         {
             // The faulting statement is body line 4 of a method whose ST
             // element opens on file line 12, i.e. file line 15. In-body line 4
@@ -25,9 +25,13 @@ namespace TcXunit.Interpreter.Tests
             var ex = Assert.Throws<PlcSourceLocationException>(() => engine.RunSuite("FB_LineSuite"));
 
             Assert.Equal(12, suite.Methods[0].BodyStartLine);
+            // TcXunit-gfs: Line stays the raw .TcPOU file line (structured
+            // consumers only); BodyLine is the new human-facing number and is
+            // what Message now embeds.
             Assert.Equal(15, ex.Line);
+            Assert.Equal(4, ex.BodyLine);
             Assert.Equal("FB_LineSuite.Fails", ex.Location);
-            Assert.StartsWith("FB_LineSuite.Fails(15): ", ex.Message);
+            Assert.StartsWith("FB_LineSuite.Fails(4): ", ex.Message);
         }
 
         [Fact]
@@ -43,8 +47,9 @@ namespace TcXunit.Interpreter.Tests
 
             Assert.Equal(9, suite.BodyStartLine);
             Assert.Equal(11, ex.Line);
+            Assert.Equal(3, ex.BodyLine);
             Assert.Null(ex.MethodName);
-            Assert.Equal("FB_PouBodySuite(11): " + ex.InnerException.Message, ex.Message);
+            Assert.Equal("FB_PouBodySuite(3): " + ex.InnerException.Message, ex.Message);
         }
 
         [Fact]
@@ -67,6 +72,12 @@ namespace TcXunit.Interpreter.Tests
             Assert.Equal("Inner", ex.MethodName);
             Assert.Equal(inner.BodyStartLine + 2, ex.Line);
             Assert.NotEqual(outer.BodyStartLine + 1, ex.Line);
+
+            // Body-relative: Inner's fault is on its own body line 3, never
+            // Outer's body line 2 (its call site) - "innermost wins" must hold
+            // for BodyLine exactly as it already does for Line.
+            Assert.Equal(3, ex.BodyLine);
+            Assert.NotEqual(2, ex.BodyLine);
         }
 
         [Fact]
@@ -89,12 +100,19 @@ namespace TcXunit.Interpreter.Tests
         {
             var inner = new InvalidOperationException("boom");
 
-            var unknown = new PlcSourceLocationException("FB_X", "M", PlcSourceLocationException.UnknownLine, inner);
-            var known = new PlcSourceLocationException("FB_X", "M", 7, inner);
+            var unknown = new PlcSourceLocationException(
+                "FB_X", "M", PlcSourceLocationException.UnknownLine, PlcSourceLocationException.UnknownLine, inner);
+            // TcXunit-gfs: Message embeds BodyLine, not Line - a suite failing
+            // several call-frames deep in a real .TcPOU file can have a raw
+            // file line in the hundreds while its body-relative line stays
+            // small, so the two must be distinguishable here.
+            var known = new PlcSourceLocationException("FB_X", "M", 142, 7, inner);
 
             Assert.Equal("FB_X.M: boom", unknown.Message);
             Assert.DoesNotContain("(0)", unknown.Message);
             Assert.Equal("FB_X.M(7): boom", known.Message);
+            Assert.Equal(142, known.Line);
+            Assert.Equal(7, known.BodyLine);
         }
 
         // Line 12 is `        <ST><![CDATA[TEST('Fails');`, so the method body's

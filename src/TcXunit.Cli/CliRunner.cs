@@ -27,10 +27,30 @@ namespace TcXunit.Cli
             // cares about. Parsed the same way as --format (both "--suite x"
             // and "--suite=x"), interleaved freely with paths/--format.
             var suiteFilters = new List<string>();
+            // --plugins <dir> (TcXunit-6k2): directory of assemblies supplying
+            // ITcXunitNativeFunction stand-ins for compiled-only TwinCAT
+            // library functions (Tc2_Utilities' F_CheckSum16 and friends),
+            // which have no .TcPOU source anywhere to parse. Parsed like
+            // --format/--suite; omitted means no plugins, i.e. exactly the
+            // pre-existing behavior.
+            string pluginDirectory = null;
             for (var i = 0; i < args.Length; i++)
             {
                 var arg = args[i];
-                if (arg.StartsWith("--format=", StringComparison.OrdinalIgnoreCase))
+                if (arg.StartsWith("--plugins=", StringComparison.OrdinalIgnoreCase))
+                {
+                    pluginDirectory = arg.Substring("--plugins=".Length);
+                }
+                else if (string.Equals(arg, "--plugins", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (i + 1 >= args.Length)
+                    {
+                        output.WriteLine("error: --plugins requires a value (directory of plugin assemblies)");
+                        return 2;
+                    }
+                    pluginDirectory = args[++i];
+                }
+                else if (arg.StartsWith("--format=", StringComparison.OrdinalIgnoreCase))
                 {
                     format = arg.Substring("--format=".Length);
                 }
@@ -74,7 +94,7 @@ namespace TcXunit.Cli
 
             if (args.Length == 0)
             {
-                output.WriteLine("usage: tcxunit run <path-to-POUs-directory> [<path-to-POUs-directory> ...] [--format text|json]");
+                output.WriteLine("usage: tcxunit run <path-to-POUs-directory> [<path-to-POUs-directory> ...] [--format text|json] [--plugins <dir>]");
                 return 2;
             }
 
@@ -219,7 +239,22 @@ namespace TcXunit.Cli
             if (suiteNames.Count == 0)
                 return WriteError($"no TcUnit suites found under {string.Join(", ", args)}");
 
-            var engine = new Engine(registry);
+            // TcXunit-6k2: plugin-supplied native functions, resolved only
+            // after every real POU in the tree has failed to resolve a call
+            // (see Engine.CallMethod), so a plugin can never shadow real
+            // source. Load failures join the same skip list as unloadable
+            // POUs, for the same reason: reduced coverage is reported, not
+            // fatal.
+            var nativeFunctions = Plugins.NativeFunctionPluginLoader.Load(
+                pluginDirectory, out var pluginSkips, out var pluginsLoaded);
+            skipped.AddRange(pluginSkips);
+            if (!asJson && pluginDirectory != null)
+            {
+                foreach (var plugin in pluginsLoaded)
+                    output.WriteLine($"plugin: {plugin}");
+            }
+
+            var engine = new Engine(registry, nativeFunctions);
             var anyFailed = false;
             var passCount = 0;
             var failCount = 0;

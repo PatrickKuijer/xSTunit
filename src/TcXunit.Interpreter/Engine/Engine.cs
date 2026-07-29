@@ -30,9 +30,22 @@ namespace TcXunit.Interpreter
         private static readonly HashSet<string> NativeTimerTypes = new HashSet<string> { "TON", "TOF", "FB_Pulse" };
         private static readonly HashSet<string> NativeEdgeTriggerTypes = new HashSet<string> { "R_TRIG", "F_TRIG" };
 
+        // Host-supplied stand-ins for compiled-only TwinCAT library functions
+        // (TcXunit-6k2). Optional and consulted last (Engine.Invocation.cs), so
+        // an Engine built without one behaves exactly as before: every
+        // unresolved call stays an error. Never null past the constructor, so
+        // the dispatch site doesn't need its own null check.
+        private readonly Extensibility.NativeFunctionRegistry _nativeFunctions;
+
         public Engine(TypeRegistry registry)
+            : this(registry, null)
+        {
+        }
+
+        public Engine(TypeRegistry registry, Extensibility.NativeFunctionRegistry nativeFunctions)
         {
             _registry = registry;
+            _nativeFunctions = nativeFunctions ?? new Extensibility.NativeFunctionRegistry();
 
             // Two-pass construction (TcXunit-09s): every GVL's Cells are
             // allocated and registered in _globals *before* any default

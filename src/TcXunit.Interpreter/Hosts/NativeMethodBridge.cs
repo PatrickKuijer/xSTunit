@@ -9,6 +9,54 @@ namespace TcXunit.Interpreter
     // FB_CounterTests fixture exercises (TcXunit-w5x.7/.8).
     public static class NativeMethodBridge
     {
+        // Whether Invoke recognizes methodName, i.e. whether the TcUnit
+        // native-stub boundary is the right place to send this call
+        // (TcXunit-6k2).
+        //
+        // Exists because "the receiver is a suite" and "this call is a suite
+        // API call" are different questions, and Engine used to conflate them:
+        // a suite instance reaching an unresolved call sent it here
+        // unconditionally, so the throw at the bottom of Invoke claimed every
+        // name a suite ever failed to resolve - including global FUNCTION POUs
+        // and native library functions, which are looked up *after* this in
+        // Engine.CallMethod and so were unreachable from inside a suite. (The
+        // pre-existing TcXunit-9su global-function tests all called from a
+        // plain FUNCTION_BLOCK, whose NativeSuiteHost is null, which is why
+        // nothing caught it.) Gating on this keeps the suite API's precedence
+        // exactly as it was for names it actually implements, while letting
+        // everything else fall through to the later lookups.
+        //
+        // MUST stay in agreement with Invoke's dispatch below. Locked by
+        // NativeMethodBridgeCanInvokeTests, which asserts the two agree over
+        // every supported name.
+        public static bool CanInvoke(string methodName)
+        {
+            if (methodName == null)
+                return false;
+
+            if (FixedNativeMethodNames.Contains(methodName))
+                return true;
+
+            if (methodName.StartsWith("AssertArrayEquals_", StringComparison.Ordinal))
+                return ArrayAssertSupportedTypes.Contains(methodName.Substring("AssertArrayEquals_".Length));
+
+            if (methodName.StartsWith("AssertArray2dEquals_", StringComparison.Ordinal) ||
+                methodName.StartsWith("AssertArray3dEquals_", StringComparison.Ordinal))
+                return MultiDimArrayAssertSupportedTypes.Contains(methodName.Substring(methodName.IndexOf('_') + 1));
+
+            if (methodName.StartsWith("AssertEquals_", StringComparison.Ordinal))
+                return ScalarAssertType.Registry.ContainsKey(methodName.Substring("AssertEquals_".Length));
+
+            return false;
+        }
+
+        // The non-prefixed names Invoke's switch handles by exact match.
+        private static readonly HashSet<string> FixedNativeMethodNames = new HashSet<string>(StringComparer.Ordinal)
+        {
+            "TEST", "TEST_ORDERED", "TEST_FINISHED", "TEST_FINISHED_NAMED", "IS_TEST_FINISHED",
+            "AssertTrue", "AssertFalse", "AssertEquals",
+        };
+
         public static object Invoke(
             TcUnitSuiteHost host,
             string methodName,
@@ -151,10 +199,20 @@ namespace TcXunit.Interpreter
                             return null;
                         }
                     }
-                    throw new NotSupportedException(
-                        $"TcUnit native call '{methodName}' isn't supported yet (grow-on-demand, TcXunit-w5x.12).");
+                    throw NotSupported(methodName);
             }
         }
+
+        // The grow-on-demand diagnostic for a TcUnit-suite call this bridge
+        // doesn't implement. Shared with Engine.CallMethod (TcXunit-6k2): since
+        // the CanInvoke gate now lets unrecognized names fall through to the
+        // global-FUNCTION/native-function lookups, a suite that exhausts those
+        // too must still be told "this TcUnit API isn't wired up yet" rather
+        // than the generic method-not-found error - the receiver being a suite
+        // is what makes that the more useful of the two messages.
+        public static NotSupportedException NotSupported(string methodName) =>
+            new NotSupportedException(
+                $"TcUnit native call '{methodName}' isn't supported yet (grow-on-demand, TcXunit-w5x.12).");
 
         private static readonly string[] ConditionAssertParamNames = { "Condition", "Message" };
         private static readonly string[] ScalarAssertParamNames = { "Expected", "Actual", "Message" };

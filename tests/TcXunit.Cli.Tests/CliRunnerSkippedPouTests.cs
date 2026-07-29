@@ -57,6 +57,78 @@ namespace TcXunit.Cli.Tests
             Assert.Contains("FB_Malformed.TcPOU", text);
         }
 
+        // TcXunit-jql: the end-to-end regression for the investigation ticket.
+        // A file that can't even be READ (as opposed to malformed XML, which
+        // is already covered above) used to throw an exception type
+        // (IOException/UnauthorizedAccessException) that StructuralParseGuard's
+        // old XmlException/NullReferenceException-only filter didn't
+        // recognize - it escaped uncaught, aborting CliRunner.Run's whole
+        // foreach over MultiDirectoryPouLoader.FindPouFiles and silently
+        // dropping every file the loop hadn't reached yet, sibling suites
+        // included. Skipped (soft, not a hard test failure) when running as
+        // root, where chmod 0 still leaves the file readable, since the
+        // scenario this test depends on - "this file cannot be read" -
+        // can't be constructed in that environment.
+        [Fact]
+        public void Run_UnreadablePouAlongsideSuite_StillRunsSuiteAndReportsSkip()
+        {
+            var unreadablePath = Path.Combine(_tempDir, "FB_Unreadable.TcPOU");
+            File.WriteAllText(unreadablePath, PassingSuiteXml.Replace("FB_PassingTests", "FB_Unrelated"));
+
+            if (OperatingSystem.IsWindows())
+            {
+                return;
+            }
+
+            File.SetUnixFileMode(unreadablePath, UnixFileMode.None);
+            try
+            {
+                if (CanStillRead(unreadablePath))
+                {
+                    // Running as root (or some other context where file
+                    // permissions aren't enforced) - there is no way to
+                    // construct "unreadable file" here, so there is nothing
+                    // this test can check. Not a failure of the fix.
+                    return;
+                }
+
+                var output = new StringWriter();
+
+                var exitCode = CliRunner.Run(new[] { _tempDir }, output);
+
+                var text = output.ToString();
+                // The suite alongside the unreadable file must still run
+                // (this is the actual regression: before the fix, the whole
+                // scan aborted and FB_PassingTests never even got attempted).
+                Assert.Equal(0, exitCode);
+                Assert.Contains("1 passed, 0 failed, 2 skipped", text);
+                Assert.Contains("FB_Unreadable.TcPOU", text);
+            }
+            finally
+            {
+                // Restore permissions so temp-dir cleanup (Dispose above) can
+                // delete the file.
+                File.SetUnixFileMode(unreadablePath, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+            }
+        }
+
+        private static bool CanStillRead(string path)
+        {
+            try
+            {
+                File.ReadAllText(path);
+                return true;
+            }
+            catch (UnauthorizedAccessException)
+            {
+                return false;
+            }
+            catch (IOException)
+            {
+                return false;
+            }
+        }
+
         [Fact]
         public void Run_UnsupportedPou_JsonFormat_ListsSkippedFileAndReason()
         {

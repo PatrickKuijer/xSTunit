@@ -93,21 +93,37 @@
 // docs/design-system.html section 8's A11y rule only specifies arrows/Enter/
 // Space.
 //
+// TcXunit-qjt supersedes TcXunit-1tt.3's "results already rendered from a
+// prior run stay visible/updating during a subsequent run" decision, per
+// explicit user feedback: a stale tree left on screen for the full duration
+// of a new run turned out to be indistinguishable from a fresh one. Two new
+// global entry points -- window.tcxunitBeginRun() (clears #tree/counts and
+// swaps in #runningState, called by StartRunAsync right before its CLI
+// process starts) and window.tcxunitSetStatus(state, text) (drives the
+// .tw-statusbar dot/#statusText, called alongside tcxunitSetRunning at every
+// one of StartRunAsync's status-line branches) -- plus #runningState itself
+// (results.html) are this ticket's additions; see their own comments below
+// for how they fit into the existing render/running-state plumbing.
+//
 // Not implemented here: per-node "currently executing" state (the CLI emits
 // one JSON blob at the end of a run, not an incremental stream, so there is
 // no data to know which suite is currently executing -- only that a run is
-// or isn't in flight). Plain script (no ES modules) since this page has
-// exactly one small render concern, unlike TcAgent's chat.html.
+// or isn't in flight; #runningState is a single generic placeholder, not a
+// per-suite one). Plain script (no ES modules) since this page has exactly
+// one small render concern, unlike TcAgent's chat.html.
 (function () {
   'use strict';
 
   var treeEl = document.getElementById('tree');
   var emptyStateEl = document.getElementById('emptyState');
+  var runningStateEl = document.getElementById('runningState');
   var runButton = document.getElementById('runButton');
   var rerunFailedButton = document.getElementById('rerunFailedButton');
   var progEl = document.getElementById('prog');
   var filterInput = document.getElementById('filterInput');
   var statusSeg = document.getElementById('statusSeg');
+  var statusTextEl = document.getElementById('statusText');
+  var statusDotEl = document.querySelector('.tw-statusbar .dot');
 
   // TcXunit-1tt.8: the two independent reasons #rerunFailedButton can be
   // disabled -- "last render had zero failures" (hasFailures, set by
@@ -758,14 +774,70 @@
     // typed before a rerun still applies to the new results.
     applyTextFilter();
 
-    // First render this session swaps the empty state out for the tree
-    // permanently -- a later rerun replaces #tree's contents in place (above)
-    // rather than ever reverting to #emptyState, per TcXunit-1tt.3's
-    // acceptance criteria ("results already rendered from a prior run stay
-    // visible/updating during a subsequent run").
-    if (emptyStateEl && !emptyStateEl.hidden) {
+    // TcXunit-qjt: every completed run swaps #runningState (shown for the
+    // run's duration by tcxunitBeginRun below) and #emptyState (the
+    // pre-first-run copy) back out for #tree, unconditionally -- a rerun no
+    // longer needs the "already showing the tree" guard TcXunit-1tt.3 used to
+    // have here, since tcxunitBeginRun now always hides the tree at the start
+    // of every run.
+    if (runningStateEl) {
+      runningStateEl.hidden = true;
+    }
+    if (emptyStateEl) {
       emptyStateEl.hidden = true;
-      treeEl.hidden = false;
+    }
+    treeEl.hidden = false;
+  };
+
+  // TcXunit-qjt: clears #tree's rows/counts and swaps in #runningState, in
+  // #emptyState's/#tree's place, right before a run's CLI process starts
+  // (ResultsToolWindowControl.xaml.cs's StartRunAsync calls this ahead of
+  // window.tcxunitSetRunning(true) below) -- so the panel can never show a
+  // mix of a prior run's stale rows and a new run in flight. hasFailures
+  // resets to false along with the counts: there is no result on screen for
+  // #rerunFailedButton to rerun until the next tcxunitRenderResult call sets
+  // it again (isRunning already disables the button for the run's own
+  // duration -- see updateRerunFailedButton).
+  window.tcxunitBeginRun = function () {
+    if (!treeEl) {
+      return;
+    }
+
+    while (treeEl.firstChild) {
+      treeEl.removeChild(treeEl.firstChild);
+    }
+    setSelectedRow(null);
+
+    updateCounts({});
+    hasFailures = false;
+    updateRerunFailedButton();
+
+    if (emptyStateEl) {
+      emptyStateEl.hidden = true;
+    }
+    treeEl.hidden = true;
+    if (runningStateEl) {
+      runningStateEl.hidden = false;
+    }
+  };
+
+  // TcXunit-qjt: drives the .tw-statusbar dot/#statusText pushed in by
+  // ResultsToolWindowControl.xaml.cs's new PushStatus, mirroring
+  // StartRunAsync's own status-line branches (running while the CLI process
+  // is in flight, then ready/stopped/error once it ends). state is one of
+  // 'running'/'stopped'/'error' (colored via the matching class, see
+  // results.css) or anything else (including 'ready') for the default green
+  // dot -- results.css only defines the three non-default classes since
+  // "ready" is the dot's plain, class-less state already in markup.
+  window.tcxunitSetStatus = function (state, text) {
+    if (statusDotEl) {
+      statusDotEl.classList.remove('running', 'stopped', 'error');
+      if (state === 'running' || state === 'stopped' || state === 'error') {
+        statusDotEl.classList.add(state);
+      }
+    }
+    if (statusTextEl) {
+      statusTextEl.textContent = text || '';
     }
   };
 
@@ -783,6 +855,22 @@
     }
     if (progEl) {
       progEl.hidden = !running;
+    }
+
+    // TcXunit-qjt: a run that ends without ever calling tcxunitRenderResult
+    // (Stop, or a host-level error -- both skip straight to the finally
+    // block that calls this with running=false) leaves #runningState still
+    // showing; left alone that would freeze a "Running..." placeholder on
+    // screen for a run that is no longer running. Reverting to #emptyState
+    // is correct either way here since tcxunitBeginRun already cleared
+    // #tree -- there is nothing to show. A run that DID render already
+    // hid #runningState itself (see tcxunitRenderResult above), so this is a
+    // no-op in that case.
+    if (!running && runningStateEl && !runningStateEl.hidden) {
+      runningStateEl.hidden = true;
+      if (emptyStateEl) {
+        emptyStateEl.hidden = false;
+      }
     }
 
     // TcXunit-1tt.8: a run in flight (whether started from #runButton or

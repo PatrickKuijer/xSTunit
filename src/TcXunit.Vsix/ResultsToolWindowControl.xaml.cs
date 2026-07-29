@@ -51,6 +51,16 @@ namespace TcXunit.Vsix
     /// just those suites and replacing (not merging into) the displayed tree via the exact
     /// same window.tcxunitRenderResult(...) path a normal run already uses.
     ///
+    /// TcXunit-qjt (reset stale results, live run-state feedback) adds two more pushes
+    /// around every StartRunAsync run: PushBeginRun (window.tcxunitBeginRun(), right
+    /// before the CLI process starts) clears #tree/counts and shows a running
+    /// placeholder instead of leaving a prior run's rows on screen for the new run's
+    /// duration, and PushStatus (window.tcxunitSetStatus(state, text), alongside every
+    /// status-line branch below) drives the page's own .tw-statusbar dot/#statusText --
+    /// previously hardcoded to "Ready" and never updated. This supersedes TcXunit-1tt.3's
+    /// original "results already rendered from a prior run stay visible/updating during
+    /// a subsequent run" decision, per explicit user feedback.
+    ///
     /// WebView2 hosting and VS-theme wiring mirror
     /// TcAgentPlugin/src/TcAgent/ChatToolWindowControl.xaml.cs exactly (EnsureCoreWebView2Async +
     /// CoreWebView2Environment, SetVirtualHostNameToFolderMapping onto Resources, a
@@ -384,7 +394,13 @@ namespace TcXunit.Vsix
 
             this.SetStatusText(string.Empty);
             this._runCts = new CancellationTokenSource();
+            // TcXunit-qjt: clears #tree/counts and swaps in the running placeholder
+            // before anything else -- including PushSetRunning(true), so the "unmistakably
+            // mid-run" cues all land together -- so the CLI process (below) never starts
+            // while a prior run's rows are still on screen.
+            this.PushBeginRun();
             this.PushSetRunning(true);
+            this.PushStatus("running", "Running");
 
             try
             {
@@ -396,11 +412,13 @@ namespace TcXunit.Vsix
                 if (!string.IsNullOrEmpty(result.Error))
                 {
                     this.ShowError("Error: " + result.Error);
+                    this.PushStatus("error", "Error: " + result.Error);
                     // No new TcxunitRunResult worth trusting (early-exit error shape has no
                     // Suites) -- leave _lastFailedSuiteNames exactly as it was rather than
-                    // clearing it, so a transient failure (e.g. Stop racing the process's own
-                    // exit) doesn't silently disable rerunFailed for a real prior result the
-                    // tree is still showing.
+                    // clearing it. This is now inert either way: PushBeginRun already reset
+                    // the page's own hasFailures to false for this run, so #rerunFailedButton
+                    // stays disabled until a real result renders again regardless of what
+                    // this list holds.
                 }
                 else
                 {
@@ -410,16 +428,21 @@ namespace TcXunit.Vsix
                     {
                         _ = this.Browser.CoreWebView2.ExecuteScriptAsync(BuildRenderResultScript(result.RawJson));
                     }
+
+                    this.PushStatus("ready", "Ready");
                 }
             }
             catch (OperationCanceledException)
             {
-                // Stop was clicked -- not a run failure. Whatever the tree already showed
-                // from a prior run is left exactly as it was (StartRunAsync never clears
-                // #tree itself; only a completed run's window.tcxunitRenderResult call
-                // does), per the acceptance criteria's "results already rendered ... stay
-                // visible ... during a subsequent run".
+                // Stop was clicked -- not a run failure. #tree was already cleared by
+                // PushBeginRun above and stays that way: TcXunit-qjt supersedes
+                // TcXunit-1tt.3's original "results already rendered ... stay visible ...
+                // during a subsequent run" decision, per explicit user feedback (a stale
+                // tree was indistinguishable from a fresh one). tcxunitSetRunning(false),
+                // pushed from the finally block below, reverts the page from
+                // #runningState back to #emptyState since no new render happened here.
                 this.SetStatusText("Stopped.");
+                this.PushStatus("stopped", "Stopped.");
             }
             catch (Exception ex)
             {
@@ -429,6 +452,7 @@ namespace TcXunit.Vsix
                 // ShowError, not a direct SetStatusText call, for consistency with every other
                 // host-level error path in this file (see ShowError's remarks below).
                 this.ShowError("Error: " + ex.Message);
+                this.PushStatus("error", "Error: " + ex.Message);
             }
             finally
             {
@@ -472,6 +496,19 @@ namespace TcXunit.Vsix
             this._runCts?.Cancel();
         }
 
+        /// <summary>Fire-and-forget ExecuteScriptAsync, guarded by the same
+        /// "CoreWebView2 might not be ready yet" null-check every push into the page
+        /// needs (mirrors ChatToolWindowControl's own pattern). Shared by
+        /// PushSetRunning/PushBeginRun/PushStatus below so each only has to build its
+        /// own `window.tcxunitXxx(...)` call string, not repeat the guard.</summary>
+        private void PushScript(string script)
+        {
+            if (this.Browser.CoreWebView2 != null)
+            {
+                _ = this.Browser.CoreWebView2.ExecuteScriptAsync(script);
+            }
+        }
+
         /// <summary>Pushes window.tcxunitSetRunning(running) into the page (see
         /// Resources/results.js) so #runButton's label/class and #prog's visibility are
         /// always a direct reflection of whether TcxunitProcessRunner.RunAsync actually
@@ -479,11 +516,41 @@ namespace TcXunit.Vsix
         /// click.</summary>
         private void PushSetRunning(bool running)
         {
-            if (this.Browser.CoreWebView2 != null)
-            {
-                _ = this.Browser.CoreWebView2.ExecuteScriptAsync(
-                    "(function(){if(window.tcxunitSetRunning){window.tcxunitSetRunning(" + (running ? "true" : "false") + ");}})();");
-            }
+            this.PushScript(
+                "(function(){if(window.tcxunitSetRunning){window.tcxunitSetRunning(" + (running ? "true" : "false") + ");}})();");
+        }
+
+        /// <summary>TcXunit-qjt: pushes window.tcxunitBeginRun() into the page (see
+        /// Resources/results.js), called from StartRunAsync right before the CLI process
+        /// starts. Clears #tree's previously-rendered rows/counts and swaps in
+        /// #runningState so the panel can never be mistaken for showing fresh/complete
+        /// results while this run is in flight -- the fix for this ticket's reported gap
+        /// (a prior run's rows sat untouched for a new run's full duration, per
+        /// TcXunit-1tt.3's original, now-superseded, design).</summary>
+        private void PushBeginRun()
+        {
+            this.PushScript("(function(){if(window.tcxunitBeginRun){window.tcxunitBeginRun();}})();");
+        }
+
+        /// <summary>TcXunit-qjt: pushes window.tcxunitSetStatus(state, text) into the page
+        /// (see Resources/results.js), so the WebView2 page's own .tw-statusbar dot/
+        /// #statusText -- previously hardcoded to "Ready" and never updated by any
+        /// code -- reflects Running while a run is in flight and Ready/Stopped/Error once
+        /// it ends, mirroring StartRunAsync's own status-line branches immediately below
+        /// each call site. Distinct from ShowError/SetStatusText, which drive the native
+        /// WPF StatusText fallback for host-level errors the page itself can't show (see
+        /// that method's remarks) -- this always targets the page's own status line.
+        /// text is JSON-serialized rather than concatenated directly (contrast
+        /// PushSetRunning's plain bool-to-string above) because it carries free text --
+        /// an exception message or the CLI's own error output -- that may itself contain
+        /// quotes/backslashes and would otherwise break out of the script's string
+        /// literal.</summary>
+        private void PushStatus(string state, string text)
+        {
+            var stateLiteral = JsonSerializer.Serialize(state ?? string.Empty);
+            var textLiteral = JsonSerializer.Serialize(text ?? string.Empty);
+            this.PushScript(
+                "(function(){if(window.tcxunitSetStatus){window.tcxunitSetStatus(" + stateLiteral + "," + textLiteral + ");}})();");
         }
 
         /// <summary>Pushes one run's results into the page by calling

@@ -32,11 +32,12 @@
 
     #emptyState is design-system.html's ".empty-state" block (Components --
     Core, so its rules live in vsix-shell.css) shown verbatim until the first
-    window.tcxunitRenderResult(...) call this session, at which point
-    results.js swaps it out for #tree permanently (a subsequent run's results
-    replace #tree's contents in place -- the tree stays visible/updating
-    across reruns per the mockup's "running" example, it does not revert to
-    this empty state).
+    window.tcxunitRenderResult(...) call swaps it out for #tree. As of
+    TcXunit-qjt this is no longer a one-way, permanent swap: a run that ends
+    without ever reaching tcxunitRenderResult (Stop, or a host-level error)
+    reverts the page from #runningState back to this empty state instead of
+    leaving a stale placeholder on screen -- see results.js's
+    tcxunitSetRunning and #runningState's own comment below.
 
     #tree is results.css/.tree's render target, filled in by results.js. The
     .tw-statusbar region is required per docs/design-system.html section 6
@@ -74,6 +75,20 @@
     toggles the attribute after every render and on tcxunitSetRunning, per the
     mockup's ".ghost-btn[disabled]" rule ("disabled when the last run had zero
     failures").
+
+    #runningState (TcXunit-qjt) is a dedicated placeholder shown for the
+    duration of a run, in #tree's place -- a separate element from #emptyState
+    (not a relabeled/reused one) so it can later become the anchor for
+    per-suite progress rows if streaming ever lands, per a companion future
+    ticket. window.tcxunitBeginRun() (called by
+    ResultsToolWindowControl.xaml.cs's StartRunAsync right before the CLI
+    process starts) clears #tree's rows/counts and swaps this in; a completed
+    run's window.tcxunitRenderResult(...) swaps it back out for #tree, and a
+    stopped/errored run (no new render) reverts to #emptyState instead of
+    leaving this frozen on screen once nothing is actually running -- see
+    results.js's tcxunitSetRunning. This supersedes TcXunit-1tt.3's original
+    "results from a prior run stay visible during a subsequent run" decision,
+    per explicit user feedback.
   -->
   <div class="toolbar">
     <button class="send-btn" type="button" id="runButton">Run tests</button>
@@ -92,6 +107,10 @@
       <strong>No results yet.</strong>
       Run the suites in this solution to see pass and fail output here. Double-click any
       result to open its .TcPOU in the editor.
+    </div>
+    <div class="empty-state running-state" id="runningState" hidden>
+      <strong>Running...</strong>
+      Test suites are executing. Results will appear here once the run completes.
     </div>
     <div class="tree" id="tree" hidden tabindex="0"></div>
   </div>

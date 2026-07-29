@@ -273,3 +273,16 @@ body[data-theme="light"] {
 @media (prefers-reduced-motion: reduce) {
   .prog i { animation: none; width: 100%; opacity: .5; }
 }
+
+/* -- running placeholder (TcXunit-qjt): #runningState borrows #emptyState's
+   box styling verbatim (vsix-shell.css) -- only its heading's accent color is
+   TcXunit-specific, so that alone lives here. -- */
+.running-state strong { color: var(--busy); }
+
+/* -- statusbar dot run-state coloring (TcXunit-qjt): default (no class,
+   vsix-shell.css) stays the existing "ready" green; results.js's
+   tcxunitSetStatus swaps in the matching status hue for the other states,
+   reusing the same --busy/--skip/--fail tokens as everything else here. -- */
+.tw-statusbar .dot.running { background: var(--busy); }
+.tw-statusbar .dot.stopped { background: var(--skip); }
+.tw-statusbar .dot.error { background: var(--fail); }

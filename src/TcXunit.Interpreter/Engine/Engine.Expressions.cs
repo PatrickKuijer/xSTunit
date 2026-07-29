@@ -764,6 +764,7 @@ namespace TcXunit.Interpreter
             if (separator < 0 || call.PositionalArgs.Count != 1)
                 return false;
 
+            var fromType = call.MethodName.Substring(0, separator);
             var toType = call.MethodName.Substring(separator + 4);
             var value = Evaluate(call.PositionalArgs[0], frame);
 
@@ -773,6 +774,22 @@ namespace TcXunit.Interpreter
                 result = Convert.ToDouble(value);
             else if (IntegerCastTargets.Contains(toType))
                 result = Convert.ToInt32(value);
+            // TcXunit-839: REAL_TO_STRING/LREAL_TO_STRING/<integer>_TO_STRING -
+            // standard IEC 61131-3/TwinCAT calls used to build assert/diagnostic
+            // messages. Scoped to numeric source prefixes only (REAL, LREAL, or
+            // the same IntegerCastTargets set the narrowing-cast branch above
+            // recognizes) - a non-numeric prefix like BOOL_TO_STRING or
+            // TIME_TO_STRING falls through to CallMethod/native-bridge dispatch
+            // unchanged, preserving its "Method not found" error. Formats the
+            // already-boxed CLR value (float/double/int/long/ulong, per
+            // NumericCoercion's existing boxing rules) via its own
+            // invariant-culture ToString(), mirroring ScalarAssertType.FormatDouble's
+            // rationale for avoiding CurrentCulture (e.g. de-DE rendering '.' as
+            // ',') - plain digits, no TwinCAT-exact digit-count/exponent parity
+            // attempted.
+            else if (toType == "STRING" &&
+                     (fromType == "REAL" || fromType == "LREAL" || IntegerCastTargets.Contains(fromType)))
+                result = Convert.ToString(value, System.Globalization.CultureInfo.InvariantCulture);
             else
                 return false;
 

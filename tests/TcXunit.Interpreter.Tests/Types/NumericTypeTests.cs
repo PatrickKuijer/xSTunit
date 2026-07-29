@@ -359,6 +359,128 @@ namespace TcXunit.Interpreter.Tests
             Assert.Equal(1UL, instance.Fields["value"].Value);
         }
 
+        // TcXunit-839: REAL_TO_STRING/LREAL_TO_STRING/<integer>_TO_STRING -
+        // TryEvaluateCast extended to recognize STRING as a valid cast target
+        // for a numeric source prefix (REAL, LREAL, or the IntegerCastTargets
+        // set), producing a plain CLR string formatted with InvariantCulture
+        // rather than CurrentCulture.
+        [Fact]
+        public void Evaluate_RealToStringCast_ProducesInvariantCultureString()
+        {
+            var engine = NewEngine();
+            var result = engine.Evaluate(Parser.ParseExpression("REAL_TO_STRING(REAL#3.5)"), NewFrame());
+
+            var s = Assert.IsType<string>(result);
+            Assert.Equal("3.5", s);
+        }
+
+        [Fact]
+        public void Evaluate_LrealToStringCast_ProducesInvariantCultureString()
+        {
+            var engine = NewEngine();
+            var result = engine.Evaluate(Parser.ParseExpression("LREAL_TO_STRING(LREAL#2.25)"), NewFrame());
+
+            var s = Assert.IsType<string>(result);
+            Assert.Equal("2.25", s);
+        }
+
+        [Fact]
+        public void Evaluate_IntToStringCast_ProducesPlainDigits()
+        {
+            var engine = NewEngine();
+            var result = engine.Evaluate(Parser.ParseExpression("INT_TO_STRING(42)"), NewFrame());
+
+            var s = Assert.IsType<string>(result);
+            Assert.Equal("42", s);
+        }
+
+        // UDINT boxes as C# long rather than int (IecNumericType.cs) - this
+        // exercises the long-boxed branch of Convert.ToString, distinct from
+        // the int-boxed INT case above. A UDINT field (not a bare literal -
+        // the parser's IntLiteral path only supports Int32-range literals,
+        // TcXunit-w5x.15.1) starts at 0L and widens via the same int-literal
+        // addition path ExecuteStatements_UlintFieldPlusIntLiteral_WidensAndAdds
+        // exercises for ULINT, so `value` really is long-boxed by the time it
+        // reaches UDINT_TO_STRING.
+        [Fact]
+        public void Evaluate_UdintToStringCast_ProducesPlainDigits()
+        {
+            var pou = new PouAst(
+                "FB_Udint",
+                null,
+                "VAR\n\tvalue : UDINT;\nEND_VAR",
+                "",
+                new List<MethodAst>());
+
+            var engine = new Engine(new TypeRegistry(new[] { pou }));
+            var instance = engine.NewInstance("FB_Udint");
+            var frame = new Frame(instance, "FB_Udint");
+            engine.ExecuteStatements(Parser.ParseStatements("value := value + 4000000;"), frame);
+            Assert.IsType<long>(instance.Fields["value"].Value);
+
+            var result = engine.Evaluate(Parser.ParseExpression("UDINT_TO_STRING(value)"), frame);
+
+            var s = Assert.IsType<string>(result);
+            Assert.Equal("4000000", s);
+        }
+
+        [Fact]
+        public void Evaluate_NegativeLrealToStringCast_IncludesSign()
+        {
+            var engine = NewEngine();
+            var result = engine.Evaluate(Parser.ParseExpression("LREAL_TO_STRING(-1.5)"), NewFrame());
+
+            var s = Assert.IsType<string>(result);
+            Assert.Equal("-1.5", s);
+        }
+
+        [Fact]
+        public void Evaluate_NegativeIntToStringCast_IncludesSign()
+        {
+            var engine = NewEngine();
+            var result = engine.Evaluate(Parser.ParseExpression("INT_TO_STRING(-7)"), NewFrame());
+
+            var s = Assert.IsType<string>(result);
+            Assert.Equal("-7", s);
+        }
+
+        // BOOL_TO_STRING has a non-numeric prefix, so it must remain OUT of
+        // scope for TryEvaluateCast's new STRING-target branch and keep
+        // falling through to CallMethod's ordinary "method not found" error,
+        // unchanged by this feature.
+        [Fact]
+        public void Evaluate_BoolToStringCall_StillThrowsMethodNotFound()
+        {
+            var engine = NewEngine();
+
+            var ex = Assert.Throws<InvalidOperationException>(
+                () => engine.Evaluate(Parser.ParseExpression("BOOL_TO_STRING(TRUE)"), NewFrame()));
+
+            Assert.Equal("Method 'BOOL_TO_STRING' not found starting from type 'Test'", ex.Message);
+        }
+
+        [Fact]
+        public void Evaluate_RealToStringCastConcatenatedWithLiteral_ProducesCombinedString()
+        {
+            var engine = NewEngine();
+            var result = engine.Evaluate(
+                Parser.ParseExpression("CONCAT('Value: ', REAL_TO_STRING(REAL#1.5))"), NewFrame());
+
+            var s = Assert.IsType<string>(result);
+            Assert.Equal("Value: 1.5", s);
+        }
+
+        [Fact]
+        public void Evaluate_IntToStringCastConcatenatedWithLiteral_ProducesCombinedString()
+        {
+            var engine = NewEngine();
+            var result = engine.Evaluate(
+                Parser.ParseExpression("CONCAT(INT_TO_STRING(3), ' apples')"), NewFrame());
+
+            var s = Assert.IsType<string>(result);
+            Assert.Equal("3 apples", s);
+        }
+
         [Fact]
         public void ExecuteStatements_AssignIntLiteralIntoUlintField_Widens()
         {

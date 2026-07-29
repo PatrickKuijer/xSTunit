@@ -15,7 +15,7 @@ namespace TcXunit.Interpreter
         private const int DefaultLength = 80;
 
         // The sized form's size text need not be a bare digit literal - a
-        // GVL-qualified constant expression (e.g. cFramework.MAX_STRING_SIZE)
+        // GVL-qualified constant expression (e.g. cScratchConstants.MAX_STRING_SIZE)
         // is equally legal IEC 61131-3 (TcXunit-988), so the group here
         // captures the raw expression text; ParseLength resolves it (either
         // the digit fast path, or via the caller's constant-expression

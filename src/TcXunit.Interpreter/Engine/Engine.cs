@@ -117,7 +117,12 @@ namespace TcXunit.Interpreter
                 ResetTopLevelTempFields(instance);
                 // A suite body is a POU body, not a METHOD, so the frame
                 // carries no method name - a fault here reports just "FB_X".
-                ExecuteBody(_registry.GetStatements(def.ImplementationText), new Frame(instance, suiteTypeName, null, def.BodyStartLine));
+                // TcXunit-n65: GetStatements is resolved lazily inside
+                // ExecuteBody's own try (see Engine.Diagnostics.cs), not
+                // eagerly here, so a lazy parse failure in the suite's own
+                // body attributes to the suite rather than escaping
+                // unattributed past this outermost boundary.
+                ExecuteBody(() => _registry.GetStatements(def.ImplementationText), new Frame(instance, suiteTypeName, null, def.BodyStartLine));
                 stopwatch.Stop();
                 elapsedMilliseconds = stopwatch.ElapsedMilliseconds;
                 return instance.NativeSuiteHost.Collect();

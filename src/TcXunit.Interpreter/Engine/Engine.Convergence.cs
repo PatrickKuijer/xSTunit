@@ -15,7 +15,6 @@ namespace TcXunit.Interpreter
             if (def == null)
                 throw new InvalidOperationException($"Type '{instance.ActualTypeName}' not found for StepCycles");
 
-            var statements = _registry.GetStatements(def.ImplementationText);
             for (var i = 0; i < cycles; i++)
             {
                 // Top-level VAR_TEMP fields reset to default before every
@@ -26,7 +25,15 @@ namespace TcXunit.Interpreter
                 // cyclic body only ends this cycle; it must not unwind into
                 // whatever ST call (e.g. a TcUnit test method) invoked
                 // StepCycles" rule, plus fault attribution (TcXunit-p3t.1).
-                ExecuteBody(statements, new Frame(instance, instance.ActualTypeName, null, def.BodyStartLine));
+                //
+                // TcXunit-n65: GetStatements is resolved lazily, inside the
+                // lambda ExecuteBody calls from within its own try - not
+                // hoisted above the loop - so a lazy parse failure in this
+                // instance's body attributes to this instance's own frame
+                // rather than to whatever caller invoked StepCycles.
+                // TypeRegistry.GetStatements caches by body text, so calling
+                // it once per cycle costs a dictionary lookup, not a re-parse.
+                ExecuteBody(() => _registry.GetStatements(def.ImplementationText), new Frame(instance, instance.ActualTypeName, null, def.BodyStartLine));
             }
         }
 

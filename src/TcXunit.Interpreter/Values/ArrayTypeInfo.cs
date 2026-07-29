@@ -10,11 +10,15 @@ namespace TcXunit.Interpreter
     // bounds plus element type name (TcXunit-w5x.15.6).
     internal static class ArrayTypeInfo
     {
+        // TcXunit-fzm: IEC 61131-3 type names are case-insensitive ('array[..]
+        // of int' is exactly as valid as 'ARRAY[..] OF INT'), so both the
+        // ARRAY/OF keyword pattern and the leading-keyword check below match
+        // case-insensitively.
         private static readonly Regex Pattern = new Regex(
-            @"^ARRAY\s*\[(?<dims>[^\]]+)\]\s*OF\s+(?<elementType>.+)$", RegexOptions.Compiled);
+            @"^ARRAY\s*\[(?<dims>[^\]]+)\]\s*OF\s+(?<elementType>.+)$", RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
         public static bool IsArrayType(string typeName) =>
-            typeName != null && typeName.TrimStart().StartsWith("ARRAY", StringComparison.Ordinal);
+            typeName != null && typeName.TrimStart().StartsWith("ARRAY", StringComparison.OrdinalIgnoreCase);
 
         // resolveBound resolves a non-literal bound expression's text (e.g.
         // "cTcpDataServerClient.MAX_REMOTE_UNITS") to its integer value.

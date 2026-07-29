@@ -20,8 +20,12 @@ namespace TcXunit.Interpreter
         // captures the raw expression text; ParseLength resolves it (either
         // the digit fast path, or via the caller's constant-expression
         // resolver).
+        // TcXunit-fzm: IEC 61131-3 type names are case-insensitive ('string'/
+        // 'WString' are exactly as valid as 'STRING'/'WSTRING'), so both the
+        // bare-keyword comparisons below and this pattern match
+        // case-insensitively.
         private static readonly Regex SizedPattern = new Regex(
-            @"^(STRING|WSTRING)\s*\(\s*(?<n>[^()]+?)\s*\)$", RegexOptions.Compiled);
+            @"^(STRING|WSTRING)\s*\(\s*(?<n>[^()]+?)\s*\)$", RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
         public static bool IsStringType(string typeName)
         {
@@ -29,7 +33,9 @@ namespace TcXunit.Interpreter
                 return false;
 
             var trimmed = typeName.Trim();
-            return trimmed == "STRING" || trimmed == "WSTRING" || SizedPattern.IsMatch(trimmed);
+            return string.Equals(trimmed, "STRING", System.StringComparison.OrdinalIgnoreCase)
+                || string.Equals(trimmed, "WSTRING", System.StringComparison.OrdinalIgnoreCase)
+                || SizedPattern.IsMatch(trimmed);
         }
 
         // Digit-literal fast path only; throws for a non-literal size
@@ -45,7 +51,8 @@ namespace TcXunit.Interpreter
         public static int ParseLength(string typeName, Func<string, int> resolveExpr)
         {
             var trimmed = typeName.Trim();
-            if (trimmed == "STRING" || trimmed == "WSTRING")
+            if (string.Equals(trimmed, "STRING", System.StringComparison.OrdinalIgnoreCase)
+                || string.Equals(trimmed, "WSTRING", System.StringComparison.OrdinalIgnoreCase))
                 return DefaultLength;
 
             var match = SizedPattern.Match(trimmed);

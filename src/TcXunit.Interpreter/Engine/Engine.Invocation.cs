@@ -208,7 +208,7 @@ namespace TcXunit.Interpreter
             var paramDecls = _registry.GetDecls(methodDef.DeclarationText);
             BindParams(paramDecls, positionalArgs, namedArgs, callerFrame, newFrame);
 
-            ExecuteBody(_registry.GetStatements(methodDef.ImplementationText), newFrame);
+            ExecuteBody(() => _registry.GetStatements(methodDef.ImplementationText), newFrame);
 
             WriteBackOutputArgs(paramDecls, namedArgs, newFrame, callerFrame);
 
@@ -247,15 +247,6 @@ namespace TcXunit.Interpreter
         // null out of CallMethod when never assigned. The elementary
         // non-numerics (BOOL/STRING/TIME/DATE) sit between the two and are
         // tracked separately (TcXunit-qft).
-        //
-        // The IecNumericType lookup is case-sensitive, so a lowercase-spelled
-        // return type ("METHOD M_Read : lreal") parses but doesn't seed. That
-        // is deliberate consistency, not an oversight: every type-name lookup
-        // in the interpreter (VarBlockParser decls through Engine.Defaults'
-        // DefaultValue, StringTypeInfo, GetStruct) is likewise case-sensitive
-        // even though ST itself is case-insensitive. Fixing it here alone
-        // would just move the surprise - it needs doing across all of them at
-        // once (TcXunit-fzm).
         private void SeedReturnCell(Frame frame, string name, string declarationText)
         {
             if (!TryGetNumericCallableType(declarationText, out var declaredType, out var zero))
@@ -296,13 +287,12 @@ namespace TcXunit.Interpreter
             var paramDecls = _registry.GetDecls(functionDef.DeclarationText);
             BindParams(paramDecls, positionalArgs, namedArgs, callerFrame, newFrame);
 
-            try
-            {
-                ExecuteStatements(_registry.GetStatements(functionDef.ImplementationText), newFrame);
-            }
-            catch (MethodReturnSignal)
-            {
-            }
+            // TcXunit-n65: routed through ExecuteBody (rather than the old
+            // hand-rolled try/catch(MethodReturnSignal)) so a lazy parse
+            // failure in functionDef.ImplementationText is attributed to
+            // this function's own frame, same as CallMethod/InvokeFbInstance
+            // below.
+            ExecuteBody(() => _registry.GetStatements(functionDef.ImplementationText), newFrame);
 
             WriteBackOutputArgs(paramDecls, namedArgs, newFrame, callerFrame);
 
@@ -441,7 +431,7 @@ namespace TcXunit.Interpreter
             var def = _registry.Get(callee.ActualTypeName);
             ResetTopLevelTempFields(callee);
             var calleeFrame = new Frame(callee, callee.ActualTypeName, null, def.BodyStartLine);
-            ExecuteBody(_registry.GetStatements(def.ImplementationText), calleeFrame);
+            ExecuteBody(() => _registry.GetStatements(def.ImplementationText), calleeFrame);
         }
 
         private void BindParams(

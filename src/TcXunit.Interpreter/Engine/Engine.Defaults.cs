@@ -44,21 +44,34 @@ namespace TcXunit.Interpreter
             if (StringTypeInfo.IsStringType(typeName))
                 return "";
 
-            if (typeName == "BOOL")
+            // TcXunit-fzm: IEC 61131-3 type names are case-insensitive, so
+            // every elementary literal type-name comparison from here down
+            // (BOOL/TIME/LTIME/DATE-family types, plus the POINTER TO/
+            // REFERENCE TO prefix check) matches case-insensitively - the
+            // same decision as IecNumericType, StringTypeInfo, ArrayTypeInfo,
+            // and TypeRegistry. The native-FB base-type checks above
+            // (NativeTimerTypes/NativeEdgeTriggerTypes/"Loopback") are a
+            // separate lookup family (native stub instantiation, not
+            // elementary-type defaulting) and are intentionally left as-is
+            // here - tracked separately (TcXunit-nch).
+            if (typeName.Equals("BOOL", StringComparison.OrdinalIgnoreCase))
                 return false;
 
-            if (typeName == "TIME")
+            if (typeName.Equals("TIME", StringComparison.OrdinalIgnoreCase))
                 return 0u;
 
-            if (typeName == "LTIME")
+            if (typeName.Equals("LTIME", StringComparison.OrdinalIgnoreCase))
                 return 0ul;
 
             // DATE/DATE_AND_TIME/TIME_OF_DAY (TcXunit-gd2.13) all box as
             // uint (see DateTimeLiteral.cs), same as TIME above.
-            if (typeName == "DATE" || typeName == "DATE_AND_TIME" || typeName == "TIME_OF_DAY")
+            if (typeName.Equals("DATE", StringComparison.OrdinalIgnoreCase)
+                || typeName.Equals("DATE_AND_TIME", StringComparison.OrdinalIgnoreCase)
+                || typeName.Equals("TIME_OF_DAY", StringComparison.OrdinalIgnoreCase))
                 return 0u;
 
-            if (typeName.StartsWith("POINTER TO") || typeName.StartsWith("REFERENCE TO"))
+            if (typeName.StartsWith("POINTER TO", StringComparison.OrdinalIgnoreCase)
+                || typeName.StartsWith("REFERENCE TO", StringComparison.OrdinalIgnoreCase))
                 return null;
 
             if (IecNumericType.TryGetDefault(typeName, out var numericDefault))

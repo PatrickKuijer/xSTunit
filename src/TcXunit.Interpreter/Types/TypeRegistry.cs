@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using TcXunit.Parser;
 
@@ -7,10 +8,16 @@ namespace TcXunit.Interpreter
     // boundary (TcXunit-w5x.7) - not missing types, deliberately unresolved.
     public sealed class TypeRegistry
     {
-        private readonly Dictionary<string, PouAst> _types = new Dictionary<string, PouAst>();
-        private readonly Dictionary<string, StructAst> _structTypes = new Dictionary<string, StructAst>();
-        private readonly Dictionary<string, IReadOnlyList<VarDecl>> _gvls = new Dictionary<string, IReadOnlyList<VarDecl>>();
-        private readonly Dictionary<string, string> _aliases = new Dictionary<string, string>();
+        // TcXunit-fzm: IEC 61131-3 type names are case-insensitive, so a POU/
+        // struct/alias name lookup (Get/GetStruct/ResolveAlias) must match
+        // regardless of how the referencing VAR/return-type text happened to
+        // spell it. _gvls keys off GVL instance names rather than type names,
+        // but TwinCAT GVL references are equally case-insensitive, so it gets
+        // the same comparer for consistency.
+        private readonly Dictionary<string, PouAst> _types = new Dictionary<string, PouAst>(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, StructAst> _structTypes = new Dictionary<string, StructAst>(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, IReadOnlyList<VarDecl>> _gvls = new Dictionary<string, IReadOnlyList<VarDecl>>(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, string> _aliases = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
         // User-defined ENUM DUT member tables (enum-name -> member-name ->
         // int-value, TcXunit-rk3), populated from DutEnumLoader.Load
@@ -18,8 +25,11 @@ namespace TcXunit.Interpreter
         // resolve a qualified enum literal (EnumType.Member) the same way
         // it already resolves BuiltinEnums.Types entries, without disturbing
         // the existing SIZEOF()/ResolveAlias alias map.
+        // Same case-insensitivity rationale as _types/_structTypes/_aliases
+        // above (TcXunit-fzm): a qualified enum literal's type name is just
+        // another type name.
         private readonly Dictionary<string, IReadOnlyDictionary<string, int>> _enumMembers =
-            new Dictionary<string, IReadOnlyDictionary<string, int>>();
+            new Dictionary<string, IReadOnlyDictionary<string, int>>(StringComparer.OrdinalIgnoreCase);
 
         // Parse-once caches (TcXunit-6af.4): Parser.ParseStatements/
         // VarBlockParser.Parse are pure functions of their input text, but

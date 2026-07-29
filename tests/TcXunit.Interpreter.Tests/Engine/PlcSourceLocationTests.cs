@@ -109,6 +109,52 @@ namespace TcXunit.Interpreter.Tests
             Assert.Null(ex.MethodName);
         }
 
+        // TcXunit-n65: MethodAst.ImplementationText is parsed lazily, the
+        // first time TypeRegistry.GetStatements sees that exact body text -
+        // and every call site shaped like
+        // `ExecuteBody(_registry.GetStatements(...), frame)` used to resolve
+        // that argument *before* ExecuteBody's own try/catch was entered. So
+        // when the callee's body itself contains an unparseable construct,
+        // the lazy parse throws outside the callee's frame and gets caught
+        // (and location-stamped) by whichever caller's ExecuteBody is still
+        // on the CLR stack - here, the suite body that merely called
+        // guard.M_Check(); one line. The fix must make the reported location
+        // name FB_Widget.M_Check (the body that actually fails to parse),
+        // never FB_MySuite (the caller).
+        [Fact]
+        public void RunSuite_CalleeBodyFailsToParse_ReportsCalleeNotCaller()
+        {
+            var widget = new PouAst(
+                "FB_Widget",
+                null,
+                "",
+                "",
+                new List<MethodAst>
+                {
+                    // '?' isn't a recognized character anywhere in the v1
+                    // lexer (see Lexer.Tokenize's default switch case), so
+                    // Lexer.Tokenize throws FormatException the first time
+                    // this method's body is lazily parsed via GetStatements.
+                    new MethodAst("M_Check", "METHOD PUBLIC M_Check", "x := 1 ? 2;"),
+                });
+
+            var suite = new PouAst(
+                "FB_MySuite",
+                "TcUnit.FB_TestSuite",
+                "VAR\n\tguard : FB_Widget;\nEND_VAR",
+                "guard.M_Check();",
+                new List<MethodAst>());
+
+            var engine = new Engine(new TypeRegistry(new[] { widget, suite }));
+
+            var ex = Assert.Throws<PlcSourceLocationException>(() => engine.RunSuite("FB_MySuite"));
+
+            Assert.Equal("FB_Widget", ex.PouTypeName);
+            Assert.Equal("M_Check", ex.MethodName);
+            Assert.Equal("FB_Widget.M_Check", ex.Location);
+            Assert.IsType<FormatException>(ex.InnerException);
+        }
+
         [Fact]
         public void CallMethod_Throw_IsNotWrapped_SoDirectInterpreterCallersKeepTheirExceptionTypes()
         {

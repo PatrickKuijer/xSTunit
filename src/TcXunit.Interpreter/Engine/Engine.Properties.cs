@@ -60,13 +60,12 @@ namespace TcXunit.Interpreter
             // and any later LREAL assignment into it was rejected as an
             // implicit narrowing.
             SeedReturnCell(frame, property.Name, property.DeclarationText);
-            try
-            {
-                ExecuteStatements(_registry.GetStatements(property.GetImplementationText), frame);
-            }
-            catch (MethodReturnSignal)
-            {
-            }
+
+            // TcXunit-n65: routed through ExecuteBody (rather than a local
+            // try/catch(MethodReturnSignal)) so a lazy parse failure in the
+            // Get accessor's own body is attributed to this property's
+            // frame, not to whatever caller's frame is still on the stack.
+            ExecuteBody(() => _registry.GetStatements(property.GetImplementationText), frame);
 
             return frame.Locals.TryGetValue(property.Name, out var returnCell) ? returnCell.Value : null;
         }
@@ -94,13 +93,9 @@ namespace TcXunit.Interpreter
                 frame.LocalTypeNames[property.Name] = declaredType;
             }
             frame.Locals[property.Name] = cell;
-            try
-            {
-                ExecuteStatements(_registry.GetStatements(property.SetImplementationText), frame);
-            }
-            catch (MethodReturnSignal)
-            {
-            }
+
+            // TcXunit-n65: same reasoning as InvokePropertyGet above.
+            ExecuteBody(() => _registry.GetStatements(property.SetImplementationText), frame);
         }
     }
 }

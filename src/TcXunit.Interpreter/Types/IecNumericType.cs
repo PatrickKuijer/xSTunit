@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 
 namespace TcXunit.Interpreter
@@ -13,8 +14,13 @@ namespace TcXunit.Interpreter
     // natural wider CLR type instead.
     internal static class IecNumericType
     {
+        // TcXunit-fzm: IEC 61131-3 type names are case-insensitive (a VAR
+        // declared 'lreal' or 'LReal' is exactly as valid as 'LREAL'), so
+        // this table - and every other type-name lookup in the interpreter -
+        // compares with StringComparer.OrdinalIgnoreCase rather than the
+        // default ordinal comparer.
         private static readonly Dictionary<string, (object Default, object Min, object Max)> Types =
-            new Dictionary<string, (object Default, object Min, object Max)>
+            new Dictionary<string, (object Default, object Min, object Max)>(StringComparer.OrdinalIgnoreCase)
             {
                 ["SINT"] = (0, (int)sbyte.MinValue, (int)sbyte.MaxValue),
                 ["USINT"] = (0, (int)byte.MinValue, (int)byte.MaxValue),

@@ -20,10 +20,23 @@ namespace TcXunit.Interpreter
         // stamps its identity onto the in-flight exception on the way out -
         // and only if nothing has stamped it yet, which makes the INNERMOST
         // body the one that wins, exactly as an acceptance criterion requires.
-        private void ExecuteBody(IReadOnlyList<Stmt> statements, Frame frame)
+        //
+        // TcXunit-n65: statementsFactory is a *lazy* lookup
+        // (`() => _registry.GetStatements(text)`), not a resolved
+        // IReadOnlyList<Stmt>, and it is called from INSIDE this method's own
+        // try - not by the caller before ExecuteBody is even entered. A
+        // callee's ImplementationText is parsed lazily on first use
+        // (TypeRegistry.GetStatements), and if that parse itself throws (e.g.
+        // a FormatException from the lexer/parser on an unsupported
+        // construct), the fault happens while THIS frame - the callee's own -
+        // is the innermost one on the stack, so it gets attributed here
+        // rather than bubbling out unattributed to whichever caller's
+        // ExecuteBody is further up the CLR stack.
+        private void ExecuteBody(Func<IReadOnlyList<Stmt>> statementsFactory, Frame frame)
         {
             try
             {
+                var statements = statementsFactory();
                 ExecuteStatements(statements, frame);
             }
             catch (MethodReturnSignal)

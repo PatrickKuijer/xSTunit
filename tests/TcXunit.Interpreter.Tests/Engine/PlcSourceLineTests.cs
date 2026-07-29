@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using TcXunit.Interpreter;
 using TcXunit.Parser;
 using Xunit;
@@ -78,6 +79,17 @@ namespace TcXunit.Interpreter.Tests
             // for BodyLine exactly as it already does for Line.
             Assert.Equal(3, ex.BodyLine);
             Assert.NotEqual(2, ex.BodyLine);
+
+            // TcXunit-1am: each level of the chain keeps its OWN line, not
+            // the innermost one - Outer's entry is its call site (body line
+            // 2), never Inner's fault line (body line 3).
+            Assert.Equal(
+                new[] { "Inner", "Outer", null },
+                ex.CallStack.Select(f => f.MethodName).ToArray());
+            Assert.Equal(3, ex.CallStack[0].BodyLine);
+            Assert.Equal(2, ex.CallStack[1].BodyLine);
+            Assert.Equal(inner.BodyStartLine + 2, ex.CallStack[0].Line);
+            Assert.Equal(outer.BodyStartLine + 1, ex.CallStack[1].Line);
         }
 
         [Fact]

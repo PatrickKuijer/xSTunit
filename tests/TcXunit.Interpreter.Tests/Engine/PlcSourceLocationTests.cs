@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using TcXunit.Interpreter;
 using TcXunit.Parser;
 using Xunit;
@@ -53,6 +54,34 @@ namespace TcXunit.Interpreter.Tests
             Assert.Equal("FB_Deep.Level3", ex.Location);
         }
 
+        // TcXunit-1am: before this, only the innermost frame (Level3) survived
+        // - every outer ExecuteBody's own call site (Level2, Level1, the
+        // suite body) was discarded on rethrow. RecordFaultSite now appends
+        // to an ordered list at every level instead of stopping at the first
+        // writer, so CallStack should carry all four: innermost frame first,
+        // the suite entry point last.
+        [Fact]
+        public void RunSuite_ThrowDeepInCallChain_CallStackCapturesEveryLevelInnermostFirst()
+        {
+            var engine = NewNestedChainEngine();
+
+            var ex = Assert.Throws<PlcSourceLocationException>(() => engine.RunSuite("FB_MySuite"));
+
+            Assert.Equal(
+                new[] { "FB_Deep.Level3", "FB_Deep.Level2", "FB_Deep.Level1", "FB_MySuite" },
+                ex.CallStack.Select(f => f.Location).ToArray());
+
+            // CallStack[0] must agree with the pre-existing single-frame
+            // properties, which still describe the innermost fault alone.
+            Assert.Equal(ex.PouTypeName, ex.CallStack[0].PouTypeName);
+            Assert.Equal(ex.MethodName, ex.CallStack[0].MethodName);
+            Assert.Equal(ex.Line, ex.CallStack[0].Line);
+            Assert.Equal(ex.BodyLine, ex.CallStack[0].BodyLine);
+
+            // Outermost frame is the suite's own POU body - no method name.
+            Assert.Null(ex.CallStack[3].MethodName);
+        }
+
         [Fact]
         public void RunSuite_ThrowDeepInCallChain_PreservesOriginalExceptionTypeAndMessage()
         {
@@ -86,6 +115,10 @@ namespace TcXunit.Interpreter.Tests
             Assert.Equal("FB_MySuite", ex.PouTypeName);
             Assert.Null(ex.MethodName);
             Assert.Equal("FB_MySuite", ex.Location);
+
+            // TcXunit-1am: a single interpreted frame degrades to a
+            // single-element CallStack, not an empty one.
+            Assert.Equal(new[] { "FB_MySuite" }, ex.CallStack.Select(f => f.Location).ToArray());
         }
 
         [Fact]

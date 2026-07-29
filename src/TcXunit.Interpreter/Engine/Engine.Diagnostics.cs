@@ -77,6 +77,17 @@ namespace TcXunit.Interpreter
         // from the same (innermost) frame.
         private const string FaultBodyLineKey = "TcXunit.Interpreter.FaultBodyLine";
 
+        // TcXunit-1am: unlike the four keys above (first-writer-wins, so they
+        // always describe the innermost frame), this list gets a frame
+        // appended by EVERY ExecuteBody level the exception passes through -
+        // the innermost body appends first (it catches first), each caller's
+        // ExecuteBody appends next as the exception keeps unwinding outward,
+        // and RunSuite's own ExecuteBody (the outermost) appends last. That
+        // unwind order is exactly the "innermost first, suite entry point
+        // last" order TryCreateSourceLocationException hands to
+        // PlcSourceLocationException - no sorting needed.
+        private const string FaultCallStackKey = "TcXunit.Interpreter.FaultCallStack";
+
         private static void RecordFaultSite(Exception ex, Frame frame)
         {
             // MethodReturnSignal/LoopExitSignal are unwind *signals*, not
@@ -84,6 +95,8 @@ namespace TcXunit.Interpreter
             // and EXIT semantics outright.
             if (IsControlFlowSignal(ex) || ex.Data == null || ex.Data.IsReadOnly)
                 return;
+
+            AppendCallStackFrame(ex, frame);
 
             // First writer wins == innermost body wins: outer frames see the
             // key already present and leave it alone as the exception passes.
@@ -98,6 +111,17 @@ namespace TcXunit.Interpreter
             // (Frame.CurrentFileLine) and nothing downstream can re-apply it.
             ex.Data[FaultLineKey] = frame.CurrentFileLine;
             ex.Data[FaultBodyLineKey] = frame.CurrentLine;
+        }
+
+        private static void AppendCallStackFrame(Exception ex, Frame frame)
+        {
+            if (!(ex.Data[FaultCallStackKey] is List<PlcCallStackFrame> callStack))
+            {
+                callStack = new List<PlcCallStackFrame>();
+                ex.Data[FaultCallStackKey] = callStack;
+            }
+
+            callStack.Add(new PlcCallStackFrame(frame.DeclaringTypeName, frame.MethodName, frame.CurrentFileLine, frame.CurrentLine));
         }
 
         private static bool IsControlFlowSignal(Exception ex) =>
@@ -126,8 +150,9 @@ namespace TcXunit.Interpreter
             // POU.Method shape p3t.1 produced.
             var fileLine = RecordedLine(ex, FaultLineKey);
             var bodyLine = RecordedLine(ex, FaultBodyLineKey);
+            var callStack = ex.Data[FaultCallStackKey] as List<PlcCallStackFrame>;
 
-            return new PlcSourceLocationException(pouTypeName, ex.Data[FaultMethodKey] as string, fileLine, bodyLine, ex);
+            return new PlcSourceLocationException(pouTypeName, ex.Data[FaultMethodKey] as string, fileLine, bodyLine, callStack, ex);
         }
 
         private static int RecordedLine(Exception ex, string key) =>

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 namespace TcXunit.Interpreter
 {
@@ -31,13 +32,46 @@ namespace TcXunit.Interpreter
         // (this type's original Line contract, TcXunit-p3t.4); bodyLine is the
         // XAE-implementation-editor-relative line, the one a human actually
         // wants in a log line (see FormatMessage/Message).
+        //
+        // No callStack parameter here: kept for source compatibility with
+        // every existing caller (tests included) that only ever knew about
+        // one frame. It degrades to a single-frame CallStack containing
+        // exactly the innermost frame this constructor was already given.
         public PlcSourceLocationException(string pouTypeName, string methodName, int fileLine, int bodyLine, Exception innerException)
-            : base(FormatMessage(pouTypeName, methodName, bodyLine, innerException), innerException)
+            : this(pouTypeName, methodName, fileLine, bodyLine, null, innerException)
         {
-            PouTypeName = pouTypeName;
-            MethodName = methodName;
-            Line = fileLine;
-            BodyLine = bodyLine;
+        }
+
+        // TcXunit-1am: the ordered-call-stack constructor. Engine is the only
+        // caller - it has already accumulated every ExecuteBody level's frame
+        // as the exception unwound (Engine.Diagnostics.cs). pouTypeName/
+        // fileLine/etc are only the null/empty-callStack fallback; once a
+        // callStack is available, the single-frame properties are DERIVED
+        // from callStack[0] (see the private ctor below) rather than taking
+        // their own copies, so the two can't drift apart.
+        public PlcSourceLocationException(
+            string pouTypeName,
+            string methodName,
+            int fileLine,
+            int bodyLine,
+            IReadOnlyList<PlcCallStackFrame> callStack,
+            Exception innerException)
+            : this(
+                callStack != null && callStack.Count > 0
+                    ? callStack
+                    : new[] { new PlcCallStackFrame(pouTypeName, methodName, fileLine, bodyLine) },
+                innerException)
+        {
+        }
+
+        private PlcSourceLocationException(IReadOnlyList<PlcCallStackFrame> callStack, Exception innerException)
+            : base(FormatMessage(callStack[0].PouTypeName, callStack[0].MethodName, callStack[0].BodyLine, innerException), innerException)
+        {
+            CallStack = callStack;
+            PouTypeName = callStack[0].PouTypeName;
+            MethodName = callStack[0].MethodName;
+            Line = callStack[0].Line;
+            BodyLine = callStack[0].BodyLine;
         }
 
         // POU type whose body was executing, e.g. "FB_DeepHelper". Never null.
@@ -70,6 +104,14 @@ namespace TcXunit.Interpreter
         // there is one); this stays line-free for callers that need the two
         // parts apart.
         public string Location => MethodName == null ? PouTypeName : PouTypeName + "." + MethodName;
+
+        // TcXunit-1am: the full interpreted call chain that led to this
+        // fault, innermost frame first (CallStack[0] is where
+        // PouTypeName/MethodName/Line/BodyLine above are derived from) and
+        // the suite entry point last. Never null or empty - degrades to a
+        // single frame when only one body was ever on the (interpreter's)
+        // stack.
+        public IReadOnlyList<PlcCallStackFrame> CallStack { get; }
 
         private static string FormatMessage(string pouTypeName, string methodName, int bodyLine, Exception innerException)
         {

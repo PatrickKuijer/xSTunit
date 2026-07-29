@@ -21,7 +21,7 @@ namespace TcXunit.Interpreter
             typeName != null && typeName.TrimStart().StartsWith("ARRAY", StringComparison.OrdinalIgnoreCase);
 
         // resolveBound resolves a non-literal bound expression's text (e.g.
-        // "cTcpDataServerClient.MAX_REMOTE_UNITS") to its integer value.
+        // "cRemoteClientConfig.MAX_REMOTE_ITEMS") to its integer value.
         // IEC 61131-3 array bounds are constant expressions, not just bare
         // integer literals (TcXunit-654) - callers with an Engine/Frame
         // context to evaluate such expressions against (e.g. GVL-qualified

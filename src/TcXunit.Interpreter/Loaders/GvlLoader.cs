@@ -8,7 +8,7 @@ namespace TcXunit.Interpreter
 {
     // Shared by CliRunner and SuiteCaseRunner.BuildRegistry (TcXunit-71o):
     // loads .TcGVL files across the merged set of POU directories so global
-    // variable lists (e.g. gFrameworkTemp) resolve identically for both the
+    // variable lists (e.g. gScratchGlobals) resolve identically for both the
     // CLI entry point and Test Explorer discovery. Mirrors DutStructLoader's
     // resilient per-file skip/report shape - a structurally unexpected
     // .TcGVL file must not abort registry build for the whole directory.

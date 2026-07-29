@@ -113,7 +113,7 @@ namespace TcXunit.Interpreter
         }
 
         // Resolves a non-literal ARRAY bound (e.g. a GVL-qualified constant
-        // like "cTcpDataServerClient.MAX_REMOTE_UNITS") without needing a
+        // like "cRemoteClientConfig.MAX_REMOTE_ITEMS") without needing a
         // running Engine/Frame - the builder runs before any FbInstance
         // exists (see class remarks). GVL constants are themselves constant
         // expressions (literals, arithmetic, or references to other GVL

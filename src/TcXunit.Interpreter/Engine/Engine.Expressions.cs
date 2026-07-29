@@ -328,7 +328,7 @@ namespace TcXunit.Interpreter
         //
         // TcXunit-dba: an interface-typed (or plain FB-reference) variable
         // follows the same "= 0 is the assigned/null check" idiom (e.g.
-        // 'IF (iipRecipeParams <> 0) AND iipRecipeParams.bAdd(...) THEN'),
+        // 'IF (iipHandler <> 0) AND iipHandler.bDoWork(...) THEN'),
         // but it has no dedicated Pointer/null representation of its own -
         // an unassigned interface field has no POU registered under its
         // interface type name (TcPouParser never parses <Itf> POUs), so

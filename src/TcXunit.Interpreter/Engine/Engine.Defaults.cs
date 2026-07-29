@@ -125,7 +125,7 @@ namespace TcXunit.Interpreter
         }
 
         // Resolves a non-literal ARRAY bound (e.g. a GVL-qualified constant
-        // like "cTcpDataServerClient.MAX_REMOTE_UNITS") through the normal
+        // like "cRemoteClientConfig.MAX_REMOTE_ITEMS") through the normal
         // Evaluate() path (TcXunit-654): array bounds are IEC 61131-3
         // constant expressions, not just bare integer literals, but they're
         // parsed from a raw type-name string at VarDecl/DefaultValue time -

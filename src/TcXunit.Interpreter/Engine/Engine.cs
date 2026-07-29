@@ -270,7 +270,7 @@ namespace TcXunit.Interpreter
         private static bool IsLoopbackFaultMethod(string methodName) => LoopbackFaultMethods.Contains(methodName);
 
         // A FieldAccessExpr's receiver is a bare GVL name (e.g.
-        // gFrameworkTemp.stMachine) rather than a variable/field in scope
+        // gScratchGlobals.stWidget) rather than a variable/field in scope
         // (TcXunit-71o) - checked the same way as the BuiltinEnums.Types
         // check above: only when the identifier doesn't already resolve as
         // a local/instance field, so a same-named local/field always wins.

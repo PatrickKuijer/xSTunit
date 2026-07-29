@@ -238,9 +238,21 @@ namespace TcXunit.Interpreter
 
                 // A suite receiver that got this far named something the TcUnit
                 // stub doesn't implement AND that isn't a POU or native
-                // function either - almost always a TcUnit assert/API not wired
-                // up yet, so keep saying exactly that (TcXunit-6k2).
-                if (instance?.NativeSuiteHost != null)
+                // function either - almost always a TcUnit assert/API, or an
+                // unimplemented IEC standard-library function (e.g. SEL), not
+                // wired up yet, so keep saying exactly that (TcXunit-6k2). But
+                // only when the name actually looks like it belongs to one of
+                // those external surfaces (see
+                // NativeMethodBridge.LooksLikeTcUnitApiName for exactly what
+                // that means) - otherwise this unconditionally classified
+                // every unresolved unqualified suite-body call as an
+                // interpreter gap (kind=unsupported-construct, "STOP, don't
+                // edit the POU"), even a plain typo of one of the suite's own
+                // methods (e.g. 'CounterStartsAtZeroo()' for
+                // 'CounterStartsAtZero()'), which is a real, fixable defect
+                // and belongs on the ordinary method-not-found path below
+                // (kind=plc-fault) instead (TcXunit-2o9.1).
+                if (instance?.NativeSuiteHost != null && NativeMethodBridge.LooksLikeTcUnitApiName(methodName))
                     throw NativeMethodBridge.NotSupported(methodName);
 
                 // startType is null for a call made from a global FUNCTION body

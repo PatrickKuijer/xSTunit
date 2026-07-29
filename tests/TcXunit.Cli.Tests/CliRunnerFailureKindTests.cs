@@ -76,6 +76,24 @@ namespace TcXunit.Cli.Tests
             Assert.Equal(JsonValueKind.Null, suite.GetProperty("errorConstruct").ValueKind);
         }
 
+        // TcXunit-2o9.1: the bug this ticket fixes. An unqualified call from a
+        // suite body used to be classified as unsupported-construct
+        // unconditionally - even a plain typo of one of the suite's own
+        // methods, which is a real, fixable defect and must classify the same
+        // as the qualified-call case above (plc-fault), not "STOP, escalate".
+        [Fact]
+        public void Run_MisspelledUnqualifiedSuiteCall_ReportsPlcFaultKind()
+        {
+            File.WriteAllText(Path.Combine(_tempDir, "FB_TypoSuiteTests.TcPOU"), UnqualifiedTypoSuiteXml);
+            var output = new StringWriter();
+
+            CliRunner.Run(new[] { _tempDir, "--format", "json" }, output);
+
+            var suite = FirstSuite(output.ToString());
+            Assert.Equal("plc-fault", suite.GetProperty("errorKind").GetString());
+            Assert.Equal(JsonValueKind.Null, suite.GetProperty("errorConstruct").ValueKind);
+        }
+
         // The inverted failure mode, and the one that matters most: a run-time
         // type error in the code under test is thrown as a plain
         // NotSupportedException, the same base type the interpreter's own
@@ -173,6 +191,20 @@ VAR
 END_VAR]]></Declaration>
     <Implementation>
       <ST><![CDATA[bResult := sText < 1;]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>";
+
+        // Bare/unqualified (unlike MethodNotFoundSuiteXml's qualified
+        // 'helper.NoSuchMethod()'): names nothing the ancestry walk, the
+        // TcUnit stub (Assert*/TEST*/IS_TEST*), a POU or a native function
+        // resolves - a plain typo, not an unwired TcUnit API (TcXunit-2o9.1).
+        private const string UnqualifiedTypoSuiteXml = @"<?xml version=""1.0"" encoding=""utf-8""?>
+<TcPlcObject Version=""1.1.0.1"">
+  <POU Name=""FB_TypoSuiteTests"" Id=""{00000000-0000-0000-0000-0000000000b5}"" SpecialFunc=""None"">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_TypoSuiteTests EXTENDS TcUnit.FB_TestSuite]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[CounterStartsAtZeroo();]]></ST>
     </Implementation>
   </POU>
 </TcPlcObject>";

@@ -75,5 +75,45 @@ namespace TcXunit.Interpreter.Tests
             Assert.Equal(TcXunit.Runner.FailureKind.UnsupportedConstruct, failure.Kind);
             Assert.Equal("AssertSomethingNobodyImplemented", failure.Construct);
         }
+
+        // TcXunit-2o9.1: a genuinely-unimplemented TcUnit API name (not a
+        // fictional one like above) must still get the grow-on-demand
+        // diagnostic. AssertArrayEquals_LWORD is real upstream API
+        // (FB_TestSuite.TcPOU has it) that NativeMethodBridge deliberately
+        // hasn't wired up yet - see ArrayAssertSupportedTypes' comment in
+        // NativeMethodBridge.cs.
+        [Fact]
+        public void RunSuite_UnwiredUpstreamArrayAssert_StillReportsUnsupportedConstructKind()
+        {
+            var suite = SuiteCalling("AssertArrayEquals_LWORD(Expecteds := 0, Actuals := 0, Message := '');");
+
+            var results = new Engine(new TypeRegistry(new[] { suite })).RunSuite("FB_WidgetTests");
+
+            var failure = Assert.Single(Assert.Single(results).Failures);
+            Assert.Contains("AssertArrayEquals_LWORD", failure.Message);
+            Assert.Contains("isn't supported yet", failure.Message);
+            Assert.Equal(TcXunit.Runner.FailureKind.UnsupportedConstruct, failure.Kind);
+            Assert.Equal("AssertArrayEquals_LWORD", failure.Construct);
+        }
+
+        // TcXunit-2o9.1: the bug this ticket fixes. An unqualified call from a
+        // suite body that resolves to nothing is NOT automatically an unwired
+        // TcUnit API - it might just be a typo of one of the suite's own
+        // methods. 'CounterStartsAtZeroo' matches none of the TcUnit surface's
+        // Assert*/TEST*/IS_TEST* prefixes, so it must fall through to the
+        // ordinary method-not-found error (plc-fault: a real, fixable defect),
+        // not the "STOP, don't touch the POU" unsupported-construct kind.
+        [Fact]
+        public void RunSuite_MisspelledUnqualifiedCallFromSuite_ReportsPlcFaultNotUnsupportedConstruct()
+        {
+            var suite = SuiteCalling("CounterStartsAtZeroo();");
+
+            var results = new Engine(new TypeRegistry(new[] { suite })).RunSuite("FB_WidgetTests");
+
+            var failure = Assert.Single(Assert.Single(results).Failures);
+            Assert.Contains("CounterStartsAtZeroo", failure.Message);
+            Assert.Equal(TcXunit.Runner.FailureKind.PlcFault, failure.Kind);
+            Assert.Null(failure.Construct);
+        }
     }
 }

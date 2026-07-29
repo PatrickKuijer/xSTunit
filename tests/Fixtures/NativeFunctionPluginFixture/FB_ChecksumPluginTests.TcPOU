@@ -1,0 +1,99 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4026.18">
+  <POU Name="FB_ChecksumPluginTests" Id="{a1b2c3d4-6k20-4a1a-8b1b-000000000010}" SpecialFunc="None">
+    <Declaration><![CDATA[(*
+    TcXunit interpreter fixture (TcXunit-6k2). Exercises host-registered
+    native functions standing in for compiled-only TwinCAT library functions,
+    across the three call shapes that matter:
+
+      - through a global FUNCTION wrapper, whose frame has no FB instance
+        (the shape that used to throw a bare NullReferenceException,
+        TcXunit-kii)
+      - called directly from a METHOD body, where the frame does have one
+      - a non-pointer signature, to show the boundary isn't checksum-specific
+
+    Expected values match the SAMPLE plugin's deliberately trivial additive
+    algorithm (samples/TcXunit.SamplePlugins), NOT Beckhoff's real
+    F_CheckSum16 - see that file's warning. This fixture asserts that
+    dispatch, argument binding, and pointer reads work, not that any
+    particular vendor checksum is reproduced.
+*)
+FUNCTION_BLOCK FB_ChecksumPluginTests EXTENDS TcUnit.FB_TestSuite]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[ChecksumThroughGlobalFunctionWrapper();
+ChecksumCalledDirectlyWithSeed();
+NonPointerNativeFunction();]]></ST>
+    </Implementation>
+    <Method Name="ChecksumThroughGlobalFunctionWrapper" Id="{a1b2c3d4-6k20-4a1a-8b1b-000000000011}">
+      <Declaration><![CDATA[METHOD PRIVATE ChecksumThroughGlobalFunctionWrapper
+VAR
+	buf		: ARRAY[0..3] OF BYTE;
+	sum		: WORD;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('ChecksumThroughGlobalFunctionWrapper');
+
+buf[0] := 1;
+buf[1] := 2;
+buf[2] := 3;
+buf[3] := 4;
+
+(* F_ComputeChecksum is real interpreted source; the F_CheckSum16 it calls
+   is not, and can only resolve through the plugin registry. *)
+sum := F_ComputeChecksum(ADR(buf), SIZEOF(buf));
+
+AssertEquals_INT(Expected := 10,
+                  Actual := sum,
+                  Message := 'checksum through global FUNCTION wrapper');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="ChecksumCalledDirectlyWithSeed" Id="{a1b2c3d4-6k20-4a1a-8b1b-000000000012}">
+      <Declaration><![CDATA[METHOD PRIVATE ChecksumCalledDirectlyWithSeed
+VAR
+	buf		: ARRAY[0..3] OF BYTE;
+	sum		: WORD;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('ChecksumCalledDirectlyWithSeed');
+
+buf[0] := 1;
+buf[1] := 2;
+buf[2] := 3;
+buf[3] := 4;
+
+(* Same native function, but reached from a METHOD body (frame HAS an
+   instance) and with a non-zero seed, so argument binding past the first
+   parameter is covered too. *)
+sum := F_CheckSum16(ADR(buf), SIZEOF(buf), 100);
+
+AssertEquals_INT(Expected := 110,
+                  Actual := sum,
+                  Message := 'checksum called directly with a seed');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="NonPointerNativeFunction" Id="{a1b2c3d4-6k20-4a1a-8b1b-000000000013}">
+      <Declaration><![CDATA[METHOD PRIVATE NonPointerNativeFunction
+VAR
+	result		: STRING(32);
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('NonPointerNativeFunction');
+
+result := F_DemoUpperCase('widget');
+
+AssertEquals_STRING(Expected := 'WIDGET',
+                     Actual := result,
+                     Message := 'non-pointer native function');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+  </POU>
+</TcPlcObject>

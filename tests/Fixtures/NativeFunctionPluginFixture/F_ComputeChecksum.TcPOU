@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4026.18">
+  <POU Name="F_ComputeChecksum" Id="{a1b2c3d4-6k20-4a1a-8b1b-000000000001}" SpecialFunc="None">
+    <Declaration><![CDATA[(*
+    TcXunit interpreter fixture (TcXunit-6k2). A thin global FUNCTION wrapper
+    around a compiled-only TwinCAT library function, which is the exact shape
+    that used to crash: a FUNCTION body has no FB instance behind its frame,
+    so an unresolved call from inside one dereferenced null (TcXunit-kii).
+
+    F_CheckSum16 lives in Tc2_Utilities, which ships compiled - there is no
+    .TcPOU for it anywhere in this tree or any user tree, so it can only be
+    resolved by a registered native function.
+*)
+FUNCTION F_ComputeChecksum : WORD
+VAR_INPUT
+	ipData		: POINTER TO BYTE;
+	inSize		: UDINT;
+END_VAR
+VAR
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[F_ComputeChecksum := F_CheckSum16( ipData, inSize, 0 );]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

@@ -16,7 +16,17 @@ namespace TcXunit.Interpreter
             string dispatchStartTypeOverride,
             bool optionalIfMissing = false)
         {
-            var startType = dispatchStartTypeOverride ?? instance.ActualTypeName;
+            // instance is null when the body making this call is a global
+            // FUNCTION's rather than an FB method's (CallGlobalFunction builds
+            // a Frame with no instance) - a FUNCTION has no `THIS`, so an
+            // unqualified call from inside one has no ancestry to dispatch
+            // against. Everything below therefore treats a null instance as
+            // "no methods, no fields, no native host" and falls through to the
+            // global-FUNCTION / native-function lookups at the bottom, instead
+            // of dereferencing it and throwing a bare NullReferenceException
+            // that names neither the call nor the missing function
+            // (TcXunit-kii).
+            var startType = dispatchStartTypeOverride ?? instance?.ActualTypeName;
 
             string definingType = null;
             TcXunit.Parser.MethodAst methodDef = null;
@@ -40,7 +50,7 @@ namespace TcXunit.Interpreter
 
             if (methodDef == null)
             {
-                if (methodName == "StepCycles" && positionalArgs.Count == 1)
+                if (instance != null && methodName == "StepCycles" && positionalArgs.Count == 1)
                 {
                     var cycles = Convert.ToInt32(Evaluate(positionalArgs[0], callerFrame));
                     StepCycles(instance, cycles);
@@ -110,7 +120,7 @@ namespace TcXunit.Interpreter
                     return null;
                 }
 
-                if (instance.NativeLoopbackHost != null && IsLoopbackFaultMethod(methodName))
+                if (instance?.NativeLoopbackHost != null && IsLoopbackFaultMethod(methodName))
                 {
                     switch (methodName)
                     {
@@ -146,7 +156,14 @@ namespace TcXunit.Interpreter
                 if (optionalIfMissing)
                     return null;
 
-                if (instance.NativeSuiteHost != null)
+                // CanInvoke gate (TcXunit-6k2): route to the TcUnit native-stub
+                // boundary only for names it actually implements. Without it, a
+                // suite instance sent *every* unresolved call here and got
+                // NativeMethodBridge's "isn't supported yet" throw, which made
+                // the global-FUNCTION and native-function lookups below
+                // unreachable from inside a suite - i.e. a suite could not call
+                // a global FUNCTION POU at all.
+                if (instance?.NativeSuiteHost != null && NativeMethodBridge.CanInvoke(methodName))
                 {
                     var evaluatedPositional = positionalArgs.Select(e => Evaluate(e, callerFrame)).ToList();
                     var evaluatedNamed = namedArgs.ToDictionary(a => a.Name, a => Evaluate(a.Value, callerFrame));
@@ -192,7 +209,36 @@ namespace TcXunit.Interpreter
                         CallableReturnTypeParser.StripLeadingComments(globalFunctionDef.DeclarationText)))
                     return CallGlobalFunction(globalFunctionDef, positionalArgs, namedArgs, callerFrame);
 
-                throw new InvalidOperationException($"Method '{methodName}' not found starting from type '{startType}'");
+                // Host-registered stand-in for a compiled-only TwinCAT library
+                // function (TcXunit-6k2), e.g. Tc2_Utilities' F_CheckSum16 -
+                // there is no .TcPOU anywhere to parse for these, so nothing
+                // above could ever have resolved them.
+                //
+                // Deliberately the LAST thing tried, after the global-FUNCTION
+                // POU lookup directly above: if the user's own tree really does
+                // contain source for this name, that source wins. A plugin can
+                // only fill a hole that would otherwise have been the error
+                // below - it can never shadow interpreted code.
+                if (_nativeFunctions.TryGet(methodName, out var nativeFunction))
+                    return InvokeNativeFunction(nativeFunction, methodName, positionalArgs, namedArgs, callerFrame);
+
+                // A suite receiver that got this far named something the TcUnit
+                // stub doesn't implement AND that isn't a POU or native
+                // function either - almost always a TcUnit assert/API not wired
+                // up yet, so keep saying exactly that (TcXunit-6k2).
+                if (instance?.NativeSuiteHost != null)
+                    throw NativeMethodBridge.NotSupported(methodName);
+
+                // startType is null for a call made from a global FUNCTION body
+                // (no instance, so no ancestry to have searched) - saying "from
+                // type ''" there would be nonsense, so name the real situation
+                // instead (TcXunit-kii).
+                throw new InvalidOperationException(
+                    startType != null
+                        ? $"Method '{methodName}' not found starting from type '{startType}'"
+                        : $"Function '{methodName}' not found: no FUNCTION/FUNCTION_BLOCK POU of that name was " +
+                          "loaded, and no native function is registered for it. If it comes from a compiled-only " +
+                          "TwinCAT library, supply it via a native-function plugin.");
             }
 
             // definingType (not instance.ActualTypeName) is the POU that owns
@@ -342,6 +388,16 @@ namespace TcXunit.Interpreter
         {
             if (callerFrame != null && instance == callerFrame.Instance && callerFrame.Locals.TryGetValue(name, out cell))
                 return true;
+
+            // A global FUNCTION frame has no instance (TcXunit-kii) - its own
+            // locals were already consulted above (null == null makes the
+            // self-invocation test true), and there are no instance Fields
+            // behind them.
+            if (instance == null)
+            {
+                cell = null;
+                return false;
+            }
 
             return instance.Fields.TryGetValue(name, out cell);
         }

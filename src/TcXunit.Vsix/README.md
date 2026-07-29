@@ -80,7 +80,10 @@ TcXunit.sln` from the CLI will skip or fail on this project; build it via
    shows the empty-state copy ("No results yet...") before any run. Clicking
    "Run tests" (needs a real `tcxunit.json` — copy `tcxunit.json.sample` and
    fill in `testProjectPath`, plus the `tcxunit` CLI on PATH or `cliPath` set
-   to a full path) swaps the button to "Stop", shows the `.prog` sweep above
+   to a full path; optionally set `plugins` to a directory of
+   `ITcXunitNativeFunction` plugin assemblies — forwarded to the CLI as
+   `--plugins <dir>`, resolved relative to `tcxunit.json`'s own directory the
+   same way `cliPath` is) swaps the button to "Stop", shows the `.prog` sweep above
    the tree, and on completion renders the pass/fail tree and swaps the
    button back to "Run tests". Clicking "Stop" mid-run should kill the
    `tcxunit` process (verify via Task Manager) and return the button to "Run

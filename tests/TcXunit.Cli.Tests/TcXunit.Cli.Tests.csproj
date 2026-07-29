@@ -15,6 +15,16 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\TcXunit.Cli\TcXunit.Cli.csproj" />
+    <!-- TcXunit-6k2: built, but deliberately NOT linked
+         (ReferenceOutputAssembly=false). The plugin end-to-end test must load
+         this assembly the way a real user's plugin is loaded - discovered as a
+         file in a directory and loaded into a PluginLoadContext at run time -
+         not resolved as a compile-time reference already present in the test's
+         own load context, which would prove nothing about the loader. The
+         reference exists only to guarantee the DLL is on disk, in the same
+         configuration, before the test looks for it. -->
+    <ProjectReference Include="..\..\samples\TcXunit.SamplePlugins\TcXunit.SamplePlugins.csproj"
+                      ReferenceOutputAssembly="false" />
   </ItemGroup>
 
 </Project>

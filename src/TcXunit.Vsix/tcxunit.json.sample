@@ -3,5 +3,6 @@
     "PLC\\POUs",
     "PLC\\Tests"
   ],
-  "cliPath": "tcxunit"
+  "cliPath": "tcxunit",
+  "plugins": "PLC\\Plugins"
 }

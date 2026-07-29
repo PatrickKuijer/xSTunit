@@ -90,6 +90,58 @@ namespace TcXunit.Vsix.Tests
         }
 
         [Fact]
+        public void BuildArguments_NullPluginsDirectory_OmitsPluginsFlag()
+        {
+            var arguments = TcxunitArgumentBuilder.BuildArguments(
+                "tcxunit",
+                new[] { "C:\\proj\\Pous" },
+                suiteNames: null,
+                pluginsDirectory: null);
+
+            Assert.Equal("\"tcxunit\" \"C:\\proj\\Pous\" --format json", arguments);
+        }
+
+        [Fact]
+        public void BuildArguments_EmptyPluginsDirectory_OmitsPluginsFlag()
+        {
+            var arguments = TcxunitArgumentBuilder.BuildArguments(
+                "tcxunit",
+                new[] { "C:\\proj\\Pous" },
+                suiteNames: null,
+                pluginsDirectory: string.Empty);
+
+            Assert.Equal("\"tcxunit\" \"C:\\proj\\Pous\" --format json", arguments);
+        }
+
+        [Fact]
+        public void BuildArguments_PluginsDirectorySet_AppendsPluginsFlag()
+        {
+            var arguments = TcxunitArgumentBuilder.BuildArguments(
+                "tcxunit",
+                new[] { "C:\\proj\\Pous" },
+                suiteNames: null,
+                pluginsDirectory: "C:\\proj\\Plugins");
+
+            Assert.Equal(
+                "\"tcxunit\" \"C:\\proj\\Pous\" --format json --plugins \"C:\\proj\\Plugins\"",
+                arguments);
+        }
+
+        [Fact]
+        public void BuildArguments_PluginsDirectoryAndSuiteNames_AppendsPluginsBeforeSuites()
+        {
+            var arguments = TcxunitArgumentBuilder.BuildArguments(
+                "tcxunit",
+                new[] { "C:\\proj\\Pous" },
+                new[] { "FB_WidgetWireRecordsTests" },
+                pluginsDirectory: "C:\\proj\\Plugins");
+
+            Assert.Equal(
+                "\"tcxunit\" \"C:\\proj\\Pous\" --format json --plugins \"C:\\proj\\Plugins\" --suite \"FB_WidgetWireRecordsTests\"",
+                arguments);
+        }
+
+        [Fact]
         public void EscapeArgument_TrailingBackslash_DoublesItSoClosingQuoteSurvives()
         {
             // Win32/CommandLineToArgvW rule: a run of backslashes immediately before the

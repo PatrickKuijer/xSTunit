@@ -102,6 +102,84 @@ namespace TcXunit.Vsix.Tests
         }
 
         [Fact]
+        public void Load_MissingPlugins_LeavesPluginsNull()
+        {
+            var directory = CreateTempDirectory();
+            try
+            {
+                File.WriteAllText(Path.Combine(directory, "tcxunit.json"), @"{ ""paths"": [""./POUs""] }");
+
+                var config = TcxunitConfig.Load(directory);
+
+                Assert.Null(config.Plugins);
+            }
+            finally
+            {
+                Directory.Delete(directory, recursive: true);
+            }
+        }
+
+        [Fact]
+        public void Load_PluginsLooksLikeARelativePath_ResolvesAgainstConfigDirectory()
+        {
+            var directory = CreateTempDirectory();
+            try
+            {
+                File.WriteAllText(Path.Combine(directory, "tcxunit.json"),
+                    @"{ ""paths"": [""./POUs""], ""plugins"": ""./plugins"" }");
+
+                var config = TcxunitConfig.Load(directory);
+
+                Assert.Equal(Path.GetFullPath(Path.Combine(directory, "./plugins")), config.Plugins);
+            }
+            finally
+            {
+                Directory.Delete(directory, recursive: true);
+            }
+        }
+
+        [Fact]
+        public void Load_PluginsIsRooted_LeftUnchanged()
+        {
+            var directory = CreateTempDirectory();
+            var rooted = Path.GetFullPath(Path.Combine(Path.GetTempPath(), "SomePlugins"));
+            try
+            {
+                File.WriteAllText(Path.Combine(directory, "tcxunit.json"),
+                    $@"{{ ""paths"": [""./POUs""], ""plugins"": ""{rooted.Replace("\\", "\\\\")}"" }}");
+
+                var config = TcxunitConfig.Load(directory);
+
+                Assert.Equal(rooted, config.Plugins);
+            }
+            finally
+            {
+                Directory.Delete(directory, recursive: true);
+            }
+        }
+
+        [Fact]
+        public void Load_PluginsIsBareName_LeftUnresolved()
+        {
+            var directory = CreateTempDirectory();
+            try
+            {
+                File.WriteAllText(Path.Combine(directory, "tcxunit.json"),
+                    @"{ ""paths"": [""./POUs""], ""plugins"": ""Plugins"" }");
+
+                var config = TcxunitConfig.Load(directory);
+
+                // No slash/backslash in "Plugins" -- mirrors cliPath's bare-name case:
+                // left unresolved rather than joined against the config directory.
+                Assert.Equal("Plugins", config.Plugins);
+            }
+            finally
+            {
+                Directory.Delete(directory, recursive: true);
+            }
+        }
+
+        [Fact]
         public void Load_NoConfigFile_ThrowsFileNotFoundException()
         {
             var directory = CreateTempDirectory();

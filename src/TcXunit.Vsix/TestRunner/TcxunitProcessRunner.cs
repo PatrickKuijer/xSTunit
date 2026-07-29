@@ -96,11 +96,12 @@ namespace TcXunit.Vsix.TestRunner
 
         private static ProcessStartInfo BuildStartInfo(TcxunitConfig config, string workingDirectory, IReadOnlyList<string> suiteNames)
         {
-            // Argument construction (including --suite <name> per suiteNames, and the
-            // Win32-style quoting each token needs) lives in TcxunitArgumentBuilder --
-            // pulled out to a class with no VS SDK dependency so it can be unit tested
-            // under net8.0 (see that file's own comment and tests/TcXunit.Vsix.Tests).
-            var arguments = TcxunitArgumentBuilder.BuildArguments(config.CliPath, config.Paths, suiteNames);
+            // Argument construction (including --plugins <dir> per config.Plugins,
+            // --suite <name> per suiteNames, and the Win32-style quoting each token
+            // needs) lives in TcxunitArgumentBuilder -- pulled out to a class with no VS
+            // SDK dependency so it can be unit tested under net8.0 (see that file's own
+            // comment and tests/TcXunit.Vsix.Tests).
+            var arguments = TcxunitArgumentBuilder.BuildArguments(config.CliPath, config.Paths, suiteNames, config.Plugins);
 
             // Run via "cmd.exe /c" rather than invoking config.CliPath directly.
             // Process.Start with UseShellExecute=false calls CreateProcess directly,

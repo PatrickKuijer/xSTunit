@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using TcXunit.Runner;
 
 namespace TcXunit.Interpreter
 {
@@ -129,16 +130,33 @@ namespace TcXunit.Interpreter
                 return new ExprStmt(call);
             }
 
+            // Left as FormatException, not converted (TcXunit-3tx.5): the
+            // complete IEC 61131-3 ST statement grammar - assignment,
+            // invocation, RETURN, IF/CASE, FOR/WHILE/REPEAT/EXIT - is already
+            // dispatched above by name, same as UnsupportedConstructException
+            // is claimed by name elsewhere. There is no known valid construct
+            // that reaches this fallback only malformed source does (e.g. a
+            // bare non-call expression used as a statement), so claiming
+            // unsupported-construct here would be a guess, not evidence.
             throw new FormatException($"Statement did not resolve to an assignment or call at token index {_pos}");
         }
 
         // Assignment targets: plain identifier, .Member field access, or
-        // [idx] array indexing (any depth/mix of the latter two). No LHS
-        // deref (x^ :=) yet - not exercised by the fixture.
+        // [idx] array indexing (any depth/mix of the latter two). LHS deref
+        // (x^ :=) is recognized but rejected below as unsupported-construct,
+        // not silently accepted (TcXunit-3tx.5).
         private static Expr RequireLValue(Expr target)
         {
             if (target is IdentifierExpr || target is FieldAccessExpr || target is IndexExpr)
                 return target;
+
+            // x^ := ... is valid IEC 61131-3 (pointer-dereference assignment)
+            // - the read side already works (Engine.Expressions.cs evaluates
+            // DerefExpr), only the write side is an unimplemented v1-subset
+            // gap, not a defect in the source (TcXunit-3tx.5).
+            if (target is DerefExpr)
+                throw new UnsupportedConstructException("x^ :=", "Pointer dereference on the assignment left-hand side (x^ := ...) is not supported in the v1 subset");
+
             throw new FormatException("Assignment target must be an identifier, field access, or array index in the v1 subset");
         }
 

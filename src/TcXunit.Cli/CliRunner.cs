@@ -42,12 +42,29 @@ namespace TcXunit.Cli
             // report only: it never changes the exit code. Opt-in because a
             // large tree's list is long and most runs don't want it.
             var withCoverage = false;
+            // --stream (TcXunit-ce1): opt-in NDJSON progress mode for large
+            // suite counts - one JSON object per line instead of one blob at
+            // the end: an initial "discovery" event listing every suite
+            // about to run (so a consumer can render a "waiting" list up
+            // front), a "suite-start"/"suite-result" pair per suite as it
+            // executes, and a final "summary" event carrying the same
+            // aggregate data --format json already reports in one shot.
+            // Independent of --format. When NOT passed, output is exactly
+            // what it always was - this is the CLI's most-consumed contract
+            // (the VSIX shells out to it without ever passing --stream), so
+            // every new code path below is gated behind this flag rather
+            // than changed in place.
+            var streaming = false;
             for (var i = 0; i < args.Length; i++)
             {
                 var arg = args[i];
                 if (string.Equals(arg, "--coverage", StringComparison.OrdinalIgnoreCase))
                 {
                     withCoverage = true;
+                }
+                else if (string.Equals(arg, "--stream", StringComparison.OrdinalIgnoreCase))
+                {
+                    streaming = true;
                 }
                 else if (arg.StartsWith("--plugins=", StringComparison.OrdinalIgnoreCase))
                 {
@@ -106,7 +123,7 @@ namespace TcXunit.Cli
 
             if (args.Length == 0)
             {
-                output.WriteLine("usage: tcxunit run <path-to-POUs-directory> [<path-to-POUs-directory> ...] [--format text|json] [--plugins <dir>] [--coverage]");
+                output.WriteLine("usage: tcxunit run <path-to-POUs-directory> [<path-to-POUs-directory> ...] [--format text|json] [--plugins <dir>] [--coverage] [--stream]");
                 return 2;
             }
 
@@ -125,7 +142,17 @@ namespace TcXunit.Cli
 
             int WriteError(string message)
             {
-                if (asJson)
+                if (streaming)
+                {
+                    // TcXunit-ce1: a single NDJSON "error" line, same data as
+                    // the --format json ErrorReport plus the event tag - this
+                    // can fire before any suite/discovery event is emitted
+                    // (a bad path, "no suites found"), so it stands alone
+                    // rather than assuming a discovery line already went out.
+                    output.WriteLine(JsonSerializer.Serialize(
+                        new ErrorReport(message, ToSkipReports(skipped), ToCoverageReports(coverage), "error"), StreamJsonOptions));
+                }
+                else if (asJson)
                 {
                     output.WriteLine(JsonSerializer.Serialize(
                         new ErrorReport(message, ToSkipReports(skipped), ToCoverageReports(coverage)), JsonOptions));
@@ -278,7 +305,11 @@ namespace TcXunit.Cli
             var nativeFunctions = Plugins.NativeFunctionPluginLoader.Load(
                 pluginDirectory, out var pluginSkips, out var pluginsLoaded);
             skipped.AddRange(pluginSkips);
-            if (!asJson && pluginDirectory != null)
+            // Streaming suppresses this plain-text line same as the PASS/FAIL
+            // lines below (TcXunit-ce1): stdout must stay one-JSON-object-
+            // per-line for a --stream consumer, and a bare "plugin: ..." line
+            // interleaved with NDJSON would break that.
+            if (!asJson && !streaming && pluginDirectory != null)
             {
                 foreach (var plugin in pluginsLoaded)
                     output.WriteLine($"plugin: {plugin}");
@@ -290,8 +321,29 @@ namespace TcXunit.Cli
             var failCount = 0;
             var suiteReports = new List<SuiteReport>();
 
+            if (streaming)
+            {
+                // TcXunit-ce1: the "discovery" event - every suite about to
+                // run, before any of them have. SuiteDiscovery.FindSuiteTypeNames
+                // (via suiteNames above) already produces the full suite list
+                // independent of execution, so this is just that same list
+                // paired with each suite's file path, emitted as the first
+                // NDJSON line - a consumer can render every suite as
+                // "waiting" immediately instead of only learning suite count
+                // from the final summary.
+                var discoverySuites = suiteNames.Select(name =>
+                {
+                    suiteFilePaths.TryGetValue(name, out var discoveryFilePath);
+                    return new SuiteDiscoveryEntry(name, discoveryFilePath);
+                }).ToList();
+                output.WriteLine(JsonSerializer.Serialize(new DiscoveryEvent(discoverySuites), StreamJsonOptions));
+            }
+
             foreach (var suiteName in suiteNames)
             {
+                if (streaming)
+                    output.WriteLine(JsonSerializer.Serialize(new SuiteStartEvent(suiteName), StreamJsonOptions));
+
                 IReadOnlyList<TcXunit.Runner.TcUnitStub.TestCaseResult> results;
                 long suiteDurationMs;
                 try
@@ -313,7 +365,7 @@ namespace TcXunit.Cli
                     // construction, say) has no location and keeps the
                     // original single-line shape.
                     var located = ex as PlcSourceLocationException;
-                    if (!asJson)
+                    if (!asJson && !streaming)
                     {
                         // located.Message rather than Location + inner message
                         // (TcXunit-p3t.4/gfs): the exception owns the one rendering
@@ -365,13 +417,32 @@ namespace TcXunit.Cli
                         Array.Empty<TestReport>(), null, fileLine, callStack));
                     failCount++;
                     anyFailed = true;
+                    if (streaming)
+                    {
+                        // TcXunit-ce1: a suite that never ran to completion
+                        // (unresolved type, unresolvable method call, ...)
+                        // still gets exactly one suite-result line, so a
+                        // --stream consumer's "waiting" list always empties
+                        // out - it never has to distinguish "suite finished"
+                        // from "suite is still stuck". Outcome is "fail" (not
+                        // a third "skip" state): it already counts toward
+                        // failCount/exitCode above the same as a suite that
+                        // ran with a failing test, and errorKind ("load-error"
+                        // here) is what tells a consumer *why* if it wants to
+                        // render that differently.
+                        output.WriteLine(JsonSerializer.Serialize(
+                            new SuiteReport(
+                                suiteName, failFilePath, ex.Message, errorKind, errorConstruct,
+                                Array.Empty<TestReport>(), null, fileLine, callStack, "suite-result", "fail"),
+                            StreamJsonOptions));
+                    }
                     continue;
                 }
 
                 var testReports = new List<TestReport>();
                 foreach (var result in results)
                 {
-                    if (!asJson)
+                    if (!asJson && !streaming)
                     {
                         output.WriteLine(result.ToString());
 
@@ -401,6 +472,16 @@ namespace TcXunit.Cli
 
                 suiteFilePaths.TryGetValue(suiteName, out var filePath);
                 suiteReports.Add(new SuiteReport(suiteName, filePath, null, null, null, testReports, suiteDurationMs, null, null));
+                if (streaming)
+                {
+                    // TcXunit-ce1: outcome mirrors what already drives
+                    // anyFailed/exitCode above - "fail" if any TEST() in this
+                    // suite failed, "pass" otherwise.
+                    var suiteOutcome = testReports.Any(t => !t.Passed) ? "fail" : "pass";
+                    output.WriteLine(JsonSerializer.Serialize(
+                        new SuiteReport(suiteName, filePath, null, null, null, testReports, suiteDurationMs, null, null, "suite-result", suiteOutcome),
+                        StreamJsonOptions));
+                }
             }
 
             // Skipped files do not change the exit code (TcXunit-iyd.7): a run
@@ -411,7 +492,18 @@ namespace TcXunit.Cli
             // coverage was reduced.
             var exitCode = anyFailed ? 1 : 0;
 
-            if (asJson)
+            if (streaming)
+            {
+                // TcXunit-ce1: the final "summary" NDJSON line - same
+                // aggregate data (suites/passed/failed/exitCode/skipped/
+                // coverage) as the non-streaming --format json blob below,
+                // just tagged with the event so a --stream consumer doesn't
+                // need a second code path to read the end-of-run totals.
+                output.WriteLine(JsonSerializer.Serialize(
+                    new RunReport(suiteReports, passCount, failCount, exitCode, ToSkipReports(skipped), ToCoverageReports(coverage), "summary"),
+                    StreamJsonOptions));
+            }
+            else if (asJson)
             {
                 output.WriteLine(JsonSerializer.Serialize(
                     new RunReport(suiteReports, passCount, failCount, exitCode, ToSkipReports(skipped), ToCoverageReports(coverage)),
@@ -486,14 +578,33 @@ namespace TcXunit.Cli
             PropertyNamingPolicy = JsonNamingPolicy.CamelCase
         };
 
+        // TcXunit-ce1: --stream's wire format - one compact JSON object per
+        // line (WriteIndented: false, unlike JsonOptions above), since a
+        // multi-line indented object would break NDJSON's one-line-per-event
+        // contract.
+        private static readonly JsonSerializerOptions StreamJsonOptions = new JsonSerializerOptions
+        {
+            WriteIndented = false,
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+        };
+
         private sealed class ErrorReport
         {
-            public ErrorReport(string error, IReadOnlyList<SkipReport> skipped, IReadOnlyList<CoverageReport> coverage)
+            public ErrorReport(
+                string error, IReadOnlyList<SkipReport> skipped, IReadOnlyList<CoverageReport> coverage, string streamEvent = null)
             {
+                Event = streamEvent;
                 Error = error;
                 Skipped = skipped;
                 Coverage = coverage;
             }
+
+            // TcXunit-ce1: set ("error") only when WriteError serializes this
+            // for --stream; null (and so omitted, JsonIgnoreCondition.
+            // WhenWritingNull) for the pre-existing --format json ErrorReport
+            // shape, which every non-streaming caller still gets unchanged.
+            [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+            public string Event { get; }
 
             public string Error { get; }
 
@@ -545,8 +656,10 @@ namespace TcXunit.Cli
                 int failed,
                 int exitCode,
                 IReadOnlyList<SkipReport> skipped,
-                IReadOnlyList<CoverageReport> coverage)
+                IReadOnlyList<CoverageReport> coverage,
+                string streamEvent = null)
             {
+                Event = streamEvent;
                 Suites = suites;
                 Passed = passed;
                 Failed = failed;
@@ -554,6 +667,12 @@ namespace TcXunit.Cli
                 Skipped = skipped;
                 Coverage = coverage;
             }
+
+            // TcXunit-ce1: set ("summary") only for --stream's final NDJSON
+            // line; null (and so omitted) for the pre-existing --format json
+            // blob, which keeps its exact prior shape.
+            [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+            public string Event { get; }
 
             public IReadOnlyList<SuiteReport> Suites { get; }
             public int Passed { get; }
@@ -589,6 +708,50 @@ namespace TcXunit.Cli
             public IReadOnlyList<string> Suites { get; }
         }
 
+        // TcXunit-ce1: --stream's first NDJSON line - every suite about to
+        // run, so a consumer can render a "waiting" list before any of them
+        // start. One entry per suite name SuiteDiscovery.FindSuiteTypeNames
+        // found (after --suite filtering), paired with the same file path
+        // suites[].filePath uses elsewhere.
+        private sealed class SuiteDiscoveryEntry
+        {
+            public SuiteDiscoveryEntry(string name, string filePath)
+            {
+                Name = name;
+                FilePath = filePath;
+            }
+
+            public string Name { get; }
+            public string FilePath { get; }
+        }
+
+        private sealed class DiscoveryEvent
+        {
+            public DiscoveryEvent(IReadOnlyList<SuiteDiscoveryEntry> suites)
+            {
+                Suites = suites;
+            }
+
+            public string Event => "discovery";
+            public IReadOnlyList<SuiteDiscoveryEntry> Suites { get; }
+        }
+
+        // TcXunit-ce1: one of these per suite, immediately before
+        // engine.RunSuite is called for it - the "running" half of
+        // waiting/running/pass/fail/skip, paired with the suite-result line
+        // (a SuiteReport with Event="suite-result") emitted once that suite
+        // finishes.
+        private sealed class SuiteStartEvent
+        {
+            public SuiteStartEvent(string suite)
+            {
+                Suite = suite;
+            }
+
+            public string Event => "suite-start";
+            public string Suite { get; }
+        }
+
         private sealed class SuiteReport
         {
             public SuiteReport(
@@ -600,8 +763,12 @@ namespace TcXunit.Cli
                 IReadOnlyList<TestReport> tests,
                 long? durationMs,
                 int? fileLine,
-                IReadOnlyList<CallStackFrameReport> callStack)
+                IReadOnlyList<CallStackFrameReport> callStack,
+                string streamEvent = null,
+                string outcome = null)
             {
+                Event = streamEvent;
+                Outcome = outcome;
                 Name = name;
                 FilePath = filePath;
                 Error = error;
@@ -612,6 +779,23 @@ namespace TcXunit.Cli
                 FileLine = fileLine;
                 CallStack = callStack;
             }
+
+            // TcXunit-ce1: set ("suite-result") only when this SuiteReport is
+            // serialized standalone as one --stream NDJSON line; null (and so
+            // omitted) both in the final summary's suites[] array and in the
+            // pre-existing --format json blob, so neither shape gains a field.
+            [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+            public string Event { get; }
+
+            // TcXunit-ce1: "pass"/"fail" for the same --stream suite-result
+            // line, null everywhere else (same rationale as Event above). A
+            // suite that never ran to completion (Error != null) still
+            // reports "fail" here rather than a third "skip" state - it
+            // already counts toward failCount/exitCode the same as a suite
+            // that ran with a failing TEST(), and ErrorKind is what tells a
+            // consumer *why* if it wants to render that case differently.
+            [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+            public string Outcome { get; }
 
             public string Name { get; }
             public string FilePath { get; }

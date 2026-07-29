@@ -1,10 +1,43 @@
+using System;
 using TcXunit.Interpreter;
+using TcXunit.Runner;
 using Xunit;
 
 namespace TcXunit.Interpreter.Tests
 {
     public class ParserTests
     {
+        // TcXunit-3tx.5: x^ := ... is valid IEC 61131-3 (pointer-dereference
+        // assignment) that this v1-subset parser does not implement yet - it
+        // must report as unsupported-construct, not plc-fault.
+        [Fact]
+        public void ParseStatements_DerefAssignmentTarget_ThrowsUnsupportedConstructException()
+        {
+            var ex = Assert.Throws<UnsupportedConstructException>(
+                () => Parser.ParseStatements("pFloor^ := 5.0;"));
+
+            Assert.Equal("x^ :=", ex.Construct);
+        }
+
+        // A genuinely malformed assignment target (not an lvalue shape at
+        // all) must still be an ordinary FormatException/plc-fault.
+        [Fact]
+        public void ParseStatements_LiteralAssignmentTarget_ThrowsFormatException()
+        {
+            Assert.Throws<FormatException>(() => Parser.ParseStatements("5 := x;"));
+        }
+
+        // '**' (EXPT) is a real IEC 61131-3 operator this parser does not
+        // implement - unsupported-construct, not a syntax error.
+        [Fact]
+        public void ParseExpression_Exponentiation_ThrowsUnsupportedConstructException()
+        {
+            var ex = Assert.Throws<UnsupportedConstructException>(
+                () => Parser.ParseExpression("a ** b"));
+
+            Assert.Equal("**", ex.Construct);
+        }
+
         [Fact]
         public void ParseStatements_SimpleAssignment_ProducesAssignStmtWithBinaryExpr()
         {

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using TcXunit.Runner;
 
 namespace TcXunit.Interpreter
 {
@@ -80,6 +81,13 @@ namespace TcXunit.Interpreter
             var left = ParseUnary();
             while (IsKeyword("MOD") || Current.Type == TokenType.Asterisk || Current.Type == TokenType.Slash)
             {
+                // '**' (IEC 61131-3 §2.5.1.5 EXPT, highest-precedence
+                // exponentiation) tokenizes as two adjacent Asterisk tokens -
+                // valid grammar this parser does not implement, not malformed
+                // source (TcXunit-3tx.5).
+                if (Current.Type == TokenType.Asterisk && _pos + 1 < _tokens.Count && _tokens[_pos + 1].Type == TokenType.Asterisk)
+                    throw new UnsupportedConstructException("**", "Exponentiation operator '**' is not supported yet");
+
                 string op;
                 if (Current.Type == TokenType.Asterisk)
                     op = "*";
@@ -191,6 +199,14 @@ namespace TcXunit.Interpreter
                     return new IdentifierExpr(name);
                 }
                 default:
+                    // Left as FormatException, not converted (TcXunit-3tx.5):
+                    // every token type reaching here (Assign, Colon, operator
+                    // tokens, RParen/RBracket, Eof, ...) is one an expression
+                    // can never legally start with, in IEC 61131-3 or any
+                    // extension of it - unlike '**' (handled by name in
+                    // ParseMod before falling through here), there is no
+                    // specific missing construct to name, only positions
+                    // where the source itself is incomplete or wrong.
                     throw new FormatException($"Unexpected token {Current} at index {_pos}");
             }
         }

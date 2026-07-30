@@ -43,26 +43,73 @@ namespace TcXunit.Interpreter.Extensibility
         // Arguments passed as `name := value`, keyed by the name as written.
         public IReadOnlyDictionary<string, object> NamedArgs { get; }
 
+        // TcXunit-kuc: positions this call has confirmed are filled by a named
+        // argument, discovered as the plugin queries them (a plugin's `position`
+        // argument is always the parameter's declared index in the signature -
+        // see every ITcXunitNativeFunction under samples/ - never a running
+        // "slot within PositionalArgs" counter, since a plugin has no way to
+        // know at compile time which of its parameters a given call will name).
+        // Needed because a named argument can occupy any declared position, so
+        // a later positional argument must skip it rather than being read
+        // straight out of PositionalArgs by its raw declared index (that was
+        // the bug: `FIND(STR1 := s, '[')` left STR2 reading PositionalArgs[1],
+        // which doesn't exist - the one positional arg supplied belongs at
+        // PositionalArgs[0]).
+        private readonly HashSet<int> _namedPositions = new HashSet<int>();
+
         // Resolves one declared parameter the way TwinCAT call syntax allows it
         // to be supplied: by name, else by position. Mirrors the interpreter's
         // own intrinsic-argument resolution (Engine.Expressions.cs's
-        // ResolveIntrinsicArgs), including the subtlety that `position` counts
-        // slots in PositionalArgs rather than the parameter's index in the
-        // signature - so a plugin declaring params in signature order and
-        // walking them left-to-right agrees with how the interpreter binds a
-        // mixed named/positional call.
+        // ResolveIntrinsicArgs) and BindParams (Engine.Invocation.cs) /
+        // ArgBinder: a positional argument fills the next declared parameter
+        // that isn't already spoken for by name, not the PositionalArgs slot
+        // matching its own declared index.
+        //
+        // `position` is always the parameter's 0-based declared index in the
+        // signature (matching every ITcXunitNativeFunction under samples/,
+        // which query params left-to-right by that index). The declared index
+        // and the PositionalArgs slot coincide only once every parameter
+        // before this one has also been resolved positionally; the moment one
+        // of them is named, everything after it shifts left by one slot per
+        // named parameter that precedes it. That shift is computed here as
+        // `position` minus however many named positions less than `position`
+        // have been discovered so far (this call included, via the branch
+        // above) - correct as long as parameters are queried in ascending
+        // declared-index order, which is how every plugin in this codebase
+        // (and the natural way to write one) reads its own arguments. A
+        // plugin that deliberately queries out of order (e.g. reading a later
+        // parameter before an earlier one purely for local computation, as
+        // CheckSum16Function does) is unaffected as long as it does so only
+        // among parameters that end up all-positional or all-named for that
+        // call - mixing an out-of-order read with a *named* earlier parameter
+        // it hasn't queried yet is the one combination this can't see coming,
+        // since nothing this class receives records a plugin's full parameter
+        // list up front.
         //
         // Returns false when the argument was omitted, letting a plugin model
         // an optional trailing parameter (CONCAT's STR3..STR10 shape).
         public bool TryGetArg(string paramName, int position, out object value)
         {
             if (paramName != null && NamedArgs.TryGetValue(paramName, out value))
-                return true;
-
-            if (position >= 0 && position < PositionalArgs.Count)
             {
-                value = PositionalArgs[position];
+                if (position >= 0)
+                    _namedPositions.Add(position);
                 return true;
+            }
+
+            if (position >= 0)
+            {
+                var precedingNamedCount = 0;
+                foreach (var namedPosition in _namedPositions)
+                    if (namedPosition < position)
+                        precedingNamedCount++;
+
+                var slot = position - precedingNamedCount;
+                if (slot >= 0 && slot < PositionalArgs.Count)
+                {
+                    value = PositionalArgs[slot];
+                    return true;
+                }
             }
 
             value = null;
@@ -77,9 +124,27 @@ namespace TcXunit.Interpreter.Extensibility
             if (TryGetArg(paramName, position, out var value))
                 return value;
 
+            // TcXunit-kuc: name the actual shortfall rather than a flat
+            // positional/named count that reads the same whether the caller
+            // wrote too few arguments or wrote enough but with a named
+            // argument occupying a declared position before this one - the
+            // latter shifts which PositionalArgs slot this parameter needs by
+            // however many named arguments precede it, so "missing" here
+            // means that adjusted slot didn't exist, not that PositionalArgs
+            // itself came up short by the raw declared position.
+            var precedingNamedCount = 0;
+            foreach (var namedPosition in _namedPositions)
+                if (namedPosition < position)
+                    precedingNamedCount++;
+
+            var detail = precedingNamedCount > 0
+                ? $"after {precedingNamedCount} preceding named argument(s), " +
+                  $"only {PositionalArgs.Count} positional argument(s) were supplied - " +
+                  $"none remained for this parameter"
+                : $"got {PositionalArgs.Count} positional and {NamedArgs.Count} named argument(s)";
+
             throw new InvalidOperationException(
-                $"{FunctionName} missing required argument '{paramName}' (position {position}); " +
-                $"got {PositionalArgs.Count} positional and {NamedArgs.Count} named argument(s)");
+                $"{FunctionName} missing required argument '{paramName}' (position {position}); {detail}");
         }
 
         // Integer accessor covering every IEC integer type at once: the

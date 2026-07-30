@@ -41,7 +41,52 @@ namespace TcXunit.Cli.Tests
             var exitCode = CliRunner.Run(new string[0], output);
 
             Assert.Equal(2, exitCode);
-            Assert.Contains("usage", output.ToString().ToLowerInvariant());
+            var text = output.ToString();
+            Assert.Contains("usage", text.ToLowerInvariant());
+            Assert.Contains("--suite", text);
+            Assert.Contains("--help", text);
+        }
+
+        [Theory]
+        [InlineData("--help")]
+        [InlineData("-h")]
+        public void Run_Help_PrintsHelpAndReturnsZero(string helpFlag)
+        {
+            var output = new StringWriter();
+
+            var exitCode = CliRunner.Run(new[] { helpFlag }, output);
+
+            Assert.Equal(0, exitCode);
+            var text = output.ToString();
+            Assert.Contains("Usage:", text);
+            foreach (var flag in new[] { "--format", "--suite", "--plugins", "--coverage", "--stream", "--help" })
+                Assert.Contains(flag, text);
+            Assert.Contains("Examples:", text);
+        }
+
+        [Fact]
+        public void Run_HelpWithOtherArgs_TakesPrecedenceAndReturnsZero()
+        {
+            var output = new StringWriter();
+
+            var exitCode = CliRunner.Run(new[] { FixturePouDir, "--help" }, output);
+
+            Assert.Equal(0, exitCode);
+            Assert.Contains("Usage:", output.ToString());
+        }
+
+        [Fact]
+        public void Run_HelpImmediatelyAfterValueConsumingFlag_StillShowsHelp()
+        {
+            // --plugins (like --format/--suite) otherwise consumes the very
+            // next token as its value - --help must still win here rather
+            // than being swallowed as a directory name.
+            var output = new StringWriter();
+
+            var exitCode = CliRunner.Run(new[] { "--plugins", "--help" }, output);
+
+            Assert.Equal(0, exitCode);
+            Assert.Contains("Usage:", output.ToString());
         }
 
         [Fact]

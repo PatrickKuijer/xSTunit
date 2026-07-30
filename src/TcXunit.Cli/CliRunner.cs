@@ -17,6 +17,21 @@ namespace TcXunit.Cli
     {
         public static int Run(string[] args, TextWriter output)
         {
+            // --help/-h (TcXunit-3cu): a standalone pre-scan rather than an
+            // else-if branch in the loop below, deliberately - --plugins,
+            // --format, and --suite each consume the next token unconditionally
+            // as their value, so "tcxunit --plugins --help" would swallow
+            // "--help" as a directory name instead of recognizing it if this
+            // lived inside that loop. Scanning the whole array up front means
+            // --help wins regardless of position. Exit 0: this is a successful,
+            // explicitly requested action, not a usage error.
+            if (args.Any(a => string.Equals(a, "--help", StringComparison.OrdinalIgnoreCase) ||
+                               string.Equals(a, "-h", StringComparison.OrdinalIgnoreCase)))
+            {
+                output.WriteLine(HelpText);
+                return 0;
+            }
+
             // --format json|text (TcXunit prototype spike: structured output for
             // non-console consumers, e.g. a VSIX tool window shelling out to the
             // CLI instead of parsing plain-text lines). Accepted anywhere in args,
@@ -123,7 +138,14 @@ namespace TcXunit.Cli
 
             if (args.Length == 0)
             {
-                output.WriteLine("usage: tcxunit run <path-to-POUs-directory> [<path-to-POUs-directory> ...] [--format text|json] [--plugins <dir>] [--coverage] [--stream]");
+                // TcXunit-3cu: kept short (path args + flag names only, no
+                // descriptions) - full detail lives in --help so this error
+                // path doesn't duplicate it. "run" was never a real
+                // subcommand (Program.Main passes args straight to Run), so
+                // it's dropped here rather than carried forward as a token
+                // that would itself fail with "path does not exist: run".
+                output.WriteLine("usage: tcxunit <path-to-POUs-directory> [<path-to-POUs-directory> ...] [--format text|json] [--suite <name>] [--plugins <dir>] [--coverage] [--stream]");
+                output.WriteLine("Run 'tcxunit --help' for flag descriptions and examples.");
                 return 2;
             }
 
@@ -571,6 +593,67 @@ namespace TcXunit.Cli
 
         private static IReadOnlyList<SkipReport> ToSkipReports(IReadOnlyList<SkippedFile> skipped) =>
             skipped.Select(s => new SkipReport(s.FileKey, s.Message)).ToList();
+
+        // TcXunit-3cu: --help/-h text. One place, printed verbatim, kept in
+        // sync with the actual flags parsed above rather than duplicating
+        // them in a second string - the no-args usage line above stays a
+        // short pointer to this instead of repeating the descriptions.
+        private static readonly string HelpText =
+@"tcxunit - xUnit-style test runner for TwinCAT/IEC 61131-3 PLC code (no TwinCAT runtime required)
+
+Usage:
+  tcxunit <path-to-POUs-directory> [<path-to-POUs-directory> ...] [options]
+
+Arguments:
+  <path-to-POUs-directory>  One or more directories, scanned recursively for
+                            *.TcPOU files. Repeatable; the POU sets are
+                            unioned, and a type name that collides across
+                            paths is a usage error.
+
+Options:
+  --format text|json    Output format. text (default) is for a human reading
+                        the console; json emits one structured result blob
+                        (suites, tests, failures, skips, coverage, exit
+                        code) for a script or agent to parse.
+  --suite <name>        Restrict the run to one suite (repeatable). Only
+                        the named suite type(s) run.
+  --plugins <dir>       Directory of assemblies implementing
+                        ITcXunitNativeFunction, for compiled-only TwinCAT
+                        library functions with no .TcPOU source (e.g.
+                        Tc2_Utilities.F_CheckSum16).
+  --coverage            Additionally report which non-suite POUs are
+                        exercised by a suite, and which have none. A work
+                        list, not a gate - never affects the exit code.
+  --stream              Emit NDJSON progress events (discovery,
+                        suite-start, suite-result, summary), one per line,
+                        instead of one blob at the end.
+  --help, -h            Show this help and exit.
+
+Exit codes:
+  0   all tests passed
+  1   at least one test failed
+  2   usage or discovery error (bad path, no suites found, ...)
+
+Examples:
+  tcxunit ./Plc/POUs
+      Run every suite found under ./Plc/POUs, plain text output.
+
+  tcxunit ./src ./tests --format json
+      Union two directories and print one JSON result - for a script or an
+      agent to parse instead of scraping console text.
+
+  tcxunit ./Plc/POUs --suite FB_CounterTests --suite FB_ClampedCounterTests
+      Run only the named suites (e.g. re-running just the ones that failed).
+
+  tcxunit ./Plc/POUs --plugins ./plugins/bin/Release/netstandard2.0
+      Resolve compiled-only library calls via native-function plugins.
+
+  tcxunit ./Plc/POUs --coverage
+      List every non-suite POU with the suites exercising it; ""(none)""
+      marks a POU with no test coverage yet.
+
+  tcxunit ./Plc/POUs --stream
+      Emit one NDJSON event per line as suites run, for a live progress UI.";
 
         private static readonly JsonSerializerOptions JsonOptions = new JsonSerializerOptions
         {

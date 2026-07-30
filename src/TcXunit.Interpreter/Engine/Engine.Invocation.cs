@@ -585,7 +585,30 @@ namespace TcXunit.Interpreter
                 }
                 else
                 {
-                    value = DefaultValue(decl, newFrame.Instance);
+                    // TcXunit-3d1: DefaultValue runs here, BEFORE ExecuteBody
+                    // is ever entered for newFrame - so its own try/catch
+                    // (Engine.Diagnostics.cs) can't attribute a fault raised
+                    // while constructing this callee's own local/unsupplied-
+                    // param default (e.g. a nested FB's default-value
+                    // construction hitting an unresolved identifier). Without
+                    // this, the fault surfaces unattributed at whatever
+                    // frame is still active further up the CLR stack -
+                    // typically the caller - with a call stack of exactly one
+                    // frame no matter how deep the real failure is. Argument
+                    // *evaluation* just above (Evaluate(argExpr, callerFrame))
+                    // is deliberately left outside this catch: that runs in
+                    // the CALLER's frame/scope, and a fault there is
+                    // legitimately the caller's, already covered by the
+                    // caller's own ExecuteBody.
+                    try
+                    {
+                        value = DefaultValue(decl, newFrame.Instance);
+                    }
+                    catch (Exception ex)
+                    {
+                        RecordFaultSite(ex, newFrame);
+                        throw;
+                    }
                 }
 
                 newFrame.Locals[decl.Name] = new Cell { Value = value, DeclaredTypeName = decl.TypeName };

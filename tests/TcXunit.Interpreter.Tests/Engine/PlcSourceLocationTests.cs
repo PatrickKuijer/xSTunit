@@ -188,6 +188,53 @@ namespace TcXunit.Interpreter.Tests
             Assert.IsType<FormatException>(ex.InnerException);
         }
 
+        // TcXunit-3d1: BindParams computes a callee's own local VAR default
+        // values (here, M_SomeTest's `sfbWidget : FB_Widget` local) BEFORE
+        // CallMethod ever reaches ExecuteBody for that callee - so the fault
+        // raised while constructing FB_Widget's own nValue default (an
+        // unresolved identifier) must still be attributed to M_SomeTest's
+        // own frame, not left to surface at the suite's call-site frame with
+        // a one-frame call stack.
+        [Fact]
+        public void RunSuite_CalleeLocalVarDefaultConstructionFails_ReportsCalleeNotSuite()
+        {
+            var widget = new PouAst(
+                "FB_Widget",
+                null,
+                "VAR\n\tnValue : INT := UNDEFINED_CONSTANT;\nEND_VAR",
+                "",
+                new List<MethodAst>());
+
+            var suite = new PouAst(
+                "FB_MySuite",
+                "TcUnit.FB_TestSuite",
+                "",
+                "M_SomeTest();",
+                new List<MethodAst>
+                {
+                    new MethodAst(
+                        "M_SomeTest",
+                        "METHOD PRIVATE M_SomeTest\nVAR\n\tsfbWidget : FB_Widget;\nEND_VAR",
+                        "TEST('M_SomeTest');\nAssertTrue(TRUE, 'never reached');\nTEST_FINISHED();"),
+                });
+
+            var engine = new Engine(new TypeRegistry(new[] { widget, suite }));
+
+            var ex = Assert.Throws<PlcSourceLocationException>(() => engine.RunSuite("FB_MySuite"));
+
+            Assert.Equal("FB_MySuite", ex.PouTypeName);
+            Assert.Equal("M_SomeTest", ex.MethodName);
+            Assert.Equal("FB_MySuite.M_SomeTest", ex.Location);
+            Assert.Contains("Unknown variable 'UNDEFINED_CONSTANT'", ex.Message);
+
+            // Call stack must include the callee (M_SomeTest) even though the
+            // fault happened before its body ever started executing - not
+            // just the suite's own top-level call-site frame.
+            Assert.Equal(
+                new[] { "FB_MySuite.M_SomeTest", "FB_MySuite" },
+                ex.CallStack.Select(f => f.Location).ToArray());
+        }
+
         [Fact]
         public void CallMethod_Throw_IsNotWrapped_SoDirectInterpreterCallersKeepTheirExceptionTypes()
         {

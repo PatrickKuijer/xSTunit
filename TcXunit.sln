@@ -31,6 +31,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "samples", "samples", "{5D20
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TcXunit.SamplePlugins", "samples\TcXunit.SamplePlugins\TcXunit.SamplePlugins.csproj", "{1562EAE8-D32E-4649-9700-827CA1FF0448}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TcXunit.Tc2StandardPlugins", "samples\TcXunit.Tc2StandardPlugins\TcXunit.Tc2StandardPlugins.csproj", "{ABAF88B9-AEC2-4B63-BCD7-2169865DEAD2}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -167,6 +169,18 @@ Global
 		{1562EAE8-D32E-4649-9700-827CA1FF0448}.Release|x64.Build.0 = Release|Any CPU
 		{1562EAE8-D32E-4649-9700-827CA1FF0448}.Release|x86.ActiveCfg = Release|Any CPU
 		{1562EAE8-D32E-4649-9700-827CA1FF0448}.Release|x86.Build.0 = Release|Any CPU
+		{ABAF88B9-AEC2-4B63-BCD7-2169865DEAD2}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{ABAF88B9-AEC2-4B63-BCD7-2169865DEAD2}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{ABAF88B9-AEC2-4B63-BCD7-2169865DEAD2}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{ABAF88B9-AEC2-4B63-BCD7-2169865DEAD2}.Debug|x64.Build.0 = Debug|Any CPU
+		{ABAF88B9-AEC2-4B63-BCD7-2169865DEAD2}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{ABAF88B9-AEC2-4B63-BCD7-2169865DEAD2}.Debug|x86.Build.0 = Debug|Any CPU
+		{ABAF88B9-AEC2-4B63-BCD7-2169865DEAD2}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{ABAF88B9-AEC2-4B63-BCD7-2169865DEAD2}.Release|Any CPU.Build.0 = Release|Any CPU
+		{ABAF88B9-AEC2-4B63-BCD7-2169865DEAD2}.Release|x64.ActiveCfg = Release|Any CPU
+		{ABAF88B9-AEC2-4B63-BCD7-2169865DEAD2}.Release|x64.Build.0 = Release|Any CPU
+		{ABAF88B9-AEC2-4B63-BCD7-2169865DEAD2}.Release|x86.ActiveCfg = Release|Any CPU
+		{ABAF88B9-AEC2-4B63-BCD7-2169865DEAD2}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -183,5 +197,6 @@ Global
 		{9D3B6F9A-1C4E-4A2D-8F6B-2E7C5A9D3B10} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{02B812CB-94ED-4BE9-AD12-98A4EAFB0935} = {71B07E6C-7646-44BF-9DEE-EE4B20A12F39}
 		{1562EAE8-D32E-4649-9700-827CA1FF0448} = {5D20AA90-6969-D8BD-9DCD-8634F4692FDA}
+		{ABAF88B9-AEC2-4B63-BCD7-2169865DEAD2} = {5D20AA90-6969-D8BD-9DCD-8634F4692FDA}
 	EndGlobalSection
 EndGlobal

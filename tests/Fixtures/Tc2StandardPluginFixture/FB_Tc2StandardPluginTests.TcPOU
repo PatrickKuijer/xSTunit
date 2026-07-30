@@ -1,0 +1,286 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4026.18">
+  <POU Name="FB_Tc2StandardPluginTests" Id="{a1b2c3d4-8po0-4a1a-8b1b-000000000010}" SpecialFunc="None">
+    <Declaration><![CDATA[(*
+    TcXunit interpreter fixture (TcXunit-8po). Exercises the Tc2_Standard
+    string functions (DELETE, FIND, INSERT, LEFT, LEN, MID, REPLACE, RIGHT)
+    resolving through the native-function plugin/registry path
+    (samples/TcXunit.Tc2StandardPlugins), not a built-in intrinsic.
+
+    CONCAT is deliberately not covered here: TcXunit-3lt already added it as
+    an interpreter intrinsic (variadic STR1..STR10) two days before this epic
+    was filed, with its own test suite (ConcatIntrinsicTests.cs). TcXunit-8po.1
+    was closed as already-resolved rather than shadowed with an unreachable
+    plugin - native functions are consulted only as a last resort, after
+    intrinsics, so a plugin CONCAT would never fire.
+*)
+FUNCTION_BLOCK FB_Tc2StandardPluginTests EXTENDS TcUnit.FB_TestSuite]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[Delete();
+DeleteClampsWhenPosPlusLenExceedsLength();
+Find();
+FindReturnsZeroWhenNotFound();
+Insert();
+Left();
+LeftClampsWhenSizeExceedsLength();
+Len();
+Mid();
+MidClampsWhenPosPlusLenExceedsLength();
+Replace();
+Right();
+RightClampsWhenSizeExceedsLength();]]></ST>
+    </Implementation>
+    <Method Name="Delete" Id="{a1b2c3d4-8po0-4a1a-8b1b-000000000012}">
+      <Declaration><![CDATA[METHOD PRIVATE Delete
+VAR
+	sFullPath	: STRING(80) := 'Root.Child]';
+	nPos		: INT := 11;
+	sResult		: STRING(80);
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('Delete');
+
+sResult := DELETE(sFullPath, 1, nPos);
+
+AssertEquals_STRING(Expected := 'Root.Child',
+                     Actual := sResult,
+                     Message := 'DELETE removes LEN characters at POS');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="DeleteClampsWhenPosPlusLenExceedsLength" Id="{a1b2c3d4-8po0-4a1a-8b1b-00000000001a}">
+      <Declaration><![CDATA[METHOD PRIVATE DeleteClampsWhenPosPlusLenExceedsLength
+VAR
+	sResult		: STRING(80);
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('DeleteClampsWhenPosPlusLenExceedsLength');
+
+(* POS=3, LEN=100 asks to remove past the end of a 5-character string. *)
+sResult := DELETE('abcde', 100, 3);
+
+AssertEquals_STRING(Expected := 'ab',
+                     Actual := sResult,
+                     Message := 'DELETE clamps LEN to the remaining length');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="Find" Id="{a1b2c3d4-8po0-4a1a-8b1b-000000000013}">
+      <Declaration><![CDATA[METHOD PRIVATE Find
+VAR
+	sFullPath	: STRING(80) := 'Root.Child.Leaf';
+	nSeparator	: INT;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('Find');
+
+nSeparator := FIND(sFullPath, '.');
+
+AssertEquals_INT(Expected := 5,
+                  Actual := nSeparator,
+                  Message := 'FIND returns the 1-based position of the first match');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="FindReturnsZeroWhenNotFound" Id="{a1b2c3d4-8po0-4a1a-8b1b-00000000001b}">
+      <Declaration><![CDATA[METHOD PRIVATE FindReturnsZeroWhenNotFound
+VAR
+	nResult		: INT;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('FindReturnsZeroWhenNotFound');
+
+nResult := FIND('abcde', 'z');
+
+AssertEquals_INT(Expected := 0,
+                  Actual := nResult,
+                  Message := 'FIND returns 0 when STR2 is not found');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="Insert" Id="{a1b2c3d4-8po0-4a1a-8b1b-000000000014}">
+      <Declaration><![CDATA[METHOD PRIVATE Insert
+VAR
+	sBase		: STRING(80) := 'Root.Leaf';
+	sInsert		: STRING(80) := 'Child.';
+	nPos		: INT := 5;
+	sResult		: STRING(80);
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('Insert');
+
+sResult := INSERT(sBase, sInsert, nPos);
+
+AssertEquals_STRING(Expected := 'Root.Child.Leaf',
+                     Actual := sResult,
+                     Message := 'INSERT places STR2 immediately after POS');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="Left" Id="{a1b2c3d4-8po0-4a1a-8b1b-000000000015}">
+      <Declaration><![CDATA[METHOD PRIVATE Left
+VAR
+	sFullPath	: STRING(80) := 'Root.Child.Leaf.Extra';
+	nIndex		: INT := 16;
+	sResult		: STRING(80);
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('Left');
+
+sResult := LEFT(sFullPath, nIndex - 1);
+
+AssertEquals_STRING(Expected := 'Root.Child.Leaf',
+                     Actual := sResult,
+                     Message := 'LEFT returns the leftmost SIZE characters');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="LeftClampsWhenSizeExceedsLength" Id="{a1b2c3d4-8po0-4a1a-8b1b-00000000001c}">
+      <Declaration><![CDATA[METHOD PRIVATE LeftClampsWhenSizeExceedsLength
+VAR
+	sResult		: STRING(80);
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('LeftClampsWhenSizeExceedsLength');
+
+sResult := LEFT('abc', 10);
+
+AssertEquals_STRING(Expected := 'abc',
+                     Actual := sResult,
+                     Message := 'LEFT clamps SIZE to the length of STR');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="Len" Id="{a1b2c3d4-8po0-4a1a-8b1b-000000000016}">
+      <Declaration><![CDATA[METHOD PRIVATE Len
+VAR
+	sFullPath	: STRING(80) := 'Root.Child.Leaf';
+	nLength		: INT;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('Len');
+
+nLength := LEN(sFullPath);
+
+AssertEquals_INT(Expected := 15,
+                  Actual := nLength,
+                  Message := 'LEN returns the character count');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="Mid" Id="{a1b2c3d4-8po0-4a1a-8b1b-000000000017}">
+      <Declaration><![CDATA[METHOD PRIVATE Mid
+VAR
+	sFullPath	: STRING(80) := 'Root.Child.Leaf';
+	nLen		: INT := 5;
+	nPos		: INT := 6;
+	sResult		: STRING(80);
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('Mid');
+
+sResult := MID(sFullPath, nLen, nPos);
+
+AssertEquals_STRING(Expected := 'Child',
+                     Actual := sResult,
+                     Message := 'MID returns LEN characters starting at POS');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="MidClampsWhenPosPlusLenExceedsLength" Id="{a1b2c3d4-8po0-4a1a-8b1b-00000000001d}">
+      <Declaration><![CDATA[METHOD PRIVATE MidClampsWhenPosPlusLenExceedsLength
+VAR
+	sResult		: STRING(80);
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('MidClampsWhenPosPlusLenExceedsLength');
+
+(* POS=3, LEN=100 asks for far more than remains of a 5-character string. *)
+sResult := MID('abcde', 100, 3);
+
+AssertEquals_STRING(Expected := 'cde',
+                     Actual := sResult,
+                     Message := 'MID clamps LEN to what remains from POS');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="Replace" Id="{a1b2c3d4-8po0-4a1a-8b1b-000000000018}">
+      <Declaration><![CDATA[METHOD PRIVATE Replace
+VAR
+	sFullPath	: STRING(80) := 'Root[0].Leaf';
+	nPos		: INT := 5;
+	sResult		: STRING(80);
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('Replace');
+
+sResult := REPLACE(sFullPath, '_', 1, nPos);
+
+AssertEquals_STRING(Expected := 'Root_0].Leaf',
+                     Actual := sResult,
+                     Message := 'REPLACE swaps L characters at P for STR2');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="Right" Id="{a1b2c3d4-8po0-4a1a-8b1b-000000000019}">
+      <Declaration><![CDATA[METHOD PRIVATE Right
+VAR
+	sFullPath	: STRING(80) := 'Root.Child.Leaf';
+	nPos		: INT := 5;
+	sResult		: STRING(80);
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('Right');
+
+sResult := RIGHT(sFullPath, LEN(sFullPath) - nPos);
+
+AssertEquals_STRING(Expected := 'Child.Leaf',
+                     Actual := sResult,
+                     Message := 'RIGHT returns the rightmost SIZE characters');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="RightClampsWhenSizeExceedsLength" Id="{a1b2c3d4-8po0-4a1a-8b1b-00000000001e}">
+      <Declaration><![CDATA[METHOD PRIVATE RightClampsWhenSizeExceedsLength
+VAR
+	sResult		: STRING(80);
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('RightClampsWhenSizeExceedsLength');
+
+sResult := RIGHT('abc', 10);
+
+AssertEquals_STRING(Expected := 'abc',
+                     Actual := sResult,
+                     Message := 'RIGHT clamps SIZE to the length of STR');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+  </POU>
+</TcPlcObject>

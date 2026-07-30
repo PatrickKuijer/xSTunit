@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+    <RootNamespace>TcXunit.Tc2StandardPlugins</RootNamespace>
+    <!-- Not packed or shipped: built and pointed at with the CLI's "plugins"
+         option, same as samples/TcXunit.SamplePlugins. Unlike that project
+         (a worked EXAMPLE of the TcXunit-6k2 extension point standing in for
+         a proprietary vendor function), Tc2_Standard's string functions are
+         publicly documented and used by nearly every TwinCAT project, so this
+         project is a real, usable plugin rather than a demo (TcXunit-8po). -->
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Private=false: see TcXunit.SamplePlugins.csproj for why the contract
+         assembly must not be copied next to the plugin. -->
+    <ProjectReference Include="..\..\src\TcXunit.Interpreter\TcXunit.Interpreter.csproj" Private="false" />
+  </ItemGroup>
+
+</Project>

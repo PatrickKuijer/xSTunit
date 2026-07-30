@@ -223,7 +223,7 @@ namespace TcXunit.Interpreter
                 // (TcXunit-0v1).
                 foreach (var decl in _registry.GetDecls(def.DeclarationText).Where(IsPersistedField))
                 {
-                    instance.Fields[decl.Name] = new Cell { Value = DefaultValue(decl, instance), DeclaredTypeName = decl.TypeName };
+                    instance.Fields[decl.Name] = CreateFieldCell(decl, instance);
                     instance.FieldTypeNames[decl.Name] = decl.TypeName;
                 }
             }
@@ -231,6 +231,30 @@ namespace TcXunit.Interpreter
             CallMethod(instance, "FB_init", Array.Empty<Expr>(), Array.Empty<NamedArg>(), null, null, optionalIfMissing: true);
 
             return instance;
+        }
+
+        // TcXunit-mxx: builds the Cell that backs one FbInstance field.
+        // Plain (non-FB) fields construct eagerly, same as before - they're
+        // O(1) with no further recursion. A field declared as another
+        // registry-known POU type (FB/PROGRAM) is wrapped in a LazyCell
+        // instead: its own DefaultValue would call NewInstance for that
+        // type, repeating this same field walk for ITS fields, transitively
+        // through however much of the type graph is reachable - regardless
+        // of whether the code that declared the outer instance ever reads
+        // this particular field. Deferring that inner construction until
+        // the field is actually dereferenced scopes the work (and any fault
+        // inside it, e.g. an unsupported construct several types away) to
+        // callers that actually touch the field. Native stub types (TON,
+        // Loopback, R_TRIG/F_TRIG, ...) aren't registry types - DefaultValue
+        // handles those via NativeTimerTypes/NativeEdgeTriggerTypes/
+        // "Loopback" and NewInstance's own nativeBoundaryHit branch above,
+        // neither of which recurses, so they stay eager too.
+        private Cell CreateFieldCell(VarDecl decl, FbInstance owningInstance)
+        {
+            if (_registry.Get(_registry.ResolveAlias(decl.TypeName)) != null)
+                return new LazyCell(() => DefaultValue(decl, owningInstance), decl.TypeName);
+
+            return new Cell { Value = DefaultValue(decl, owningInstance), DeclaredTypeName = decl.TypeName };
         }
 
         // Fields materialized at NewInstance() time (VAR_INPUT/VAR_OUTPUT/

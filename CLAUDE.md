@@ -104,3 +104,7 @@ Exit codes: `0` all pass, `1` any fail, `2` usage/discovery error. Unloadable fi
 ## Conventions & Patterns
 
 Interpreter is hand-rolled, scoped to what fixtures actually need — extended incrementally, not built to full IEC 61131-3 grammar up front (see comments in `Engine.cs`/`Lexer.cs`). Early/grow-on-demand status; check `wiki/` for in-progress design decisions.
+
+## Naming Constraints (pre-beta rename pending)
+
+Project will be renamed before beta release to xSTunit. Do NOT reuse the `Tc`/`TC` namespace or Beckhoff's own naming conventions (`Tc2_*`, `TcPOU`, `Tc*` prefixes, etc.) in any NEW identifier — namespaces, project names, class names, file names, CLI flags, config keys. Existing `TcXunit.*` projects/namespaces stay as-is until the rename lands; don't invent more of the same pattern on top of them. Goal: no naming collision or trademark confusion with Beckhoff/TwinCAT once renamed. If a new type needs to reference a TwinCAT/Beckhoff concept, name it after the IEC 61131-3 or domain concept instead (e.g. `BistableLatchHost`, not `TcBistableHost`).

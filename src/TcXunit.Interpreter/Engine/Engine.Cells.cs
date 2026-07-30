@@ -69,7 +69,14 @@ namespace TcXunit.Interpreter
 
             if (expr is IndexExpr index)
             {
-                var array = (ArrayValue)Evaluate(index.Receiver, frame);
+                var receiverValue = Evaluate(index.Receiver, frame);
+                if (receiverValue is string)
+                {
+                    var parentCell = ResolveCellForLValue(index.Receiver, frame);
+                    return new StringByteCell(parentCell, ResolveStringIndex(index.Indices, frame));
+                }
+
+                var array = (ArrayValue)receiverValue;
                 return new ArrayElementCell(array, FlattenIndex(array, index.Indices, frame));
             }
 

@@ -209,7 +209,25 @@ namespace TcXunit.Interpreter
                 }
                 case IndexExpr index:
                 {
-                    var array = (ArrayValue)Evaluate(index.Receiver, frame);
+                    // Receiver is evaluated for its *value* first (not via
+                    // ResolveCellForLValue) to keep this on the same path as
+                    // before this string-indexing case existed - a
+                    // FieldAccessExpr receiver may resolve through a
+                    // PROPERTY getter (Evaluate's fallback, TcXunit-sxv),
+                    // which ResolveCellForLValue's FieldAccessExpr case does
+                    // not support. The Cell is only needed - and only
+                    // resolved - for the STRING branch below, since
+                    // System.String is immutable and writing a byte means
+                    // replacing the parent Cell's Value wholesale.
+                    var receiverValue = Evaluate(index.Receiver, frame);
+                    if (receiverValue is string str)
+                    {
+                        var receiverCell = ResolveCellForLValue(index.Receiver, frame);
+                        receiverCell.Value = SetStringByte(str, ResolveStringIndex(index.Indices, frame), Convert.ToInt32(value));
+                        break;
+                    }
+
+                    var array = (ArrayValue)receiverValue;
                     var flat = FlattenIndex(array, index.Indices, frame);
                     array.Elements[flat] = CoerceForAssignment(array.Elements[flat], value);
                     break;
@@ -329,5 +347,50 @@ namespace TcXunit.Interpreter
         // the CLR type already sitting in the Cell.
         private static object CoerceForAssignment(object existing, object incoming) =>
             NumericCoercion.CoerceForAssignment(existing, incoming);
+
+        // TwinCAT ST extension: a STRING can be indexed directly (s[n], 0-
+        // based) to read/write individual bytes - most commonly "IF s[0] = 0
+        // THEN" to test for an empty string, since STRING is a null-
+        // terminated byte buffer internally (TcXunit-3jr, real-usage find).
+        // Unlike ARRAY, a STRING's declared capacity isn't tracked on the
+        // Cell here, so bounds are checked against the string's *current*
+        // content: index == Length reads/writes the terminator (one past the
+        // last character), anything further is out of range.
+        private int ResolveStringIndex(IReadOnlyList<Expr> indexExprs, Frame frame)
+        {
+            if (indexExprs.Count != 1)
+                throw new InvalidOperationException($"STRING indexing takes exactly one index, got {indexExprs.Count}");
+            return Convert.ToInt32(Evaluate(indexExprs[0], frame));
+        }
+
+        // Shared by GetStringByte/SetStringByte and StringByteCell (the
+        // REF=/ADR()/Transmit() counterpart in Engine.Cells.cs).
+        internal static void ValidateStringIndex(string str, int idx)
+        {
+            if (idx < 0 || idx > str.Length)
+                throw new IndexOutOfRangeException($"String index {idx} out of bounds [0..{str.Length}]");
+        }
+
+        internal static int GetStringByte(string str, int idx)
+        {
+            ValidateStringIndex(str, idx);
+            return idx < str.Length ? str[idx] : 0;
+        }
+
+        // byteValue == 0 truncates at idx (writing the terminator early,
+        // TwinCAT's idiomatic way to shorten a string in place); a non-zero
+        // byte either replaces the character at idx or, when idx is exactly
+        // one past the current content, appends a new character.
+        internal static string SetStringByte(string str, int idx, int byteValue)
+        {
+            ValidateStringIndex(str, idx);
+            if (byteValue == 0)
+                return str.Substring(0, idx);
+
+            var ch = (char)(byteValue & 0xFF);
+            return idx < str.Length
+                ? str.Substring(0, idx) + ch + str.Substring(idx + 1)
+                : str + ch;
+        }
     }
 }

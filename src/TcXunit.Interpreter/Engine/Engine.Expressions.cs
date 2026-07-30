@@ -46,7 +46,11 @@ namespace TcXunit.Interpreter
                     return ((Pointer)Evaluate(deref.Inner, frame)).Target.Value;
                 case IndexExpr index:
                 {
-                    var array = (ArrayValue)Evaluate(index.Receiver, frame);
+                    var receiverValue = Evaluate(index.Receiver, frame);
+                    if (receiverValue is string str)
+                        return GetStringByte(str, ResolveStringIndex(index.Indices, frame));
+
+                    var array = (ArrayValue)receiverValue;
                     return array.Elements[FlattenIndex(array, index.Indices, frame)];
                 }
                 case FieldAccessExpr fieldAccess:

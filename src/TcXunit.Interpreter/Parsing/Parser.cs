@@ -52,6 +52,16 @@ namespace TcXunit.Interpreter
         private bool IsKeyword(string keyword) =>
             Current.Type == TokenType.Identifier && Current.Text == keyword;
 
+        // IEC 61131-3 doesn't require a ; after END_IF/END_FOR/END_WHILE/
+        // END_CASE/END_REPEAT, but plenty of real ST code writes one anyway
+        // (TcXunit-sum). Swallow it here so the enclosing ParseStatementList
+        // doesn't mistake it for the start of a new statement.
+        private void SkipOptionalSemicolon()
+        {
+            if (Current.Type == TokenType.Semicolon)
+                Advance();
+        }
+
         private static readonly HashSet<string> DefaultTerminators = new HashSet<string> { "ELSIF", "ELSE", "END_IF" };
 
         private List<Stmt> ParseStatementList(HashSet<string> terminators = null)
@@ -207,6 +217,7 @@ namespace TcXunit.Interpreter
             if (!IsKeyword("END_IF"))
                 throw new FormatException("Expected END_IF");
             Advance();
+            SkipOptionalSemicolon();
 
             return new IfStmt(condition, thenBranch, elseBranch);
         }
@@ -239,6 +250,7 @@ namespace TcXunit.Interpreter
             if (!IsKeyword("END_FOR"))
                 throw new FormatException("Expected END_FOR");
             Advance();
+            SkipOptionalSemicolon();
 
             return new ForStmt(varName, from, to, step, body);
         }
@@ -257,6 +269,7 @@ namespace TcXunit.Interpreter
             if (!IsKeyword("END_WHILE"))
                 throw new FormatException("Expected END_WHILE");
             Advance();
+            SkipOptionalSemicolon();
 
             return new WhileStmt(condition, body);
         }
@@ -274,6 +287,7 @@ namespace TcXunit.Interpreter
             if (!IsKeyword("END_REPEAT"))
                 throw new FormatException("Expected END_REPEAT");
             Advance();
+            SkipOptionalSemicolon();
 
             return new RepeatStmt(body, until);
         }
@@ -308,6 +322,7 @@ namespace TcXunit.Interpreter
             if (!IsKeyword("END_CASE"))
                 throw new FormatException("Expected END_CASE");
             Advance();
+            SkipOptionalSemicolon();
 
             return new CaseStmt(selector, arms, elseBody);
         }

@@ -111,6 +111,75 @@ namespace TcXunit.Interpreter.Tests
             Assert.IsType<ExitStmt>(Assert.Single(whileStmt.Body));
         }
 
+        // --- optional trailing semicolon after END_* keywords (TcXunit-sum) --
+
+        [Fact]
+        public void ParseStatements_EndIfWithTrailingSemicolon_ParsesSameAsWithout()
+        {
+            var stmts = Parser.ParseStatements("IF a THEN\n\tx := 1;\nEND_IF;");
+
+            Assert.IsType<IfStmt>(Assert.Single(stmts));
+        }
+
+        [Fact]
+        public void ParseStatements_EndForWithTrailingSemicolon_ParsesSameAsWithout()
+        {
+            var stmts = Parser.ParseStatements("FOR i := 1 TO 5 DO\n\tsum := sum + i;\nEND_FOR;");
+
+            Assert.IsType<ForStmt>(Assert.Single(stmts));
+        }
+
+        [Fact]
+        public void ParseStatements_EndWhileWithTrailingSemicolon_ParsesSameAsWithout()
+        {
+            var stmts = Parser.ParseStatements("WHILE i < 5 DO\n\ti := i + 1;\nEND_WHILE;");
+
+            Assert.IsType<WhileStmt>(Assert.Single(stmts));
+        }
+
+        [Fact]
+        public void ParseStatements_EndRepeatWithTrailingSemicolon_ParsesSameAsWithout()
+        {
+            var stmts = Parser.ParseStatements("REPEAT\n\ti := i + 1;\nUNTIL i >= 5\nEND_REPEAT;");
+
+            Assert.IsType<RepeatStmt>(Assert.Single(stmts));
+        }
+
+        [Fact]
+        public void ParseStatements_EndCaseWithTrailingSemicolon_ParsesSameAsWithout()
+        {
+            var stmts = Parser.ParseStatements("CASE selector OF\n1: result := 1;\nEND_CASE;");
+
+            Assert.IsType<CaseStmt>(Assert.Single(stmts));
+        }
+
+        [Fact]
+        public void ParseStatements_TrailingSemicolonFollowedByMoreStatements_ParsesBoth()
+        {
+            var stmts = Parser.ParseStatements("IF a THEN\n\tx := 1;\nEND_IF;\ny := 2;");
+
+            Assert.Equal(2, stmts.Count);
+            Assert.IsType<IfStmt>(stmts[0]);
+            Assert.IsType<AssignStmt>(stmts[1]);
+        }
+
+        [Fact]
+        public void ExecuteNestedForIf_WithTrailingSemicolonsAfterEndIfAndEndFor_ExitsAtExpectedValue()
+        {
+            // Repro from the bug report: EXIT inside IF/END_IF; nested in
+            // FOR/END_FOR; both closing keywords carry a trailing semicolon.
+            var result = RunAndReadInt(
+                "result := 0;\n" +
+                "FOR i := 1 TO 3 DO\n" +
+                "\tIF i = 2 THEN\n" +
+                "\t\tresult := i;\n" +
+                "\t\tEXIT;\n" +
+                "\tEND_IF;\n" +
+                "END_FOR;", "result");
+
+            Assert.Equal(2, result);
+        }
+
         // --- FOR execution ---------------------------------------------------
 
         [Fact]

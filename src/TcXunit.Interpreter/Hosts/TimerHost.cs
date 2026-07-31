@@ -21,6 +21,10 @@ namespace TcXunit.Interpreter
         {
             "TON" => new TonHost(),
             "TOF" => new TofHost(),
+            // TcXunit-tzeg.1: TP is the IEC 61131-3 name for the pulse timer;
+            // FB_Pulse is only our own alias for it, so both spellings must
+            // land on the same host.
+            "TP" => new PulseHost(),
             "FB_PULSE" => new PulseHost(),
             _ => throw new NotSupportedException($"Unknown native timer type '{typeName}'"),
         };

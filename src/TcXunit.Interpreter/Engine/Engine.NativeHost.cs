@@ -46,7 +46,7 @@ namespace TcXunit.Interpreter
         // name instantiable at all" check reads the same two sets, so they
         // live with the classifier that owns their meaning rather than in
         // Engine.cs.
-        private static readonly HashSet<string> NativeTimerTypes = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "TON", "TOF", "FB_Pulse" };
+        private static readonly HashSet<string> NativeTimerTypes = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "TON", "TOF", "TP", "FB_Pulse" };
         private static readonly HashSet<string> NativeEdgeTriggerTypes = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "R_TRIG", "F_TRIG" };
 
         // Single-member "set" for symmetry with the two above; matched

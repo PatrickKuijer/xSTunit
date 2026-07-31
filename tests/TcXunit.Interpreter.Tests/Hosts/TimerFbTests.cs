@@ -121,6 +121,39 @@ namespace TcXunit.Interpreter.Tests
             Assert.Equal(0u, instance.Fields["measuredEt"].Value);
         }
 
+        // TcXunit-tzeg.1: TP is the real IEC 61131-3 spelling of the pulse
+        // timer that FB_Pulse aliases, so declaring one by either name must
+        // walk the identical Q/ET trace - this mirrors the FB_Pulse test
+        // above assertion for assertion.
+        [Fact]
+        public void Tp_FiresFixedWidthPulseOnRisingEdge_IdenticallyToFbPulse()
+        {
+            var engine = NewWrapperEngine("TP");
+            var instance = engine.NewInstance("FB_Wrapper");
+            instance.Fields["inVar"].Value = true;
+            instance.Fields["ptVar"].Value = 200u;
+
+            Step(engine, instance); // rising edge - pulse starts
+            Assert.Equal(true, instance.Fields["measuredQ"].Value);
+
+            engine.Clock.Advance(199);
+            Step(engine, instance);
+            Assert.Equal(true, instance.Fields["measuredQ"].Value);
+            Assert.Equal(199u, instance.Fields["measuredEt"].Value);
+
+            engine.Clock.Advance(1);
+            Step(engine, instance); // IN still true, but pulse elapses on its own
+            Assert.Equal(false, instance.Fields["measuredQ"].Value);
+            Assert.Equal(200u, instance.Fields["measuredEt"].Value);
+
+            instance.Fields["inVar"].Value = false;
+            Step(engine, instance);
+            instance.Fields["inVar"].Value = true;
+            Step(engine, instance); // fresh rising edge re-triggers
+            Assert.Equal(true, instance.Fields["measuredQ"].Value);
+            Assert.Equal(0u, instance.Fields["measuredEt"].Value);
+        }
+
         [Fact]
         public void Clock_MultiInstanceSteppingOrder_DoesNotStealElapsedTime()
         {

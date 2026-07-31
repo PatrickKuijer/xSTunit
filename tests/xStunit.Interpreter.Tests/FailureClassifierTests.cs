@@ -70,10 +70,12 @@ namespace xStunit.Interpreter.Tests
         // A parse-error names its offending token in `construct` - the same
         // field unsupported-construct uses, never a parse-error-only field, so
         // `kind` + `construct` is one vocabulary at every level of the JSON.
+        // xstunit-fpw8: Classify reads ParseException.Token directly - it no
+        // longer re-derives it by scraping the message.
         [Fact]
         public void Classify_LexerParseException_CarriesTheOffendingTokenAsTheConstruct()
         {
-            var ex = new ParseException("Unexpected character '@' at position 13 in: n := 1;\nn := @ 2;");
+            var ex = new ParseException("Unexpected character '@' at position 13 in: n := 1;\nn := @ 2;", "@");
 
             FailureClassifier.Classify(ex, out var construct);
 
@@ -81,18 +83,18 @@ namespace xStunit.Interpreter.Tests
         }
 
         // The parser's own messages name the token as Token.ToString()
-        // ("Type:Text") rather than quoting it.
+        // ("Type:Text"), but the structured field carries the bare token text.
         [Fact]
         public void Classify_ParserParseException_CarriesTheOffendingTokenAsTheConstruct()
         {
-            var ex = new ParseException("Expected Semicolon but got Identifier:FOO at token index 4");
+            var ex = new ParseException("Expected Semicolon but got Identifier:FOO at token index 4", "FOO");
 
             FailureClassifier.Classify(ex, out var construct);
 
             Assert.Equal("FOO", construct);
         }
 
-        // A message that names no token at all ("Expected END_IF") still
+        // A ParseException with no token at all ("Expected END_IF") still
         // classifies - `construct` is nullable for every kind, and a missing
         // token must never cost the classification.
         [Fact]
@@ -104,27 +106,31 @@ namespace xStunit.Interpreter.Tests
             Assert.Null(construct);
         }
 
-        // The position a parse-error cites: a parse failure happens before any
-        // statement runs, so no Stmt.Line exists to stamp on the frame - the
-        // line is recovered from the lexer's own offset-plus-body message, and
-        // "open line N" is the whole of this kind's guidance.
+        // The lexer knows the body text and the offset it failed at, so it
+        // derives the line itself (Lexer.LineAt) and stamps it on the
+        // exception directly - no message to re-parse downstream.
         [Fact]
-        public void ParseErrorBodyLine_LexerMessage_CountsTheLineWithinTheBody()
+        public void LexerParseException_UnexpectedCharacterOnLineTwo_CarriesThatLineStructurally()
         {
-            var line = FailureClassifier.ParseErrorBodyLine(
-                "FB_X.Unreadable: Unexpected character '@' at position 13 in: n := 1;\nn := @ 2;");
+            var ex = Assert.Throws<ParseException>(() => Lexer.Tokenize("n := 1;\nn := @ 2;"));
 
-            Assert.Equal(2, line);
+            Assert.Equal(2, ex.BodyLine);
+            Assert.Equal("@", ex.Token);
         }
 
-        // The parser reports a token INDEX, not an offset, so no line is
-        // recoverable - unknown, rather than a number that would be wrong.
+        // xstunit-fpw8: the case the old message-scraping could never recover.
+        // The parser reports a token INDEX, not a body offset, so the message-
+        // scraping fallback always degraded to UnknownLine for a parser-raised
+        // failure. Token.Line is tracked by the lexer regardless, and the
+        // parser's own throw sites now stamp it directly - so a parser-raised
+        // ParseException carries a real line where it used to carry none.
         [Fact]
-        public void ParseErrorBodyLine_ParserMessage_IsUnknown()
+        public void ParserParseException_ExpectedTokenOnLineTwo_CarriesThatLineWhereMessageScrapingUsedToDegradeToUnknown()
         {
-            var line = FailureClassifier.ParseErrorBodyLine("Expected Semicolon but got Identifier:FOO at token index 4");
+            var ex = Assert.Throws<ParseException>(() => Parser.ParseStatements("n := 1;\nn := 2"));
 
-            Assert.Equal(PlcSourceLocationException.UnknownLine, line);
+            Assert.NotEqual(PlcSourceLocationException.UnknownLine, ex.BodyLine);
+            Assert.Equal(2, ex.BodyLine);
         }
 
         // TcXunit-g14q: parse-error is claimed by the front end's OWN type, not

@@ -427,11 +427,17 @@ namespace xStunit.Cli
                     // itself - the message string is prose for a human and is
                     // never the thing a consumer switches on.
                     var errorKind = FailureClassifier.Classify(ex, out var errorConstruct);
+                    // xstunit-fpw8: a parse-error's body line comes from the
+                    // front end's own structured field, not from re-parsing
+                    // ex.Message.
+                    var errorBodyLine = errorKind == FailureKind.ParseError
+                        ? FailureClassifier.UnwrapParseException(ex)?.BodyLine ?? PlcSourceLocationException.UnknownLine
+                        : PlcSourceLocationException.UnknownLine;
                     // TcXunit-229.15: the one-line error an agent reads gets
                     // that kind's guidance appended, so the JSON object is
                     // self-contained - a consumer never has to have read this
                     // repo's README to know whether to edit the POU or stop.
-                    var errorText = WithGuidance(ex.Message, errorKind, isVerbatim: false);
+                    var errorText = WithGuidance(ex.Message, errorKind, isVerbatim: false, errorBodyLine);
                     // No suite ran to completion here (load/instantiation/default-value
                     // failure), so there's no elapsed time to report - null, not a
                     // fabricated zero (TcXunit-6fb.2). ex.Message already carries the
@@ -547,42 +553,25 @@ namespace xStunit.Cli
             return exitCode;
         }
 
+        // xstunit-fpw8: `Construct` and `Site.BodyLine` are already the right
+        // values by the time a fault reaches this boundary - the engine
+        // (Engine.Diagnostics.ToTestFailure) populates both from the
+        // ParseException's own structured fields, not from re-parsing its
+        // message. This boundary just reads them through.
         private static FailureReport ToFailureReport(xStunit.Runner.TcUnitStub.AssertionFailure failure) =>
             new FailureReport(
                 WithGuidance(failure),
                 failure.Kind,
-                failure.Construct ?? ParseErrorConstruct(failure),
+                failure.Construct,
                 failure.Assert,
                 failure.Expected,
                 failure.Actual,
                 failure.AssertMessage,
                 failure.Site.PouTypeName,
                 failure.Site.MethodName,
-                NullableLine(failure.Site.BodyLine) ?? ParseErrorBodyLine(failure),
+                NullableLine(failure.Site.BodyLine),
                 NullableLine(failure.Site.Line),
                 failure.CallStack?.Select(ToCallStackFrameReport).ToArray());
-
-        // TcXunit-229.15: a fault charged to a test is classified inside the
-        // engine (Engine.Diagnostics.ToTestFailure), which hands this boundary
-        // only a kind and a message - so a parse-error's token and line are
-        // recovered here, from that message, exactly as the suite-level path
-        // recovers them from the exception. Same two fields either way
-        // (`construct`, `bodyLine`), never a parse-error-only field.
-        private static string ParseErrorConstruct(xStunit.Runner.TcUnitStub.AssertionFailure failure) =>
-            failure.Kind == FailureKind.ParseError ? FailureClassifier.OffendingToken(failure.Message) : null;
-
-        // Only ever fills a bodyLine that is otherwise UNKNOWN, and only for a
-        // parse-error: a parse failure happens before any statement runs, so
-        // the frame it is attributed to has no Stmt.Line to stamp. Leaving it
-        // null while this kind's own message says "at line N" would be
-        // incoherent - `bodyLine` is the field an agent opens the source with.
-        // `line` (the raw .TcPOU XML line) stays null: deriving it needs the
-        // body's BodyStartLine, which never reaches this boundary, and a
-        // guessed file line is worse than an absent one.
-        private static int? ParseErrorBodyLine(xStunit.Runner.TcUnitStub.AssertionFailure failure) =>
-            failure.Kind == FailureKind.ParseError
-                ? NullableLine(FailureClassifier.ParseErrorBodyLine(failure.Message))
-                : null;
 
         // TcXunit-229.15: the message a consumer reads, followed by what to DO
         // about a failure of that kind (FailureKind.Guidance). TcXunit's
@@ -609,14 +598,17 @@ namespace xStunit.Cli
         // assertion-kind failure, including a convergence failure that never
         // went near the formatter, and left Guidance(Assertion) unreachable.
         private static string WithGuidance(xStunit.Runner.TcUnitStub.AssertionFailure failure) =>
-            WithGuidance(failure.Message, failure.Kind, isVerbatim: failure.Expected != null);
+            WithGuidance(failure.Message, failure.Kind, isVerbatim: failure.Expected != null, failure.Site.BodyLine);
 
         // Overload for the two call sites that have no failure object at all -
         // a suite-level error and the run-level ErrorReport. Neither can be a
         // formatter line (no AssertionFailure, so no Expected/Actual), hence
         // isVerbatim spelled out at the call site rather than defaulted here:
         // the exemption should never be something a caller gets by omission.
-        private static string WithGuidance(string message, string kind, bool isVerbatim)
+        // bodyLine defaults to unknown: neither call site has a parse-error
+        // body line of its own to offer.
+        private static string WithGuidance(
+            string message, string kind, bool isVerbatim, int bodyLine = PlcSourceLocationException.UnknownLine)
         {
             if (isVerbatim)
                 return message;
@@ -630,7 +622,8 @@ namespace xStunit.Cli
                 // The form TcXunit-229.9 settled on: say plainly that the body
                 // could not be READ, and that the cause is one of two things
                 // TcXunit genuinely cannot tell apart - never assert which.
-                var bodyLine = FailureClassifier.ParseErrorBodyLine(message);
+                // xstunit-fpw8: bodyLine is the caller's own structured field,
+                // not recovered here by re-parsing message.
                 var at = bodyLine != PlcSourceLocationException.UnknownLine
                     ? $" at line {bodyLine}"
                     : string.Empty;

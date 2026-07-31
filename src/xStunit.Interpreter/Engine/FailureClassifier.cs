@@ -91,8 +91,13 @@ namespace xStunit.Interpreter
                 // as parse-error told an agent to escalate a genuine PLC defect
                 // instead of fixing it. Everything that is not a ParseException
                 // falls through to the located/unlocated split below.
-                case ParseException _:
-                    construct = OffendingToken(ex.Message);
+                //
+                // xstunit-fpw8: Token is stamped by the throw site itself, not
+                // recovered here by re-parsing ex.Message - the message is
+                // prose for a human, never a structured value a consumer
+                // switches on.
+                case ParseException parseError:
+                    construct = parseError.Token;
                     return FailureKind.ParseError;
             }
 
@@ -101,99 +106,16 @@ namespace xStunit.Interpreter
             return located ? FailureKind.PlcFault : FailureKind.LoadError;
         }
 
-        // The token a parse-error is about, for the `construct` field
-        // (TcXunit-229.15) - deliberately the SAME field unsupported-construct
-        // uses, so `kind` + `construct` is one vocabulary at every level of the
-        // JSON instead of a second field nobody would know to read.
-        //
-        // Recovered from the front end's own message text because ParseException
-        // is message-compatible only for now; carrying the token and position as
-        // structured fields, and retiring this scraping with them, is
-        // TcXunit-fpw8. Best effort by construction: null when the message names
-        // no token, which is a fine answer - `construct` is already nullable for
-        // every other kind.
-        public static string OffendingToken(string message)
+        // The ParseException behind ex, unwrapping PlcSourceLocationException
+        // exactly as Classify does above, or null when ex is not (and does not
+        // wrap) a ParseException. Lets a caller that already knows kind ==
+        // FailureKind.ParseError reach the front end's own structured
+        // BodyLine/Token without a second classification pass.
+        public static ParseException UnwrapParseException(Exception ex)
         {
-            if (string.IsNullOrEmpty(message))
-                return null;
-
-            // Lexer shape: "... '<token>' at position N in: <body>", and the
-            // literal parsers' "... '<literal>' ...". First quoted run wins.
-            var open = message.IndexOf('\'');
-            if (open >= 0)
-            {
-                var close = message.IndexOf('\'', open + 1);
-                if (close > open + 1)
-                    return message.Substring(open + 1, close - open - 1);
-            }
-
-            // Parser shapes: "Expected X but got <Type>:<Text> at token index N"
-            // and "Unexpected token <Type>:<Text> at index N" - Token.ToString()
-            // is "Type:Text", so the text after the colon is the source token.
-            var token = AfterMarker(message, "but got ") ?? AfterMarker(message, "Unexpected token ");
-            if (token == null)
-                return null;
-
-            var colon = token.IndexOf(':');
-            return colon >= 0 && colon + 1 < token.Length ? token.Substring(colon + 1) : token;
-        }
-
-        // The 1-based line WITHIN THE BODY the front end failed to read, or
-        // PlcSourceLocationException.UnknownLine (0) when the message doesn't
-        // say (TcXunit-229.15).
-        //
-        // A parse failure happens before any statement runs, so no Stmt.Line
-        // exists for ExecuteBody to stamp - which is why a parse-error's frame
-        // carries no line of its own. The lexer's message does carry the offset
-        // and the body text it was reading, so the line is recoverable here,
-        // and "open line N" is the whole of this kind's guidance. The parser's
-        // messages carry a token index rather than an offset; those degrade to
-        // "unknown" and the guidance drops the line, rather than citing a
-        // number that would be wrong.
-        public static int ParseErrorBodyLine(string message)
-        {
-            if (string.IsNullOrEmpty(message))
-                return PlcSourceLocationException.UnknownLine;
-
-            const string positionMarker = " at position ";
-            const string textMarker = " in: ";
-
-            var positionAt = message.IndexOf(positionMarker, StringComparison.Ordinal);
-            if (positionAt < 0)
-                return PlcSourceLocationException.UnknownLine;
-
-            var numberAt = positionAt + positionMarker.Length;
-            var textAt = message.IndexOf(textMarker, numberAt, StringComparison.Ordinal);
-            if (textAt < 0)
-                return PlcSourceLocationException.UnknownLine;
-
-            if (!int.TryParse(message.Substring(numberAt, textAt - numberAt), out var offset) || offset < 0)
-                return PlcSourceLocationException.UnknownLine;
-
-            var body = message.Substring(textAt + textMarker.Length);
-            if (offset > body.Length)
-                return PlcSourceLocationException.UnknownLine;
-
-            var line = 1;
-            for (var i = 0; i < offset; i++)
-            {
-                if (body[i] == '\n')
-                    line++;
-            }
-
-            return line;
-        }
-
-        private static string AfterMarker(string message, string marker)
-        {
-            var at = message.IndexOf(marker, StringComparison.Ordinal);
-            if (at < 0)
-                return null;
-
-            var rest = message.Substring(at + marker.Length);
-            var end = rest.IndexOf(" at ", StringComparison.Ordinal);
-            rest = (end >= 0 ? rest.Substring(0, end) : rest).Trim();
-            return rest.Length > 0 ? rest : null;
+            while (ex is PlcSourceLocationException wrapper && wrapper.InnerException != null)
+                ex = wrapper.InnerException;
+            return ex as ParseException;
         }
     }
 }

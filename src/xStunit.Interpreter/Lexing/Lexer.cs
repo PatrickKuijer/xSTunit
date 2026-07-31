@@ -340,7 +340,8 @@ namespace xStunit.Interpreter
                     case '[': tokens.Add(new Token(TokenType.LBracket, "[", tokenLine)); i++; continue;
                     case ']': tokens.Add(new Token(TokenType.RBracket, "]", tokenLine)); i++; continue;
                     default:
-                        throw new ParseException($"Unexpected character '{c}' at position {i} in: {text}");
+                        throw new ParseException(
+                            $"Unexpected character '{c}' at position {i} in: {text}", c.ToString(), LineAt(text, i));
                 }
             }
 
@@ -367,6 +368,20 @@ namespace xStunit.Interpreter
                     line++;
                 counted++;
             }
+        }
+
+        // The 1-based line containing offset within text, using the same
+        // CRLF-as-one-break rule as CountLineBreaks (TcXunit-p3t.2) so a
+        // ParseException's BodyLine agrees with every other line number this
+        // lexer produces. Standalone rather than reusing CountLineBreaks's
+        // running (counted, line) state - a throw site needs a line for one
+        // arbitrary offset, not the next stretch of an in-progress scan.
+        private static int LineAt(string text, int offset)
+        {
+            var line = 1;
+            var counted = 0;
+            CountLineBreaks(text, ref counted, Math.Min(offset, text.Length), ref line);
+            return line;
         }
 
         // Recognizes IEC 61131-3 '$'-escape sequences inside single-quoted STRING
@@ -425,10 +440,14 @@ namespace xStunit.Interpreter
         private static long ParseBasedLiteral(string digits, int numberBase, string text, int position)
         {
             if (numberBase != 2 && numberBase != 8 && numberBase != 16)
-                throw new ParseException($"Unsupported based-literal base '{numberBase}#' at position {position} in: {text}");
+                throw new ParseException(
+                    $"Unsupported based-literal base '{numberBase}#' at position {position} in: {text}",
+                    numberBase + "#", LineAt(text, position));
 
             if (digits.Length == 0)
-                throw new ParseException($"Based literal has no digits after '#' at position {position} in: {text}");
+                throw new ParseException(
+                    $"Based literal has no digits after '#' at position {position} in: {text}",
+                    "#", LineAt(text, position));
 
             long value = 0;
             foreach (var ch in digits)
@@ -442,7 +461,9 @@ namespace xStunit.Interpreter
                 };
 
                 if (digitValue < 0 || digitValue >= numberBase)
-                    throw new ParseException($"Digit '{ch}' is invalid for base {numberBase} at position {position} in: {text}");
+                    throw new ParseException(
+                        $"Digit '{ch}' is invalid for base {numberBase} at position {position} in: {text}",
+                        ch.ToString(), LineAt(text, position));
 
                 value = (value * numberBase) + digitValue;
             }

@@ -45,9 +45,15 @@ namespace xStunit.Interpreter
         private Token Expect(TokenType type)
         {
             if (Current.Type != type)
-                throw new ParseException($"Expected {type} but got {Current} at token index {_pos}");
+                throw new ParseException(
+                    $"Expected {type} but got {Current} at token index {_pos}", CurrentToken, Current.Line);
             return Advance();
         }
+
+        // The offending token text for the `construct` field, or null for a
+        // token that carries no meaningful text (e.g. Eof) - matches the
+        // nullable convention every other kind's `construct` uses.
+        private string CurrentToken => string.IsNullOrEmpty(Current.Text) ? null : Current.Text;
 
         private bool IsKeyword(string keyword) =>
             Current.Type == TokenType.Identifier && Current.Text == keyword;
@@ -148,7 +154,8 @@ namespace xStunit.Interpreter
             // that reaches this fallback only malformed source does (e.g. a
             // bare non-call expression used as a statement), so claiming
             // unsupported-construct here would be a guess, not evidence.
-            throw new ParseException($"Statement did not resolve to an assignment or call at token index {_pos}");
+            throw new ParseException(
+                $"Statement did not resolve to an assignment or call at token index {_pos}", CurrentToken, Current.Line);
         }
 
         // Assignment targets: plain identifier, .Member field access, or
@@ -167,7 +174,9 @@ namespace xStunit.Interpreter
             if (target is DerefExpr)
                 throw new UnsupportedConstructException("x^ :=", "Pointer dereference on the assignment left-hand side (x^ := ...) is not supported in the v1 subset");
 
-            throw new ParseException("Assignment target must be an identifier, field access, or array index in the v1 subset");
+            throw new ParseException(
+                "Assignment target must be an identifier, field access, or array index in the v1 subset",
+                target.GetType().Name, target.Line);
         }
 
         private Stmt ParseIf()
@@ -175,7 +184,7 @@ namespace xStunit.Interpreter
             Advance(); // IF
             var condition = ParseExpr();
             if (!IsKeyword("THEN"))
-                throw new ParseException("Expected THEN");
+                throw new ParseException("Expected THEN", CurrentToken, Current.Line);
             Advance();
 
             var thenBranch = ParseStatementList();
@@ -198,7 +207,7 @@ namespace xStunit.Interpreter
                 Advance();
                 var elsifCondition = ParseExpr();
                 if (!IsKeyword("THEN"))
-                    throw new ParseException("Expected THEN");
+                    throw new ParseException("Expected THEN", CurrentToken, Current.Line);
                 Advance();
 
                 var elsifThen = ParseStatementList();
@@ -215,7 +224,7 @@ namespace xStunit.Interpreter
             }
 
             if (!IsKeyword("END_IF"))
-                throw new ParseException("Expected END_IF");
+                throw new ParseException("Expected END_IF", CurrentToken, Current.Line);
             Advance();
             SkipOptionalSemicolon();
 
@@ -230,7 +239,7 @@ namespace xStunit.Interpreter
             var from = ParseExpr();
 
             if (!IsKeyword("TO"))
-                throw new ParseException("Expected TO");
+                throw new ParseException("Expected TO", CurrentToken, Current.Line);
             Advance();
             var to = ParseExpr();
 
@@ -242,13 +251,13 @@ namespace xStunit.Interpreter
             }
 
             if (!IsKeyword("DO"))
-                throw new ParseException("Expected DO");
+                throw new ParseException("Expected DO", CurrentToken, Current.Line);
             Advance();
 
             var body = ParseStatementList(new HashSet<string> { "END_FOR" });
 
             if (!IsKeyword("END_FOR"))
-                throw new ParseException("Expected END_FOR");
+                throw new ParseException("Expected END_FOR", CurrentToken, Current.Line);
             Advance();
             SkipOptionalSemicolon();
 
@@ -261,13 +270,13 @@ namespace xStunit.Interpreter
             var condition = ParseExpr();
 
             if (!IsKeyword("DO"))
-                throw new ParseException("Expected DO");
+                throw new ParseException("Expected DO", CurrentToken, Current.Line);
             Advance();
 
             var body = ParseStatementList(new HashSet<string> { "END_WHILE" });
 
             if (!IsKeyword("END_WHILE"))
-                throw new ParseException("Expected END_WHILE");
+                throw new ParseException("Expected END_WHILE", CurrentToken, Current.Line);
             Advance();
             SkipOptionalSemicolon();
 
@@ -280,12 +289,12 @@ namespace xStunit.Interpreter
             var body = ParseStatementList(new HashSet<string> { "UNTIL" });
 
             if (!IsKeyword("UNTIL"))
-                throw new ParseException("Expected UNTIL");
+                throw new ParseException("Expected UNTIL", CurrentToken, Current.Line);
             Advance();
             var until = ParseExpr();
 
             if (!IsKeyword("END_REPEAT"))
-                throw new ParseException("Expected END_REPEAT");
+                throw new ParseException("Expected END_REPEAT", CurrentToken, Current.Line);
             Advance();
             SkipOptionalSemicolon();
 
@@ -298,7 +307,7 @@ namespace xStunit.Interpreter
             var selector = ParseExpr();
 
             if (!IsKeyword("OF"))
-                throw new ParseException("Expected OF");
+                throw new ParseException("Expected OF", CurrentToken, Current.Line);
             Advance();
 
             var arms = new List<CaseArm>();
@@ -320,7 +329,7 @@ namespace xStunit.Interpreter
             }
 
             if (!IsKeyword("END_CASE"))
-                throw new ParseException("Expected END_CASE");
+                throw new ParseException("Expected END_CASE", CurrentToken, Current.Line);
             Advance();
             SkipOptionalSemicolon();
 

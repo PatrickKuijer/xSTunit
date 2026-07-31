@@ -207,7 +207,7 @@ namespace xStunit.Interpreter
                     // ParseMod before falling through here), there is no
                     // specific missing construct to name, only positions
                     // where the source itself is incomplete or wrong.
-                    throw new ParseException($"Unexpected token {Current} at index {_pos}");
+                    throw new ParseException($"Unexpected token {Current} at index {_pos}", CurrentToken, Current.Line);
             }
         }
 

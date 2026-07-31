@@ -31,55 +31,41 @@ namespace TcXunit.Interpreter
 
         public object NativeHost { get; set; }
 
-        // The four typed views over that pair. Each yields its host only when
-        // NativeKind agrees, so a caller that reaches for the wrong one gets
-        // null rather than an InvalidCastException - identical to the
-        // null-valued field it used to read.
+        // Read-only typed views over that pair, for the callers that actually
+        // work the host's own API (TimerHost.Update, LoopbackHost.Transmit,
+        // TcUnitSuiteHost.Collect/EnterNativeCall) and would otherwise cast
+        // NativeHost by hand. Each yields its host only when NativeKind
+        // agrees, so a caller that reaches for the wrong one gets null rather
+        // than an InvalidCastException.
+        //
+        // They are deliberately NOT the way to ask "what kind is this?" -
+        // that is NativeKind's job, and null-checking these instead is the
+        // duplication TcXunit-j98/kwv6/fvp6 removed. Setters are gone with it:
+        // kind and host are only ever assigned together, by the classifier.
 
         // Non-null when ActualTypeName's ancestry reaches TcUnit.FB_TestSuite -
         // the native C# stub instance backing TEST()/AssertEquals_INT()/etc for
         // this instance (TcXunit-w5x.7's native-stub boundary).
-        public TcUnitSuiteHost NativeSuiteHost
-        {
-            get => NativeKind == NativeHostKind.Suite ? (TcUnitSuiteHost)NativeHost : null;
-            set => SetNativeHost(NativeHostKind.Suite, value);
-        }
+        public TcUnitSuiteHost NativeSuiteHost =>
+            NativeKind == NativeHostKind.Suite ? (TcUnitSuiteHost)NativeHost : null;
 
         // Non-null when ActualTypeName is a native timer type (TON/TOF/
         // FB_Pulse) - the native host backing this instance's IN/PT->Q/ET
         // behavior (TcXunit-w5x.15.7's native-stub boundary).
-        public TimerHost NativeTimerHost
-        {
-            get => NativeKind == NativeHostKind.Timer ? (TimerHost)NativeHost : null;
-            set => SetNativeHost(NativeHostKind.Timer, value);
-        }
+        public TimerHost NativeTimerHost =>
+            NativeKind == NativeHostKind.Timer ? (TimerHost)NativeHost : null;
 
         // Non-null when ActualTypeName is the native Loopback type - the
         // native host backing this instance's Transmit(source, sink) call
         // (TcXunit-w5x.15.5's native-stub boundary).
-        public LoopbackHost NativeLoopbackHost
-        {
-            get => NativeKind == NativeHostKind.Loopback ? (LoopbackHost)NativeHost : null;
-            set => SetNativeHost(NativeHostKind.Loopback, value);
-        }
+        public LoopbackHost NativeLoopbackHost =>
+            NativeKind == NativeHostKind.Loopback ? (LoopbackHost)NativeHost : null;
 
         // Non-null when ActualTypeName is a native edge-trigger type (R_TRIG/
         // F_TRIG) - the native host backing this instance's CLK->Q behavior
         // (TcXunit-f6b's native-stub boundary).
-        public EdgeTriggerHost NativeEdgeTriggerHost
-        {
-            get => NativeKind == NativeHostKind.Edge ? (EdgeTriggerHost)NativeHost : null;
-            set => SetNativeHost(NativeHostKind.Edge, value);
-        }
-
-        // Assigning a host adopts its kind; assigning null clears back to
-        // None, so `inst.NativeTimerHost = null` still leaves every typed
-        // view reading null exactly as it did when they were four fields.
-        private void SetNativeHost(NativeHostKind kind, object host)
-        {
-            NativeKind = host == null ? NativeHostKind.None : kind;
-            NativeHost = host;
-        }
+        public EdgeTriggerHost NativeEdgeTriggerHost =>
+            NativeKind == NativeHostKind.Edge ? (EdgeTriggerHost)NativeHost : null;
 
         public FbInstance(string actualTypeName)
         {

@@ -170,7 +170,7 @@ namespace TcXunit.Interpreter
                 // the global-FUNCTION and native-function lookups below
                 // unreachable from inside a suite - i.e. a suite could not call
                 // a global FUNCTION POU at all.
-                if (instance?.NativeSuiteHost != null && NativeMethodBridge.CanInvoke(methodName))
+                if (instance?.NativeKind == NativeHostKind.Suite && NativeMethodBridge.CanInvoke(methodName))
                 {
                     var evaluatedPositional = positionalArgs.Select(e => Evaluate(e, callerFrame)).ToList();
                     var evaluatedNamed = namedArgs.ToDictionary(a => a.Name, a => Evaluate(a.Value, callerFrame));
@@ -259,7 +259,7 @@ namespace TcXunit.Interpreter
                 // 'CounterStartsAtZero()'), which is a real, fixable defect
                 // and belongs on the ordinary method-not-found path below
                 // (kind=plc-fault) instead (TcXunit-2o9.1).
-                if (instance?.NativeSuiteHost != null && NativeMethodBridge.LooksLikeTcUnitApiName(methodName))
+                if (instance?.NativeKind == NativeHostKind.Suite && NativeMethodBridge.LooksLikeTcUnitApiName(methodName))
                     throw NativeMethodBridge.NotSupported(methodName);
 
                 // startType is null for a call made from a global FUNCTION body

@@ -110,22 +110,40 @@ Interpreter is hand-rolled, scoped to what fixtures actually need — extended i
 The house style for comments in `.cs` files. This is the definition of done for
 any comment work, and the bar new code is held to.
 
-**XML doc on the public/internal API surface — always.** Every public or
-internal type, member, and parameter carries `<summary>`. These feed docgen and
-IntelliSense, so they are written for a caller who cannot see the body.
+**Good code doesn't need comments.** Self-documenting names and small,
+well-shaped methods are the default; a comment is the exception that earns its
+place, not the norm. When in doubt, delete rather than reformat — a wrong or
+stale comment is worse than no comment, and a deleted one can't rot.
+
+**XML doc `<summary>` only when it adds information beyond the signature.**
+Skip it entirely for a member whose name and type already say everything (a
+`Name` property of type `string`, a `Parse(string xml)` method with an obvious
+return). Write it when the name doesn't tell the whole story: what a
+non-obvious return value means, what state a type represents, why a type
+exists at all.
 
 - `<param>` / `<returns>` wherever the name alone does not tell the caller what
   to pass or what comes back (units, ranges, null/empty semantics, ownership).
+  Skip when the parameter name already says it — but note `<param>` is
+  all-or-nothing per member: documenting some and not others raises CS1573, so
+  once one parameter needs a tag, give the rest a short one too.
 - `<exception>` for anything thrown that a caller must handle — including what
   distinguishes it from neighbouring exception types.
-- `<remarks>` for invariants, ordering requirements, and gotchas: what must stay
-  true, what breaks if it doesn't, why the obvious alternative was rejected.
+- `<remarks>` only for a real invariant, ordering requirement, or gotcha: what
+  must stay true, what breaks if it doesn't, why the obvious alternative was
+  rejected. Not a place to restate the summary in more words.
 - `<see cref="..."/>` for cross-references, so renames don't rot the prose.
 
 **Inline comments state WHY, not WHAT.** A comment earns its place by carrying
 what the code cannot: the invariant being held, the case being guarded against,
 the non-obvious interaction with another component. A comment that restates the
 line below it is deleted, not reworded.
+
+**When reviewing or overhauling existing comments, delete before you reformat.**
+A comment that fails the tests above (restates the code, is stale, hedges, or
+just repeats the type signature in prose) gets removed, not polished into
+better-formatted junk. Reformatting a bad comment gives it a second life it
+didn't earn.
 
 **Never encode ticket IDs, agent reasoning, or change history in a comment.**
 No bead IDs, no "fixed the bug where...", no "as requested". That belongs in the

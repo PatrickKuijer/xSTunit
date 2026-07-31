@@ -7,74 +7,53 @@ namespace xStunit.Parser
 {
     /// <summary>
     /// A parsed POU tagged with the file it came from, so duplicate-type
-    /// errors and per-file skip/report paths can name the originating file.
+    /// errors and skip/report paths can name the originating file.
     /// </summary>
     public readonly struct LoadedPou
     {
-        /// <summary>Constructs a loaded-POU record from its parsed AST and originating file path.</summary>
         public LoadedPou(PouAst pou, string filePath)
         {
             Pou = pou;
             FilePath = filePath;
         }
 
-        /// <summary>The parsed POU.</summary>
         public PouAst Pou { get; }
 
-        /// <summary>The .TcPOU file the POU was parsed from.</summary>
         public string FilePath { get; }
     }
 
     /// <summary>
     /// Unions POUs across one or more source directories (e.g. a Tests PLC
-    /// project and a separately-referenced Source PLC project) instead of
-    /// scanning a single directory.
+    /// project plus a separately-referenced Source PLC project).
     /// </summary>
     /// <remarks>
-    /// Order of the input directories does not matter - paths are unioned,
-    /// not layered/precedenced. A type name that appears in more than one
-    /// file across the merged set is a fail-fast, hard error
-    /// (<see cref="DuplicatePouTypeException"/>) raised before any suite runs.
+    /// Directory order does not matter - paths are unioned, not
+    /// layered/precedenced, so no directory can shadow another's type.
     /// </remarks>
     public static class MultiDirectoryPouLoader
     {
-        /// <summary>Every distinct *.TcPOU file path under the given directories.</summary>
         public static IReadOnlyList<string> FindPouFiles(IReadOnlyList<string> pouDirectories) =>
             DeduplicatePaths(
                 pouDirectories
                     .SelectMany(dir => Directory.GetFiles(dir, "*.TcPOU", SearchOption.AllDirectories)));
 
-        /// <summary>
-        /// Every distinct *.TcDUT file path under the given directories.
-        /// </summary>
-        /// <remarks>
-        /// Globbed separately from *.TcPOU since .TcDUT files (which declare
-        /// STRUCT/ENUM/alias types) use a different root XML element
-        /// (&lt;DUT&gt; vs &lt;POU&gt;).
-        /// </remarks>
+        // .TcDUT and .TcGVL are globbed separately from .TcPOU rather than in
+        // one pass because each uses its own root XML element (<DUT>, <GVL>,
+        // <POU>) and so needs a different parser.
         public static IReadOnlyList<string> FindDutFiles(IReadOnlyList<string> pouDirectories) =>
             DeduplicatePaths(
                 pouDirectories
                     .SelectMany(dir => Directory.GetFiles(dir, "*.TcDUT", SearchOption.AllDirectories)));
 
-        /// <summary>
-        /// Every distinct *.TcGVL file path under the given directories.
-        /// </summary>
-        /// <remarks>
-        /// Globbed separately from *.TcPOU/*.TcDUT since .TcGVL files
-        /// (global variable lists) use their own root XML element
-        /// (&lt;GVL&gt; vs &lt;POU&gt;/&lt;DUT&gt;).
-        /// </remarks>
         public static IReadOnlyList<string> FindGvlFiles(IReadOnlyList<string> pouDirectories) =>
             DeduplicatePaths(
                 pouDirectories
                     .SelectMany(dir => Directory.GetFiles(dir, "*.TcGVL", SearchOption.AllDirectories)));
 
-        // Normalizes each path (Path.GetFullPath) and de-duplicates
-        // case-insensitively so overlapping input directories (same
-        // directory passed twice, one nested inside another, or differing
-        // only by casing/trailing slash) behave as a true union rather than
-        // producing the same on-disk file more than once.
+        // Normalizes and de-duplicates case-insensitively so overlapping input
+        // directories (same directory passed twice, one nested inside another,
+        // or differing only by casing/trailing slash) behave as a true union
+        // rather than yielding the same on-disk file more than once.
         private static IReadOnlyList<string> DeduplicatePaths(IEnumerable<string> files) =>
             files
                 .Select(Path.GetFullPath)
@@ -82,15 +61,14 @@ namespace xStunit.Parser
                 .ToList();
 
         /// <summary>
-        /// Globs and parses every *.TcPOU file across all given directories,
-        /// then checks the successfully-parsed set for duplicate type names.
+        /// Globs and parses every .TcPOU across all given directories, then
+        /// checks the result for duplicate type names.
         /// </summary>
         /// <exception cref="TcPouRejectedException">
-        /// A .TcPOU's implementation text uses a construct outside the
-        /// parser's supported subset. Propagates uncaught; callers that need
-        /// to skip-and-report unparseable POUs instead (e.g. the CLI's suite
-        /// discovery) should parse files themselves and call
-        /// <see cref="CheckForDuplicates"/> on the successfully-parsed subset.
+        /// A POU uses a construct outside the supported subset. Propagates
+        /// UNCAUGHT and abandons the whole load - callers that need to
+        /// skip-and-report instead must parse files themselves and call
+        /// <see cref="CheckForDuplicates"/> on what survived.
         /// </exception>
         /// <exception cref="DuplicatePouTypeException">
         /// The same POU type name is defined in more than one file.
@@ -105,11 +83,9 @@ namespace xStunit.Parser
             return loaded;
         }
 
-        /// <summary>
-        /// Throws <see cref="DuplicatePouTypeException"/> if any two entries
-        /// in <paramref name="loaded"/> share a POU type name; does nothing
-        /// otherwise.
-        /// </summary>
+        /// <exception cref="DuplicatePouTypeException">
+        /// Two or more entries share a POU type name.
+        /// </exception>
         public static void CheckForDuplicates(IReadOnlyList<LoadedPou> loaded) =>
             DuplicateNameDetector.ThrowIfDuplicate(
                 loaded,

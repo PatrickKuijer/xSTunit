@@ -6,7 +6,6 @@ using System.Xml.Linq;
 
 namespace xStunit.Parser
 {
-    /// <summary>Parses a .TcPOU file's XML into a <see cref="PouAst"/>.</summary>
     public static class TcPouParser
     {
         private static readonly Regex ExtendsPattern = new Regex(
@@ -21,17 +20,14 @@ namespace xStunit.Parser
             (new Regex(@"\bcall_after_init\b", RegexOptions.Compiled), "call_after_init"),
         };
 
-        /// <summary>Parses the given .TcPOU XML content into a <see cref="PouAst"/>.</summary>
         /// <exception cref="TcPouRejectedException">
-        /// The POU's own implementation text, or that of one of its methods
-        /// or property accessors, uses a construct outside the parser's
-        /// supported subset.
+        /// The POU's own body, or one of its methods or property accessors,
+        /// uses a construct outside the supported subset.
         /// </exception>
         public static PouAst Parse(string xml)
         {
-            // LoadOptions.SetLineInfo is what makes failure logs able to
-            // point at a line in the user's .TcPOU instead of a line in an
-            // extracted string - see BodyStartLine below.
+            // SetLineInfo is what lets a failure be reported against a line in
+            // the user's .TcPOU rather than a line in an extracted string.
             var doc = XDocument.Parse(xml, LoadOptions.SetLineInfo);
             var pou = doc.Root.Element("POU");
             var name = pou.Attribute("Name").Value;
@@ -62,23 +58,16 @@ namespace xStunit.Parser
 
         // IXmlLineInfo reports the line of the <ST> start tag, and TwinCAT
         // writes the CDATA prologue on that same line (`<ST><![CDATA[`). A
-        // newline directly after `<![CDATA[` stays inside the body string, so
-        // it becomes the body's own (empty) line 0 rather than shifting the
-        // body down - which makes the <ST> line the file line of body line 0
-        // in both shapes, i.e. BodyStartLine + zeroBasedLineWithinBody is the
-        // real file line.
+        // newline directly after `<![CDATA[` stays inside the body string and
+        // becomes the body's own line 0 rather than shifting the body down, so
+        // the <ST> line is the file line of body line 0 in both shapes - which
+        // is what makes MethodAst.BodyStartLine's arithmetic hold.
         private static int BodyStartLine(XElement st)
         {
             var lineInfo = (IXmlLineInfo)st;
             return lineInfo.HasLineInfo() ? lineInfo.LineNumber : 1;
         }
 
-        // <Property> nests its Get/Set accessor bodies one level deeper than
-        // <Method> (<Property><Get><Implementation><ST>...), and either
-        // accessor is optional (a get-only property has no <Set>, and vice
-        // versa) - ParseAccessorImplementation returns null for a missing
-        // accessor rather than throwing, so PropertyAst.HasGet/HasSet can
-        // tell "not declared" apart from "declared with an empty body".
         private static PropertyAst ParseProperty(XElement property)
         {
             var name = property.Attribute("Name").Value;
@@ -87,11 +76,9 @@ namespace xStunit.Parser
             var getImplementationText = ParseAccessorImplementation(property.Element("Get"));
             var setImplementationText = ParseAccessorImplementation(property.Element("Set"));
 
-            // Unlike ParseMethod (one body per scope name), a property has
-            // two independent accessor bodies - scope each rejection message
-            // to "<name>.Get"/"<name>.Set" so a rejected-construct error
-            // says which accessor it came from instead of just the
-            // ambiguous property name.
+            // Scope each rejection to "<name>.Get"/"<name>.Set": a property has
+            // two independent bodies, so the ambiguous property name alone
+            // would not say which accessor was rejected.
             if (getImplementationText != null)
                 RejectIfUnsupported($"{name}.Get", getImplementationText);
             if (setImplementationText != null)
@@ -100,6 +87,8 @@ namespace xStunit.Parser
             return new PropertyAst(name, declarationText, getImplementationText, setImplementationText);
         }
 
+        // Null (not an exception) for an accessor the POU never declared, so
+        // PropertyAst.HasGet/HasSet can tell that apart from an empty body.
         private static string ParseAccessorImplementation(XElement accessor) =>
             accessor?.Element("Implementation")?.Element("ST")?.Value;
 

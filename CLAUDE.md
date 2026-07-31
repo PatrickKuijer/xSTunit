@@ -105,6 +105,38 @@ Exit codes: `0` all pass, `1` any fail, `2` usage/discovery error. Unloadable fi
 
 Interpreter is hand-rolled, scoped to what fixtures actually need — extended incrementally, not built to full IEC 61131-3 grammar up front (see comments in `Engine.cs`/`Lexer.cs`). Early/grow-on-demand status; check `wiki/` for in-progress design decisions.
 
+## Comment Standard
+
+The house style for comments in `.cs` files. This is the definition of done for
+any comment work, and the bar new code is held to.
+
+**XML doc on the public/internal API surface — always.** Every public or
+internal type, member, and parameter carries `<summary>`. These feed docgen and
+IntelliSense, so they are written for a caller who cannot see the body.
+
+- `<param>` / `<returns>` wherever the name alone does not tell the caller what
+  to pass or what comes back (units, ranges, null/empty semantics, ownership).
+- `<exception>` for anything thrown that a caller must handle — including what
+  distinguishes it from neighbouring exception types.
+- `<remarks>` for invariants, ordering requirements, and gotchas: what must stay
+  true, what breaks if it doesn't, why the obvious alternative was rejected.
+- `<see cref="..."/>` for cross-references, so renames don't rot the prose.
+
+**Inline comments state WHY, not WHAT.** A comment earns its place by carrying
+what the code cannot: the invariant being held, the case being guarded against,
+the non-obvious interaction with another component. A comment that restates the
+line below it is deleted, not reworded.
+
+**Never encode ticket IDs, agent reasoning, or change history in a comment.**
+No bead IDs, no "fixed the bug where...", no "as requested". That belongs in the
+commit message, the `bd close` reason, or the PR description. Comments describe
+the code as it stands; history lives in git.
+
+**Test comments state the invariant the test pins, in prose.** Say what would be
+broken if the test went red — not what the arrange/act/assert lines do. A
+regression test whose reason for existing is written down survives the refactor
+that would otherwise delete it as redundant.
+
 ## Naming Constraints (pre-beta rename pending)
 
 Project will be renamed before beta release to xSTunit. Do NOT reuse the `Tc`/`TC` namespace or Beckhoff's own naming conventions (`Tc2_*`, `TcPOU`, `Tc*` prefixes, etc.) in any NEW identifier — namespaces, project names, class names, file names, CLI flags, config keys. Existing `TcXunit.*` projects/namespaces stay as-is until the rename lands; don't invent more of the same pattern on top of them. Goal: no naming collision or trademark confusion with Beckhoff/TwinCAT once renamed. If a new type needs to reference a TwinCAT/Beckhoff concept, name it after the IEC 61131-3 or domain concept instead (e.g. `BistableLatchHost`, not `TcBistableHost`).

@@ -2,24 +2,20 @@ using xStunit.Interpreter.Extensibility;
 
 namespace xStunit.StandardStringPlugins
 {
-    // One Tc2_Standard string-function body, evaluated under a given
-    // character measure. See StringOperations for the bodies themselves.
+    // One Tc2_Standard string-function body, evaluated under a given character
+    // measure. See StringOperations for the bodies themselves.
     public delegate object StringOperation(NativeCallContext context, CharacterMeasure measure);
 
     // A Tc2_Standard string function: a name, a shared body, and the character
-    // measure the body counts and slices with (TcXunit-p4qb).
-    //
-    // The narrow (STRING) and wide (WSTRING) halves of the set used to be two
-    // near-identical files per function, differing only in the class name and
-    // the Name string. They are now two registrations over one body, so a fix
-    // to a function is made once, and the one genuine difference between the
-    // halves stays where it belongs - in the CharacterMeasure.
+    // measure the body counts and slices with. Narrow and wide are two
+    // registrations over one body, so a fix to a function is made once and the
+    // only genuine difference between the halves stays in the measure.
     //
     // Abstract on purpose: the plugin loader only instantiates exported,
     // non-abstract types with a parameterless constructor
-    // (Cli/Plugins/NativeFunctionPluginLoader.cs), so the concrete
-    // registrations below are what it picks up, and this base type is not
-    // mistaken for a function of its own.
+    // (Cli/Plugins/NativeFunctionPluginLoader.cs), so it picks up the concrete
+    // registrations below without mistaking this base type for a function of
+    // its own.
     public abstract class StringFunction : IXstunitNativeFunction
     {
         private readonly StringOperation _operation;
@@ -37,11 +33,10 @@ namespace xStunit.StandardStringPlugins
         public object Invoke(NativeCallContext context) => _operation(context, _measure);
     }
 
-    // The registrations. Each pair is the same body twice: once counted the
-    // narrow way, once the wide way. WCONCAT is deliberately absent from this
-    // list - it has no narrow counterpart to pair with, because narrow CONCAT
-    // is an interpreter intrinsic rather than a plugin function, so it keeps
-    // its own file (WConcatFunction.cs).
+    // Each pair below is the same body twice, once counted the narrow way and
+    // once the wide way. WCONCAT is absent on purpose: narrow CONCAT is an
+    // interpreter intrinsic rather than a plugin function, so WCONCAT has no
+    // counterpart to pair with and keeps its own file (WConcatFunction.cs).
 
     public sealed class DeleteFunction : StringFunction
     {

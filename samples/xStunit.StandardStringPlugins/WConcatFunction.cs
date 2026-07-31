@@ -3,23 +3,21 @@ using xStunit.Interpreter.Extensibility;
 
 namespace xStunit.StandardStringPlugins
 {
-    // Tc2_Standard WCONCAT (TcXunit-93l9): concatenates STR1..STR10, with
-    // STR1/STR2 required and STR3..STR10 optional trailing arguments - the
-    // same variadic shape the interpreter's CONCAT intrinsic uses
-    // (Engine.Expressions.cs's ConcatParamNames, TcXunit-3lt).
+    // Tc2_Standard WCONCAT: STR1/STR2 required, STR3..STR10 optional trailing
+    // arguments - the same variadic shape the interpreter's CONCAT intrinsic
+    // uses (Engine.Expressions.cs's ConcatParamNames).
     //
-    // Unlike its narrow sibling, this one is NOT dead code. CONCAT was
-    // deliberately left out of this plugin (TcXunit-8po.1) because the
+    // Narrow CONCAT is deliberately not in this plugin, because the
     // interpreter intercepts it as an intrinsic before native functions are
-    // ever consulted. That interception is an exact ordinal name match on
-    // "CONCAT", which "WCONCAT" does not hit, and no other intrinsic mentions
-    // WCONCAT - so a WCONCAT call falls all the way through to the
-    // native-function registry and lands here.
+    // consulted at all. That interception is an exact ordinal match on
+    // "CONCAT", which "WCONCAT" does not hit, and no other intrinsic claims
+    // WCONCAT - so a WCONCAT call does reach the native-function registry and
+    // land here.
     public sealed class WConcatFunction : IXstunitNativeFunction
     {
-        // Declared parameter names in IEC order, so a caller may supply them
-        // positionally or as `STRn := ...` and still get them appended in
-        // declared order.
+        // In declared IEC order: a caller may supply arguments positionally or
+        // as `STRn := ...`, and the index into this array is what makes both
+        // forms append in declared order.
         private static readonly string[] ParamNames =
             { "STR1", "STR2", "STR3", "STR4", "STR5", "STR6", "STR7", "STR8", "STR9", "STR10" };
 
@@ -29,8 +27,6 @@ namespace xStunit.StandardStringPlugins
         {
             var builder = new StringBuilder();
 
-            // STR1/STR2 are required: RequireString faults the call site the
-            // same way the CONCAT intrinsic's RequireIntrinsicArg does.
             builder.Append(context.RequireString(ParamNames[0], 0));
             builder.Append(context.RequireString(ParamNames[1], 1));
 
@@ -41,9 +37,9 @@ namespace xStunit.StandardStringPlugins
 
                 if (!(value is string text))
                 {
-                    // Mirrors the intrinsic's RequireStringArg: a STRn
-                    // argument is ANY_STRING, so a non-string is a type error
-                    // rather than something to coerce.
+                    // A STRn argument is ANY_STRING, so a non-string is a type
+                    // error rather than something to coerce - the same call the
+                    // intrinsic's RequireStringArg makes.
                     throw new System.InvalidOperationException(
                         $"{context.FunctionName} argument '{ParamNames[position]}' must be a WSTRING, " +
                         $"got {(value == null ? "null" : value.GetType().Name)}");

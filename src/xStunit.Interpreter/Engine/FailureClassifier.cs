@@ -92,10 +92,9 @@ namespace xStunit.Interpreter
                 // instead of fixing it. Everything that is not a ParseException
                 // falls through to the located/unlocated split below.
                 //
-                // xstunit-fpw8: Token is stamped by the throw site itself, not
-                // recovered here by re-parsing ex.Message - the message is
-                // prose for a human, never a structured value a consumer
-                // switches on.
+                // Token is stamped by the throw site itself, not recovered
+                // here by re-parsing ex.Message - the message is prose for a
+                // human, never a structured value a consumer switches on.
                 case ParseException parseError:
                     construct = parseError.Token;
                     return FailureKind.ParseError;

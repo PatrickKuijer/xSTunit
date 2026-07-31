@@ -10,7 +10,7 @@ namespace xStunit.Interpreter
     /// <remarks>
     /// Exists so <see cref="FailureClassifier"/> can name parse-error BY TYPE
     /// rather than by catching every <see cref="FormatException"/> in the
-    /// process (xstunit-g14q). The engine makes ~31 <c>Convert.To*</c> calls
+    /// process. The engine makes ~31 <c>Convert.To*</c> calls
     /// while running interpreted ST, each one a STRING operand away from a
     /// <see cref="FormatException"/> that is a genuine defect in the code
     /// under test - a plc-fault. Classifying on the base type reported those
@@ -30,9 +30,9 @@ namespace xStunit.Interpreter
     /// <see cref="Token"/> and <see cref="BodyLine"/> are populated by the
     /// throw site itself from values it already has in hand (the character
     /// or token it rejected, the offset it was reading) rather than
-    /// recovered later by re-parsing <see cref="Exception.Message"/> -
-    /// xstunit-fpw8 retired that scraping from <c>FailureClassifier</c>. A
-    /// throw site with nothing to offer leaves either at its default (null,
+    /// recovered later by re-parsing <see cref="Exception.Message"/> in
+    /// <c>FailureClassifier</c>. A throw site with nothing to offer leaves
+    /// either at its default (null,
     /// <see cref="PlcSourceLocationException.UnknownLine"/>) - every literal
     /// parser only ever sees the literal's own substring, never the body it
     /// sits in, so it can never derive a line.
@@ -45,10 +45,10 @@ namespace xStunit.Interpreter
         /// </summary>
         /// <param name="message">Human-readable description of the failure.</param>
         /// <param name="token">
-        /// The rejected token or character, for the `construct` field
-        /// (xstunit-229.15) - the same field unsupported-construct uses, so
-        /// `kind` + `construct` is one vocabulary at every level of the
-        /// JSON. Null when the throw site names none.
+        /// The rejected token or character, for the `construct` field -
+        /// the same field unsupported-construct uses, so `kind` +
+        /// `construct` is one vocabulary at every level of the JSON. Null
+        /// when the throw site names none.
         /// </param>
         /// <param name="bodyLine">
         /// The 1-based line within the body being read, or

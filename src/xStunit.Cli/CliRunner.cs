@@ -427,9 +427,8 @@ namespace xStunit.Cli
                     // itself - the message string is prose for a human and is
                     // never the thing a consumer switches on.
                     var errorKind = FailureClassifier.Classify(ex, out var errorConstruct);
-                    // xstunit-fpw8: a parse-error's body line comes from the
-                    // front end's own structured field, not from re-parsing
-                    // ex.Message.
+                    // A parse-error's body line comes from the front end's
+                    // own structured field, not from re-parsing ex.Message.
                     var errorBodyLine = errorKind == FailureKind.ParseError
                         ? FailureClassifier.UnwrapParseException(ex)?.BodyLine ?? PlcSourceLocationException.UnknownLine
                         : PlcSourceLocationException.UnknownLine;
@@ -553,8 +552,8 @@ namespace xStunit.Cli
             return exitCode;
         }
 
-        // xstunit-fpw8: `Construct` and `Site.BodyLine` are already the right
-        // values by the time a fault reaches this boundary - the engine
+        // `Construct` and `Site.BodyLine` are already the right values by the
+        // time a fault reaches this boundary - the engine
         // (Engine.Diagnostics.ToTestFailure) populates both from the
         // ParseException's own structured fields, not from re-parsing its
         // message. This boundary just reads them through.
@@ -622,8 +621,8 @@ namespace xStunit.Cli
                 // The form TcXunit-229.9 settled on: say plainly that the body
                 // could not be READ, and that the cause is one of two things
                 // TcXunit genuinely cannot tell apart - never assert which.
-                // xstunit-fpw8: bodyLine is the caller's own structured field,
-                // not recovered here by re-parsing message.
+                // bodyLine is the caller's own structured field, not
+                // recovered here by re-parsing message.
                 var at = bodyLine != PlcSourceLocationException.UnknownLine
                     ? $" at line {bodyLine}"
                     : string.Empty;

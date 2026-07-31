@@ -142,14 +142,13 @@ namespace xStunit.Interpreter
                 ? ToAssertSite(located.CallStack[0])
                 : default(AssertSite);
 
-            // xstunit-fpw8: a parse failure raised while lazily parsing a
-            // callee's body (TcXunit-n65) is attributed to that callee's OWN
-            // frame, which never ran a statement of its own - so the
-            // interpreter's own line tracking (the source of `site` above)
-            // is genuinely unknown here. The front end's own ParseException
-            // carries a real line in that case; fold it in rather than
-            // leaving a parse-error's bodyLine null when a better answer
-            // already exists.
+            // A parse failure raised while lazily parsing a callee's body is
+            // attributed to that callee's OWN frame, which never ran a
+            // statement of its own - so the interpreter's own line tracking
+            // (the source of `site` above) is genuinely unknown here. The
+            // front end's own ParseException carries a real line in that
+            // case; fold it in rather than leaving a parse-error's bodyLine
+            // null when a better answer already exists.
             if (kind == xStunit.Runner.FailureKind.ParseError && site.BodyLine == PlcSourceLocationException.UnknownLine
                 && FailureClassifier.UnwrapParseException(located ?? ex) is ParseException parseFailure
                 && parseFailure.BodyLine != PlcSourceLocationException.UnknownLine)

@@ -70,8 +70,8 @@ namespace xStunit.Interpreter.Tests
         // A parse-error names its offending token in `construct` - the same
         // field unsupported-construct uses, never a parse-error-only field, so
         // `kind` + `construct` is one vocabulary at every level of the JSON.
-        // xstunit-fpw8: Classify reads ParseException.Token directly - it no
-        // longer re-derives it by scraping the message.
+        // Classify reads ParseException.Token directly - it does not derive
+        // it by scraping the message.
         [Fact]
         public void Classify_LexerParseException_CarriesTheOffendingTokenAsTheConstruct()
         {
@@ -118,9 +118,9 @@ namespace xStunit.Interpreter.Tests
             Assert.Equal("@", ex.Token);
         }
 
-        // xstunit-fpw8: the case the old message-scraping could never recover.
-        // The parser reports a token INDEX, not a body offset, so the message-
-        // scraping fallback always degraded to UnknownLine for a parser-raised
+        // The case the old message-scraping could never recover: the parser
+        // reports a token INDEX, not a body offset, so the message-scraping
+        // fallback always degraded to UnknownLine for a parser-raised
         // failure. Token.Line is tracked by the lexer regardless, and the
         // parser's own throw sites now stamp it directly - so a parser-raised
         // ParseException carries a real line where it used to carry none.

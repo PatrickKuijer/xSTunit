@@ -41,36 +41,23 @@ namespace TcXunit.Interpreter
                     : initValue;
             }
 
-            if (StringTypeInfo.IsStringType(typeName))
-                return "";
+            // The elementary non-numeric defaults (STRING/W?STRING(n), BOOL,
+            // TIME/LTIME, DATE-family) are owned by IecElementaryDefault
+            // (TcXunit-mvbk/-om7f), shared with SeedReturnCell so the two
+            // seeding sites can't drift apart.
+            if (IecElementaryDefault.TryGetDefault(typeName, out var elementaryDefault))
+                return elementaryDefault;
 
             // TcXunit-fzm: IEC 61131-3 type names are case-insensitive, so
-            // every elementary literal type-name comparison from here down
-            // (BOOL/TIME/LTIME/DATE-family types, plus the POINTER TO/
-            // REFERENCE TO prefix check) matches case-insensitively - the
-            // same decision as IecNumericType, StringTypeInfo, ArrayTypeInfo,
-            // and TypeRegistry. The native-FB base-type check above
-            // (IsNativeFbTypeName, Engine.NativeHost.cs) is a separate lookup
-            // family (native stub instantiation, not elementary-type
-            // defaulting) - matched case-insensitively too, via
-            // NativeTimerTypes/NativeEdgeTriggerTypes's OrdinalIgnoreCase
-            // comparer and its OrdinalIgnoreCase NativeLoopbackType compare
-            // (TcXunit-nch).
-            if (typeName.Equals("BOOL", StringComparison.OrdinalIgnoreCase))
-                return false;
-
-            if (typeName.Equals("TIME", StringComparison.OrdinalIgnoreCase))
-                return 0u;
-
-            if (typeName.Equals("LTIME", StringComparison.OrdinalIgnoreCase))
-                return 0ul;
-
-            // DATE/DATE_AND_TIME/TIME_OF_DAY (TcXunit-gd2.13) all box as
-            // uint (see DateTimeLiteral.cs), same as TIME above.
-            if (typeName.Equals("DATE", StringComparison.OrdinalIgnoreCase)
-                || typeName.Equals("DATE_AND_TIME", StringComparison.OrdinalIgnoreCase)
-                || typeName.Equals("TIME_OF_DAY", StringComparison.OrdinalIgnoreCase))
-                return 0u;
+            // the POINTER TO/REFERENCE TO prefix check below matches
+            // case-insensitively - the same decision as IecNumericType,
+            // StringTypeInfo, ArrayTypeInfo, and TypeRegistry. The native-FB
+            // base-type check above (IsNativeFbTypeName,
+            // Engine.NativeHost.cs) is a separate lookup family (native stub
+            // instantiation, not elementary-type defaulting) - matched
+            // case-insensitively too, via NativeTimerTypes/
+            // NativeEdgeTriggerTypes's OrdinalIgnoreCase comparer and its
+            // OrdinalIgnoreCase NativeLoopbackType compare (TcXunit-nch).
 
             if (typeName.StartsWith("POINTER TO", StringComparison.OrdinalIgnoreCase)
                 || typeName.StartsWith("REFERENCE TO", StringComparison.OrdinalIgnoreCase))

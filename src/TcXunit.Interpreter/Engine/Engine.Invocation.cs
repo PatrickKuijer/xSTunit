@@ -329,9 +329,9 @@ namespace TcXunit.Interpreter
         // BOOL-returning method with an early-out that never sets its own
         // name) reads its IEC default out of CallMethod instead of null,
         // which a caller's cast/comparison (IF bIsReady() THEN ...) can't
-        // handle. IsSeedableElementaryNonNumericType below only classifies
-        // the type; the actual default value still comes from DefaultValue
-        // itself, not re-derived here.
+        // handle. Both the classification and the value come from
+        // IecElementaryDefault (TcXunit-om7f), the same owner Engine.
+        // DefaultValue defers to - nothing is re-derived here.
         //
         // DUT/FB/interface/POINTER return types are deliberately left
         // unseeded - no cell until first assignment, null out of CallMethod
@@ -354,30 +354,11 @@ namespace TcXunit.Interpreter
                 return;
 
             var resolvedType = _registry.ResolveAlias(declaredType);
-            if (!IsSeedableElementaryNonNumericType(resolvedType))
+            if (!IecElementaryDefault.TryGetDefault(resolvedType, out var value))
                 return;
 
-            var value = DefaultValue(new VarDecl(name, declaredType, null, VarSection.Local), frame.Instance);
             frame.Locals[name] = new Cell { Value = value, DeclaredTypeName = declaredType };
             frame.LocalTypeNames[name] = declaredType;
-        }
-
-        // TcXunit-qft: the elementary non-numeric return types SeedReturnCell
-        // seeds beyond IecNumericType's numerics - kept in sync with the
-        // branches Engine.DefaultValue actually returns a plain constant for
-        // (StringTypeInfo.IsStringType covers STRING/WSTRING and their sized
-        // STRING(n)/WSTRING(n) forms; the rest are ordinal-insensitive
-        // keyword compares mirroring DefaultValue's own TcXunit-fzm
-        // case-insensitivity).
-        private static bool IsSeedableElementaryNonNumericType(string resolvedTypeName)
-        {
-            return StringTypeInfo.IsStringType(resolvedTypeName)
-                || resolvedTypeName.Equals("BOOL", StringComparison.OrdinalIgnoreCase)
-                || resolvedTypeName.Equals("TIME", StringComparison.OrdinalIgnoreCase)
-                || resolvedTypeName.Equals("LTIME", StringComparison.OrdinalIgnoreCase)
-                || resolvedTypeName.Equals("DATE", StringComparison.OrdinalIgnoreCase)
-                || resolvedTypeName.Equals("DATE_AND_TIME", StringComparison.OrdinalIgnoreCase)
-                || resolvedTypeName.Equals("TIME_OF_DAY", StringComparison.OrdinalIgnoreCase);
         }
 
         // Shared by SeedReturnCell above and Engine.Properties' Get/Set

@@ -6,10 +6,6 @@ using Xunit;
 
 namespace xStunit.Interpreter.Tests
 {
-    // TcXunit-sej.3: MEMCPY/MEMSET/MEMMOVE, built on array indexing
-    // (TcXunit-sej.1) and array-element pointer arithmetic (TcXunit-sej.2).
-    // Scoped to POINTER TO BYTE over ARRAY OF BYTE - the Beckhoff
-    // buffer-packing/message-framing case the ticket was raised for.
     public class MemIntrinsicsTests
     {
         private static (Engine Engine, FbInstance Instance, Frame Frame) NewHolder(string varBlock)
@@ -81,10 +77,9 @@ namespace xStunit.Interpreter.Tests
         [Fact]
         public void Memmove_OverlappingForwardShift_RingBufferConsumeHead_ShiftsCorrectly()
         {
-            // Consuming 2 bytes off the head of a 5-byte ring buffer: shift
-            // the remaining 3 bytes down to index 0 (dest < src, no overlap
-            // hazard for a forward copy - but exercises the same call path a
-            // backward shift would).
+            // Consuming 2 bytes off the head of a ring buffer. dest < src, so
+            // a forward copy has no overlap hazard - this is the direction
+            // MEMMOVE and MEMCPY agree on.
             var (engine, instance, frame) = NewHolder(
                 "VAR\n\tbuf : ARRAY[0..4] OF BYTE := [10, 20, 30, 40, 50];\nEND_VAR");
 
@@ -97,9 +92,9 @@ namespace xStunit.Interpreter.Tests
         [Fact]
         public void Memmove_OverlappingBackwardShift_DestAheadOfSrc_CopiesBackwardWithoutClobbering()
         {
-            // dest is *ahead* of src within the same array and the regions
-            // overlap - a naive forward MEMCPY would overwrite src[2] (=30)
-            // with dest[0]'s new value before it's read. MEMMOVE must not.
+            // dest is ahead of src within the same array and the regions
+            // overlap: a forward copy would overwrite src[2] (=30) before
+            // reading it. MEMMOVE must copy backward instead.
             var (engine, instance, frame) = NewHolder(
                 "VAR\n\tbuf : ARRAY[0..4] OF BYTE := [10, 20, 30, 40, 50];\nEND_VAR");
 
@@ -112,9 +107,8 @@ namespace xStunit.Interpreter.Tests
         [Fact]
         public void Memcpy_ForwardOverlap_NaivelyClobbersSource_UnlikeMemmove()
         {
-            // Same scenario as the MEMMOVE backward-shift test, but via
-            // MEMCPY - documents that MEMCPY is NOT overlap-safe (matches
-            // the C intrinsic it mirrors; MEMMOVE exists for exactly this).
+            // The clobbering here is deliberate, not a defect: MEMCPY is not
+            // overlap-safe, which is the whole reason MEMMOVE exists.
             var (engine, instance, frame) = NewHolder(
                 "VAR\n\tbuf : ARRAY[0..4] OF BYTE := [10, 20, 30, 40, 50];\nEND_VAR");
 
@@ -134,10 +128,8 @@ namespace xStunit.Interpreter.Tests
                 engine.Evaluate(Parser.ParseExpression("MEMCPY(ADR(dst), ADR(src), 4)"), frame));
         }
 
-        // TcXunit-4vn: ADR(scalarVar) as a MEMCPY dest - no ArrayElementCell,
-        // so the 2 copied bytes are packed into count's own INT byte
-        // representation (little-endian) rather than requiring an
-        // ArrayElementCell target.
+        // A scalar has no per-byte cells to write into, so the copied bytes
+        // are packed into the INT's own little-endian byte representation.
         [Fact]
         public void Memcpy_IntoScalarCell_PacksBytesIntoValue()
         {
@@ -149,8 +141,6 @@ namespace xStunit.Interpreter.Tests
             Assert.Equal(513, instance.Fields["count"].Value); // 0x0201 little-endian
         }
 
-        // ADR(scalarVar) as a MEMCPY src - the scalar's current byte
-        // representation is read out into the dest array.
         [Fact]
         public void Memcpy_FromScalarCell_ReadsBytesOutOfValue()
         {
@@ -163,8 +153,6 @@ namespace xStunit.Interpreter.Tests
             Assert.Equal(new object[] { 1, 2 }, dst.Elements);
         }
 
-        // ADR(struct.field) - a struct field Cell holding a scalar, packed
-        // by its own declared field type same as a plain scalar variable.
         [Fact]
         public void Memcpy_IntoStructField_PacksBytesIntoFieldValue()
         {
@@ -186,10 +174,9 @@ END_TYPE");
             Assert.Equal(9, m.Fields["count"].Value);
         }
 
-        // TcXunit-eub: whole-struct MEMCPY (ADR(m), not ADR(m.field)) must
-        // honor the struct's {attribute 'pack_mode' := '1'} pragma - rValue
-        // packed right after eType at byte offset 4, not the naturally-
-        // aligned offset 8 an 8-byte LREAL would otherwise land at.
+        // A whole-struct MEMCPY has to honour the pack_mode pragma: rValue
+        // sits right after eType at byte offset 4, not at the offset 8 an
+        // 8-byte LREAL would take under natural alignment.
         [Fact]
         public void Memcpy_WholePackedStruct_PacksFieldsWithNoAlignmentPadding()
         {
@@ -219,11 +206,9 @@ END_TYPE");
             Assert.Equal(3.5, instance.Fields["result"].Value);
         }
 
-        // TcXunit-eub: the inverse direction of the test above - bytes
-        // copied into a whole packed struct (ADR(m), exercising
-        // UnpackValue's struct branch) must be read back at the packed
-        // offsets, not the naturally-aligned ones. rValue's 8 bytes start
-        // right at offset 4 in the 12-byte packed source, not offset 8.
+        // The inverse direction: unpacking must read the same packed offsets
+        // packing wrote, so rValue's 8 bytes start at offset 4 of the 12-byte
+        // source.
         [Fact]
         public void Memcpy_IntoWholePackedStruct_UnpacksFieldsWithNoAlignmentPadding()
         {
@@ -252,10 +237,8 @@ END_TYPE");
             Assert.Equal(3.5, m.Fields["rValue"].Value);
         }
 
-        // TcXunit-fsz: ADR(struct.field) where the field is STRING(n) - the
-        // byte-buffer wire-record round-trip case (uWidgetRegistrationRecord's
-        // sWidgetName). PackValue must byte-pack the string (ASCII,
-        // null-terminated) instead of throwing NotSupportedException.
+        // A STRING(n) field packs as ASCII bytes padded out with nulls, so a
+        // wire record carrying a name can round-trip through a byte buffer.
         [Fact]
         public void Memcpy_StringStructField_RoundTripsThroughByteBuffer()
         {
@@ -277,8 +260,8 @@ END_TYPE");
             Assert.Equal(new object[] { 97, 98, 99, 0, 0, 0 }, outBuf.Elements); // "abc\0\0\0"
         }
 
-        // Inverse direction: bytes copied *into* a STRING(n) struct field
-        // are unpacked back into a CLR string, truncating at the first null.
+        // Unpacking stops at the first null: the trailing padding bytes are
+        // not part of the value.
         [Fact]
         public void Memcpy_IntoStringStructField_UnpacksBytesAsString()
         {
@@ -301,8 +284,8 @@ END_TYPE");
             Assert.Equal("xy", m.Fields["name"].Value);
         }
 
-        // A value longer than the declared STRING(n) length is truncated to
-        // n characters, mirroring TwinCAT's fixed-size wire format.
+        // The declared length, not the current value's length, decides how
+        // many bytes a STRING occupies on the wire.
         [Fact]
         public void Memcpy_StringLongerThanDeclaredLength_TruncatesToDeclaredLength()
         {
@@ -312,11 +295,9 @@ END_TYPE");
             engine.Evaluate(Parser.ParseExpression("MEMCPY(ADR(out), ADR(s), 4)"), frame);
 
             var outBuf = (ArrayValue)instance.Fields["out"].Value;
-            Assert.Equal(new object[] { 97, 98, 99, 0 }, outBuf.Elements); // "abc\0" (declared length 3, not "abcdef")
+            Assert.Equal(new object[] { 97, 98, 99, 0 }, outBuf.Elements); // "abc\0"
         }
 
-        // MEMSET on a scalar Cell: fills its byte representation with the
-        // low byte of value, same as filling a BYTE array.
         [Fact]
         public void Memset_OnScalarCell_FillsBytesOfValue()
         {
@@ -327,9 +308,9 @@ END_TYPE");
             Assert.Equal(16843009, instance.Fields["count"].Value); // 0x01010101
         }
 
-        // A scalar/struct-field Cell with no declared type (not backed by a
-        // VarDecl) still can't be byte-addressed - only ArrayElementCell or
-        // a Cell with a known DeclaredTypeName is supported.
+        // Byte addressing needs a declared type to know the width and layout
+        // of the value, so a Cell with no VarDecl behind it cannot be a
+        // MEMCPY target however plausible its runtime value looks.
         [Fact]
         public void Memcpy_TargetCellWithNoDeclaredType_ThrowsNotSupported()
         {
@@ -341,9 +322,6 @@ END_TYPE");
                 engine.Evaluate(Parser.ParseExpression("MEMCPY(p, ADR(src), 2)"), frame));
         }
 
-        // TcXunit-996: destAddr/srcAddr passed by name (a legal ST calling
-        // convention) must resolve by name, not fall through to indexing
-        // PositionalArgs (which only holds the trailing positional n here).
         [Fact]
         public void Memcpy_WithNamedDestAndSrcArgs_ResolvesByName()
         {
@@ -392,9 +370,6 @@ END_TYPE");
             Assert.Equal(new object[] { 1, 2, 3, 0 }, dst.Elements);
         }
 
-        // TcXunit-1hc: RequireIntrinsicArg reports the missing parameter by
-        // name (not by positional index) when neither a named nor enough
-        // positional args are supplied.
         [Fact]
         public void Memcpy_MissingNArgument_ThrowsWithParamNameInMessage()
         {
@@ -407,9 +382,6 @@ END_TYPE");
             Assert.Equal("MEMCPY missing required argument 'n'", ex.Message);
         }
 
-        // TcXunit-1hc: RequirePointerArg rejects a resolved, non-missing arg
-        // that isn't a Pointer (e.g. a plain INT passed where ADR(...) was
-        // expected), reporting the offending param name and value type.
         [Fact]
         public void Memcpy_NamedDestArgNotAPointer_ThrowsMustBePointerToByte()
         {

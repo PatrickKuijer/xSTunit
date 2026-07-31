@@ -7,9 +7,9 @@ using Xunit;
 
 namespace xStunit.Interpreter.Tests
 {
-    // End-to-end target of TcXunit-w5x.12: run the real FB_CounterTests suite
-    // (TcXunit-w5x.8 fixture) through the interpreter, not a hand-written C#
-    // stand-in, and get back TcUnit-shaped pass/fail results.
+    // The end-to-end guard for the whole chain: real .TcPOU fixture files
+    // parsed, registered and interpreted, rather than a hand-built AST or a C#
+    // stand-in for the suite.
     public class FbCounterTestsSuiteTests
     {
         private static readonly string FixtureDir = TestFixtures.FbCounterFixtureDir();

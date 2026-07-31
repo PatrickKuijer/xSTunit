@@ -6,10 +6,10 @@ using Xunit;
 
 namespace xStunit.Interpreter.Tests
 {
-    // TcXunit-0v1: VAR_INPUT/VAR_OUTPUT of a nested (non-native, non-suite) FB
-    // instance must be materialized into FbInstance.Fields at NewInstance()
-    // time, so dot-access and bare invocation of the FB both see the same
-    // persisted cells.
+    // A nested FB's VAR_INPUT/VAR_OUTPUT are persistent instance state, not
+    // call parameters: they exist from instantiation and outlive each
+    // invocation, so dot-access and bare invocation must reach the same
+    // cells.
     public class NestedFbFieldTests
     {
         private static Engine NewEngine(string outerImplementation)
@@ -93,10 +93,9 @@ namespace xStunit.Interpreter.Tests
             Assert.Equal(2, nested.Fields["Sum"].Value);
         }
 
-        // TcXunit-21j: named args must only bind against the callee's own
-        // VAR_INPUT/VAR_IN_OUT decls (mirrors BindParams), not the full
-        // Fields set, else a named arg can silently clobber VAR_OUTPUT/Local
-        // state before the body ever runs.
+        // Named args bind only against the callee's inputs. Binding against
+        // the full field set instead would let a caller overwrite VAR_OUTPUT
+        // or local state before the body ever runs.
         [Fact]
         public void BareInvocation_NamedArgTargetingVarOutput_DoesNotOverwriteIt()
         {
@@ -109,14 +108,10 @@ namespace xStunit.Interpreter.Tests
             Assert.Equal(3, nested.Fields["Sum"].Value);
         }
 
-        // Real-world repro (TcXunit-996 follow-up): a TcUnit TEST case with a
-        // METHOD-local VAR of a nested FB type (not a top-level FB field) that
-        // bare-invokes it, e.g. FB_DigitalInputFilterTests declaring
-        // `sfbDigitalInput : FB_DigitalInputFilter` inside the METHOD and
-        // calling `sfbDigitalInput()`. The local var lives in the calling
-        // Frame's Locals, not the suite instance's Fields, so bare-invocation
-        // dispatch must also check the caller frame's locals, not just
-        // instance.Fields.
+        // An FB declared as a METHOD-local VAR lives in the calling frame's
+        // locals rather than the instance's fields, so bare-invocation
+        // dispatch has to look there too. Test methods commonly declare
+        // the FB under test this way.
         [Fact]
         public void BareInvocation_OfMethodLocalFbVar_BindsAndRunsInsteadOfFallingThroughToNative()
         {
@@ -140,15 +135,10 @@ namespace xStunit.Interpreter.Tests
             engine.CallMethod(instance, "DoAdd", new Expr[0], new NamedArg[0], null, null);
         }
 
-        // TcXunit-3zk: same coverage gap as
-        // BareInvocation_OfMethodLocalFbVar_BindsAndRunsInsteadOfFallingThroughToNative
-        // above, but for the *native timer host* bare-invocation branch
-        // (Engine.Invocation.cs's first TryResolveCalleeCell check, ~line 74)
-        // rather than the ordinary-interpreted-FB branch (~line 101) - only
-        // the latter had a METHOD-local-var regression test before this.
-        // A METHOD-local `fbTimer : TON` bare-invoked as `fbTimer(...)` must
-        // resolve via callerFrame.Locals (it isn't a field on the suite/outer
-        // instance) and drive the native TimerHost, not silently no-op.
+        // Same METHOD-local resolution, but reaching a natively hosted FB
+        // (TON) instead of an interpreted one - a separate dispatch branch,
+        // where failing to find the local silently no-ops rather than
+        // throwing.
         [Fact]
         public void BareInvocation_OfMethodLocalNativeTimer_BindsAndUpdatesInsteadOfNoOp()
         {
@@ -172,17 +162,10 @@ namespace xStunit.Interpreter.Tests
             Assert.Equal(true, instance.Fields["measuredQ"].Value);
         }
 
-        // TcXunit-3zk: TryResolveCalleeCell must NOT consult the caller
-        // frame's Locals for an explicit-receiver call (someObj.Foo()) -
-        // that precedence is only correct for a genuine bare/self
-        // invocation where instance == callerFrame.Instance. Here the
-        // calling METHOD has its own unrelated local `DoStuff : FB_Adder`,
-        // and the call is `sfbTarget.DoStuff(4, 5)` where sfbTarget's type
-        // (FB_Target) has neither a method nor a field named DoStuff. Before
-        // the fix, TryResolveCalleeCell would find the caller's local
-        // `DoStuff` cell and silently bare-invoke it instead of failing;
-        // after the fix this must throw "method not found" against the
-        // receiver's own type, ignoring the caller's local entirely.
+        // The caller's locals are only in scope for a bare/self invocation.
+        // With an explicit receiver, a same-named local must not be
+        // mistaken for the receiver's member: the call has to fail against
+        // the receiver's own type instead of silently invoking the local.
         [Fact]
         public void ExplicitReceiverCall_DoesNotFallBackToCallerFrameLocalOfSameName()
         {
@@ -216,14 +199,11 @@ namespace xStunit.Interpreter.Tests
             Assert.Contains("DoStuff", ex.Message);
         }
 
-        // TcXunit-guo: IsPersistedField/GetOwnInputDecls both explicitly
-        // include VarSection.InOut, but no existing test bare-invokes a
-        // VAR_IN_OUT param. InvokeFbInstance binds by evaluating the arg
-        // expression and assigning it into the callee's Cell (by value),
-        // never by aliasing/sharing the caller's Cell - so mutations the
-        // callee makes to its VAR_IN_OUT parameter must NOT propagate back
-        // to the caller's variable. This documents that known limitation
-        // for the bare-invocation path specifically.
+        // Bare invocation binds a VAR_IN_OUT argument by value: the arg
+        // expression is evaluated and assigned into the callee's own Cell,
+        // never aliased to the caller's. Callee mutations therefore do not
+        // reach the caller's variable, which is a known divergence from
+        // VAR_IN_OUT's by-reference meaning.
         [Fact]
         public void BareInvocation_VarInOutParam_BindsByValue_MutationsDoNotPropagateBack()
         {
@@ -248,17 +228,9 @@ namespace xStunit.Interpreter.Tests
 
             var nested = (FbInstance)instance.Fields["sfbInOut"].Value;
             Assert.Equal(105, nested.Fields["ioVal"].Value);
-            // By-value binding: the caller's own variable is untouched by
-            // the callee's mutation of its VAR_IN_OUT parameter.
             Assert.Equal(5, instance.Fields["callerVal"].Value);
         }
 
-        // TcXunit-guo: GetOwnInputDecls walks the BaseTypeName chain
-        // (base-to-derived) to collect VAR_INPUT/VAR_IN_OUT decls, mirroring
-        // NewInstance's Fields-materialization loop. No existing test
-        // bare-invokes a nested FB whose VAR_INPUT is only declared on a
-        // base type reached via EXTENDS - this proves the base-declared
-        // input actually binds through the derived-type bare-invoke path.
         [Fact]
         public void BareInvocation_OfExtendedNestedFb_BindsBaseDeclaredVarInput()
         {
@@ -293,15 +265,6 @@ namespace xStunit.Interpreter.Tests
             Assert.Equal(42, nested.Fields["Doubled"].Value);
         }
 
-        // TcXunit-guo: TryResolveCalleeCell checks callerFrame.Locals before
-        // instance.Fields specifically to support a METHOD-local VAR naming
-        // an ordinary interpreted FB (see comment near
-        // Engine.Invocation.cs's InvokeFbInstance branch, ~line 96-101,
-        // "sfbLoopback(ibEnable := TRUE) ... or method-local var"). All the
-        // pre-existing BareInvocation_* tests above only exercise the
-        // instance-Field-scoped case; this proves the same bare-invocation
-        // binding/dispatch generalizes to a nested FB declared as a
-        // METHOD-local VAR rather than a top-level instance field.
         [Fact]
         public void BareInvocation_OfMethodLocalNestedFb_BindsPersistedFieldsAndRuns()
         {

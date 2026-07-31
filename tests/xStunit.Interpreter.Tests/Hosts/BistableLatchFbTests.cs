@@ -5,11 +5,15 @@ using Xunit;
 
 namespace xStunit.Interpreter.Tests
 {
-    // TcXunit-ejjl: RS/SR native stubs, exercised the same way as
-    // EdgeTriggerFbTests - a wrapper FB does the bare invocation
-    // (fbLatch(SET:=.., RESET1:=..)) and reads Q1 back via plain field access.
-    // The two latches are wrapped separately because their input names differ
-    // (RS: SET/RESET1, SR: SET1/RESET).
+    // Drives the RS/SR native stubs through the full ST -> native -> ST round
+    // trip: an interpreted wrapper FB does the bare invocation and reads Q1
+    // back by plain field access, so a break in argument binding or field
+    // publishing shows up here and not only in the host's own unit tests.
+    //
+    // The two latches need separate wrappers because their input names differ
+    // (RS: SET/RESET1, SR: SET1/RESET). A latch keeps no state outside its own
+    // Q1 Cell, so one Step is one cycle only by convention - calling twice
+    // without changing the inputs is indistinguishable from two cycles.
     public class BistableLatchFbTests
     {
         private static Engine NewWrapperEngine(string latchTypeName, string setInput, string resetInput)
@@ -196,9 +200,9 @@ namespace xStunit.Interpreter.Tests
             Assert.Equal(true, Q1(sr));
         }
 
-        // TcXunit-nch: the type-name lookup that routes to this host is
-        // case-insensitive, so a lowercase/mixed-case spelling must reach the
-        // same host instead of falling through to NativeHostKind.Suite.
+        // IEC 61131-3 type names are case-insensitive, so a lowercase or
+        // mixed-case spelling must still reach this host; falling through to
+        // NativeHostKind.Suite would fail silently rather than loudly.
         [Theory]
         [InlineData("rs")]
         [InlineData("Rs")]

@@ -4,8 +4,9 @@ using Xunit;
 
 namespace xStunit.Interpreter.Tests
 {
-    // TcXunit-w5x.15.7: Engine.Clock.AdvanceMs(dt) is a shared, monotonic,
-    // process-wide running total - a separate primitive from StepCycles.
+    // Simulated time is a running total advanced explicitly, entirely separate
+    // from StepCycles: a test can advance the clock without stepping, or step
+    // without advancing.
     public class ClockTests
     {
         [Fact]
@@ -19,10 +20,9 @@ namespace xStunit.Interpreter.Tests
             Assert.Equal(750, engine.Clock.TotalMs);
         }
 
-        // TcXunit-x5pt: ns is the clock's base unit (the LTIME timers count in
-        // ns), and ms is the derived view - so the two units accumulate into
-        // the same total and TotalMs truncates any sub-ms remainder rather
-        // than rounding or tracking it separately.
+        // ns is the base unit (LTON/LTOF/LTP count in it) and ms the derived
+        // view, so both units accumulate into one total and TotalMs truncates
+        // the sub-ms remainder rather than rounding it or tracking it apart.
         [Fact]
         public void AdvanceNs_AccumulatesIntoTheSameTotalAsAdvanceMs()
         {

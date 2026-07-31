@@ -7,16 +7,11 @@ using Xunit;
 
 namespace xStunit.Interpreter.Tests
 {
-    // TcXunit-6k2: a TcUnit suite could not call a global FUNCTION POU at all.
-    //
-    // Engine routed every unresolved call from a suite receiver to
-    // NativeMethodBridge, whose default branch throws "isn't supported yet" -
-    // so the global-FUNCTION fallback (TcXunit-9su) and the native-function
-    // lookup after it were both unreachable from inside a suite. The
-    // pre-existing global-function tests all called from a plain
-    // FUNCTION_BLOCK, whose NativeSuiteHost is null, which is why nothing
-    // caught it. Fixed by gating that routing on
-    // NativeMethodBridge.CanInvoke.
+    // A suite receiver must not swallow every unresolved call: routing to the
+    // native bridge is gated on CanInvoke, so the global-FUNCTION and
+    // native-function lookups behind it stay reachable from inside a suite.
+    // Calling from a plain FUNCTION_BLOCK, where there is no suite host at all,
+    // exercises none of this.
     public class SuiteGlobalFunctionCallTests
     {
         private static PouAst SuiteCalling(string body)
@@ -61,27 +56,24 @@ namespace xStunit.Interpreter.Tests
             // API isn't wired up yet" diagnostic.
             var suite = SuiteCalling("AssertSomethingNobodyImplemented(Condition := TRUE);");
 
-            // TcXunit-3tx.3: the call sits inside an open TEST() bracket, so
-            // the fault fails that test instead of the whole suite - the
-            // diagnostic itself is what this test is about, and it is carried
-            // verbatim on the failure.
+            // The call sits inside an open TEST() bracket, so the fault fails
+            // that test rather than the whole suite, carrying the diagnostic
+            // verbatim onto the failure.
             var results = new Engine(new TypeRegistry(new[] { suite })).RunSuite("FB_WidgetTests");
 
             var failure = Assert.Single(Assert.Single(results).Failures);
             Assert.Contains("AssertSomethingNobodyImplemented", failure.Message);
             Assert.Contains("isn't supported yet", failure.Message);
-            // TcXunit-3tx.1: and it is classified as an interpreter gap, not as
-            // a defect in the suite under test.
+            // Classified as an interpreter gap, not as a defect in the suite
+            // under test - the reader is told not to go edit their POU.
             Assert.Equal(xStunit.Runner.FailureKind.UnsupportedConstruct, failure.Kind);
             Assert.Equal("AssertSomethingNobodyImplemented", failure.Construct);
         }
 
-        // TcXunit-2o9.1: a genuinely-unimplemented TcUnit API name (not a
-        // fictional one like above) must still get the grow-on-demand
-        // diagnostic. AssertArrayEquals_LWORD is real upstream API
-        // (FB_TestSuite.TcPOU has it) that NativeMethodBridge deliberately
-        // hasn't wired up yet - see ArrayAssertSupportedTypes' comment in
-        // NativeMethodBridge.cs.
+        // AssertArrayEquals_LWORD is real upstream API that is deliberately not
+        // wired up yet, where the name above is fictional. Both must reach the
+        // same grow-on-demand diagnostic, or the classification would depend on
+        // whether the caller's typo happened to name something real.
         [Fact]
         public void RunSuite_UnwiredUpstreamArrayAssert_StillReportsUnsupportedConstructKind()
         {
@@ -96,13 +88,12 @@ namespace xStunit.Interpreter.Tests
             Assert.Equal("AssertArrayEquals_LWORD", failure.Construct);
         }
 
-        // TcXunit-2o9.1: the bug this ticket fixes. An unqualified call from a
-        // suite body that resolves to nothing is NOT automatically an unwired
-        // TcUnit API - it might just be a typo of one of the suite's own
-        // methods. 'CounterStartsAtZeroo' matches none of the TcUnit surface's
-        // Assert*/TEST*/IS_TEST* prefixes, so it must fall through to the
-        // ordinary method-not-found error (plc-fault: a real, fixable defect),
-        // not the "STOP, don't touch the POU" unsupported-construct kind.
+        // An unqualified call from a suite body that resolves to nothing is not
+        // automatically an unwired framework API - far more often it is a typo
+        // of one of the suite's own methods. Matching none of the
+        // Assert*/TEST*/IS_TEST* prefixes, it is a real and fixable defect in
+        // the PLC code, so misclassifying it as an interpreter gap would tell
+        // the author to leave the very POU that is broken alone.
         [Fact]
         public void RunSuite_MisspelledUnqualifiedCallFromSuite_ReportsPlcFaultNotUnsupportedConstruct()
         {

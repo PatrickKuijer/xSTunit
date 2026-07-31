@@ -4,10 +4,6 @@ using Xunit;
 
 namespace xStunit.Interpreter.Tests
 {
-    // TcXunit-6af.2: direct unit tests for the shared promotion/narrowing
-    // rule, exercised as plain CLR values in/out - no Engine/Frame/FbInstance
-    // setup needed, unlike EvaluateBinary/CoerceForAssignment's own tests
-    // (NumericTypeTests) which drive it through the interpreter end-to-end.
     public class NumericCoercionTests
     {
         [Theory]
@@ -49,11 +45,9 @@ namespace xStunit.Interpreter.Tests
             Assert.IsType<double>(right);
         }
 
-        // long mixed with float/double has no IEC widening rule defined yet
-        // (out of scope for this extraction - ToDouble/ToFloat only accept
-        // the same inputs the pre-extraction private helpers did) and throws
-        // rather than silently narrowing a 64-bit LINT/UDINT/DWORD value into
-        // a float/double mantissa.
+        // No IEC widening rule mixes a 64-bit integer with float/double, so
+        // promotion throws rather than silently dropping bits of a
+        // LINT/UDINT/DWORD value into a narrower mantissa.
         [Fact]
         public void Promote_LongAndDouble_Throws()
         {
@@ -101,18 +95,17 @@ namespace xStunit.Interpreter.Tests
             Assert.Equal(2UL, right);
         }
 
-        // long and ulong have no IEC widening rule defined between them - a
-        // ULINT/LWORD (ulong) can't mix with a LINT/UDINT/DWORD (long)
-        // without an explicit cast, mirroring long+float/double above.
+        // ULINT/LWORD box as ulong and LINT/UDINT/DWORD as long; no widening
+        // rule spans the two, so they need an explicit cast to mix.
         [Fact]
         public void Promote_LongAndULong_Throws()
         {
             Assert.Throws<NotSupportedException>(() => NumericCoercion.Promote(1L, 2UL));
         }
 
-        // TcXunit-odo: TIME/DATE/DATE_AND_TIME/TIME_OF_DAY box as uint
-        // (DateTimeLiteral.cs) - comparing/arithmetic between two of them,
-        // or one against a plain INT literal, must not throw.
+        // TIME/DATE/DATE_AND_TIME/TIME_OF_DAY all box as uint, so comparing
+        // or adding two of them - or one against a plain INT literal - lands
+        // on these promotions rather than the int/long ones.
         [Fact]
         public void Promote_UIntAndUInt_WidensBothToLong()
         {

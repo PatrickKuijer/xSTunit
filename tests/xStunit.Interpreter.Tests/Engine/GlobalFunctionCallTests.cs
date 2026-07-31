@@ -5,12 +5,9 @@ using Xunit;
 
 namespace xStunit.Interpreter.Tests
 {
-    // TcXunit-9su: an unqualified call inside a FUNCTION_BLOCK METHOD naming a
-    // plain global FUNCTION (no receiver, no ancestor method) used to throw
-    // "Method '<name>' not found starting from type '<fb>'" - the ancestry
-    // walk in Engine.Invocation.CallMethod only ever searched the FB's own
-    // Method table, with no fallback to a top-level FUNCTION POU of the same
-    // name. Covers the CallGlobalFunction fallback added to close that gap.
+    // An unqualified call inside a METHOD may name a plain global FUNCTION, so
+    // resolution cannot stop at the FB's own ancestry: exhausting the method
+    // tables has to fall back to a top-level FUNCTION POU of that name.
     public class GlobalFunctionCallTests
     {
         [Fact]
@@ -46,11 +43,9 @@ namespace xStunit.Interpreter.Tests
         [Fact]
         public void CallMethod_GlobalFunctionDeclarationLeadsWithBlockComment_StillResolves()
         {
-            // TcXunit-9k6: GlobalFunctionDeclarationPattern anchored with ^\s*
-            // to the very start of DeclarationText, so a file-header purpose
-            // comment (this codebase's standard convention) before the
-            // FUNCTION keyword made the match fail even though the registry
-            // lookup found the right PouAst.
+            // A header comment above the FUNCTION keyword is the house
+            // convention in PLC source, so recognizing a global FUNCTION
+            // declaration cannot depend on that keyword coming first.
             var function = new PouAst(
                 "F_Double",
                 null,

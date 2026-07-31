@@ -5,13 +5,6 @@ using Xunit;
 
 namespace xStunit.Interpreter.Tests
 {
-    // TcXunit-fyu: ENUM .TcDUT definitions (e.g. "TYPE E_Color : (Red,
-    // Green, Blue); END_TYPE") aren't resolved by the interpreter today -
-    // SIZEOF() (TcXunit-l1x) throws "doesn't know the byte size of type X"
-    // for a field/variable declared with an enum type. DutEnumLoader parses
-    // these into the same name -> underlying-type-text shape
-    // DutAliasLoader uses, so they can feed the same TypeRegistry alias map
-    // and every existing ResolveAlias call site (including SIZEOF's).
     public class DutEnumLoaderTests
     {
         [Fact]
@@ -144,10 +137,9 @@ namespace xStunit.Interpreter.Tests
         [Fact]
         public void TryParseEnum_MemberWithTrailingLineComment_CommentIsIgnored()
         {
-            // Regression: an ENUM DUT member can carry a trailing "// ..."
-            // explanation on the same line as its initializer (a
-            // representative ENUM DUT member fixture) - int.Parse must
-            // never see that comment text as part of the initializer value.
+            // An enum member's initializer can be followed by a trailing
+            // "// ..." explanation on the same line; if that text reaches the
+            // integer parse, a whole DUT fails to load over a comment.
             const string declaration =
                 "TYPE eFollowerRampMode :\n(\n\tTypeA := 1\t\t\t// Ramp behavior depends on another axis's progress; limits are not considered\n\t,\n\tTypeB\n);\nEND_TYPE";
 
@@ -166,10 +158,10 @@ namespace xStunit.Interpreter.Tests
         [InlineData("-1", -1)]
         public void TryParseEnum_MemberWithBasedOrNegativeInitializer_ResolvesToDecimalValue(string initializer, int expected)
         {
-            // Regression: an ENUM DUT member's explicit initializer isn't
-            // guaranteed to be a plain decimal literal - IEC 61131-3 SS2.4.2
-            // based-literal notation (<base>#<digits>) is also valid, and a
-            // bare int.Parse throws FormatException on it (e.g. "16#8").
+            // An explicit initializer need not be a plain decimal literal:
+            // IEC 61131-3 based-literal notation (<base>#<digits>) is equally
+            // valid there, and the implicit members after it keep counting
+            // from the resolved decimal value.
             var declaration = $"TYPE eBasedLiteral :\n(\n\tTypeA := {initializer},\n\tTypeB\n);\nEND_TYPE";
 
             DutEnumLoader.TryParseEnum(declaration, out _, out _, out var members);

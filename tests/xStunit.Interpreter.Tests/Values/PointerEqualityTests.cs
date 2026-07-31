@@ -5,10 +5,9 @@ using Xunit;
 
 namespace xStunit.Interpreter.Tests
 {
-    // TcXunit-dur: the standard IEC 61131-3 null-pointer-check idiom
-    // 'IF ipSrc = 0 THEN' must work without throwing when ipSrc is a real
-    // POINTER TO BYTE VAR_INPUT/VAR, whether bound via ADR(x) or left at its
-    // unbound/default (null) value.
+    // An unbound POINTER compares equal to 0 whatever numeric type the zero
+    // literal is, which is what makes the ST null-check idiom
+    // 'IF ipSrc = 0 THEN' work.
     public class PointerEqualityTests
     {
         private static (Engine Engine, FbInstance Instance, Frame Frame) NewHolder(string varBlock)
@@ -80,9 +79,9 @@ namespace xStunit.Interpreter.Tests
         [Fact]
         public void TwoPointersToSameScalarTarget_AreEqual()
         {
-            // buf is a plain scalar VAR (not an array), so ADR(buf) resolves to a
-            // Cell reference rather than an ArrayElementCell, exercising the
-            // ReferenceEquals(left, right) fallback in PointerTargetsEqual.
+            // A scalar target resolves to a plain Cell, not an array element,
+            // so pointer identity falls back on reference equality of the
+            // Cell rather than on array-and-index comparison.
             var (engine, instance, frame) = NewHolder(
                 "VAR\n\tbuf : BYTE := 1;\n\tp1 : POINTER TO BYTE;\n\tp2 : POINTER TO BYTE;\nEND_VAR");
             instance.Fields["p1"].Value = engine.Evaluate(Parser.ParseExpression("ADR(buf)"), frame);
@@ -94,9 +93,8 @@ namespace xStunit.Interpreter.Tests
         [Fact]
         public void TwoPointersToDifferentScalarTargets_AreNotEqual()
         {
-            // buf1/buf2 are plain scalar VARs, so ADR() resolves to distinct Cell
-            // references rather than ArrayElementCells, exercising the
-            // ReferenceEquals(left, right) fallback in PointerTargetsEqual.
+            // The same reference-equality fallback, in the negative: two
+            // scalar VARs are distinct Cells even when they sit side by side.
             var (engine, instance, frame) = NewHolder(
                 "VAR\n\tbuf1 : BYTE := 1;\n\tbuf2 : BYTE := 2;\n\tp1 : POINTER TO BYTE;\n\tp2 : POINTER TO BYTE;\nEND_VAR");
             instance.Fields["p1"].Value = engine.Evaluate(Parser.ParseExpression("ADR(buf1)"), frame);

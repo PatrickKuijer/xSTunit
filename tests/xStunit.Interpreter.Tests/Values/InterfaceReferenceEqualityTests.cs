@@ -5,13 +5,10 @@ using Xunit;
 
 namespace xStunit.Interpreter.Tests
 {
-    // TcXunit-dba: the standard IEC 61131-3 "is the interface assigned?"
-    // null-check idiom 'IF (iipHandler <> 0) AND iipHandler.bDoWork(...) THEN'
-    // must work without throwing. An interface-typed field has no dedicated
-    // Pointer/null representation (TcPouParser never parses <Itf> POUs, so
-    // an unassigned interface field's DefaultValue lookups all miss and it
-    // falls through to plain int 0); once assigned to a concrete FB
-    // (itf := concreteFb), the field holds that FB's FbInstance directly.
+    // An interface-typed field has no dedicated null representation:
+    // unassigned it holds a plain int 0, and once assigned it holds the
+    // concrete FbInstance itself. That is what makes the ST idiom
+    // 'IF (iipHandler <> 0) AND iipHandler.bDoWork(...) THEN' work here.
     public class InterfaceReferenceEqualityTests
     {
         private static (Engine Engine, FbInstance Instance, Frame Frame) NewHolder(string varBlock)

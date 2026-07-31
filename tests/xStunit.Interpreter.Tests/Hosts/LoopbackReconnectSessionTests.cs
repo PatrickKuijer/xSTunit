@@ -5,12 +5,14 @@ using Xunit;
 
 namespace xStunit.Interpreter.Tests
 {
-    // TcXunit-w5x.15.11: demonstrates the session/generation-counter reconnect
-    // pattern from wiki/05-session-counter-reconnect.md. No new primitive -
-    // Generation is an ordinary VAR field on the FB under test, bumped via ST
-    // assignment between Loopback's Drop()/Restore(). The assertion targets
-    // the FB's own reconnect-path output (ReregistrationCount), never the
-    // counter field or Loopback's internal wiring.
+    // Worked example of the session/generation-counter reconnect pattern
+    // (wiki/05-session-counter-reconnect.md), and the guard that the existing
+    // primitives suffice to express it: Generation is an ordinary VAR field on
+    // the FB under test, bumped by ST assignment between Loopback's
+    // Drop()/Restore(). Nothing here reaches into Loopback's internals, and the
+    // assertions read only the FB's own reconnect-path output - so if these go
+    // red, the pattern itself has stopped being expressible, not just a
+    // helper.
     public class LoopbackReconnectSessionTests
     {
         private static Engine NewWrapperEngine()

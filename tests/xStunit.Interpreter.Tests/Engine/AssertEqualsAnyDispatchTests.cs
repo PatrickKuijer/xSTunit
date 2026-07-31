@@ -4,13 +4,11 @@ using Xunit;
 
 namespace xStunit.Interpreter.Tests
 {
-    // TcXunit-gd2.5: type-erased AssertEquals(Expected: ANY, Actual: ANY,
-    // Message) dispatcher. Unlike the AssertEquals_<TYPE> tests in
-    // NativeMethodBridgeAssertTests.cs, these calls carry no type suffix -
-    // Expected/Actual's IEC type has to come from the *declared* type of the
-    // variable passed in (there's no literal fallback), so every case here
-    // declares typed VAR fields and calls AssertEquals with bare
-    // identifiers, mirroring how SIZEOF() resolves a declared type.
+    // The type-erased AssertEquals(ANY, ANY, Message) carries no type suffix to
+    // dispatch on, so the IEC type must come from the DECLARED type of the
+    // variable passed in - there is no literal fallback. That is why every case
+    // here declares typed VAR fields and passes bare identifiers, the same way
+    // SIZEOF() resolves a declared type.
     public class AssertEqualsAnyDispatchTests
     {
         private static Engine NewSuiteEngine(string declarationText, string implementationText)
@@ -106,9 +104,9 @@ namespace xStunit.Interpreter.Tests
         [Fact]
         public void RunSuite_AssertEqualsAny_Real_UsesExactEquality_NotCallerDelta()
         {
-            // Unlike AssertEquals_REAL (caller-supplied Delta), the ANY
-            // overload always compares with Delta := 0.0 - a value within
-            // what would otherwise be an acceptable tolerance still fails.
+            // The ANY overload has nowhere to take a Delta, so it compares with
+            // Delta := 0.0: a difference that AssertEquals_REAL would accept
+            // still fails here.
             var engine = NewSuiteEngine(
                 "VAR\nrExpected : REAL := 1.0;\nrActual : REAL := 1.05;\nEND_VAR",
                 "TEST('t');\n" +
@@ -133,8 +131,8 @@ namespace xStunit.Interpreter.Tests
         private static (string Expected, string Actual) ExtractIdentifiers(string declarations)
         {
             // Each InlineData row declares exactly two fields, one per line,
-            // named "<prefix>Expected"/"<prefix>Actual" - pull their
-            // identifiers out rather than repeating them in a second column.
+            // suffixed Expected/Actual; deriving the names beats repeating
+            // them in a second column that can drift out of step.
             var lines = declarations.Split('\n');
             var expectedName = lines[0].Substring(0, lines[0].IndexOf(':')).Trim();
             var actualName = lines[1].Substring(0, lines[1].IndexOf(':')).Trim();

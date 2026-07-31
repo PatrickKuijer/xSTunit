@@ -5,12 +5,16 @@ using Xunit;
 
 namespace xStunit.Interpreter.Tests
 {
-    // TcXunit-l64b: CTU/CTD/CTUD native stubs, exercised the same way as
-    // BistableLatchFbTests - a wrapper FB does the bare invocation
-    // (fbCounter(CU:=.., RESET:=.., PV:=..)) and reads Q/QU/QD/CV back via
-    // plain field access. Each counter gets its own wrapper because their
-    // input and output names differ (CTU: CU/RESET->Q, CTD: CD/LOAD->Q,
+    // Drives the CTU/CTD/CTUD native stubs through the full ST -> native -> ST
+    // round trip: an interpreted wrapper FB does the bare invocation and reads
+    // Q/QU/QD/CV back by plain field access. Each counter needs its own wrapper
+    // because the field names differ (CTU: CU/RESET->Q, CTD: CD/LOAD->Q,
     // CTUD: CU/CD/RESET/LOAD->QU/QD).
+    //
+    // A counter is strictly call-driven, not clock-driven: it counts one
+    // FALSE->TRUE transition of CU/CD per call, so every Step below IS one PLC
+    // cycle. Stepping twice with the inputs unchanged is two cycles' worth of
+    // edge sampling, and a skipped Step loses an edge outright.
     //
     // Semantics under test are the documented Tc2_Standard ones: counting on
     // the RISING EDGE of CU/CD only, RESET/LOAD taking precedence over
@@ -114,23 +118,21 @@ namespace xStunit.Interpreter.Tests
             var engine = NewCtuEngine();
             var instance = engine.NewInstance("FB_Wrapper");
 
-            // First cycle with CU already TRUE is a FALSE->TRUE edge: the
-            // counter's previous-CU memory starts FALSE, as the IEC body's
-            // ordinary BOOL does.
+            // The very first call with CU already TRUE counts, because the
+            // counter's previous-CU memory starts FALSE the way the IEC body's
+            // ordinary BOOL does. R_TRIG deliberately disagrees and reports no
+            // edge on its first call; neither is an accident.
             StepUp(engine, instance, cu: true, reset: false, pv: 3);
             Assert.Equal(1, Cv(instance));
 
-            // Held high: no further edge, no further counting.
             StepUp(engine, instance, cu: true, reset: false, pv: 3);
             Assert.Equal(1, Cv(instance));
             StepUp(engine, instance, cu: true, reset: false, pv: 3);
             Assert.Equal(1, Cv(instance));
 
-            // Falling edge does not count either...
             StepUp(engine, instance, cu: false, reset: false, pv: 3);
             Assert.Equal(1, Cv(instance));
 
-            // ...but the next rising edge does.
             StepUp(engine, instance, cu: true, reset: false, pv: 3);
             Assert.Equal(2, Cv(instance));
         }
@@ -166,13 +168,11 @@ namespace xStunit.Interpreter.Tests
             Assert.Equal(1, Cv(instance));
             Assert.Equal(true, Q(instance));
 
-            // Rising CU edge AND RESET on the same cycle: RESET wins.
             StepUp(engine, instance, cu: false, reset: false, pv: 1);
             StepUp(engine, instance, cu: true, reset: true, pv: 1);
             Assert.Equal(0, Cv(instance));
             Assert.Equal(false, Q(instance));
 
-            // RESET held: CV stays at 0 even with more CU edges.
             StepUp(engine, instance, cu: false, reset: true, pv: 1);
             StepUp(engine, instance, cu: true, reset: true, pv: 1);
             Assert.Equal(0, Cv(instance));
@@ -197,7 +197,6 @@ namespace xStunit.Interpreter.Tests
             Assert.Equal(1, Cv(instance));
         }
 
-        // The gotcha: CV saturates at the WORD ceiling, it does not wrap to 0.
         [Fact]
         public void Ctu_SaturatesAtWordCeilingInsteadOfWrapping()
         {
@@ -256,7 +255,6 @@ namespace xStunit.Interpreter.Tests
             StepDown(engine, instance, cd: true, load: false, pv: 3);
             Assert.Equal(2, Cv(instance));
 
-            // Held high: no second decrement.
             StepDown(engine, instance, cd: true, load: false, pv: 3);
             Assert.Equal(2, Cv(instance));
 
@@ -278,14 +276,13 @@ namespace xStunit.Interpreter.Tests
             StepDown(engine, instance, cd: true, load: false, pv: 4);
             Assert.Equal(3, Cv(instance));
 
-            // Rising CD edge AND LOAD on the same cycle: LOAD wins, so CV is
-            // the preset rather than the preset minus one.
+            // LOAD wins on the same cycle as a rising CD edge, so CV lands on
+            // the preset and not the preset minus one.
             StepDown(engine, instance, cd: false, load: false, pv: 4);
             StepDown(engine, instance, cd: true, load: true, pv: 4);
             Assert.Equal(4, Cv(instance));
         }
 
-        // The gotcha, downward: CV stops at 0, it does not wrap to 65535.
         [Fact]
         public void Ctd_SaturatesAtZeroInsteadOfWrapping()
         {
@@ -320,7 +317,6 @@ namespace xStunit.Interpreter.Tests
             StepUpDown(engine, instance, cu: true, cd: false, reset: false, load: false, pv: 2);
             Assert.Equal(1, Cv(instance));
 
-            // CU held high - no second edge.
             StepUpDown(engine, instance, cu: true, cd: false, reset: false, load: false, pv: 2);
             Assert.Equal(1, Cv(instance));
 
@@ -334,7 +330,6 @@ namespace xStunit.Interpreter.Tests
             Assert.Equal(1, Cv(instance));
             Assert.Equal(false, Qu(instance));
 
-            // CD held high - no second decrement.
             StepUpDown(engine, instance, cu: false, cd: true, reset: false, load: false, pv: 2);
             Assert.Equal(1, Cv(instance));
 
@@ -355,7 +350,6 @@ namespace xStunit.Interpreter.Tests
             Assert.Equal(true, Qu(instance));
             Assert.Equal(false, Qd(instance));
 
-            // Rising CU edge AND LOAD: LOAD wins, so CV is the preset, not 8.
             StepUpDown(engine, instance, cu: true, cd: false, reset: false, load: true, pv: 7);
             Assert.Equal(7, Cv(instance));
         }
@@ -369,7 +363,6 @@ namespace xStunit.Interpreter.Tests
             StepUpDown(engine, instance, cu: false, cd: false, reset: false, load: true, pv: 7);
             Assert.Equal(7, Cv(instance));
 
-            // RESET and LOAD together: RESET wins.
             StepUpDown(engine, instance, cu: true, cd: false, reset: true, load: true, pv: 7);
             Assert.Equal(0, Cv(instance));
             Assert.Equal(false, Qu(instance));
@@ -406,7 +399,6 @@ namespace xStunit.Interpreter.Tests
             StepUpDown(engine, instance, cu: true, cd: false, reset: false, load: false, pv: 65535);
             Assert.Equal(65535, Cv(instance));
 
-            // Floor: RESET to 0, then a CD edge must not wrap back to 65535.
             StepUpDown(engine, instance, cu: false, cd: false, reset: true, load: false, pv: 65535);
             Assert.Equal(0, Cv(instance));
 
@@ -414,8 +406,6 @@ namespace xStunit.Interpreter.Tests
             Assert.Equal(0, Cv(instance));
             Assert.Equal(true, Qd(instance));
         }
-
-        // --- wiring ---
 
         [Fact]
         public void PositionalArguments_BindInIecDeclarationOrder()
@@ -438,9 +428,9 @@ namespace xStunit.Interpreter.Tests
             Assert.Equal(false, Q(instance));
         }
 
-        // TcXunit-nch: the type-name lookup that routes to this host is
-        // case-insensitive, so a lowercase/mixed-case spelling must reach the
-        // same host instead of falling through to NativeHostKind.Suite.
+        // IEC 61131-3 type names are case-insensitive, so a lowercase or
+        // mixed-case spelling must still reach this host; falling through to
+        // NativeHostKind.Suite would fail silently rather than loudly.
         [Theory]
         [InlineData("ctu")]
         [InlineData("Ctu")]

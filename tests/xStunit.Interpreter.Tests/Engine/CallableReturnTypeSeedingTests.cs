@@ -5,21 +5,19 @@ using Xunit;
 
 namespace xStunit.Interpreter.Tests
 {
-    // TcXunit-cq6: a Cell carries no declared-type tag, so assignment
-    // compatibility is inferred from the CLR type already sitting in it
-    // (NumericCoercion.CoerceForAssignment). CallMethod used to let a
-    // callable's return cell be created lazily by whatever its first
-    // assignment happened to be, and a bare decimal literal lexes as
-    // REAL/float - so 'M_Read := 0.0;' at the top of an LREAL-returning
-    // method made the return cell a REAL, and every later LREAL assignment
-    // into it threw "Implicit narrowing from LREAL to REAL". Valid ST that
-    // TwinCAT compiles was rejected, taking the whole suite's load with it.
-    // Covers seeding the return cell from the declared return type instead.
+    // A Cell carries no declared-type tag, so assignment compatibility is
+    // inferred from the CLR type already sitting in it. A callable's return
+    // cell is therefore seeded from the declared return type: left to be
+    // created by its first assignment, 'M_Read := 0.0;' in an LREAL-returning
+    // method would fix the cell as REAL (a bare decimal literal lexes as REAL),
+    // and every later LREAL assignment into it would be rejected as implicit
+    // narrowing - failing ST that TwinCAT compiles, and taking the suite's load
+    // with it.
     public class CallableReturnTypeSeedingTests
     {
         // Every case here runs the method under test through an LREAL-returning
-        // M_Run, so the value the caller actually receives is what's asserted -
-        // the bug was only ever observable at the call boundary.
+        // M_Run: the narrowing rule is only observable in the value that
+        // reaches the caller.
         private static object RunM_Run(TypeRegistry registry, string typeName = "FB_Widget")
         {
             var engine = new Engine(registry);
@@ -55,8 +53,8 @@ namespace xStunit.Interpreter.Tests
         [Fact]
         public void LrealMethod_SeededByRealLiteralThenAssignedIntToLreal_ReturnsTheLreal()
         {
-            // INT_TO_LREAL yields a double, so it hit the same narrowing
-            // rejection as a plain LREAL variable did.
+            // INT_TO_LREAL yields a boxed double, so it meets the same
+            // narrowing rule a plain LREAL variable does.
             var read = new MethodAst(
                 "M_Read",
                 "METHOD PRIVATE M_Read : LREAL\nVAR\n\tnValue : INT := 3;\nEND_VAR",
@@ -68,9 +66,9 @@ namespace xStunit.Interpreter.Tests
         [Fact]
         public void LrealMethod_OnlyEverAssignedARealLiteral_WidensToLreal()
         {
-            // The seeded LREAL cell also fixes the silent half of the bug:
-            // 'M_Read := 1.0;' used to leave a boxed float behind, so the
-            // caller got REAL precision out of an LREAL-returning method.
+            // The silent half of the same rule: an unseeded cell would leave a
+            // boxed float behind, handing the caller REAL precision out of an
+            // LREAL-returning method.
             var read = new MethodAst(
                 "M_Read",
                 "METHOD PRIVATE M_Read : LREAL",
@@ -105,9 +103,7 @@ namespace xStunit.Interpreter.Tests
         [Fact]
         public void IntMethod_AssignedARealLiteral_StillRejectsTheNarrowing()
         {
-            // Seeding must not soften the narrowing rule it exists to feed:
-            // an INT-returning method assigned a REAL literal is still an
-            // error, exactly as it was before.
+            // Seeding must not soften the narrowing rule it exists to feed.
             var read = new MethodAst(
                 "M_Read",
                 "METHOD PRIVATE M_Read : INT",
@@ -180,15 +176,10 @@ namespace xStunit.Interpreter.Tests
             Assert.Equal(4.25d, RunM_Run(new TypeRegistry(new[] { derived, baseFb }), "FB_Derived"));
         }
 
-        // TcXunit-qft: SeedReturnCell extended beyond IEC numerics to the
-        // remaining elementary return types (BOOL/STRING/W?STRING(n)/TIME/
-        // LTIME/DATE/DATE_AND_TIME/TIME_OF_DAY), which have a plain constant
-        // default in Engine.DefaultValue but none of the narrowing hazard
-        // TcXunit-cq6 was fixing. Unlike the LREAL cases above (which go
-        // through an LREAL-returning M_Run wrapper to observe the narrowing
-        // rule), these call the method directly - there is no coercion rule
-        // to exercise here, only "does the caller see the IEC default instead
-        // of null".
+        // The non-numeric elementary return types (BOOL/STRING/WSTRING(n)/TIME/
+        // LTIME/DATE/DATE_AND_TIME/TIME_OF_DAY) carry no narrowing hazard, so
+        // these call the method directly rather than through the LREAL wrapper:
+        // all that is pinned is that the caller sees the IEC default, not null.
         private static object CallDirectly(PouAst fb, string methodName)
         {
             var engine = new Engine(new TypeRegistry(new[] { fb }));
@@ -256,13 +247,11 @@ namespace xStunit.Interpreter.Tests
         [Fact]
         public void PointerMethod_NeverAssignsItsReturn_StillReturnsNull()
         {
-            // Out of scope for TcXunit-qft, verified rather than assumed:
-            // a POINTER-returning method still gets no seeded cell at all,
-            // same as before this ticket - DefaultValue's null for POINTER
-            // TO is not the same thing as "seeded", and SeedReturnCell must
-            // not call DefaultValue for this case (that path also
-            // materializes DUT/FB instances for other type names, which is
-            // exactly the speculative work this ticket declines to do).
+            // Seeding is deliberately limited to the elementary types: a
+            // POINTER return gets no cell at all. Routing it through
+            // DefaultValue would also start materializing DUT/FB instances for
+            // every other type name, which is speculative construction the
+            // interpreter declines to do.
             var read = new MethodAst("M_Ptr", "METHOD PUBLIC M_Ptr : POINTER TO INT", "");
 
             Assert.Null(CallDirectly(WidgetWithOnly(read), "M_Ptr"));
@@ -271,11 +260,8 @@ namespace xStunit.Interpreter.Tests
         [Fact]
         public void FbMethod_NeverAssignsItsReturn_StillReturnsNull()
         {
-            // Same "still genuinely unseeded" check as the POINTER case
-            // above, for an FB-typed return - DefaultValue *would*
-            // materialize a full FB_Timer-like instance for this type name
-            // if SeedReturnCell called it, which is the speculative
-            // construction this ticket explicitly declines to do.
+            // The FB-typed half of the same limit: no instance is constructed
+            // just because a method declares one as its return type.
             var timer = new PouAst("FB_Sub", null, "VAR\nEND_VAR", "", new List<MethodAst>());
             var widget = new PouAst(
                 "FB_Widget",

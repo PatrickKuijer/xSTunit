@@ -6,11 +6,8 @@ using Xunit;
 
 namespace xStunit.Interpreter.Tests
 {
-    // TcXunit-gd2.13: DATE/DATE_AND_TIME/TIME_OF_DAY literal grammar
-    // (D#/DATE#, DT#/DATE_AND_TIME#, TOD#/TIME_OF_DAY#) and their Cell
-    // representations - all box as uint (DATE/DT as seconds since the
-    // 1970-01-01 epoch, TOD as milliseconds since midnight), mirroring how
-    // TimeTypeTests.cs covers TIME/LTIME.
+    // DATE and DATE_AND_TIME box as uint seconds since the 1970-01-01 epoch;
+    // TIME_OF_DAY boxes as uint milliseconds since midnight.
     public class DateTimeTypeTests
     {
         private static Engine NewEngine() => new Engine(new TypeRegistry(Array.Empty<PouAst>()));

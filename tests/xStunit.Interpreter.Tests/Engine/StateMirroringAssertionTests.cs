@@ -5,9 +5,10 @@ using Xunit;
 
 namespace xStunit.Interpreter.Tests
 {
-    // TcXunit-w5x.15.9 / T6 design: AssertConverges/AssertConvergesAndLatches
-    // own the master-then-proxy StepCycles(1) loop internally and throw a
-    // ConvergenceAssertionException with a per-field diff on failure.
+    // AssertConverges/AssertConvergesAndLatches drive the cycles themselves -
+    // master then proxy, one cycle at a time, up to maxCycles - rather than
+    // inspecting state the caller has already stepped. Failure throws with a
+    // per-field diff instead of recording an ordinary assertion failure.
     public class StateMirroringAssertionTests
     {
         private static Engine NewEngine(params PouAst[] extraTypes)

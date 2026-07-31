@@ -5,14 +5,10 @@ using Xunit;
 
 namespace xStunit.Interpreter.Tests
 {
-    // TcXunit-6hg: TwinCAT ALIAS types (e.g. "TYPE T_MaxString :
-    // STRING(255); END_TYPE") weren't resolved by the interpreter - a POU
-    // declaring a var of an alias type fell through DefaultValue's checks
-    // to the plain-scalar fallback (returning an int 0 instead of "" for a
-    // STRING alias) because the alias name was never mapped to its
-    // underlying type. TypeRegistry.ResolveAlias plus resolving through it
-    // at every existing type-name lookup site fixes this without those
-    // sites needing their own alias-aware branch.
+    // An ALIAS type name carries no defaulting or bounds behaviour of its
+    // own: every type-name lookup site must resolve it to the underlying
+    // type first, or a var of the alias falls through to the plain-scalar
+    // fallback (int 0) instead of its real IEC default.
     public class AliasTypeResolutionTests
     {
         private static Dictionary<string, string> Alias(string name, string underlying) =>
@@ -48,8 +44,6 @@ namespace xStunit.Interpreter.Tests
             Assert.Equal("INT", registry.ResolveAlias("T_Outer"));
         }
 
-        // Alias to STRING(255): a VAR of this alias type must default to an
-        // empty string, not the plain-scalar "0" fallback.
         [Fact]
         public void DefaultValue_VarOfAliasToSizedString_DefaultsToEmptyString()
         {
@@ -69,8 +63,6 @@ namespace xStunit.Interpreter.Tests
             Assert.Equal("", instance.Fields["isStep"].Value);
         }
 
-        // Alias to a scalar (INT): a VAR of this alias type must default to
-        // 0 and behave like a plain INT for read/write.
         [Fact]
         public void DefaultValue_VarOfAliasToScalar_DefaultsToZeroAndIsAssignable()
         {
@@ -92,8 +84,6 @@ namespace xStunit.Interpreter.Tests
             Assert.Equal(1, instance.Fields["counter"].Value);
         }
 
-        // Alias used as a STRUCT field: the field must default the same way
-        // a directly-declared STRING(255)/INT field would.
         [Fact]
         public void DefaultValue_StructFieldOfAliasType_ResolvesUnderlyingType()
         {

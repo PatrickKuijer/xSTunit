@@ -9,7 +9,6 @@ namespace xStunit.Interpreter.Tests
         [Fact]
         public void Tokenize_DollarEscapedQuote_ProducesEmbeddedSingleQuotes()
         {
-            // TwinCAT/IEC 61131-3 '$'' escapes an embedded single-quote.
             var tokens = Lexer.Tokenize("'Failed to find test $'%s$''");
 
             var literal = Assert.Single(tokens, t => t.Type == TokenType.StringLiteral);
@@ -69,7 +68,6 @@ namespace xStunit.Interpreter.Tests
         [Fact]
         public void Tokenize_DollarHexEscapeTruncatedByClosingQuote_IsLiteralDollar()
         {
-            // Only one hex digit before the closing quote: not a valid $hh escape.
             var tokens = Lexer.Tokenize("'a$4'");
 
             var literal = Assert.Single(tokens, t => t.Type == TokenType.StringLiteral);
@@ -85,7 +83,8 @@ namespace xStunit.Interpreter.Tests
             Assert.Equal("plain text", literal.Text);
         }
 
-        // WSTRING literals use "..." rather than STRING's '...' (TcXunit-gd2.4).
+        // A double-quoted literal is a WSTRING, where STRING uses '...'; the
+        // lexer deliberately collapses both onto one token type.
         [Fact]
         public void Tokenize_DoubleQuotedLiteral_ProducesStringLiteralToken()
         {
@@ -113,7 +112,8 @@ namespace xStunit.Interpreter.Tests
             Assert.Equal("it's wide", literal.Text);
         }
 
-        // IEC 61131-3 §2.4.2 based literals: <base>#<digits> (TcXunit-nsm).
+        // IEC 61131-3 §2.4.2 based literals: <base>#<digits>. The lexer folds
+        // them to decimal, so nothing downstream ever sees the base notation.
         [Theory]
         [InlineData("16#ABCD", "43981")]
         [InlineData("16#abcd", "43981")]

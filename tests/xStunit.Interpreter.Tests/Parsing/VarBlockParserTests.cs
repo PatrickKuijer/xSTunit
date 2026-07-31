@@ -170,9 +170,8 @@ END_VAR";
             Assert.Equal("'see (* details *) here'", note.DefaultValueText);
         }
 
-        // TcXunit-71o: a GVL's VAR_GLOBAL block, with leading {attribute
-        // ...} pragma lines (ignored since no section is open yet) and no
-        // trailing modifier.
+        // Pragma lines appear before any section header, so they are read while
+        // no section is open and must not disturb the block that follows.
         [Fact]
         public void Parse_VarGlobalBlockWithAttributePragmas_ReadsGlobalSection()
         {
@@ -207,12 +206,10 @@ END_VAR";
             Assert.Equal("16", value.DefaultValueText);
         }
 
-        // TcXunit-988: a STRING/WSTRING size need not be a bare integer
-        // literal - a GVL-qualified constant (e.g.
-        // cScratchConstants.MAX_LABEL_STRING_SIZE) is a legal IEC 61131-3 constant
-        // expression there too. Previously VarLinePattern only accepted
-        // \d+ inside the parens, so the whole line silently failed to
-        // match and the field was dropped from the VarDecl list entirely.
+        // A STRING/WSTRING size may be any IEC 61131-3 constant expression, not
+        // just an integer literal. A size this parser cannot match costs more
+        // than the size itself: the whole declaration line fails to match and
+        // the field disappears from the VarDecl list without a word.
         [Fact]
         public void Parse_StringSizedByGvlQualifiedConstant_ReadsFullTypeName()
         {
@@ -229,17 +226,10 @@ END_TYPE";
             Assert.Equal("STRING(cScratchConstants.MAX_LABEL_STRING_SIZE)", value.TypeName);
         }
 
-        // TcXunit-3g7: VAR_TEMP (re-initialized-to-zero-every-call/invocation
-        // locals) wasn't recognized by the section-header switch, so its
-        // header line fell through to the currentSection == null guard and
-        // every declaration inside the block was silently dropped.
-        // TcXunit-9go: VAR_TEMP now gets its own VarSection.Temp rather than
-        // aliasing to VarSection.Local - a METHOD-scoped VAR_TEMP still
-        // resets every call via BindParams (which treats any non-Input/
-        // InOut section the same way), but a FUNCTION_BLOCK/PROGRAM's own
-        // top-level VAR_TEMP needs to be told apart from a real top-level
-        // VAR field so it can be reset before every invocation instead of
-        // persisting forever (Engine.ResetTopLevelTempFields).
+        // VAR_TEMP gets a section of its own rather than aliasing to Local: a
+        // top-level VAR_TEMP is reset before every invocation while a real VAR
+        // field persists, and nothing downstream can tell the two apart once
+        // the distinction is lost here.
         [Fact]
         public void Parse_VarTempBlock_ReadsNameAndTypeAsTempSection()
         {

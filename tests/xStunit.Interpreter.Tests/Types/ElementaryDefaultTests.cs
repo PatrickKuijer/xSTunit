@@ -3,9 +3,6 @@ using Xunit;
 
 namespace xStunit.Interpreter.Tests
 {
-    // TcXunit-mvbk: direct unit tests for the elementary non-numeric
-    // type-name -> default value provider (one per branch, plus
-    // case-insensitivity and the unknown-type miss).
     public class ElementaryDefaultTests
     {
         [Fact]

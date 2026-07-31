@@ -5,11 +5,9 @@ using Xunit;
 
 namespace xStunit.Interpreter.Tests
 {
-    // TcXunit-wmh: 'Name => expr' call-arg syntax (TcXunit-mym.5) parses and
-    // tags NamedArg.IsOutput, but BindParams only ever consulted namedArgs
-    // for Input/InOut params - the callee's VAR_OUTPUT value was never
-    // written back into the caller-side lvalue. Covers the write-back path
-    // added in Engine.Invocation.CallMethod.
+    // 'Name => expr' binds in the opposite direction to 'Name := expr': the
+    // callee's VAR_OUTPUT is copied back into the caller's lvalue once the call
+    // returns, so nothing is observable until then.
     public class OutputParamBindingTests
     {
         [Fact]

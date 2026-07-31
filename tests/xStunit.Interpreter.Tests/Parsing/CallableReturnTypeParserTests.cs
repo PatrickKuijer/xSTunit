@@ -3,11 +3,9 @@ using Xunit;
 
 namespace xStunit.Interpreter.Tests
 {
-    // TcXunit-cq6: VarBlockParser only ever looked inside VAR...END_VAR, so a
-    // callable's declared return type - which lives on the METHOD/FUNCTION
-    // header line itself - was never parsed at all. These cover the header
-    // parse in isolation; the Engine-level consequence of not having it is
-    // covered by CallableReturnTypeSeedingTests.
+    // A callable's declared return type lives on the METHOD/FUNCTION/PROPERTY
+    // header line, not in any VAR block, so it needs a parser of its own.
+    // CallableReturnTypeSeedingTests covers what the Engine then does with it.
     public class CallableReturnTypeParserTests
     {
         [Theory]
@@ -32,13 +30,11 @@ namespace xStunit.Interpreter.Tests
         [Fact]
         public void TryGetReturnTypeName_LowercaseHeaderKeywords_ParseButTypeTextTravelsVerbatim()
         {
-            // ST is case-insensitive, so the METHOD/PRIVATE keywords match
-            // either way. The captured type name is NOT normalized, matching
-            // VarBlockParser, which likewise hands back declared type text
-            // exactly as written - so a lowercase spelling parses here and
-            // then misses Engine.SeedReturnCell's case-sensitive
-            // IecNumericType lookup. That gap is interpreter-wide and tracked
-            // as TcXunit-fzm; this test pins where the boundary currently is.
+            // ST is case-insensitive, so the keywords match either way, but the
+            // captured type name travels verbatim - as it does out of
+            // VarBlockParser. A lowercase spelling therefore parses here and
+            // only later misses the case-sensitive type lookup downstream. This
+            // pins where that boundary currently sits, not where it belongs.
             Assert.True(CallableReturnTypeParser.TryGetReturnTypeName("method private m_read : lreal", out var typeName));
             Assert.Equal("lreal", typeName);
         }
@@ -55,8 +51,6 @@ namespace xStunit.Interpreter.Tests
         [Fact]
         public void TryGetReturnTypeName_HeaderLeadsWithBlockComment_StillParses()
         {
-            // Same convention GlobalFunctionDeclarationPattern already had to
-            // tolerate (TcXunit-9k6): a purpose comment above the header.
             const string decl = "(* Reads one value.\n   Second line. *)\nMETHOD PRIVATE M_Read : LREAL\nVAR\n\ttfValue : LREAL;\nEND_VAR";
 
             Assert.True(CallableReturnTypeParser.TryGetReturnTypeName(decl, out var typeName));
@@ -98,8 +92,8 @@ namespace xStunit.Interpreter.Tests
         [Fact]
         public void TryGetReturnTypeName_MethodNamedLikeAnAccessModifierPrefix_IsNotEatenByIt()
         {
-            // "FINAL" is an access-modifier alternative; a method named
-            // FINALIZE must not have its first five characters consumed as one.
+            // FINAL is an access modifier, so a method whose name merely starts
+            // with it must not have those five characters eaten as one.
             Assert.True(CallableReturnTypeParser.TryGetReturnTypeName("METHOD FINALIZE : INT", out var typeName));
             Assert.Equal("INT", typeName);
         }

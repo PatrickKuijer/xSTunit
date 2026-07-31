@@ -8,13 +8,11 @@ using Xunit;
 
 namespace xStunit.Interpreter.Tests
 {
-    // TcXunit-6k2: host-registered stand-ins for compiled-only TwinCAT library
-    // functions (Tc2_Utilities' F_CheckSum16 and friends), which have no
-    // .TcPOU anywhere to parse and so could never resolve through the
-    // TcXunit-9su global-FUNCTION fallback.
+    // Host-registered stand-ins for compiled-only vendor library functions.
+    // These ship without source, so there is no POU anywhere on disk to parse
+    // and nothing for the global-FUNCTION fallback to resolve against.
     public class NativeFunctionRegistryTests
     {
-        // Minimal test double: named function, computed from its args.
         private sealed class StubFunction : IXstunitNativeFunction
         {
             private readonly Func<NativeCallContext, object> _body;
@@ -182,13 +180,10 @@ namespace xStunit.Interpreter.Tests
         [Fact]
         public void CallMethod_NativeFunctionReadsBytesBehindAPointerIntoAnArrayOfStructs()
         {
-            // TcXunit-4jt: ADR(arrayOfStruct)/SIZEOF(arrayOfStruct) must
-            // bounds-check the requested byte count against the array's true
-            // byte size (elementCount * elementSize), not its raw element
-            // count. uPair (USINT + INT, 2-byte aligned) is 4 bytes, so a
-            // 2-element array is 8 bytes - previously ReadPointerBytes
-            // bounds-checked SIZEOF(aPairs) (correctly 8) against
-            // Elements.Length (wrongly 2, the element count), always failing.
+            // A pointer read is bounds-checked against the array's byte size
+            // (elementCount * elementSize), never its element count - for
+            // anything wider than a BYTE the two differ. uPair is USINT + INT
+            // at 2-byte alignment, so 4 bytes each and 8 for the array.
             var structAst = new StructAst("uPair", new[]
             {
                 new VarDecl("a", "USINT", null, VarSection.Local),
@@ -259,8 +254,8 @@ namespace xStunit.Interpreter.Tests
         [Fact]
         public void CallMethod_NativeFunctionResolvesFromInsideAGlobalFunctionBody()
         {
-            // The TcXunit-kii shape: a global FUNCTION's frame has no FB
-            // instance, which is exactly where a thin library wrapper lives.
+            // A global FUNCTION's frame has no FB instance, and that is exactly
+            // where a thin library wrapper lives.
             var wrapper = new PouAst(
                 "F_ComputeChecksum",
                 null,
@@ -312,8 +307,6 @@ namespace xStunit.Interpreter.Tests
         [Fact]
         public void EngineWithoutARegistry_KeepsReportingUnresolvedCallsAsErrors()
         {
-            // The additive guarantee: an Engine built the old one-argument way
-            // behaves exactly as it always did.
             var caller = new MethodAst("bDoWork", "METHOD bDoWork : BOOL", "nResult := F_Triple(nValue);");
             var fb = new PouAst(
                 "FB_Widget",

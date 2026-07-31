@@ -6,10 +6,6 @@ using Xunit;
 
 namespace xStunit.Interpreter.Tests
 {
-    // TcXunit-w5x.15.2: MOD (integer-only) and bitstring AND/OR/XOR/NOT on
-    // INT/BOOL operands.
-    // TcXunit-rdz: extended with the short-circuit forms AND_THEN/OR_ELSE,
-    // the '&' alias for AND, and DWORD-range (long-boxed) bitstring coverage.
     public class BitstringOperatorTests
     {
         private static Engine NewEngine() => new Engine(new TypeRegistry(Array.Empty<PouAst>()));
@@ -159,8 +155,8 @@ namespace xStunit.Interpreter.Tests
             Assert.Equal(6, result);
         }
 
-        // TcXunit-rdz: '&' (IEC 61131-3 §2.4.5's alias for AND) on INT
-        // (BYTE/WORD-range) and BOOL operands.
+        // '&' is IEC 61131-3's alias for AND, so it must behave identically on
+        // both bitstring and BOOL operands.
         [Fact]
         public void Evaluate_AmpersandOnInt_ReturnsBitwiseAnd()
         {
@@ -183,12 +179,10 @@ namespace xStunit.Interpreter.Tests
             Assert.Equal(false, result);
         }
 
-        // TcXunit-rdz: AND/OR/XOR on DWORD-range (long-boxed) operands -
-        // BYTE/WORD/INT box as C# int (already covered above), but DWORD
-        // exceeds Int32 range and boxes as long (IecNumericType). Values here
-        // stay within int range so the expected result is unambiguous, but
-        // the operand Cells are long-typed to exercise the long/long
-        // EvaluateBitstring branch a plain int literal test can't reach.
+        // DWORD exceeds Int32 range and so boxes as long where BYTE/WORD/INT
+        // box as int. The values below stay small on purpose - they are
+        // long-typed only to reach the long/long branch, which no test written
+        // with plain int literals can enter.
         [Fact]
         public void Evaluate_AndOnDwordVariables_ReturnsBitwiseAnd()
         {
@@ -228,9 +222,6 @@ namespace xStunit.Interpreter.Tests
             Assert.Equal(5L, result);
         }
 
-        // TcXunit-rdz: AND_THEN/OR_ELSE (IEC 61131-3 §2.4.5 short-circuit
-        // forms) on BOOL operands - value correctness for every truth-table
-        // combination the short-circuit path can take.
         [Theory]
         [InlineData(true, true, true)]
         [InlineData(true, false, false)]
@@ -265,11 +256,9 @@ namespace xStunit.Interpreter.Tests
             Assert.Equal(expected, result);
         }
 
-        // TcXunit-rdz: AND_THEN/OR_ELSE have no short-circuit meaning for
-        // bitstring operands (the standard defines the short-circuit forms
-        // for BOOL only), so both sides are evaluated and the result falls
-        // back to plain bitwise AND/OR - covering INT (BYTE/WORD-range) and
-        // DWORD-range (long-boxed) operands.
+        // The standard defines the short-circuit forms for BOOL only, so on
+        // bitstring operands AND_THEN/OR_ELSE have nothing to short-circuit:
+        // both sides are evaluated and the result is plain bitwise AND/OR.
         [Fact]
         public void Evaluate_AndThenOnInt_ReturnsBitwiseAnd()
         {
@@ -314,13 +303,12 @@ namespace xStunit.Interpreter.Tests
             Assert.Equal(7L, result);
         }
 
-        // TcXunit-rdz: mixed AND_THEN/OR_ELSE chain must associate the same
-        // way as AND/OR (AND_THEN binds tighter than OR_ELSE), i.e.
-        // 'a AND_THEN b OR_ELSE c' parses as '(a AND_THEN b) OR_ELSE c'.
+        // AND_THEN binds tighter than OR_ELSE, exactly as AND does over OR:
+        // 'a AND_THEN b OR_ELSE c' groups as '(a AND_THEN b) OR_ELSE c'.
         [Theory]
-        [InlineData(true, true, false, true)] // (T AND_THEN T) OR_ELSE F = T OR_ELSE F = T
-        [InlineData(false, true, true, true)] // (F AND_THEN T) OR_ELSE T = F OR_ELSE T = T
-        [InlineData(false, true, false, false)] // (F AND_THEN T) OR_ELSE F = F OR_ELSE F = F
+        [InlineData(true, true, false, true)]
+        [InlineData(false, true, true, true)]
+        [InlineData(false, true, false, false)]
         public void Evaluate_MixedAndThenOrElseChain_AssociatesLikeAndOr(bool a, bool b, bool c, bool expected)
         {
             var engine = NewEngine();
@@ -334,13 +322,11 @@ namespace xStunit.Interpreter.Tests
             Assert.Equal(expected, result);
         }
 
-        // TcXunit-rdz: the whole point of AND_THEN/OR_ELSE - the guard-then-
-        // index idiom from the bug repro must genuinely skip evaluating the
-        // RHS, not just parse it. saUsed is declared ARRAY[1..3] OF BOOL, so
-        // saUsed[nSlot] with nSlot = 0 indexes out of bounds and throws
-        // IndexOutOfRangeException *if evaluated*. A real short-circuit
-        // never reaches that evaluation; eager (AND/OR-style) evaluation
-        // would throw before the IF's THEN branch is even considered.
+        // The guard-then-index idiom below only works if the RHS is genuinely
+        // skipped rather than merely parsed: saUsed is ARRAY[1..3] OF BOOL, so
+        // saUsed[nSlot] with nSlot = 0 throws IndexOutOfRangeException the
+        // moment it is evaluated. Eager evaluation therefore throws before the
+        // IF can even choose a branch, which is what these tests detect.
         private static Engine NewGuardEngine(out Frame frame)
         {
             var fb = new PouAst(

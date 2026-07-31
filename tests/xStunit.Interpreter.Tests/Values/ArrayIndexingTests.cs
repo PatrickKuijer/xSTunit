@@ -6,8 +6,6 @@ using Xunit;
 
 namespace xStunit.Interpreter.Tests
 {
-    // TcXunit-sej.1: arr[i] / arr[i,j] read and write, prerequisite for
-    // MEMCPY/MEMSET/MEMMOVE pointer-offset support (TcXunit-sej.3).
     public class ArrayIndexingTests
     {
         private static Engine NewEngine(IEnumerable<StructAst> structTypes = null) =>
@@ -80,11 +78,8 @@ namespace xStunit.Interpreter.Tests
                 engine.ExecuteStatements(Parser.ParseStatements("buf[4] := 1;"), frame));
         }
 
-        // DINT/UDINT/LINT-typed index variables box as long (NumericCoercion),
-        // unlike INT which boxes as int - FlattenIndex used to (int)-cast the
-        // evaluated index directly and threw InvalidCastException whenever it
-        // was handed a boxed long, a real-usage find (TcXunit-iyd.5) against
-        // FB_WidgetWireRecordsTests.
+        // DINT/UDINT/LINT index variables box as long where INT boxes as int,
+        // so index flattening must narrow the value rather than unbox it.
         [Fact]
         public void ExecuteStatements_IndexAssignment_AcceptsUdintIndexVariable()
         {

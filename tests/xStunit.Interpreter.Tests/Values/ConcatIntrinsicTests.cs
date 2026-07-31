@@ -6,12 +6,9 @@ using Xunit;
 
 namespace xStunit.Interpreter.Tests
 {
-    // TcXunit-3lt: CONCAT is a standard IEC 61131-3 string function (TwinCAT
-    // extends it to a variadic STR1..STR10 form, Tc2_Standard) with no
-    // intrinsic dispatch in EvaluateCall - a bare CONCAT(...) call fell
-    // through to CallMethod and threw "Method 'CONCAT' not found starting
-    // from type '<fb>'" (surfaced running tcxunit against a real-world POU
-    // with a CONCAT call inside a METHOD body).
+    // CONCAT is a library function, not a method on any POU, and its
+    // parameters are named STR1..STR10 - which is what named-argument calls
+    // and the missing-argument error resolve against.
     public class ConcatIntrinsicTests
     {
         private static (Engine Engine, FbInstance Instance, Frame Frame) NewHolder(string varBlock)

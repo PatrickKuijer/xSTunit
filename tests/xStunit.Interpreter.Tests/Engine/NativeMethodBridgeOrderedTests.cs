@@ -5,10 +5,9 @@ using Xunit;
 
 namespace xStunit.Interpreter.Tests
 {
-    // TcXunit-k28.7: TEST_ORDERED/TEST_FINISHED_NAMED/IS_TEST_FINISHED had no
-    // NativeMethodBridge case or SuiteHost wrapper - wires them up and
-    // proves they're reachable through the interpreter, including as boolean
-    // expressions inside IF (TEST_ORDERED/IS_TEST_FINISHED return BOOL).
+    // TEST_ORDERED and IS_TEST_FINISHED return BOOL, so they appear as IF
+    // conditions rather than as statements - reaching them has to work from
+    // expression position, not just from a bare call.
     public class NativeMethodBridgeOrderedTests
     {
         private static Engine NewSuiteEngine(string implementationText)
@@ -58,9 +57,9 @@ namespace xStunit.Interpreter.Tests
                 "TEST_FINISHED();\n" +
                 "AssertTrue(Condition := IS_TEST_FINISHED('A'), Message := 'finished now');");
 
-            // The trailing AssertTrue runs outside any TEST()/TEST_FINISHED()
-            // bracket, so it only proves IS_TEST_FINISHED's return value via
-            // the suite completing without an assertion-bracket error.
+            // The trailing AssertTrue sits outside any TEST() bracket, so it
+            // can only show up as the suite failing to complete - it is not
+            // reported as an assertion of its own.
             var result = Assert.Single(engine.RunSuite("FB_MySuite"));
             Assert.True(result.Passed, result.ToString());
         }

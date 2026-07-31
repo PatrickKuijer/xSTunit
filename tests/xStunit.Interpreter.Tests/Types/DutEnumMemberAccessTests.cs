@@ -5,11 +5,6 @@ using Xunit;
 
 namespace xStunit.Interpreter.Tests
 {
-    // TcXunit-rk3: a fully-qualified ENUM literal (EnumTypeName.MemberName,
-    // IEC 61131-3 SS2.4.3) for a user-defined ENUM DUT must resolve to the
-    // member's int value - the DUT-sourced counterpart to BuiltinEnumTests'
-    // TcEventSeverity coverage, backed by TypeRegistry.TryGetEnumMembers
-    // (populated from DutEnumLoader.Load, not exercised directly here).
     public class DutEnumMemberAccessTests
     {
         private static IReadOnlyDictionary<string, IReadOnlyDictionary<string, int>> EnumMembers(
@@ -47,8 +42,6 @@ namespace xStunit.Interpreter.Tests
         [Fact]
         public void QualifiedEnumLiteral_ExplicitInitializerWithGap_ResolvesToDeclaredValue()
         {
-            // TcXunit-rk3 user story 4: first explicit initializer is 5,
-            // gaps/offsets in the DUT source must be respected exactly.
             var enumMembers = EnumMembers("eWidgetValueKind", ("TypeBool", 5), ("TypeByte", 6), ("TypeInt", 7));
             var engine = NewEngine("result := eWidgetValueKind.TypeInt;", enumMembers);
             var instance = engine.NewInstance("FB_Wrapper");
@@ -114,8 +107,8 @@ END_TYPE");
         [InlineData(1, 2)]
         public void QualifiedEnumLiteral_AsCaseLabel_DispatchesOnMatchingArm(int opcode, int expected)
         {
-            // TcXunit-ohn: EnumType.Member: used as a CASE label must dispatch
-            // like any other label, not fail to parse as a CASE-arm boundary.
+            // A qualified enum label and a CASE arm both end in ':', so the
+            // parser must not read 'eWidgetOpcode.Add' as an arm boundary.
             var enumMembers = EnumMembers("eWidgetOpcode", ("Add", 0), ("Remove", 1));
             var engine = NewEngine(
                 $"eOpcode := {opcode};\n" +
@@ -137,9 +130,6 @@ END_TYPE");
         [Fact]
         public void QualifiedEnumLiteral_LocalVariableSharesEnumTypeName_VariableWins()
         {
-            // TcXunit-rk3 user story 7: a resolvable variable/cell always
-            // wins over enum-type-name resolution, mirroring the existing
-            // GVL-qualifier disambiguation rule (GvlGlobalsTests).
             var stValue = StructDeclParser.Parse(@"TYPE ST_Value :
 STRUCT
 	TypeLreal : INT;

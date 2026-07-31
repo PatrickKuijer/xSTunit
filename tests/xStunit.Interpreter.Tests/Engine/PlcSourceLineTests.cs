@@ -7,11 +7,11 @@ using Xunit;
 
 namespace xStunit.Interpreter.Tests
 {
-    // TcXunit-p3t.4: PlcSourceLocationException.Line, the composition of
-    // p3t.1 (who faulted), p3t.2 (which line of the body) and p3t.3 (where the
-    // body starts in the file). These go through TcPouParser rather than
-    // hand-built PouAst/MethodAst on purpose - a hand-built AST's BodyStartLine
-    // defaults to 1, which would make an off-by-BodyStartLine bug invisible.
+    // A reported line composes three things: who faulted, which line of the
+    // body, and where that body starts in the file. These go through
+    // TcPouParser rather than a hand-built PouAst/MethodAst on purpose - a
+    // hand-built AST's BodyStartLine defaults to 1, which would make an
+    // off-by-BodyStartLine bug invisible.
     public class PlcSourceLineTests
     {
         [Fact]
@@ -23,15 +23,14 @@ namespace xStunit.Interpreter.Tests
             var suite = TcPouParser.Parse(FaultOnBodyLine4Xml);
             var engine = new Engine(new TypeRegistry(new[] { suite }));
 
-            // TcXunit-3tx.3: the fault is inside an open TEST() bracket, so it
-            // fails that test rather than the suite. The location machinery
-            // this test is about is unchanged - it now arrives on the failure.
+            // The fault is inside an open TEST() bracket, so it fails that test
+            // rather than throwing out of the suite; the location arrives on
+            // the failure instead.
             var failure = Assert.Single(Assert.Single(engine.RunSuite("FB_LineSuite")).Failures);
 
             Assert.Equal(12, suite.Methods[0].BodyStartLine);
-            // TcXunit-gfs: Line stays the raw .TcPOU file line (structured
-            // consumers only); BodyLine is the new human-facing number and is
-            // what Message now embeds.
+            // Line is the raw file line, for structured consumers; BodyLine is
+            // the human-facing number, and the one Message embeds.
             Assert.Equal(15, failure.Site.Line);
             Assert.Equal(4, failure.Site.BodyLine);
             Assert.Equal("FB_LineSuite.Fails", failure.Site.Location);
@@ -66,8 +65,6 @@ namespace xStunit.Interpreter.Tests
             var suite = TcPouParser.Parse(NestedChainXml);
             var engine = new Engine(new TypeRegistry(new[] { suite }));
 
-            // TcXunit-3tx.3: contained into the open TEST() bracket; the
-            // innermost-wins rule this test pins is unchanged.
             var failure = Assert.Single(Assert.Single(engine.RunSuite("FB_NestedLineSuite")).Failures);
 
             var outer = suite.Methods[0];
@@ -79,15 +76,13 @@ namespace xStunit.Interpreter.Tests
             Assert.Equal(inner.BodyStartLine + 2, failure.Site.Line);
             Assert.NotEqual(outer.BodyStartLine + 1, failure.Site.Line);
 
-            // Body-relative: Inner's fault is on its own body line 3, never
-            // Outer's body line 2 (its call site) - "innermost wins" must hold
-            // for BodyLine exactly as it already does for Line.
+            // "Innermost wins" must hold for BodyLine exactly as it does for
+            // Line: Inner's own body line 3, never Outer's call site.
             Assert.Equal(3, failure.Site.BodyLine);
             Assert.NotEqual(2, failure.Site.BodyLine);
 
-            // TcXunit-1am: each level of the chain keeps its OWN line, not
-            // the innermost one - Outer's entry is its call site (body line
-            // 2), never Inner's fault line (body line 3).
+            // Each frame in the chain keeps its OWN line - Outer's entry is its
+            // call site, not the innermost fault line.
             Assert.Equal(
                 new[] { "Inner", "Outer", null },
                 failure.CallStack.Select(f => f.MethodName).ToArray());
@@ -119,10 +114,10 @@ namespace xStunit.Interpreter.Tests
 
             var unknown = new PlcSourceLocationException(
                 "FB_X", "M", PlcSourceLocationException.UnknownLine, PlcSourceLocationException.UnknownLine, inner);
-            // TcXunit-gfs: Message embeds BodyLine, not Line - a suite failing
-            // several call-frames deep in a real .TcPOU file can have a raw
-            // file line in the hundreds while its body-relative line stays
-            // small, so the two must be distinguishable here.
+            // Message embeds BodyLine, not Line: a fault deep in a real source
+            // file can have a raw file line in the hundreds while its
+            // body-relative line stays small, so the two are kept far apart
+            // here to tell which one was rendered.
             var known = new PlcSourceLocationException("FB_X", "M", 142, 7, inner);
 
             Assert.Equal("FB_X.M: boom", unknown.Message);

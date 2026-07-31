@@ -6,14 +6,11 @@ using Xunit;
 
 namespace xStunit.Interpreter.Tests
 {
-    // TcXunit-sej.2: ADR(x) +/- offset. A pointer targeting an array element
-    // steps directly on the real backing ArrayValue. A pointer to a scalar
-    // or whole STRUCT has no element to step through, but reuses the
-    // MEMCPY/MEMSET byte-layout packer (PackCellToByteView) to snapshot the
-    // Cell's current value into a synthetic BYTE-array view and step through
-    // that instead - read-only (ptr^ := isn't a supported assignment target
-    // yet), but enough to walk struct/array-of-struct boundaries for
-    // byte-for-byte comparison idioms.
+    // Pointer arithmetic on an array element steps the real backing
+    // ArrayValue, so writes through it land in the array. A scalar or whole
+    // STRUCT has no elements to step, so it is packed into a synthetic
+    // BYTE-array view of its current value instead - re-packed on each call,
+    // and readable only.
     public class PointerArithmeticTests
     {
         private static (Engine Engine, FbInstance Instance, Frame Frame) NewHolder(
@@ -131,11 +128,6 @@ namespace xStunit.Interpreter.Tests
         [Fact]
         public void Adr_OnStructPlusOffset_ReflectsCurrentValueNotStaleSnapshot()
         {
-            // Each ADR(p) + i call re-packs p fresh (TcXunit-sej.2) rather
-            // than caching a snapshot from the first call - a mutation
-            // between two arithmetic calls on the same base pointer must be
-            // visible, matching the read-only buffer-compare idiom this
-            // exists for ('FOR i := 0 TO inSize - 1 DO (ipA + i)^ <> ...').
             var structAst = new StructAst("uPair", new[]
             {
                 new VarDecl("a", "USINT", null, VarSection.Local),
@@ -177,11 +169,9 @@ namespace xStunit.Interpreter.Tests
         [Fact]
         public void Adr_PlusUdintOffset_DoesNotThrowInvalidCast()
         {
-            // The 'FOR i := 0 TO inSize - 1 DO (ipA + i)^' buffer-compare
-            // idiom uses a UDINT loop index, which boxes as long. Pointer
-            // arithmetic must narrow it (Convert.ToInt32), not direct (int)
-            // unbox it - the latter threw InvalidCastException (Int64 -> Int32)
-            // and surfaced whole suites as "(parse error)".
+            // The usual buffer-compare loop counts with a UDINT index, which
+            // boxes as long, so the offset must be narrowed rather than
+            // unboxed straight to int.
             var (engine, instance, frame) = NewHolder(
                 "VAR\n\tbuf : ARRAY[0..3] OF BYTE := [10, 20, 30, 40];\n\ti : UDINT := 2;\nEND_VAR");
 

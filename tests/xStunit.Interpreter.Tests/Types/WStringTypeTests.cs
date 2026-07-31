@@ -5,13 +5,9 @@ using Xunit;
 
 namespace xStunit.Interpreter.Tests
 {
-    // TcXunit-gd2.4: WSTRING had no interpreter representation at all - not
-    // even a trivial STRING mirror. StringTypeInfo.IsStringType/ParseLength
-    // now recognize WSTRING alongside STRING (same default 80-char length,
-    // since the interpreter has no narrower wide-char representation than
-    // C# string), and the Lexer tokenizes "..." (WSTRING's literal
-    // delimiter) into the same StringLiteral token '...' already produces
-    // for STRING.
+    // WSTRING is represented exactly as STRING is - a CLR string - and its
+    // double-quoted literal lexes to the same token as STRING's
+    // single-quoted one.
     public class WStringTypeTests
     {
         private static Engine NewSuiteEngine(string varBlock, string implementationText)

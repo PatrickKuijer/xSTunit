@@ -5,12 +5,8 @@ using Xunit;
 
 namespace xStunit.Interpreter.Tests
 {
-    // TcXunit-3g7: VAR_TEMP wasn't recognized by VarBlockParser's
-    // section-header switch, so its declarations were silently dropped and
-    // the engine threw "Unknown variable" the first time the body read one.
-    // Covers the end-to-end fix: VAR_TEMP locals are declared, and (mirroring
-    // real IEC 61131-3 semantics) are re-initialized to their default value
-    // on every call rather than persisting like a FB-instance VAR field.
+    // A METHOD's VAR_TEMP local is re-initialized to its default on every call,
+    // never carried over the way an FB-instance VAR field is.
     public class VarTempLocalsTests
     {
         [Fact]

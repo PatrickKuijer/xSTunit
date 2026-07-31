@@ -3,11 +3,11 @@ using System.Runtime.CompilerServices;
 
 namespace xStunit.Interpreter.Tests
 {
-    // Resolves vendored fixture POUs (tests/Fixtures/...) relative to the
-    // calling test file instead of a machine-local external repo path
-    // (TcXunit-1ys). Callers live one level deeper now
-    // (tests/xStunit.Interpreter.Tests/<Topic>/...), hence the extra ".."
-    // to still reach tests/Fixtures.
+    // Fixture POUs are located from the caller's own source path rather than
+    // the working directory, so a run is independent of where it was started
+    // from. The two ".." hops assume every caller sits in a topic folder under
+    // tests/xStunit.Interpreter.Tests/ - a caller at the project root, or one
+    // folder deeper, would resolve somewhere else entirely.
     internal static class TestFixtures
     {
         public static string FbCounterFixtureDir([CallerFilePath] string callerFile = "") =>

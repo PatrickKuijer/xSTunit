@@ -3,8 +3,8 @@ using Xunit;
 
 namespace xStunit.Interpreter.Tests
 {
-    // Line stamping on AST nodes (TcXunit-p3t.2). Stmt.Line/Expr.Line are
-    // 1-based within the ST body text, so line 1 is the body's first line.
+    // Stmt.Line/Expr.Line are 1-based within the ST body text, so line 1 is the
+    // body's first line and not a line of the file the body was read from.
     public class ParserLineNumberTests
     {
         [Fact]
@@ -186,8 +186,8 @@ namespace xStunit.Interpreter.Tests
         [Fact]
         public void ParseStatements_HandBuiltNodes_DefaultToUnknownLineZero()
         {
-            // Line 0 is the "unknown" sentinel so the hundreds of hand-built
-            // AST nodes in the test suite stay valid without a line argument.
+            // Line 0 is the "unknown" sentinel, which is what lets the many
+            // hand-built AST nodes in these tests omit a line entirely.
             Assert.Equal(0, new IntLiteralExpr(1).Line);
             Assert.Equal(0, new ReturnStmt().Line);
         }

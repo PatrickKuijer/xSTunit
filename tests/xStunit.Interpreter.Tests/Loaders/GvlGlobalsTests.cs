@@ -5,11 +5,6 @@ using Xunit;
 
 namespace xStunit.Interpreter.Tests
 {
-    // TcXunit-71o: GVL-qualified globals (GvlName.field) must resolve as
-    // lvalues/rvalues anywhere in interpreted ST, backed by zero-initialized
-    // storage of the declared type, and support REF= to a GVL member -
-    // mirrors a common FB_init REF= pattern seen in real PLC code doing
-    // "sstWidget REF= gScratchGlobals.stWidget" unconditionally.
     public class GvlGlobalsTests
     {
         private static Engine NewEngine(string implementation, IReadOnlyList<GvlAst> gvls, IReadOnlyList<StructAst> structs = null)
@@ -98,9 +93,6 @@ namespace xStunit.Interpreter.Tests
             Assert.Equal(7, frame.Locals["result"].Value);
         }
 
-        // TcXunit-09s: an unqualified (bare) reference to a GVL constant
-        // must resolve via the same _globals lookup as GvlName.Member,
-        // not just via frame.ResolveCell.
         [Fact]
         public void UnqualifiedRead_GvlConstant_ResolvesWithoutGvlPrefix()
         {
@@ -114,9 +106,9 @@ namespace xStunit.Interpreter.Tests
             Assert.Equal(16, frame.Locals["result"].Value);
         }
 
-        // Mirrors the reported repro: one GVL's default-value expression
-        // references another GVL's constant unqualified, evaluated eagerly
-        // in Engine's constructor while building _globals.
+        // GVL default values are evaluated eagerly while the globals are still
+        // being built, so a cross-GVL reference has to resolve against a
+        // half-populated table rather than a finished one.
         [Fact]
         public void UnqualifiedRead_GvlConstant_ResolvesFromAnotherGvlDuringConstruction()
         {
@@ -131,9 +123,10 @@ namespace xStunit.Interpreter.Tests
             Assert.Equal(16, frame.Locals["result"].Value);
         }
 
-        // Same as above but declared in the opposite GVL order, so the
-        // referencing GVL is registered before the GVL that defines the
-        // constant it depends on.
+        // The same case with the GVLs declared the other way round, so the
+        // referencing GVL is registered BEFORE the one defining the constant.
+        // Not redundant with the test above: an implementation that resolves
+        // eagerly in registration order passes that one and fails this one.
         [Fact]
         public void UnqualifiedRead_GvlConstant_ResolvesRegardlessOfGvlRegistrationOrder()
         {
@@ -148,11 +141,9 @@ namespace xStunit.Interpreter.Tests
             Assert.Equal(16, frame.Locals["result"].Value);
         }
 
-        // TcXunit-654: ARRAY bounds are IEC 61131-3 constant expressions, so
-        // a GVL-qualified constant (e.g. cRemoteClientConfig.MAX_REMOTE_ITEMS,
-        // mirroring the reported repro) is legal as a bound and must resolve
-        // through the normal GVL lookup rather than crashing ArrayTypeInfo's
-        // raw int.Parse with a FormatException.
+        // An ARRAY bound is any IEC 61131-3 constant expression, not just an
+        // integer literal, so a GVL-qualified constant is legal there and has
+        // to go through the GVL lookup instead of being parsed as a number.
         [Fact]
         public void NewInstance_ArrayFieldBoundByGvlQualifiedConstant_BuildsArrayOfDeclaredLength()
         {
@@ -172,10 +163,9 @@ namespace xStunit.Interpreter.Tests
             Assert.All(aUnits.Elements, e => Assert.Equal(0, e));
         }
 
-        // Same shape, but the array is a STRUCT field (matching the reported
-        // repro's BuildStructDefault call chain: a DUT field whose array
-        // bound is a GVL-qualified constant, defaulted while building an
-        // enclosing struct's defaults rather than an FB's own fields).
+        // Same shape one level down, where the array is a DUT field: struct
+        // defaults are built by a separate path from an FB's own fields, and
+        // fixing only the FB path leaves this one throwing.
         [Fact]
         public void NewInstance_StructFieldArrayBoundByGvlQualifiedConstant_BuildsArrayOfDeclaredLength()
         {
@@ -194,9 +184,10 @@ namespace xStunit.Interpreter.Tests
             Assert.Equal(10, aItems.Elements.Length);
         }
 
-        // A single GVL whose default-value expression throws (unresolvable
-        // reference) must not prevent other GVLs from being constructed -
-        // Engine's constructor should skip just the bad GVL/decl.
+        // One unresolvable default must cost only its own declaration. A
+        // real project routinely references library constants this loader
+        // knows nothing about, and failing the whole Engine construction over
+        // one of them would make every suite in the project undiscoverable.
         [Fact]
         public void ConstructionResilience_BadGvlDefaultDoesNotBlockOtherGvls()
         {

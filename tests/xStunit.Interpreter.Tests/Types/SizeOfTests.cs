@@ -5,9 +5,8 @@ using Xunit;
 
 namespace xStunit.Interpreter.Tests
 {
-    // TcXunit-l1x: SIZEOF() native call. Byte-size computation for
-    // scalars/STRING/ARRAY/STRUCT, assuming TwinCAT's default
-    // natural-alignment struct packing (see Engine.SizeOf.cs remarks).
+    // Struct and array sizes assume natural alignment unless a pack_mode
+    // pragma caps it; see the layout rules in Engine.SizeOf.cs.
     public class SizeOfTests
     {
         private static (Engine Engine, FbInstance Instance, Frame Frame) NewHolder(
@@ -81,8 +80,6 @@ namespace xStunit.Interpreter.Tests
             Assert.Equal(11, result);
         }
 
-        // TcXunit-988: a STRING size may be a GVL-qualified constant
-        // expression, not just a bare integer literal.
         [Fact]
         public void SizeOf_StringSizedByGvlQualifiedConstant_ReturnsLengthPlusNull()
         {
@@ -176,9 +173,8 @@ END_TYPE");
         [Fact]
         public void SizeOf_EnumVariable_DefaultsToIntByteWidth()
         {
-            // TcXunit-fyu: no explicit base type on the ENUM DUT (E_Color ->
-            // INT via DutEnumLoader's default), so SIZEOF() resolves it the
-            // same way it resolves any other alias-to-scalar type name.
+            // An ENUM with no explicit base type is INT-backed, and reaches
+            // SIZEOF as an alias to that base type like any other alias.
             var aliases = new[] { new KeyValuePair<string, string>("E_Color", "INT") };
             var (engine, _, frame) = NewHolder("VAR\n\tc : E_Color;\nEND_VAR", aliases: aliases);
 
@@ -199,11 +195,10 @@ END_TYPE");
             Assert.Equal(4, result);
         }
 
-        // TcXunit-eub: a struct with {attribute 'pack_mode' := '1'} is
-        // byte-packed - no per-field alignment padding, unlike the default
-        // (pack_mode 0/absent) natural-alignment case this same field
-        // layout would otherwise get (UINT+UINT then LREAL needing 8-byte
-        // alignment would pad the struct to 16 bytes).
+        // {attribute 'pack_mode' := '1'} byte-packs a struct: no per-field
+        // alignment padding at all. The same fields at natural alignment pad
+        // the LREAL out to offset 8 and the struct to 16 bytes, as the test
+        // immediately below shows.
         [Fact]
         public void SizeOf_PackedStruct_HasNoAlignmentPadding()
         {

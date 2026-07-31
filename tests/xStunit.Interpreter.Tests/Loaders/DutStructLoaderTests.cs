@@ -6,11 +6,11 @@ using Xunit;
 
 namespace xStunit.Interpreter.Tests
 {
-    // TcXunit-bpk: the STRUCT-vs-ENUM/alias/union filter must match the
-    // STRUCT keyword in the TYPE header, not a raw Contains("STRUCT") over
-    // the whole declaration text - which would false-positive on an ENUM or
-    // alias DUT whose text merely contains that substring in a comment or an
-    // identifier like "STRUCTURED".
+    // The STRUCT-vs-ENUM/alias/union filter matches the STRUCT keyword in the
+    // TYPE header, not a Contains("STRUCT") over the whole declaration text.
+    // The difference only shows up on declarations carrying that substring
+    // somewhere harmless - a comment, or an identifier like "STRUCTURED" -
+    // which is what most of these fixtures are built to be.
     public class DutStructLoaderTests
     {
         [Fact]
@@ -118,14 +118,14 @@ END_TYPE";
         [Fact]
         public void Load_ExtendsStructDut_IsSkippedNotRegisteredAsStruct()
         {
-            // TcXunit-2h4: "TYPE X EXTENDS Base :" STRUCT DUTs (struct
-            // inheritance) have no field-merging model yet. IsStructDeclaration
-            // still returns true for these (the EXTENDS group is optional in
-            // TypeHeaderPattern) - the actual skip happens one step later, in
-            // Load, because StructDeclParser.TypeNamePattern requires "TYPE
-            // Name :" with nothing between the name and the colon, so it
-            // can't match the "EXTENDS Base" text and leaves StructAst.Name
-            // null, which Load treats as skip-and-continue.
+            // Struct inheritance has no field-merging model yet, so an
+            // "EXTENDS Base" STRUCT DUT must be dropped rather than registered
+            // with only its own fields. Note where that happens: this one still
+            // passes IsStructDeclaration - hence the assertion mid-test - and
+            // is only rejected a step later in Load, when the name pattern
+            // cannot match past the EXTENDS clause and leaves StructAst.Name
+            // null. Move the rejection to the filter and the mid-test assertion
+            // is what fails.
             var tempDir = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "tcxunit-extendsstruct-" + Guid.NewGuid()));
             try
             {

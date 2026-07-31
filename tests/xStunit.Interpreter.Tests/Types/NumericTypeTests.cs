@@ -6,8 +6,6 @@ using Xunit;
 
 namespace xStunit.Interpreter.Tests
 {
-    // TcXunit-w5x.15.1: REAL/LREAL literals, INT->REAL->LREAL implicit widening,
-    // explicit X_TO_Y narrowing casts, and rejection of narrowing without a cast.
     public class NumericTypeTests
     {
         private static Engine NewEngine() => new Engine(new TypeRegistry(Array.Empty<PouAst>()));
@@ -226,12 +224,10 @@ namespace xStunit.Interpreter.Tests
             Assert.Equal(0d, instance.Fields["lrValue"].Value);
         }
 
-        // TcXunit-5qs: a bare decimal literal (no LREAL#/REAL# prefix) always
-        // lexes as a float (RealLiteralExpr) - 'lrValue : LREAL := 2.5;' must
-        // still widen that float to double at declaration time, the same way
-        // 'lrValue := 2.5;' widens post-declaration, or the field would
-        // silently run at REAL precision for its whole life despite being
-        // declared LREAL.
+        // A bare decimal literal always lexes as REAL (float), so a declared
+        // LREAL field must widen its initializer at declaration time. Without
+        // that, the field runs at REAL precision for its whole life despite
+        // being declared LREAL.
         [Fact]
         public void NewInstance_LrealFieldWithBareDecimalInitializer_WidensToDouble()
         {
@@ -249,10 +245,8 @@ namespace xStunit.Interpreter.Tests
             Assert.Equal(2.5d, instance.Fields["lrGain"].Value);
         }
 
-        // TcXunit-6af.1: struct-field UDINT and FB-field UDINT must agree on
-        // CLR representation - both go through IecNumericType now instead of
-        // each defaulting path (Engine.BuildStructDefault vs. Engine.NewInstance)
-        // re-deriving its own answer.
+        // UDINT boxes as long, and the struct-field and FB-field defaulting
+        // paths must not each re-derive that answer for themselves.
         [Fact]
         public void NewInstance_UdintField_AgreesWithStructFieldOnClrRepresentation()
         {
@@ -275,11 +269,9 @@ namespace xStunit.Interpreter.Tests
             Assert.Equal(0L, structInstance.Fields["value"].Value);
         }
 
-        // TcXunit-6af.6: ULINT/LWORD box as ulong via the same IecNumericType
-        // table LINT/UDINT/DWORD use for long - verify the default CLR
-        // representation, then exercise arithmetic/bitstring/MOD/assignment
-        // through the actual interpreter to confirm the ulong-widening added
-        // alongside the long-widening in TcXunit-6af.1 works end-to-end.
+        // ULINT and LWORD box as ulong where LINT/UDINT/DWORD box as long, so
+        // arithmetic, bitstring ops, MOD and assignment each need a widening
+        // path of their own - the tests below walk them.
         [Fact]
         public void NewInstance_UlintField_DefaultsToZeroUlong()
         {
@@ -359,11 +351,9 @@ namespace xStunit.Interpreter.Tests
             Assert.Equal(1UL, instance.Fields["value"].Value);
         }
 
-        // TcXunit-839: REAL_TO_STRING/LREAL_TO_STRING/<integer>_TO_STRING -
-        // TryEvaluateCast extended to recognize STRING as a valid cast target
-        // for a numeric source prefix (REAL, LREAL, or the IntegerCastTargets
-        // set), producing a plain CLR string formatted with InvariantCulture
-        // rather than CurrentCulture.
+        // X_TO_STRING formats with InvariantCulture, so a machine running a
+        // comma-decimal locale still renders "3.5" and string comparisons in
+        // ST test code stay stable.
         [Fact]
         public void Evaluate_RealToStringCast_ProducesInvariantCultureString()
         {
@@ -394,14 +384,10 @@ namespace xStunit.Interpreter.Tests
             Assert.Equal("42", s);
         }
 
-        // UDINT boxes as C# long rather than int (IecNumericType.cs) - this
-        // exercises the long-boxed branch of Convert.ToString, distinct from
-        // the int-boxed INT case above. A UDINT field (not a bare literal -
-        // the parser's IntLiteral path only supports Int32-range literals,
-        // TcXunit-w5x.15.1) starts at 0L and widens via the same int-literal
-        // addition path ExecuteStatements_UlintFieldPlusIntLiteral_WidensAndAdds
-        // exercises for ULINT, so `value` really is long-boxed by the time it
-        // reaches UDINT_TO_STRING.
+        // UDINT boxes as long, a different formatting branch from the
+        // int-boxed INT case above. The value has to be built up through a
+        // field rather than written as a literal, because the parser's
+        // integer literals are Int32-range only.
         [Fact]
         public void Evaluate_UdintToStringCast_ProducesPlainDigits()
         {
@@ -444,10 +430,8 @@ namespace xStunit.Interpreter.Tests
             Assert.Equal("-7", s);
         }
 
-        // BOOL_TO_STRING has a non-numeric prefix, so it must remain OUT of
-        // scope for TryEvaluateCast's new STRING-target branch and keep
-        // falling through to CallMethod's ordinary "method not found" error,
-        // unchanged by this feature.
+        // BOOL is not a numeric cast source, so BOOL_TO_STRING is not a cast
+        // at all and must keep falling through to ordinary method dispatch.
         [Fact]
         public void Evaluate_BoolToStringCall_StillThrowsMethodNotFound()
         {

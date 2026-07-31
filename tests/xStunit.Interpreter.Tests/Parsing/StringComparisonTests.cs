@@ -5,10 +5,10 @@ using Xunit;
 
 namespace xStunit.Interpreter.Tests
 {
-    // TcXunit-ixh: EvaluateBinary had no STRING branch, so '=' / '<>' between
-    // two STRING operands fell through to the int-cast numeric path and threw
-    // a raw InvalidCastException. Mirrors BoolLiteralTests' coverage of the
-    // BOOL guard (TcXunit-80v/TcXunit-vwe).
+    // STRING comparison needs a branch of its own; without one the operands
+    // reach the numeric path, where the int cast turns an everyday ST
+    // comparison into a raw InvalidCastException. BoolLiteralTests pins the
+    // same rule for BOOL.
     public class StringComparisonTests
     {
         private static Engine NewEngine() => new Engine(new TypeRegistry(Array.Empty<PouAst>()));
@@ -47,9 +47,9 @@ namespace xStunit.Interpreter.Tests
             Assert.Equal(expected, (bool)result);
         }
 
-        // Mismatched STRING/non-STRING (e.g. sVal = 1) has no valid
-        // IEC 61131-3 semantics - must throw a descriptive
-        // NotSupportedException rather than InvalidCastException.
+        // A STRING against a non-STRING has no IEC 61131-3 meaning, so the
+        // failure names the operator and both types instead of surfacing as an
+        // InvalidCastException from the numeric path.
         [Fact]
         public void Evaluate_StringEqualsInt_ThrowsNotSupportedException()
         {

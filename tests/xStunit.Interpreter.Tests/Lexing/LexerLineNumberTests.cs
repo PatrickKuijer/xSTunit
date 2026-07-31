@@ -4,9 +4,9 @@ using Xunit;
 
 namespace xStunit.Interpreter.Tests
 {
-    // Line stamping on tokens (TcXunit-p3t.2). Line is 1-based within the
-    // string handed to Tokenize - i.e. within a method's ST body - so these
-    // tests never reason about .TcPOU file lines.
+    // Token.Line is 1-based within the string handed to Tokenize - a method's
+    // ST body - never within the enclosing source file, so nothing here should
+    // reason about where that body sits in the file.
     public class LexerLineNumberTests
     {
         [Fact]
@@ -38,8 +38,9 @@ namespace xStunit.Interpreter.Tests
         [Fact]
         public void Tokenize_CrLfLineBreak_CountsAsSingleBreak()
         {
-            // TwinCAT writes CRLF into .TcPOU bodies while the fixtures on
-            // disk are LF, so both must advance the counter by exactly one.
+            // TwinCAT writes CRLF into POU bodies while the fixtures on disk
+            // are LF; if CRLF counted twice, every line number reported for a
+            // real project would drift further off with each line.
             var tokens = Lexer.Tokenize("a := 1;\r\nb := 2;\r\nc := 3;");
 
             Assert.Equal(1, LineOfIdentifier(tokens, "a"));
@@ -85,15 +86,13 @@ namespace xStunit.Interpreter.Tests
         [Fact]
         public void Tokenize_MultiLineStringLiteral_StampsLineWhereLiteralStarts()
         {
-            // A token's Line is where it starts, not where it ends - the
-            // literal below opens on line 2 and closes on line 3.
             var tokens = Lexer.Tokenize("a := 1;\nmsg := 'first\nsecond';\nb := 2;");
 
             var literal = Assert.Single(tokens, t => t.Type == TokenType.StringLiteral);
             Assert.Equal(2, literal.Line);
 
-            // The break inside the literal still counts, so the next
-            // statement lands on line 4, not line 3.
+            // A break inside a literal still counts as a break, so everything
+            // after it keeps the line numbering the author would expect.
             Assert.Equal(4, LineOfIdentifier(tokens, "b"));
         }
 

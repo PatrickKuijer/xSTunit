@@ -5,18 +5,17 @@ using Xunit;
 
 namespace xStunit.Interpreter.Tests
 {
-    // TcXunit-nch: NativeTimerTypes/NativeEdgeTriggerTypes (Engine.cs) and the
-    // "Loopback" checks (Engine.cs/Engine.Defaults.cs) used to be ordinal
-    // comparisons, so a lowercase/mixed-case native FB base type (e.g.
-    // 'fbTimer : ton;') fell through to NativeSuiteHost instead of being
-    // recognized as a native timer/edge-trigger/loopback stub - the same
-    // class of bug TcXunit-fzm fixed for elementary type names. Fixing only
-    // the "is this native?" lookups isn't enough on its own: TimerHost.Create
-    // /EdgeTriggerHost.Create's switch expressions are a second, independent
-    // case-sensitive site - a lowercase spelling that passes the lookup but
-    // hits the still-case-sensitive switch throws NotSupportedException
-    // instead of NativeSuiteHost's silent wrong-path failure. These tests
-    // cover both layers via the full ST->NewInstance round trip.
+    // IEC 61131-3 type names are case-insensitive, and recognizing a native FB
+    // stub takes TWO independent case-sensitive-if-you-get-it-wrong lookups:
+    // the "is this native at all?" check in Engine, and the type-name switch
+    // inside each Host.Create. Getting only the first right is the dangerous
+    // half-fix, so these run the full ST -> NewInstance round trip and assert
+    // on the host that came back.
+    //
+    // The two failure modes differ, which is why both layers are covered: a
+    // miss in the first lookup silently instantiates a suite host and the FB
+    // just never behaves like a timer, while a miss in the switch throws
+    // NotSupportedException.
     public class NativeFbCaseInsensitivityTests
     {
         private static Engine NewTimerWrapperEngine(string timerTypeName)
@@ -98,10 +97,9 @@ namespace xStunit.Interpreter.Tests
             Assert.Null(fbTimer.NativeSuiteHost);
         }
 
-        // TcXunit-x5pt: the LTIME trio resolves through the same
-        // NativeTimerTypes lookup and the same TimerHost.Create switch, so it
-        // inherits both case-insensitivity layers - and seeds PT/ET at LTIME
-        // width (0ul), not TIME width (0u).
+        // The LTIME trio goes through the same two lookups as TON/TOF, but must
+        // seed PT/ET at LTIME width (0ul), not TIME width (0u) - a host picked
+        // by a case-insensitive match still has to be the right one.
         [Theory]
         [InlineData("lton")]
         [InlineData("LtOn")]

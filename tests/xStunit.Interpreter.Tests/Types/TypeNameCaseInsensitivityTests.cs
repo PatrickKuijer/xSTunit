@@ -5,16 +5,10 @@ using Xunit;
 
 namespace xStunit.Interpreter.Tests
 {
-    // TcXunit-fzm: IEC 61131-3 type names are case-insensitive, but the
-    // interpreter's type-name lookup sites (IecNumericType.Types,
-    // Engine.DefaultValue, StringTypeInfo, ArrayTypeInfo, TypeRegistry)
-    // all compared ordinally - a lowercase or mixed-case spelling of an
-    // elementary type silently took a different path than the uppercase
-    // spelling. E.g. 'nGain : lreal;' fell through DefaultValue's
-    // IecNumericType lookup to the plain-scalar '0' (int) fallback instead
-    // of 0d, and a lowercase-spelled METHOD return type wasn't seeded by
-    // Engine.SeedReturnCell (TcXunit-cq6), reopening the narrowing bug that
-    // ticket fixed.
+    // IEC 61131-3 type names are case-insensitive, so 'lreal', 'LReal' and
+    // 'LREAL' must take the same path through every type-name lookup site.
+    // An ordinal comparison anywhere sends the odd spelling to the
+    // plain-scalar fallback instead of its real type.
     public class TypeNameCaseInsensitivityTests
     {
         [Fact]
@@ -51,13 +45,10 @@ namespace xStunit.Interpreter.Tests
             Assert.Equal(0d, instance.Fields["nGain"].Value);
         }
 
-        // Mirrors CallableReturnTypeSeedingTests'
-        // LrealMethod_SeededByRealLiteralThenAssignedLreal_ReturnsTheLreal,
-        // but with a lowercase-spelled return type: without a case-insensitive
-        // IecNumericType lookup in SeedReturnCell, the return cell is never
-        // seeded, 'M_Read := 0.0;' creates it as a REAL (bare decimal literals
-        // lex as REAL, TcXunit-5qs), and the later LREAL assignment is
-        // rejected as an implicit narrowing.
+        // A return cell that is not seeded from the declared return type gets
+        // created by the first assignment instead: 'M_Read := 0.0;' makes it
+        // a REAL, because bare decimal literals lex as REAL, and the later
+        // LREAL assignment is then rejected as an implicit narrowing.
         [Fact]
         public void LowercaseLrealMethodReturnType_SeedsReturnCellAndReturnsTheLreal()
         {
@@ -85,9 +76,8 @@ namespace xStunit.Interpreter.Tests
             Assert.Equal(1.5d, result);
         }
 
-        // Same shape as the lowercase case above, but with a mixed-case
-        // spelling ("LReal") - the lowercase test alone leaves open whether
-        // the fix is really a case-insensitive comparison or just an
+        // Deliberately near-identical to the lowercase test above: on its own
+        // that one cannot distinguish a case-insensitive comparison from an
         // all-lowercase special case.
         [Fact]
         public void MixedCaseLrealMethodReturnType_SeedsReturnCellAndReturnsTheLreal()

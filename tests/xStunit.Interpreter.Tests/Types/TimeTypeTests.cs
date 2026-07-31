@@ -6,8 +6,7 @@ using Xunit;
 
 namespace xStunit.Interpreter.Tests
 {
-    // TcXunit-w5x.15.3: TIME/LTIME literal grammar (T#/TIME#/LTIME#) and their
-    // Cell representations (TIME as uint ms, LTIME as ulong ns).
+    // TIME boxes as uint milliseconds; LTIME as ulong nanoseconds.
     public class TimeTypeTests
     {
         private static Engine NewEngine() => new Engine(new TypeRegistry(Array.Empty<PouAst>()));
@@ -118,10 +117,8 @@ namespace xStunit.Interpreter.Tests
             Assert.Equal(1_000_000ul, (ulong)result);
         }
 
-        // TcXunit-odo: TIME boxes as uint - EvaluateBinary's comparison ops
-        // route through NumericCoercion.Promote, which used to unbox straight
-        // to int for anything that wasn't double/float/long/ulong, throwing
-        // InvalidCastException on a boxed uint.
+        // Comparison operands go through numeric promotion, which has to
+        // handle the boxed uint a TIME value arrives as.
         [Fact]
         public void Evaluate_TimeLiteralEqualsTimeLiteral_ReturnsTrueWithoutThrowing()
         {

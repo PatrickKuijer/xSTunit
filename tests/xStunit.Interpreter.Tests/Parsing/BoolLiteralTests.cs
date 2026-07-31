@@ -5,8 +5,6 @@ using Xunit;
 
 namespace xStunit.Interpreter.Tests
 {
-    // TcXunit-nfd: TRUE/FALSE as literal boolean expressions, parallel to
-    // Int/Real/Time literal handling.
     public class BoolLiteralTests
     {
         private static Engine NewEngine() => new Engine(new TypeRegistry(Array.Empty<PouAst>()));
@@ -66,9 +64,8 @@ namespace xStunit.Interpreter.Tests
             Assert.IsType<IdentifierExpr>(expr);
         }
 
-        // TcXunit-vwe: BOOL = / <> between two BOOL operands must return the
-        // boxed comparison result, not fall through to the int-cast numeric
-        // path (which would throw InvalidCastException).
+        // Comparing two BOOLs must not fall through to the numeric path, whose
+        // int cast turns an ordinary ST comparison into InvalidCastException.
         [Theory]
         [InlineData("TRUE = TRUE", true)]
         [InlineData("TRUE = FALSE", false)]
@@ -83,10 +80,9 @@ namespace xStunit.Interpreter.Tests
             Assert.Equal(expected, (bool)result);
         }
 
-        // TcXunit-80v: BOOL mixed with a non-BOOL operand (INT here) has no
-        // valid IEC 61131-3 semantics for '=' - it must throw a descriptive
-        // NotSupportedException, not fall through to the int-cast numeric
-        // path and throw an unhelpful InvalidCastException.
+        // BOOL against a non-BOOL has no IEC 61131-3 meaning, so the failure
+        // has to name the operator and both types - an InvalidCastException
+        // from the numeric path leaves the author with nothing to go on.
         [Fact]
         public void Evaluate_BoolEqualsInt_ThrowsNotSupportedException()
         {
@@ -100,9 +96,8 @@ namespace xStunit.Interpreter.Tests
             Assert.Contains("Int32", ex.Message);
         }
 
-        // TcXunit-80v: relational operators (<, >, <=, >=) have no valid
-        // IEC 61131-3 semantics for BOOL operands - must throw a descriptive
-        // NotSupportedException rather than InvalidCastException.
+        // The relational operators have no BOOL semantics either, so they take
+        // the same descriptive failure rather than an InvalidCastException.
         [Fact]
         public void Evaluate_BoolLessThanBool_ThrowsNotSupportedException()
         {
@@ -115,9 +110,8 @@ namespace xStunit.Interpreter.Tests
             Assert.Contains("Boolean", ex.Message);
         }
 
-        // Legitimate BOOL usage (AND/OR logical ops) must keep working - the
-        // TcXunit-80v guard should only fire for BOOL-with-non-BOOL or a BOOL
-        // operator with no BOOL semantics, not for these.
+        // The guard above must stay narrow: the logical operators are the
+        // common, legitimate BOOL usage and must not be caught by it.
         [Fact]
         public void Evaluate_BoolOrBool_StillWorks()
         {

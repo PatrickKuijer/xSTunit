@@ -78,8 +78,9 @@ namespace xStunit.Interpreter.Tests.Logging
 
                 Assert.Contains("unit test context", contents);
                 Assert.Contains("boom - marker-9f3c", contents);
-                // Full ex.ToString() (message + stack trace), not just ex.Message - the whole
-                // point of TcXunit-2v8 is not discarding the stack trace.
+                // "at " is the stack frame marker: it pins that the log gets
+                // ex.ToString() and not just ex.Message. Without the trace the
+                // log names the failure but never says where it happened.
                 Assert.Contains("at ", contents);
             }
             finally

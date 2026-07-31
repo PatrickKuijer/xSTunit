@@ -3,9 +3,9 @@ using Xunit;
 
 namespace xStunit.Interpreter.Tests
 {
-    // TcXunit-eub: the {attribute 'pack_mode' := 'N'} pragma preceding a
-    // STRUCT DUT's TYPE header is captured onto StructAst.PackMode instead
-    // of being silently dropped like an ordinary attribute pragma.
+    // pack_mode is the one attribute pragma the parser does not drop: it is
+    // captured onto StructAst.PackMode because it changes the struct's memory
+    // layout, which SIZEOF and byte-level assertions depend on.
     public class StructDeclParserTests
     {
         [Fact]

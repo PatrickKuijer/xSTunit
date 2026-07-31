@@ -5,9 +5,10 @@ using Xunit;
 
 namespace xStunit.Interpreter.Tests
 {
-    // TcXunit-w5x.15.5 / T4 design: Loopback native FB + explicit Transmit(source,
-    // sink) call, discrete copy via REFERENCE TO-style field-access binding
-    // (fbA.Buffer -> fbB.Buffer), no implicit wiring tied to StepCycles.
+    // Loopback moves a value only on an explicit Transmit(source, sink) call:
+    // a discrete copy through REFERENCE TO-style field-access binding, never a
+    // standing wire that StepCycles re-evaluates. That keeps a test's data flow
+    // where the test can see it, at the cost of having to say so every cycle.
     public class LoopbackTests
     {
         private static Engine NewWrapperEngine()
@@ -83,12 +84,9 @@ namespace xStunit.Interpreter.Tests
             Assert.Equal(1, rxFb.Fields["Buffer"].Value);
 
             txFb.Fields["Buffer"].Value = 2;
-            Assert.Equal(1, rxFb.Fields["Buffer"].Value); // no aliasing - copy already happened
+            Assert.Equal(1, rxFb.Fields["Buffer"].Value);
         }
 
-        // TcXunit-w5x.15.10 / T7: STRUCT payloads must be per-field cloned,
-        // not aliased - mutating the source struct after Transmit must not
-        // be visible through the sink.
         [Fact]
         public void Transmit_StructPayload_ClonesFieldsInsteadOfAliasing()
         {

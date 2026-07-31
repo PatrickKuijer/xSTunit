@@ -4,13 +4,10 @@ using Xunit;
 
 namespace xStunit.Interpreter.Tests
 {
-    // TcXunit-gd2.6: AssertArrayEquals_<TYPE> for the 12 non-float IEC
-    // scalar types (BOOL/BYTE/DINT/DWORD/INT/LINT/SINT/UDINT/UINT/ULINT/
-    // USINT/WORD) - the ARRAY[*] counterpart to the scalar AssertEquals_
-    // <TYPE> tests in NativeMethodBridgeAssertTests.cs. One theory per
-    // failure mode (shape mismatch vs per-element mismatch) covers all 12
-    // types via the same table-driven dispatcher rather than 12x duplicated
-    // test methods.
+    // The array counterpart to the scalar asserts in
+    // NativeMethodBridgeAssertTests. All twelve non-float IEC scalar types go
+    // through one table-driven dispatcher, so a theory per failure mode covers
+    // them without twelve near-identical test methods.
     public class NativeMethodBridgeArrayAssertTests
     {
         private static Engine NewSuiteEngine(string declarationText, string implementationText)
@@ -101,12 +98,10 @@ namespace xStunit.Interpreter.Tests
             Assert.Contains($"EXP: ARRAY[1] = {expectedFormatted}, ACT: ARRAY[1] = {actualFormatted}", result.Failures[0].Message);
         }
 
-        // Lower bounds can legitimately differ between Expecteds/Actuals
-        // (upstream's own documented behavior - see FB_TestSuite.TcPOU's
-        // AssertArrayEquals_BOOL comment) - as long as the sizes match, a
-        // pure lower-bound offset isn't a shape mismatch, and each array's
-        // own real (lower-bound-relative) index is reported on a later
-        // per-element mismatch.
+        // Two arrays of equal size but different lower bounds compare
+        // element-by-element rather than counting as a shape mismatch, and a
+        // reported index is each array's own declared index - so the two sides
+        // of one failure message can legitimately name different numbers.
         [Fact]
         public void RunSuite_AssertArrayEquals_DifferingLowerBounds_ReportsEachArraysOwnIndex()
         {
@@ -125,14 +120,10 @@ namespace xStunit.Interpreter.Tests
             Assert.Contains("EXP: ARRAY[2] = 20, ACT: ARRAY[6] = 99", result.Failures[0].Message);
         }
 
-        // TcXunit-gd2.7: AssertArrayEquals_REAL/_LREAL - the float-array
-        // counterpart to the 12 non-float types above. Unlike those,
-        // upstream's REAL/LREAL array asserts take a caller-supplied Delta
-        // VAR_INPUT (verified against FB_TestSuite.TcPOU) and compare
-        // ABS(Expecteds[i] - Actuals[i]) > Delta per element - an absolute
-        // tolerance, not proportional to the expected value despite that
-        // method's own doc comment. One theory per failure mode, same as
-        // above, covers both REAL and LREAL via the same dispatcher.
+        // The float array asserts take a caller-supplied Delta and compare
+        // ABS(Expecteds[i] - Actuals[i]) > Delta per element. That tolerance is
+        // absolute, not proportional to the expected value - upstream's own doc
+        // comment says otherwise, and the behaviour is what is pinned here.
         public static IEnumerable<object[]> FloatArrayTypes => new[]
         {
             new object[] { "REAL" },
@@ -202,16 +193,11 @@ namespace xStunit.Interpreter.Tests
             Assert.Contains("EXP: SIZE = 3, ACT: SIZE = 2", result.Failures[0].Message);
         }
 
-        // TcXunit-gd2.10: AssertArray2dEquals_REAL/_LREAL and
-        // AssertArray3dEquals_REAL/_LREAL - confirmed (per FB_TestSuite.cs'
-        // AssertArrayEquals and ArrayValue's flattened N-dimension storage)
-        // to be pure dispatch wiring reusing the same generic dispatcher as
-        // the 1D case above, not a new implementation - these tests exist
-        // to prove that rather than assume it. Declared array literals are
-        // flat/row-major regardless of dimension count (Engine.Defaults.cs'
-        // OverlayArray walks the flattened Elements array in order), same
-        // as ArrayValue's own storage, so a 2x2 literal is just the 1D
-        // 4-element list in row-major order.
+        // Multi-dimensional arrays are stored flat and their declared literals
+        // are flat too, row-major, regardless of dimension count - a 2x2
+        // initializer is just the four values in row-major order. The 2D/3D
+        // asserts reuse the same dispatcher as the 1D case; these prove that
+        // rather than assume it.
         [Theory]
         [MemberData(nameof(FloatArrayTypes))]
         public void RunSuite_AssertArray2dEquals_WithinDelta_Passes(string typeName)
@@ -250,8 +236,8 @@ namespace xStunit.Interpreter.Tests
             var result = Assert.Single(engine.RunSuite("FB_MySuite"));
 
             Assert.False(result.Passed);
-            // flat index 2 in a [0..1,0..1] row-major layout unflattens to
-            // [1,0] - the third element (0-based) of the 4-value literal.
+            // Flat index 2 in a [0..1,0..1] row-major layout unflattens to
+            // [1,0]: a reported index is always in declared coordinates.
             Assert.Contains("EXP: ARRAY[1,0] = 3, ACT: ARRAY[1,0] = 3.5", result.Failures[0].Message);
         }
 
@@ -315,9 +301,8 @@ namespace xStunit.Interpreter.Tests
             var result = Assert.Single(engine.RunSuite("FB_MySuite"));
 
             Assert.False(result.Passed);
-            // flat index 5 in a [0..1,0..1,0..1] row-major layout unflattens
-            // to [1,0,1] - the sixth element (0-based) of the 8-value
-            // literal.
+            // Flat index 5 in a [0..1,0..1,0..1] row-major layout unflattens
+            // to [1,0,1].
             Assert.Contains("EXP: ARRAY[1,0,1] = 6, ACT: ARRAY[1,0,1] = 6.5", result.Failures[0].Message);
         }
 

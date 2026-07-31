@@ -7,9 +7,6 @@ using Xunit;
 
 namespace xStunit.Interpreter.Tests
 {
-    // TcXunit-w5x.15.6: TYPE...STRUCT...END_STRUCT END_TYPE declarations,
-    // ARRAY[lo..hi] OF type (multi-dim, arrays-of-structs), struct literal
-    // (field := val, ...), array literal [v0,v1,...] with [n(v)] repeat.
     public class StructArrayTypeTests
     {
         private static Engine NewEngine(IEnumerable<StructAst> structTypes = null) =>

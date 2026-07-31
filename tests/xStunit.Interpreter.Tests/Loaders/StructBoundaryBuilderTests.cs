@@ -4,10 +4,6 @@ using Xunit;
 
 namespace xStunit.Interpreter.Tests
 {
-    // TcXunit-w5x.15.10 / T7 design: pure-introspection STRUCT boundary
-    // builder - every field in-range by default, named overrides push to a
-    // numeric min/max or STRING empty/max-length boundary (single-field
-    // sweep, not a full cross-product).
     public class StructBoundaryBuilderTests
     {
         private static TypeRegistry NewRegistry(string structDecl) =>
@@ -131,10 +127,9 @@ END_TYPE");
             Assert.Equal(new string('X', 80), instance.Fields["label"].Value);
         }
 
-        // TcXunit-988: a STRING size may be a GVL-qualified constant
-        // expression - the builder has no Engine/Frame (see class remarks),
-        // so this must resolve through the same GVL-lookup path
-        // ResolveArrayBound/EvaluateConstExpr already use for ARRAY bounds.
+        // A STRING size is a constant expression like an ARRAY bound, not
+        // necessarily a literal, and the builder has no Engine or Frame to
+        // evaluate one with - so both have to share the same resolver.
         [Fact]
         public void Build_StringFieldSizedByGvlQualifiedConstant_MaxIsResolvedLengthString()
         {

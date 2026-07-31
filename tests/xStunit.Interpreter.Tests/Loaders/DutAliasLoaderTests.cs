@@ -6,12 +6,10 @@ using Xunit;
 
 namespace xStunit.Interpreter.Tests
 {
-    // TcXunit-6hg: ALIAS .TcDUT definitions (e.g. "TYPE T_MaxString :
-    // STRING(255); END_TYPE") aren't resolved by the interpreter today - a
-    // POU declaring a var of an alias type fails type resolution because
-    // the alias name is never mapped to its underlying type. DutAliasLoader
-    // parses these the same resilient way DutStructLoader parses STRUCT
-    // DUTs.
+    // A .TcDUT file is an ALIAS, a STRUCT or an ENUM, and the three loaders
+    // each scan the same directory for all of them. So half of these tests are
+    // about what this loader must REFUSE: a STRUCT or ENUM DUT picked up as an
+    // alias would map a type name to nonsense underlying text.
     public class DutAliasLoaderTests
     {
         [Fact]
@@ -96,10 +94,10 @@ namespace xStunit.Interpreter.Tests
         [Fact]
         public void Load_NoSourceFiles_StillRegistersWellKnownLibraryAlias()
         {
-            // T_MaxString (TcXunit-w51): Tc2_System.T_MaxString has no
-            // project-authored .TcDUT - it's compiled library metadata - so
-            // Load must still resolve it even when the scanned directory
-            // has no matching source file at all.
+            // T_MaxString lives in compiled library metadata, so no project
+            // ever ships a .TcDUT for it and scanning alone can never find it.
+            // It has to be resolvable anyway or every POU declaring one fails
+            // type resolution.
             var tempDir = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "tcxunit-alias-wellknown-" + Guid.NewGuid()));
             try
             {

@@ -7,9 +7,6 @@ using Xunit;
 
 namespace xStunit.Interpreter.Tests
 {
-    // TcXunit-3tx.1: the exception-to-FailureKind mapping, isolated from the
-    // CLI so each branch is pinned without needing a fixture that reproduces
-    // it end to end.
     public class FailureClassifierTests
     {
         [Fact]
@@ -21,12 +18,12 @@ namespace xStunit.Interpreter.Tests
             Assert.Equal("SEL", construct);
         }
 
-        // The base type is NOT enough evidence, and claiming it would be the
-        // worst possible error: the engine throws plain NotSupportedException
-        // for genuine defects in the code under test too ("Operator '<' is not
-        // supported between Int32 and String"), and reporting one of those as
-        // unsupported-construct tells an agent to stop and page a human over
-        // its own bug. Throw sites opt in by type instead.
+        // NotSupportedException is not evidence of an interpreter gap: the
+        // engine raises it for genuine defects in the code under test too
+        // ("Operator '<' is not supported between Int32 and String").
+        // Reporting one of those as unsupported-construct tells the reader to
+        // stop and escalate over their own bug, so throw sites must opt in by
+        // raising UnsupportedConstructException instead.
         [Fact]
         public void Classify_PlainNotSupportedException_IsPlcFaultWhenLocated()
         {
@@ -39,11 +36,11 @@ namespace xStunit.Interpreter.Tests
             Assert.Null(construct);
         }
 
-        // TcXunit-229.15: the ST front end gets its own kind. A hand-rolled
-        // recursive-descent parser still cannot tell "syntax I don't implement"
-        // from "syntax that is simply wrong" - parse-error is that answer said
-        // out loud, instead of being smuggled in as plc-fault ("your code is
-        // broken") or load-error ("nothing ran").
+        // The ST front end gets a kind of its own because it cannot tell
+        // "syntax I don't implement" from "syntax that is simply wrong".
+        // parse-error says exactly that, rather than smuggling the ambiguity
+        // in as plc-fault ("your code is broken") or load-error ("nothing
+        // ran"), either of which would misdirect whoever reads the report.
         [Fact]
         public void Classify_ParseException_IsParseErrorWhenLocated()
         {
@@ -54,11 +51,9 @@ namespace xStunit.Interpreter.Tests
             Assert.Equal(FailureKind.ParseError, kind);
         }
 
-        // The accident TcXunit-229.15 removes: the SAME unreadable body used to
-        // classify as plc-fault when it happened to be reached through a call
-        // that stamped a location, and load-error when it didn't. That split
-        // described TcXunit's own call path, not the failure - so the kind can't
-        // depend on it.
+        // One unreadable body must not report as two different kinds depending
+        // on whether the call path happened to stamp a location on the way in:
+        // that would describe the runner's internals, not the failure.
         [Fact]
         public void Classify_ParseException_IsParseErrorWhenUnlocatedToo()
         {
@@ -67,11 +62,10 @@ namespace xStunit.Interpreter.Tests
             Assert.Equal(FailureKind.ParseError, kind);
         }
 
-        // A parse-error names its offending token in `construct` - the same
-        // field unsupported-construct uses, never a parse-error-only field, so
-        // `kind` + `construct` is one vocabulary at every level of the JSON.
-        // Classify reads ParseException.Token directly - it does not derive
-        // it by scraping the message.
+        // A parse-error names its offending token in the same `construct`
+        // field unsupported-construct uses, so `kind` + `construct` stays one
+        // vocabulary across every kind. The value comes from
+        // ParseException.Token, never from scraping the message text.
         [Fact]
         public void Classify_LexerParseException_CarriesTheOffendingTokenAsTheConstruct()
         {
@@ -94,9 +88,8 @@ namespace xStunit.Interpreter.Tests
             Assert.Equal("FOO", construct);
         }
 
-        // A ParseException with no token at all ("Expected END_IF") still
-        // classifies - `construct` is nullable for every kind, and a missing
-        // token must never cost the classification.
+        // `construct` is nullable for every kind, so a ParseException that
+        // never captured a token still classifies rather than degrading.
         [Fact]
         public void Classify_TokenlessParseException_IsStillParseErrorWithNoConstruct()
         {
@@ -106,9 +99,9 @@ namespace xStunit.Interpreter.Tests
             Assert.Null(construct);
         }
 
-        // The lexer knows the body text and the offset it failed at, so it
-        // derives the line itself (Lexer.LineAt) and stamps it on the
-        // exception directly - no message to re-parse downstream.
+        // The lexer holds the body text and the offset it failed at, so it
+        // resolves the line itself and stamps it on the exception - nothing
+        // downstream has to re-parse a message to recover it.
         [Fact]
         public void LexerParseException_UnexpectedCharacterOnLineTwo_CarriesThatLineStructurally()
         {
@@ -118,12 +111,10 @@ namespace xStunit.Interpreter.Tests
             Assert.Equal("@", ex.Token);
         }
 
-        // The case the old message-scraping could never recover: the parser
-        // reports a token INDEX, not a body offset, so the message-scraping
-        // fallback always degraded to UnknownLine for a parser-raised
-        // failure. Token.Line is tracked by the lexer regardless, and the
-        // parser's own throw sites now stamp it directly - so a parser-raised
-        // ParseException carries a real line where it used to carry none.
+        // A parser message reports a token INDEX, which is not a character
+        // offset and cannot be turned into one, so anything reading the line
+        // out of the message can only report UnknownLine here. The line has to
+        // come from Token.Line, which the parser stamps at its throw sites.
         [Fact]
         public void ParserParseException_ExpectedTokenOnLineTwo_CarriesThatLineWhereMessageScrapingUsedToDegradeToUnknown()
         {
@@ -133,14 +124,13 @@ namespace xStunit.Interpreter.Tests
             Assert.Equal(2, ex.BodyLine);
         }
 
-        // TcXunit-g14q: parse-error is claimed by the front end's OWN type, not
-        // by the FormatException base. Engine.ExecuteFor coerces its loop bounds
-        // with Convert.ToInt32, so a STRING bound throws a bare FormatException
-        // from deep inside a running body - a genuine defect in the code under
-        // test. Matching the base type reported it as parse-error, whose
-        // guidance is "STOP and escalate if it looks like valid ST": an agent
-        // told to page a human over a bug it should simply have fixed, which is
-        // this vocabulary's own failure mode inverted.
+        // parse-error is claimed by ParseException itself, never by its
+        // FormatException base. Engine.ExecuteFor coerces loop bounds with
+        // Convert.ToInt32, so a STRING bound throws a bare FormatException
+        // from deep inside a body that was already running - a defect in the
+        // code under test. Matching on the base type would label that
+        // parse-error, whose guidance is to stop and escalate if the ST looks
+        // valid: an escalation over a bug the reader should simply fix.
         [Fact]
         public void Classify_StringForLoopBound_IsPlcFaultNotParseError()
         {
@@ -154,8 +144,8 @@ namespace xStunit.Interpreter.Tests
 
             var ex = Assert.Throws<PlcSourceLocationException>(() => engine.RunSuite("FB_MySuite"));
 
-            // The throw really is a FormatException - the base type alone is no
-            // evidence of a parse failure, which is the whole point.
+            // The throw really is a FormatException, which is what makes the
+            // classification above a decision rather than a coincidence.
             Assert.IsType<FormatException>(ex.InnerException);
 
             var kind = FailureClassifier.Classify(ex, out _);
@@ -163,17 +153,14 @@ namespace xStunit.Interpreter.Tests
             Assert.Equal(FailureKind.PlcFault, kind);
         }
 
-        // The other half of the same rule: ArrayTypeInfo.Parse throws a bare
-        // FormatException while Engine.BuildArrayDefault is constructing a
-        // declared VAR's default value - before any body has run. That is
-        // instantiation, which FailureKind.LoadError's own doc comment claims,
-        // so the classifier must agree with it rather than calling it a
-        // parse-error of a body that was never even reached.
+        // The other half of the same rule: this FormatException is raised
+        // while a declared VAR's default value is being built, before any body
+        // has run. That is instantiation, which LoadError covers - calling it
+        // a parse-error would blame a body that was never reached.
         //
-        // "OFINT" (no space) is the narrowest declaration that VarBlockParser
-        // still accepts as an ARRAY-typed VAR - ArrayTypeInfo's own pattern
-        // requires whitespace after OF - so it reaches ArrayTypeInfo.Parse and
-        // fails there, which is exactly the throw site under test.
+        // "OFINT" (no space) is the narrowest declaration VarBlockParser still
+        // accepts as an ARRAY-typed VAR while ArrayTypeInfo's own pattern
+        // rejects it, so it reaches exactly the throw site under test.
         [Fact]
         public void Classify_UnparseableArrayTypeDuringInstantiation_IsLoadErrorNotParseError()
         {

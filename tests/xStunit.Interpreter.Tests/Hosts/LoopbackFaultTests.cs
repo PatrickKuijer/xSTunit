@@ -5,11 +5,12 @@ using Xunit;
 
 namespace xStunit.Interpreter.Tests
 {
-    // TcXunit-w5x.15.8 / T5 design: fault vocabulary on Loopback -
-    // Drop/Restore/Freeze/SetDelay/Duplicate/Corrupt, dispatched through the
-    // same native-method boundary as Transmit. One active fault mode at a
-    // time; LinkUp/LastUpdateTime are the observable contract for watchdog-
-    // style staleness-vs-drop tests.
+    // Loopback's fault vocabulary - Drop/Restore/Freeze/SetDelay/Duplicate/
+    // Corrupt - dispatched through the same native-method boundary as Transmit.
+    //
+    // Only ONE fault mode is active at a time, so setting a new one discards
+    // whatever the previous one had pending. LinkUp and LastUpdateTime are the
+    // whole observable contract a watchdog-style FB under test gets to see.
     public class LoopbackFaultTests
     {
         private static Engine NewWrapperEngine()
@@ -120,9 +121,9 @@ namespace xStunit.Interpreter.Tests
         [Fact]
         public void Freeze_VsDrop_StalenessDistinguishableViaLinkUp()
         {
-            // Watchdog-style demo: both faults leave the sink un-updated, but
-            // only Drop reports the link itself as down. A watchdog reading
-            // LinkUp distinguishes "stale but connected" from "hard drop".
+            // Freeze and Drop both leave the sink un-updated, so LinkUp is the
+            // only thing telling a watchdog "stale but connected" apart from
+            // "hard drop". Collapse the two and that distinction is untestable.
             var engine = NewWrapperEngine();
             var frozen = engine.NewInstance("FB_Wrapper");
             var dropped = engine.NewInstance("FB_Wrapper");
@@ -156,10 +157,11 @@ namespace xStunit.Interpreter.Tests
             engine.Clock.AdvanceMs(30);
             Transmit(engine, wrapper);
 
-            Assert.Equal(1, rxFb.Fields["Buffer"].Value); // oldest queued value delivered
+            Assert.Equal(1, rxFb.Fields["Buffer"].Value);
             Assert.Equal(30L, LastUpdateTime(wrapper));
 
-            // Delay window is spent - normal copy semantics resume.
+            // The delay is a one-off window, not a permanent mode: once the
+            // queue has drained, ordinary copy semantics resume.
             txFb.Fields["Buffer"].Value = 4;
             Transmit(engine, wrapper);
             Assert.Equal(4, rxFb.Fields["Buffer"].Value);
@@ -181,7 +183,6 @@ namespace xStunit.Interpreter.Tests
             Transmit(engine, wrapper);
             Assert.Equal(11, rxFb.Fields["Buffer"].Value);
 
-            // One-shot - next call copies normally again.
             Transmit(engine, wrapper);
             Assert.Equal(99, rxFb.Fields["Buffer"].Value);
         }
@@ -199,7 +200,6 @@ namespace xStunit.Interpreter.Tests
             Transmit(engine, wrapper);
             Assert.Equal(-1, rxFb.Fields["Buffer"].Value);
 
-            // One-shot - next call copies normally again.
             Transmit(engine, wrapper);
             Assert.Equal(3, rxFb.Fields["Buffer"].Value);
         }
@@ -213,14 +213,15 @@ namespace xStunit.Interpreter.Tests
             var rxFb = (FbInstance)wrapper.Fields["rxFb"].Value;
 
             Fault(engine, wrapper, "SetDelay", new IntLiteralExpr(5));
-            Fault(engine, wrapper, "Corrupt", new IntLiteralExpr(-7)); // supersedes the pending delay
+            Fault(engine, wrapper, "Corrupt", new IntLiteralExpr(-7));
 
             txFb.Fields["Buffer"].Value = 20;
             Transmit(engine, wrapper);
             Assert.Equal(-7, rxFb.Fields["Buffer"].Value);
 
-            // Delay queue was cleared, so subsequent calls behave normally, not
-            // as though 5 queued transmits are still pending.
+            // The superseded delay must take its queue with it: leaving it
+            // behind would swallow the next five transmits long after the
+            // fault that created it was replaced.
             txFb.Fields["Buffer"].Value = 21;
             Transmit(engine, wrapper);
             Assert.Equal(21, rxFb.Fields["Buffer"].Value);

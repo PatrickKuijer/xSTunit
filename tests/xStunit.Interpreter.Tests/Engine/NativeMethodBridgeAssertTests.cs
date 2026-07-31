@@ -6,10 +6,9 @@ using Xunit;
 
 namespace xStunit.Interpreter.Tests
 {
-    // TcXunit-k28.6: AssertFalse/AssertEquals_BOOL/AssertEquals_STRING/
-    // AssertEquals_REAL were already implemented on FB_TestSuite but had no
-    // NativeMethodBridge case or SuiteHost wrapper, so an interpreted
-    // suite calling them threw "not supported" - wires them up.
+    // End-to-end cover that each assert on the suite base type is reachable
+    // from interpreted ST: an assert implemented on FB_TestSuite but missing a
+    // native-bridge case throws "not supported" at the call site instead.
     public class NativeMethodBridgeAssertTests
     {
         private static Engine NewSuiteEngine(string implementationText)
@@ -21,9 +20,6 @@ namespace xStunit.Interpreter.Tests
         [Fact]
         public void RunSuite_AssertFalse_ReachableThroughInterpreter()
         {
-            // No TRUE/FALSE literal keywords in the interpreter's expression
-            // grammar yet (separate, pre-existing gap) - a comparison
-            // expression yields the same BOOL value.
             var engine = NewSuiteEngine(
                 "TEST('t');\n" +
                 "AssertFalse(Condition := (1 = 2), Message := 'ok');\n" +
@@ -59,8 +55,8 @@ namespace xStunit.Interpreter.Tests
             Assert.True(Assert.Single(engine.RunSuite("FB_MySuite")).Passed);
         }
 
-        // TcXunit-gd2.4: WSTRING assert, wired the same way STRING is -
-        // WSTRING literals use "..." rather than STRING's '...'.
+        // A WSTRING literal is double-quoted, where a STRING literal is
+        // single-quoted.
         [Fact]
         public void RunSuite_AssertEqualsWString_ReachableThroughInterpreter()
         {
@@ -97,9 +93,8 @@ namespace xStunit.Interpreter.Tests
             Assert.True(Assert.Single(engine.RunSuite("FB_MySuite")).Passed);
         }
 
-        // TcXunit-bda: real TcUnit/ST code frequently calls these
-        // positionally (e.g. AssertTrue(cond, 'msg')) - previously threw
-        // KeyNotFoundException because the switch only ever read named[...].
+        // Real ST calls these positionally as often as by name, so every
+        // assert has to accept both argument styles.
         [Fact]
         public void RunSuite_AssertTrue_PositionalArgs_ReachableThroughInterpreter()
         {
@@ -177,10 +172,6 @@ namespace xStunit.Interpreter.Tests
             Assert.True(Assert.Single(engine.RunSuite("FB_MySuite")).Passed);
         }
 
-        // TcXunit-gd2.1: AssertEquals_DINT is the highest-priority
-        // integer-family type added by the ScalarAssertType registry - this
-        // is the E2E proof it's reachable through NativeMethodBridge from
-        // interpreted ST, both passing and reporting a clear failure.
         [Fact]
         public void RunSuite_AssertEqualsDint_NamedArgs_ReachableThroughInterpreter()
         {
@@ -206,10 +197,9 @@ namespace xStunit.Interpreter.Tests
         [Fact]
         public void RunSuite_AssertEqualsDint_ReportsFailureWithExpAct()
         {
-            // Not int.MinValue here: the interpreter's literal parser negates
-            // a positive literal (Parser.Expressions.cs), and 2147483648
-            // itself overflows Int32.Parse before negation ever applies -
-            // a pre-existing, separate parser gap unrelated to this ticket.
+            // Deliberately not DINT#MIN: negation is applied to a positive
+            // literal, so 2147483648 overflows on parse before the sign is
+            // ever reached. That gap is separate from what this pins.
             var engine = NewSuiteEngine(
                 "TEST('t');\n" +
                 "AssertEquals_DINT(Expected := -2147483647, Actual := 2147483647, Message := 'mismatch');\n" +
@@ -221,9 +211,6 @@ namespace xStunit.Interpreter.Tests
             Assert.Contains("EXP: -2147483647, ACT: 2147483647", result.Failures[0].Message);
         }
 
-        // TcXunit-gd2.2: AssertEquals_LREAL is the 64-bit delta-based twin
-        // of AssertEquals_REAL - this is the E2E proof it's reachable
-        // through NativeMethodBridge from interpreted ST.
         [Fact]
         public void RunSuite_AssertEqualsLreal_ReachableAndRespectsDelta()
         {
@@ -235,10 +222,9 @@ namespace xStunit.Interpreter.Tests
             Assert.True(Assert.Single(engine.RunSuite("FB_MySuite")).Passed);
         }
 
-        // TcXunit-gd2.3: AssertEquals_TIME/LTIME - E2E proof they're
-        // reachable through NativeMethodBridge from interpreted ST, driven
-        // by real TIME#/LTIME# literals (see TimeTypeTests.cs for how the
-        // interpreter evaluates these to boxed uint ms / ulong ns).
+        // A TIME literal evaluates to a boxed uint of milliseconds and an
+        // LTIME literal to a boxed ulong of nanoseconds, which is what the
+        // raw numbers in the failure messages below are.
         [Fact]
         public void RunSuite_AssertEqualsTime_NamedArgs_ReachableThroughInterpreter()
         {
@@ -289,11 +275,9 @@ namespace xStunit.Interpreter.Tests
             Assert.Contains("EXP: 1000000, ACT: 2000000", result.Failures[0].Message);
         }
 
-        // TcXunit-gd2.13: AssertEquals_DATE/_DATE_AND_TIME/_TIME_OF_DAY -
-        // E2E proof they're reachable through NativeMethodBridge from
-        // interpreted ST, driven by real D#/DT#/TOD# literals (see
-        // DateTimeTypeTests.cs for how the interpreter evaluates these to
-        // boxed uint epoch-seconds/midnight-ms).
+        // D#/DT# literals evaluate to boxed uint epoch-seconds and TOD# to
+        // boxed uint milliseconds since midnight, which is what the raw
+        // numbers in the failure messages below are.
         [Fact]
         public void RunSuite_AssertEqualsDate_NamedArgs_ReachableThroughInterpreter()
         {

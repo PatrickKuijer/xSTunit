@@ -7,17 +7,14 @@ using Xunit;
 
 namespace xStunit.Interpreter.Tests
 {
-    // TcXunit-6k2: locks the invariant NativeMethodBridge.CanInvoke's comment
-    // promises - CanInvoke must recognize exactly the names Invoke dispatches.
-    //
-    // The two are separate code paths (a predicate over tables vs. a switch
-    // plus prefix checks), so they can drift. Drift is silently harmful in one
-    // direction: a name Invoke handles but CanInvoke rejects stops being routed
-    // to the suite host and instead falls through to the global-FUNCTION and
-    // native-function lookups, ending as a confusing "not found" for what is
-    // really an implemented TcUnit assert. Rather than eyeballing the two
-    // lists, this drives every name through Invoke and asserts that "Invoke
-    // did not reject it as unknown" agrees with CanInvoke.
+    // CanInvoke must recognize exactly the names Invoke dispatches. They are
+    // separate code paths - a predicate over tables versus a switch plus prefix
+    // checks - so they can drift, and the drift is silent in one direction: a
+    // name Invoke handles but CanInvoke rejects stops being routed to the suite
+    // host, falls through to the global-FUNCTION and native-function lookups,
+    // and surfaces as "not found" for an assert that is in fact implemented.
+    // Rather than eyeballing two lists, every name is driven through Invoke and
+    // "Invoke did not reject it as unknown" is checked against CanInvoke.
     public class NativeMethodBridgeCanInvokeTests
     {
         // Every name Invoke is known to dispatch, built the same table-driven

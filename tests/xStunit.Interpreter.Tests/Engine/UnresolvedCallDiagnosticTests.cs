@@ -7,16 +7,11 @@ using Xunit;
 
 namespace xStunit.Interpreter.Tests
 {
-    // TcXunit-kii: an unresolved call inside a global FUNCTION body threw a
-    // bare NullReferenceException instead of a diagnostic naming the missing
-    // function.
-    //
-    // CallGlobalFunction runs a FUNCTION body with Frame(null, ...) - a
-    // FUNCTION has no THIS - so EvaluateCall's fall-through reached
-    // CallMethod with a null instance, and CallMethod's first statement
-    // dereferenced it. The clear "not found" message a few lines further down
-    // was unreachable from that path, which mattered most exactly where such
-    // calls live: thin wrappers around compiled-only vendor library functions.
+    // A global FUNCTION has no THIS, so its frame carries no instance and the
+    // usual method-resolution path has nothing to dereference. An unresolved
+    // call from inside one must still name the missing function - that is
+    // exactly where thin wrappers around compiled-only vendor libraries live,
+    // so it is the diagnostic a reader needs most.
     public class UnresolvedCallDiagnosticTests
     {
         [Fact]
@@ -43,8 +38,8 @@ namespace xStunit.Interpreter.Tests
             var ex = Assert.ThrowsAny<Exception>(() =>
                 engine.CallMethod(instance, "bDoWork", new Expr[0], new NamedArg[0], null, null));
 
-            // The regression itself: anything at all, as long as it isn't the
-            // contentless NRE.
+            // Which exception type is immaterial; what matters is that it is
+            // not the contentless NullReferenceException a null instance gives.
             Assert.IsNotType<NullReferenceException>(ex);
             Assert.Contains("F_NotAnywhere", ex.Message);
         }
@@ -77,9 +72,6 @@ namespace xStunit.Interpreter.Tests
 
             var engine = new Engine(new TypeRegistry(new[] { suite, wrapper }));
 
-            // TcXunit-3tx.3: contained into the open TEST() bracket, so the
-            // located message and its call chain ride on that test's failure -
-            // the chain is what this test pins, and it is unchanged.
             var failure = Assert.Single(Assert.Single(engine.RunSuite("FB_WidgetTests")).Failures);
 
             Assert.Contains("F_NotAnywhere", failure.Message);

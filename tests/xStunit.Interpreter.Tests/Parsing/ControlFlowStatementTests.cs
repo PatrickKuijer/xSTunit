@@ -5,7 +5,6 @@ using Xunit;
 
 namespace xStunit.Interpreter.Tests
 {
-    // TcXunit-mym.3: FOR/WHILE/REPEAT/CASE/EXIT parsing and execution.
     public class ControlFlowStatementTests
     {
         private static Engine NewEngine() => new Engine(new TypeRegistry(Array.Empty<PouAst>()));
@@ -85,9 +84,9 @@ namespace xStunit.Interpreter.Tests
         [Fact]
         public void ParseStatements_CaseWithQualifiedEnumLabels_ProducesCaseStmt()
         {
-            // TcXunit-ohn: EnumType.Member: is a normal CASE-label idiom;
-            // IsCaseArmBoundary must recognize the qualified name as a label
-            // boundary rather than letting ParseCaseBody misparse it as a statement.
+            // EnumType.Member: is an ordinary CASE-label idiom, so a qualified
+            // name must still read as an arm boundary - otherwise the label is
+            // swallowed into the previous arm's body as a statement.
             var stmts = Parser.ParseStatements(
                 "CASE eOpcode OF\n" +
                 "eWidgetOpcode.Add:\n" +
@@ -111,7 +110,7 @@ namespace xStunit.Interpreter.Tests
             Assert.IsType<ExitStmt>(Assert.Single(whileStmt.Body));
         }
 
-        // --- optional trailing semicolon after END_* keywords (TcXunit-sum) --
+        // --- optional trailing semicolon after END_* keywords ----------------
 
         [Fact]
         public void ParseStatements_EndIfWithTrailingSemicolon_ParsesSameAsWithout()
@@ -166,8 +165,9 @@ namespace xStunit.Interpreter.Tests
         [Fact]
         public void ExecuteNestedForIf_WithTrailingSemicolonsAfterEndIfAndEndFor_ExitsAtExpectedValue()
         {
-            // Repro from the bug report: EXIT inside IF/END_IF; nested in
-            // FOR/END_FOR; both closing keywords carry a trailing semicolon.
+            // The trailing semicolons are the point: nesting an EXIT-carrying
+            // IF inside a FOR when both closers end in ';' is the shape real
+            // bodies are written in, and the one the cases above miss.
             var result = RunAndReadInt(
                 "result := 0;\n" +
                 "FOR i := 1 TO 3 DO\n" +
@@ -194,7 +194,7 @@ namespace xStunit.Interpreter.Tests
         {
             var count = RunAndReadInt(
                 "count := 0;\nFOR i := 10 TO 0 BY -2 DO\n\tcount := count + 1;\nEND_FOR", "count");
-            Assert.Equal(6, count); // 10,8,6,4,2,0
+            Assert.Equal(6, count);
         }
 
         [Fact]
@@ -208,7 +208,7 @@ namespace xStunit.Interpreter.Tests
         public void ExecuteFor_LoopVariable_RemainsReadableAfterLoop()
         {
             var lastValue = RunAndReadInt("FOR i := 1 TO 3 DO\nEND_FOR\nlastValue := i;", "lastValue");
-            Assert.Equal(3, lastValue); // holds the last value it was set to during iteration
+            Assert.Equal(3, lastValue); // the last iterated value, not one past the bound
         }
 
         // --- WHILE execution --------------------------------------------------
@@ -344,10 +344,10 @@ namespace xStunit.Interpreter.Tests
             "END_IF";
 
         [Theory]
-        [InlineData(true, true, true, 1)]   // first condition true short-circuits later branches
-        [InlineData(false, true, true, 2)]  // first ELSIF matches, remaining branches skipped
-        [InlineData(false, false, true, 3)] // second ELSIF matches
-        [InlineData(false, false, false, 4)] // falls through to trailing ELSE
+        [InlineData(true, true, true, 1)]
+        [InlineData(false, true, true, 2)]
+        [InlineData(false, false, true, 3)]
+        [InlineData(false, false, false, 4)]
         public void ExecuteIfElsif_ChainWithElse_RunsOnlyFirstTrueBranch(bool a, bool b, bool c, int expectedBranch)
         {
             var engine = NewEngine();

@@ -6,8 +6,6 @@ using Xunit;
 
 namespace xStunit.Interpreter.Tests
 {
-    // TcXunit-3tx.4: not a coverage percentage or a CI badge - a next-task list
-    // for an agent. "F_ComputeChecksum: (none)" is directly usable as a prompt.
     public class SuiteCoverageTests
     {
         [Fact]
@@ -34,8 +32,9 @@ namespace xStunit.Interpreter.Tests
             Assert.False(checksum.IsCovered);
         }
 
-        // A reference from a test METHOD's body counts too - that is where most
-        // real suites exercise the code under test, not the suite's own body.
+        // Method bodies are where real suites exercise the code under test, so
+        // scanning only the suite's own body would report almost everything as
+        // uncovered.
         [Fact]
         public void Analyze_PouReferencedOnlyFromATestMethodBody_IsCovered()
         {
@@ -66,9 +65,8 @@ namespace xStunit.Interpreter.Tests
             Assert.True(Single(coverage, "FB_Counter").IsCovered);
         }
 
-        // "FB_Counter" must not be matched inside "FB_CounterExtended" - a
-        // substring hit would silently report a POU as covered by a suite that
-        // never mentions it.
+        // A substring hit would silently report a POU as covered by a suite
+        // that never mentions it.
         [Fact]
         public void Analyze_NameAppearingOnlyAsASubstringOfALongerName_DoesNotCount()
         {
@@ -80,9 +78,8 @@ namespace xStunit.Interpreter.Tests
             Assert.True(Single(coverage, "FB_CounterExtended").IsCovered);
         }
 
-        // TcXunit-2o9.2: a type named only inside a (* ... *) comment is not a
-        // real reference - counting it as covered would hide a POU that no
-        // suite actually exercises.
+        // A type named only in prose is not a real reference: counting it would
+        // hide a POU that no suite actually exercises.
         [Fact]
         public void Analyze_PouMentionedOnlyInABlockComment_IsNotCovered()
         {
@@ -95,8 +92,6 @@ namespace xStunit.Interpreter.Tests
             Assert.False(counter.IsCovered);
         }
 
-        // Same as above but a // line comment, and in the implementation
-        // text rather than the declaration.
         [Fact]
         public void Analyze_PouMentionedOnlyInALineComment_IsNotCovered()
         {
@@ -107,9 +102,9 @@ namespace xStunit.Interpreter.Tests
             Assert.False(Single(coverage, "FB_Counter").IsCovered);
         }
 
-        // Regression guard: a genuine VAR declaration reference must still
-        // count as covered even when the same suite ALSO mentions the type
-        // in a comment - the comment-stripping fix must not eat real code.
+        // Stripping comments before matching must not eat real code: the two
+        // tests above pass trivially if the scanner simply ignores every suite
+        // that mentions the type in prose at all.
         [Fact]
         public void Analyze_PouReferencedInVarDeclAndMentionedInComment_IsStillCovered()
         {

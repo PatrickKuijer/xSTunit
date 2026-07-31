@@ -6,20 +6,12 @@ using Xunit;
 
 namespace xStunit.Interpreter.Tests
 {
-    // TcXunit-kuc: a call mixing a named argument with a trailing positional
-    // argument - e.g. F_FindSubstring(sSearchText := buffer, '[') - real
-    // TwinCAT/IEC 61131-3 binds the positional value to the next unfilled
-    // formal parameter in declaration order (skipping the one already given
-    // by name). BindParams (Engine.Invocation.cs, via the shared
-    // ArgBinder.TryResolveArg) already got this right for FUNCTION/METHOD
-    // calls. The bug lived one layer over, in
-    // NativeCallContext.TryGetArg (Extensibility/NativeCallContext.cs): a
-    // native-function plugin's `position` argument is always the parameter's
-    // declared index in the signature (see every IXstunitNativeFunction
-    // under samples/), but TryGetArg indexed straight into PositionalArgs by
-    // that raw declared index - so once a named argument occupied an earlier
-    // declared position, every later positional lookup missed by exactly the
-    // number of named arguments that preceded it.
+    // IEC 61131-3 lets a call mix named and positional arguments - e.g.
+    // F_FindSubstring(sSearchText := buffer, '[') - and binds each positional
+    // value to the next formal parameter not already filled by name, in
+    // declaration order. The trap is that a native function's `position` is
+    // always the parameter's DECLARED index, so indexing straight into the
+    // positional list misses by the number of named arguments ahead of it.
     public class MixedNamedPositionalArgTests
     {
         private sealed class StubFunction : IXstunitNativeFunction
@@ -40,9 +32,6 @@ namespace xStunit.Interpreter.Tests
         [Fact]
         public void CallMethod_NativeFunction_NamedArgFollowedByPositionalArg_Binds()
         {
-            // Repro shape from the ticket: name the first declared param,
-            // then supply a trailing positional arg that must fill the next
-            // unfilled param (nB) - not throw "missing required argument".
             var caller = new MethodAst(
                 "bDoWork",
                 "METHOD bDoWork : BOOL",
@@ -70,10 +59,6 @@ namespace xStunit.Interpreter.Tests
         [Fact]
         public void CallMethod_NativeFunction_NamedArgForMiddleParamFollowedByTwoPositionalArgs_Binds()
         {
-            // The named argument doesn't have to be the first declared
-            // param: naming the middle one of three still leaves the two
-            // trailing positional args filling the two unfilled params
-            // (nA, nC) in declaration order.
             var caller = new MethodAst(
                 "bDoWork",
                 "METHOD bDoWork : BOOL",
@@ -102,11 +87,9 @@ namespace xStunit.Interpreter.Tests
         [Fact]
         public void CallMethod_NativeFunction_GenuinelyMissingPositionalArg_ThrowsUsefulMessage()
         {
-            // No-regression check: with no trailing positional arg supplied
-            // at all, resolution should still fail, and the message should
-            // still name the missing parameter and explain the shortfall in
-            // terms of the preceding named argument, not a raw count that
-            // reads the same for an ordinary missing argument.
+            // Skipping over named arguments must not turn a genuinely absent
+            // one into a silent bind: it still fails, and the message points at
+            // the named argument that shifted the positions.
             var caller = new MethodAst(
                 "bDoWork",
                 "METHOD bDoWork : BOOL",
@@ -138,9 +121,9 @@ namespace xStunit.Interpreter.Tests
         [Fact]
         public void CallMethod_NativeFunction_NoArgumentsAtAllStillReportsPlainMissingMessage()
         {
-            // A call with nothing named at all still gets the original
-            // "got N positional and M named" phrasing - the new "preceding
-            // named argument" wording is specific to the mixed case.
+            // The "preceding named argument" wording is specific to the mixed
+            // case; a plain call with nothing named keeps the raw-count
+            // phrasing, which is the more useful diagnosis there.
             var caller = new MethodAst(
                 "bDoWork",
                 "METHOD bDoWork : BOOL",
@@ -171,14 +154,9 @@ namespace xStunit.Interpreter.Tests
         [Fact]
         public void CallGlobalFunction_NamedArgFollowedByPositionalArg_Binds()
         {
-            // The ticket's literal repro shape: a plain user-defined FUNCTION
-            // (not a native-function plugin) called with a named first
-            // argument and a trailing positional second argument. This path
-            // (CallGlobalFunction -> BindParams -> ArgBinder.TryResolveArg,
-            // Engine.Invocation.cs) already binds this correctly - kept here
-            // as a lock-in regression alongside the native-function fix
-            // above, so the two call-binding paths this ticket touches on
-            // both stay covered.
+            // A user-defined FUNCTION binds its arguments through a different
+            // path than a native-function plugin does; both must agree on the
+            // mixed named/positional rule.
             var function = new PouAst(
                 "F_FindSubstring",
                 null,

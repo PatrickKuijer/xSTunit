@@ -5,13 +5,18 @@ using Xunit;
 
 namespace xStunit.Interpreter.Tests
 {
-    // TcXunit-x5pt: LTON/LTOF/LTP - the Tc2_Standard 64-bit siblings of
-    // TON/TOF/TP. Same IN/PT->Q/ET contract as TimerFbTests exercises, but
-    // PT/ET are LTIME (ulong NANOSECONDS) rather than TIME (uint
-    // milliseconds), so these tests are deliberately written at two scales
-    // the ms timers cannot express at all:
+    // LTON/LTOF/LTP are the 64-bit siblings of TON/TOF/TP: same IN/PT->Q/ET
+    // contract TimerFbTests exercises, but PT/ET are LTIME (ulong NANOSECONDS)
+    // rather than TIME (uint milliseconds). So these tests are deliberately
+    // written at the two scales the ms timers cannot express at all:
     //   - sub-millisecond PT (1500 ns), which a ms field truncates to 0;
     //   - PT/ET past uint.MaxValue ns (~4.29 s), which a 32-bit field wraps.
+    // Anything provable at ms width belongs in TimerFbTests instead.
+    //
+    // Elapsed time comes from the shared Clock, not from being called: the
+    // first Step of each test only establishes the baseline, stepping again
+    // without advancing the clock is a no-op, and a clock advance is observed
+    // in full on the next Step however many cycles later.
     public class LongTimerFbTests
     {
         // Elapsed nanoseconds for one hour: 3.6e12, ~838x uint.MaxValue.
@@ -53,7 +58,7 @@ namespace xStunit.Interpreter.Tests
             instance.Fields["inVar"].Value = true;
             instance.Fields["ptVar"].Value = 1500UL;
 
-            Step(engine, instance); // baseline call - initializes clock tracking, no elapsed yet
+            Step(engine, instance);
 
             engine.Clock.AdvanceNs(1499);
             Step(engine, instance);
@@ -82,7 +87,7 @@ namespace xStunit.Interpreter.Tests
             Assert.Equal(false, instance.Fields["measuredQ"].Value);
             Assert.Equal(5_000_000_000UL, instance.Fields["measuredEt"].Value);
 
-            engine.Clock.AdvanceMs(3_595_000); // one hour total
+            engine.Clock.AdvanceMs(3_595_000); // brings the total to one hour
             Step(engine, instance);
             Assert.Equal(true, instance.Fields["measuredQ"].Value);
             Assert.Equal(OneHourNs, instance.Fields["measuredEt"].Value);
@@ -120,7 +125,7 @@ namespace xStunit.Interpreter.Tests
             Assert.Equal(true, instance.Fields["measuredQ"].Value);
 
             instance.Fields["inVar"].Value = false;
-            Step(engine, instance); // falling edge - Q still true, ET starts from 0
+            Step(engine, instance);
 
             engine.Clock.AdvanceNs(299);
             Step(engine, instance);
@@ -164,7 +169,7 @@ namespace xStunit.Interpreter.Tests
             instance.Fields["inVar"].Value = true;
             instance.Fields["ptVar"].Value = 6_000_000_000UL; // 6 s in ns, past uint.MaxValue
 
-            Step(engine, instance); // rising edge - pulse starts
+            Step(engine, instance);
             Assert.Equal(true, instance.Fields["measuredQ"].Value);
 
             engine.Clock.AdvanceMs(5_999);
@@ -173,21 +178,21 @@ namespace xStunit.Interpreter.Tests
             Assert.Equal(5_999_000_000UL, instance.Fields["measuredEt"].Value);
 
             engine.Clock.AdvanceMs(1);
-            Step(engine, instance); // IN still true, but pulse elapses on its own
+            Step(engine, instance);
             Assert.Equal(false, instance.Fields["measuredQ"].Value);
             Assert.Equal(6_000_000_000UL, instance.Fields["measuredEt"].Value);
 
             instance.Fields["inVar"].Value = false;
             Step(engine, instance);
             instance.Fields["inVar"].Value = true;
-            Step(engine, instance); // fresh rising edge re-triggers
+            Step(engine, instance);
             Assert.Equal(true, instance.Fields["measuredQ"].Value);
             Assert.Equal(0UL, instance.Fields["measuredEt"].Value);
         }
 
-        // The ns and ms families share one Clock, so an LTIME timer must see
-        // ms advances at full ns weight and a TIME timer must be unaffected by
-        // the finer base unit (TimerFbTests pins the ms side).
+        // Both timer families share one Clock, so an LTIME timer has to see an
+        // ms advance at its full ns weight (TimerFbTests pins the other half:
+        // a TIME timer is unaffected by the finer base unit).
         [Fact]
         public void Lton_MsClockAdvance_CountsAsWholeMillionsOfNanoseconds()
         {
@@ -219,7 +224,7 @@ namespace xStunit.Interpreter.Tests
             {
                 instance.Fields["inVar"].Value = true;
                 instance.Fields["ptVar"].Value = 10_000_000_000UL;
-                Step(engine, instance); // baseline call for each, both at clock 0
+                Step(engine, instance);
             }
 
             engine.Clock.AdvanceNs(7_000_000_700);

@@ -6,10 +6,8 @@ using Xunit;
 
 namespace xStunit.Interpreter.Tests
 {
-    // TcXunit-sxv: TwinCAT PROPERTY (Get/Set) members were dropped entirely
-    // during POU loading - TcPouParser never looked for <Property> elements,
-    // so FbInstance.Fields never gained an entry for one and dot-access threw
-    // "Unknown field" instead of running the property's Get accessor.
+    // A PROPERTY is not a field: dot-access has to run its Get/Set accessor
+    // body, so nothing about it can be answered from FbInstance.Fields.
     public class PropertyAccessorTests
     {
         [Fact]
@@ -74,12 +72,10 @@ namespace xStunit.Interpreter.Tests
         [Fact]
         public void DotAccess_ReadsLrealProperty_SeededByRealLiteralThenAssignedLreal_ReturnsTheLreal()
         {
-            // TcXunit-8we: same defect as TcXunit-cq6, but at the PROPERTY Get
-            // accessor site. InvokePropertyGet used to leave the Local named
-            // after the property to be created lazily by its first
-            // assignment, so 'nGain := 0.0;' (a bare decimal literal, which
-            // lexes as REAL) made the cell a REAL, and the later LREAL
-            // assignment was rejected as an implicit narrowing.
+            // A Get accessor's implicit local is seeded from the declared
+            // property type, exactly as a method's return cell is. Left to be
+            // created by its first assignment, 'nGain := 0.0;' would fix the
+            // cell as REAL and reject the later LREAL as implicit narrowing.
             var foo = new PouAst(
                 "FB_Foo",
                 null,
@@ -109,14 +105,11 @@ namespace xStunit.Interpreter.Tests
         [Fact]
         public void DotAccess_WriteThroughSetLrealProperty_SeededCellTaggedWithDeclaredType()
         {
-            // TcXunit-8we: InvokePropertySet seeded 'new Cell { Value = value
-            // }' with no DeclaredTypeName - same class of problem as the Get
-            // side, and it left the cell untagged for anything reading
-            // Cell.DeclaredTypeName. SIZEOF resolves a bare identifier's size
-            // through exactly that tag (Engine.SizeOf's
-            // ResolveDeclaredTypeName, via Frame.LocalTypeNames) - untagged,
-            // SIZEOF(nGain) falls back to treating "nGain" itself as a type
-            // name and throws; tagged, it reports LREAL's 8 bytes.
+            // The Set accessor's incoming value must carry the property's
+            // declared type on its cell, not just a boxed value: SIZEOF reads a
+            // bare identifier's size from exactly that tag. Untagged,
+            // SIZEOF(nGain) falls back to treating "nGain" as a type name and
+            // throws instead of reporting LREAL's 8 bytes.
             var foo = new PouAst(
                 "FB_Foo",
                 null,

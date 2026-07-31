@@ -6,12 +6,11 @@ using Xunit;
 
 namespace xStunit.Interpreter.Tests
 {
-    // TcXunit-3jr: TwinCAT ST lets a STRING be indexed directly (s[n], 0-
-    // based) to read/write individual bytes - most commonly "IF s[0] = 0
-    // THEN" to test for an empty string, since STRING is a null-terminated
-    // byte buffer internally. IndexExpr evaluation used to assume every
-    // indexed receiver was an ArrayValue and threw InvalidCastException the
-    // moment it was handed a STRING (a System.String) instead.
+    // ST lets a STRING be indexed directly, 0-based, reading and writing
+    // character codes rather than substrings - a STRING behaves as a
+    // null-terminated buffer, so index 0 of an empty string reads as the
+    // terminator and writing 0 truncates. Unlike an array, the receiver is
+    // a CLR string, so every indexing path needs its own handling for it.
     public class StringIndexingTests
     {
         [Fact]
@@ -37,8 +36,6 @@ namespace xStunit.Interpreter.Tests
             var instance = engine.NewInstance("FB_Holder");
             var frame = new Frame(instance, "FB_Holder");
 
-            // The idiom straight out of TcXunit-3jr's repro: an empty
-            // string's first byte reads as the null terminator, not a crash.
             var result = engine.Evaluate(Parser.ParseExpression("sLabel[0] = 0"), frame);
 
             Assert.Equal(true, result);
@@ -111,8 +108,8 @@ namespace xStunit.Interpreter.Tests
                 engine.ExecuteStatements(Parser.ParseStatements("sLabel[5] := 88;"), frame));
         }
 
-        // Existing ArrayValue indexing must keep working unchanged now that
-        // IndexExpr evaluation branches on the receiver's runtime type.
+        // Array indexing shares the evaluation path with string indexing and
+        // must stay unaffected by it.
         [Fact]
         public void ExecuteStatements_ArrayIndexAssignment_StillWorksAlongsideStringIndexing()
         {
@@ -127,11 +124,9 @@ namespace xStunit.Interpreter.Tests
             Assert.Equal(new object[] { 0, 99, 0 }, buf.Elements);
         }
 
-        // The original TcXunit-3jr crash traced through the third
-        // unconditional-cast site named in the bead - ResolveCellForLValue
-        // (Engine.Cells.cs), the ADR()/REF=/Transmit() target resolver, not
-        // just plain read/assignment - since real FB_init chains commonly
-        // wire things up via REF= rather than direct index reads/writes.
+        // A string index also has to work as an lvalue target - the path
+        // ADR() and REF= resolve through - not only as a direct read or
+        // assignment.
         [Fact]
         public void Evaluate_AdrOfStringIndex_ReadsByteThroughPointerDeref()
         {

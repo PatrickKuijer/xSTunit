@@ -5,8 +5,9 @@ using Xunit;
 
 namespace xStunit.Interpreter.Tests
 {
-    // TcXunit-w5x.15.4: FbInstance.StepCycles(n) re-invokes the FB's top-level
-    // body n times, reusing Cell state across calls. No dt param, no scheduler.
+    // StepCycles(n) re-invokes an FB's top-level body n times, carrying Cell
+    // state across cycles. It models the PLC scan, not time: there is no dt and
+    // no scheduler, so a cycle is only ever "one more pass over the body".
     public class StepCyclesTests
     {
         private static Engine NewCounterEngine()
@@ -47,9 +48,9 @@ namespace xStunit.Interpreter.Tests
             Assert.Equal(5, b.Fields["Count"].Value);
         }
 
-        // TcXunit-z1l: a top-level RETURN inside the stepped FB's cyclic body
-        // must only end that cycle, not unwind into whatever ST statement
-        // (e.g. a caller's METHOD) invoked StepCycles.
+        // A top-level RETURN in a cyclic body ends that cycle only. Letting it
+        // unwind further would abandon the rest of whatever ST statement
+        // invoked StepCycles.
         [Fact]
         public void StepCycles_TopLevelReturnInBody_DoesNotEscapeIntoCaller()
         {
@@ -80,12 +81,10 @@ namespace xStunit.Interpreter.Tests
             Assert.Equal(0, nested.Fields["Count"].Value);
         }
 
-        // TcXunit-agc: the try/catch(MethodReturnSignal) in StepCycles's
-        // `for` loop is per-iteration, so a RETURN that ends cycle N must
-        // not prevent cycles N+1..cycles from running. The body flips
-        // ibEnable on its own RETURN-taking cycle so a single StepCycles(3)
-        // call exercises both the RETURN path (cycle 1) and normal
-        // completion (cycles 2 and 3) without external re-entry.
+        // A RETURN that ends cycle N must not stop cycles N+1 onward from
+        // running - the scan continues. The body flips its own enable on the
+        // RETURN-taking cycle so one StepCycles(3) covers both paths without
+        // any external re-entry.
         [Fact]
         public void StepCycles_ReturnInEarlyCycle_DoesNotAbortRemainingCycles()
         {
@@ -101,11 +100,9 @@ namespace xStunit.Interpreter.Tests
 
             engine.CallMethod(instance, "StepCycles", new Expr[] { new IntLiteralExpr(3) }, new NamedArg[0], null, null);
 
-            // Cycle 1: ibEnable starts FALSE, so it flips to TRUE and RETURNs
-            // before incrementing Count. Cycles 2 and 3 then see ibEnable ==
-            // TRUE and run to completion, each incrementing Count. If the
-            // MethodReturnSignal from cycle 1 aborted the whole cycles loop
-            // instead of just that iteration, Count would still be 0.
+            // Cycle 1 flips the enable and returns before incrementing; cycles
+            // 2 and 3 each increment. A RETURN that aborted the whole loop
+            // rather than one iteration would leave Count at 0.
             Assert.Equal(2, instance.Fields["Count"].Value);
         }
     }

@@ -7,9 +7,11 @@ namespace xStunit.Interpreter.Tests
 {
     public class ParserTests
     {
-        // TcXunit-3tx.5: x^ := ... is valid IEC 61131-3 (pointer-dereference
-        // assignment) that this v1-subset parser does not implement yet - it
-        // must report as unsupported-construct, not plc-fault.
+        // x^ := ... is valid IEC 61131-3 (pointer-dereference assignment) that
+        // this subset does not implement yet, so it reports as
+        // unsupported-construct rather than as a fault in the code under test.
+        // A current limit, not a verdict: promote this out when the parser
+        // learns the construct.
         [Fact]
         public void ParseStatements_DerefAssignmentTarget_ThrowsUnsupportedConstructException()
         {
@@ -19,20 +21,18 @@ namespace xStunit.Interpreter.Tests
             Assert.Equal("x^ :=", ex.Construct);
         }
 
-        // A genuinely malformed assignment target (not an lvalue shape at
-        // all) must still be an ordinary FormatException - which TcXunit-229.15
-        // classifies as parse-error (the front end cannot tell "malformed" from
-        // "beyond the subset", and says so) rather than claiming the
-        // unsupported-construct above on no evidence. The exception TYPE this
-        // parser raises is unchanged either way; only the classifier moved.
+        // A target that is not an lvalue shape at all stays an ordinary
+        // ParseException: the front end cannot tell "malformed" from "beyond
+        // the subset", so it must not claim the unsupported-construct above on
+        // no evidence.
         [Fact]
         public void ParseStatements_LiteralAssignmentTarget_ThrowsParseException()
         {
             Assert.Throws<ParseException>(() => Parser.ParseStatements("5 := x;"));
         }
 
-        // '**' (EXPT) is a real IEC 61131-3 operator this parser does not
-        // implement - unsupported-construct, not a syntax error.
+        // '**' (EXPT) is a real IEC 61131-3 operator this parser has not
+        // learned yet - unsupported-construct, not a syntax error.
         [Fact]
         public void ParseExpression_Exponentiation_ThrowsUnsupportedConstructException()
         {
@@ -149,9 +149,8 @@ namespace xStunit.Interpreter.Tests
         [Fact]
         public void ParseStatements_RefAssignFieldAccessTarget_ProducesRefAssignStmtWithFieldAccessTarget()
         {
-            // TcXunit-6t0: REF= must accept the same lvalue shapes as := -
-            // a struct/FB member target (stWidget.IpHandler REF= fbHandler),
-            // not just a plain identifier.
+            // REF= accepts the same lvalue shapes as :=, not just a plain
+            // identifier.
             var stmts = Parser.ParseStatements("stWidget.IpHandler REF= fbHandler;");
 
             var refAssign = Assert.IsType<RefAssignStmt>(Assert.Single(stmts));
@@ -163,8 +162,6 @@ namespace xStunit.Interpreter.Tests
         [Fact]
         public void ParseStatements_RefAssignIndexTarget_ProducesRefAssignStmtWithIndexTarget()
         {
-            // TcXunit-6t0: REF= must also accept an array-index target
-            // (aRefs[1] REF= x).
             var stmts = Parser.ParseStatements("aRefs[1] REF= x;");
 
             var refAssign = Assert.IsType<RefAssignStmt>(Assert.Single(stmts));
@@ -196,7 +193,6 @@ namespace xStunit.Interpreter.Tests
         [Fact]
         public void ParseExpression_MultiplyBindsTighterThanAdditive_ProducesExpectedTree()
         {
-            // a + b * c should parse as a + (b * c)
             var expr = Parser.ParseExpression("a + b * c");
 
             var add = Assert.IsType<BinaryExpr>(expr);
@@ -209,7 +205,6 @@ namespace xStunit.Interpreter.Tests
         [Fact]
         public void ParseExpression_MultiplyAndModSamePrecedence_ProcessedLeftToRight()
         {
-            // a * b MOD c should parse as (a * b) MOD c
             var expr = Parser.ParseExpression("a * b MOD c");
 
             var mod = Assert.IsType<BinaryExpr>(expr);

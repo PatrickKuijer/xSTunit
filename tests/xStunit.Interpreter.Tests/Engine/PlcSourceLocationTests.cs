@@ -7,12 +7,11 @@ using Xunit;
 
 namespace xStunit.Interpreter.Tests
 {
-    // TcXunit-p3t.1: when an ST body throws, the only context that used to
-    // reach CliRunner was the suite name plus a .NET stack trace of
-    // interpreter internals - nothing said which PLC POU/method was
-    // executing. Engine now stamps the innermost interpreted body onto the
-    // in-flight exception and wraps it once, at the suite boundary, in a
+    // A fault inside an interpreted ST body is stamped with the innermost PLC
+    // POU/method and wrapped exactly once, at the suite boundary, in a
     // PlcSourceLocationException that keeps the original as InnerException.
+    // Without that, a caller sees only the suite name and a .NET stack trace of
+    // interpreter internals, with nothing naming the PLC code that failed.
     public class PlcSourceLocationTests
     {
         // Suite -> FB_Deep.Level1 -> Level2 -> Level3 -> (missing method).
@@ -54,12 +53,6 @@ namespace xStunit.Interpreter.Tests
             Assert.Equal("FB_Deep.Level3", ex.Location);
         }
 
-        // TcXunit-1am: before this, only the innermost frame (Level3) survived
-        // - every outer ExecuteBody's own call site (Level2, Level1, the
-        // suite body) was discarded on rethrow. RecordFaultSite now appends
-        // to an ordered list at every level instead of stopping at the first
-        // writer, so CallStack should carry all four: innermost frame first,
-        // the suite entry point last.
         [Fact]
         public void RunSuite_ThrowDeepInCallChain_CallStackCapturesEveryLevelInnermostFirst()
         {
@@ -71,14 +64,14 @@ namespace xStunit.Interpreter.Tests
                 new[] { "FB_Deep.Level3", "FB_Deep.Level2", "FB_Deep.Level1", "FB_MySuite" },
                 ex.CallStack.Select(f => f.Location).ToArray());
 
-            // CallStack[0] must agree with the pre-existing single-frame
-            // properties, which still describe the innermost fault alone.
+            // The flat single-frame properties describe the innermost fault
+            // alone, so they must never drift from CallStack[0].
             Assert.Equal(ex.PouTypeName, ex.CallStack[0].PouTypeName);
             Assert.Equal(ex.MethodName, ex.CallStack[0].MethodName);
             Assert.Equal(ex.Line, ex.CallStack[0].Line);
             Assert.Equal(ex.BodyLine, ex.CallStack[0].BodyLine);
 
-            // Outermost frame is the suite's own POU body - no method name.
+            // A top-level POU body frame carries no method name.
             Assert.Null(ex.CallStack[3].MethodName);
         }
 
@@ -91,11 +84,10 @@ namespace xStunit.Interpreter.Tests
 
             var inner = Assert.IsType<InvalidOperationException>(ex.InnerException);
             Assert.Equal("Method 'ThisMethodDoesNotExist' not found starting from type 'FB_Deep'", inner.Message);
-            // The "(1)" is TcXunit-p3t.4/gfs: these hand-built MethodAsts take
-            // BodyStartLine's default of 1, and Level3's body is a single line,
-            // so the file line and the body-relative line (what Message now
-            // embeds) coincide at 1. What this test pins is unchanged - the
-            // inner message survives verbatim after the location.
+            // The "(1)" is the body-relative line: hand-built MethodAsts take
+            // BodyStartLine's default of 1 and Level3's body is one line, so it
+            // coincides with the file line. The inner message must survive
+            // verbatim after the location prefix.
             Assert.Equal("FB_Deep.Level3(1): " + inner.Message, ex.Message);
         }
 
@@ -115,18 +107,14 @@ namespace xStunit.Interpreter.Tests
             Assert.Equal("FB_MySuite", ex.PouTypeName);
             Assert.Null(ex.MethodName);
             Assert.Equal("FB_MySuite", ex.Location);
-
-            // TcXunit-1am: a single interpreted frame degrades to a
-            // single-element CallStack, not an empty one.
             Assert.Equal(new[] { "FB_MySuite" }, ex.CallStack.Select(f => f.Location).ToArray());
         }
 
         [Fact]
         public void RunSuite_ThrowInsideBareInvokedFbBody_ReportsThatFbNotTheSuite()
         {
-            // A bare FB invocation (sfbThing();) runs the callee's own top-level
-            // body in its own frame - the reported POU must be the callee, not
-            // the suite that invoked it.
+            // A bare FB invocation runs the callee's own top-level body in its
+            // own frame, the same as a method call does.
             var thing = new PouAst("FB_Thing", null, "", "ThisMethodDoesNotExist();", new List<MethodAst>());
             var suite = new PouAst(
                 "FB_MySuite",
@@ -142,18 +130,10 @@ namespace xStunit.Interpreter.Tests
             Assert.Null(ex.MethodName);
         }
 
-        // TcXunit-n65: MethodAst.ImplementationText is parsed lazily, the
-        // first time TypeRegistry.GetStatements sees that exact body text -
-        // and every call site shaped like
-        // `ExecuteBody(_registry.GetStatements(...), frame)` used to resolve
-        // that argument *before* ExecuteBody's own try/catch was entered. So
-        // when the callee's body itself contains an unparseable construct,
-        // the lazy parse throws outside the callee's frame and gets caught
-        // (and location-stamped) by whichever caller's ExecuteBody is still
-        // on the CLR stack - here, the suite body that merely called
-        // guard.M_Check(); one line. The fix must make the reported location
-        // name FB_Widget.M_Check (the body that actually fails to parse),
-        // never FB_MySuite (the caller).
+        // A method body is parsed lazily, on first execution, so a parse
+        // failure surfaces while some caller's frame is the one on the CLR
+        // stack. The reported location must still name the body that failed to
+        // parse; blaming the caller that merely invoked it is the regression.
         [Fact]
         public void RunSuite_CalleeBodyFailsToParse_ReportsCalleeNotCaller()
         {
@@ -164,10 +144,8 @@ namespace xStunit.Interpreter.Tests
                 "",
                 new List<MethodAst>
                 {
-                    // '?' isn't a recognized character anywhere in the v1
-                    // lexer (see Lexer.Tokenize's default switch case), so
-                    // Lexer.Tokenize throws ParseException the first time
-                    // this method's body is lazily parsed via GetStatements.
+                    // '?' is not a character the lexer recognizes, so this body
+                    // throws ParseException the first time it is lazily parsed.
                     new MethodAst("M_Check", "METHOD PUBLIC M_Check", "x := 1 ? 2;"),
                 });
 
@@ -188,13 +166,10 @@ namespace xStunit.Interpreter.Tests
             Assert.IsType<ParseException>(ex.InnerException);
         }
 
-        // TcXunit-3d1: BindParams computes a callee's own local VAR default
-        // values (here, M_SomeTest's `sfbWidget : FB_Widget` local) BEFORE
-        // CallMethod ever reaches ExecuteBody for that callee - so the fault
-        // raised while constructing FB_Widget's own nValue default (an
-        // unresolved identifier) must still be attributed to M_SomeTest's
-        // own frame, not left to surface at the suite's call-site frame with
-        // a one-frame call stack.
+        // A callee's local VAR defaults are constructed before its body starts
+        // executing, so a fault there has no statement to hang off. It must
+        // still be attributed to the callee's frame rather than falling back to
+        // the caller's call site.
         [Fact]
         public void RunSuite_CalleeLocalVarDefaultConstructionFails_ReportsCalleeNotSuite()
         {
@@ -227,9 +202,8 @@ namespace xStunit.Interpreter.Tests
             Assert.Equal("FB_MySuite.M_SomeTest", ex.Location);
             Assert.Contains("Unknown variable 'UNDEFINED_CONSTANT'", ex.Message);
 
-            // Call stack must include the callee (M_SomeTest) even though the
-            // fault happened before its body ever started executing - not
-            // just the suite's own top-level call-site frame.
+            // The callee's frame belongs on the stack even though its body
+            // never began executing.
             Assert.Equal(
                 new[] { "FB_MySuite.M_SomeTest", "FB_MySuite" },
                 ex.CallStack.Select(f => f.Location).ToArray());
@@ -238,10 +212,9 @@ namespace xStunit.Interpreter.Tests
         [Fact]
         public void CallMethod_Throw_IsNotWrapped_SoDirectInterpreterCallersKeepTheirExceptionTypes()
         {
-            // Wrapping happens once, at the suite boundary - not at every
-            // CallMethod level. Engine.CallMethod is public and driven directly
-            // by tests and by future embedders that switch on the concrete
-            // exception type, so its contract must stay unchanged.
+            // Wrapping happens once, at the suite boundary, never at every
+            // CallMethod level: CallMethod is public and its callers switch on
+            // the concrete exception type.
             var engine = NewNestedChainEngine();
             var instance = engine.NewInstance("FB_Deep");
 
@@ -252,8 +225,8 @@ namespace xStunit.Interpreter.Tests
         }
 
         // AssertConverges/AssertConvergesAndLatches throw rather than record a
-        // TcUnit-style failure (Engine.Convergence.cs), so they travel the same
-        // path a genuine interpreter fault does.
+        // TcUnit-style failure, so they travel the same wrapping path a genuine
+        // interpreter fault does.
         private static Engine NewConvergenceEngine(string suiteBody)
         {
             var master = new PouAst("FB_Master", null, "VAR\n\tValue : INT;\nEND_VAR", "", new List<MethodAst>());
@@ -281,8 +254,6 @@ namespace xStunit.Interpreter.Tests
                 () => directEngine.CallMethod(
                     directEngine.NewInstance("FB_MySuite"), "CheckConvergence", new Expr[0], new NamedArg[0], null, null));
 
-            // Same failure reached through RunSuite keeps the convergence
-            // diagnosis verbatim, just prefixed with where it came from.
             var wrapped = Assert.Throws<PlcSourceLocationException>(
                 () => NewConvergenceEngine("CheckConvergence();").RunSuite("FB_MySuite"));
 
@@ -320,13 +291,11 @@ namespace xStunit.Interpreter.Tests
         [Fact]
         public void PlcSourceLocationException_HandBuiltAst_ReportsTheInBodyLineAsIs()
         {
-            // Was "Line defaults to unknown" while p3t.4's seam was unfilled;
-            // p3t.4 fills it with fileLine = MethodAst.BodyStartLine +
-            // node.Line - 1. A hand-built MethodAst has no .TcPOU file, so
-            // BodyStartLine keeps its documented default of 1 and the formula
-            // degrades to the identity - the body IS the file, so Line and
-            // BodyLine (TcXunit-gfs) coincide here too. Line stays 0 only when
-            // the statement itself has no line (see PlcSourceLineTests).
+            // Line is the file line, BodyLine the body-relative one:
+            // BodyStartLine + node.Line - 1 versus node.Line. A hand-built
+            // MethodAst has no source file, so BodyStartLine keeps its default
+            // of 1 and the two coincide. Line falls back to UnknownLine only
+            // when the statement itself carries no line (see PlcSourceLineTests).
             var engine = NewNestedChainEngine();
 
             var ex = Assert.Throws<PlcSourceLocationException>(() => engine.RunSuite("FB_MySuite"));

@@ -5,10 +5,6 @@ using Xunit;
 
 namespace xStunit.Interpreter.Tests
 {
-    // TcXunit-6fb.2: suite-level counterpart to TcXunit-6fb.1's per-test
-    // ElapsedMilliseconds - Engine.RunSuite(string, out long) wraps its
-    // instantiate/execute call with a Stopwatch so CliRunner's JSON output can
-    // report suites[].durationMs.
     public class RunSuiteDurationTests
     {
         private static Engine NewSuiteEngine(string implementationText)
@@ -35,10 +31,9 @@ namespace xStunit.Interpreter.Tests
         [Fact]
         public void RunSuite_OutElapsedMilliseconds_CapturedEvenWhenATestFails()
         {
-            // The suite itself still ran to completion (Body() returned normally) -
-            // only the individual TEST() assertion failed - so a duration should
-            // still be reported, same as CliRunner's suite-load-failure path only
-            // omits it when the suite never ran at all.
+            // A failed assertion does not stop the suite body from running to
+            // completion, so a duration is still owed. It is absent only where
+            // the suite never ran at all.
             var engine = NewSuiteEngine(
                 "TEST('FailingTest');\n" +
                 "AssertTrue(Condition := FALSE, Message := 'deliberately false');\n" +
@@ -54,10 +49,6 @@ namespace xStunit.Interpreter.Tests
         [Fact]
         public void RunSuite_ParameterlessOverload_StillReturnsSameResultsAsOutParamOverload()
         {
-            // The pre-existing RunSuite(string) overload (relied on by
-            // SuiteCaseRunner.cs and dozens of other Engine tests) must keep
-            // behaving identically now that it just forwards to the new
-            // out-param overload and discards the elapsed time.
             var implementation =
                 "TEST('QuickTest');\n" +
                 "AssertTrue(Condition := TRUE, Message := 'ok');\n" +

@@ -5,9 +5,9 @@ using Xunit;
 
 namespace xStunit.Interpreter.Tests
 {
-    // TcXunit-f6b (TcXunit-qit): TcEventSeverity has no source in the
-    // solution, so a POU referencing TcEventSeverity.Warning must resolve via
-    // BuiltinEnums instead of failing variable/field lookup.
+    // TcEventSeverity is library-supplied and has no DUT source in any
+    // solution under test, so a POU referencing TcEventSeverity.Warning can
+    // only resolve through the built-in enum table.
     public class BuiltinEnumTests
     {
         [Fact]

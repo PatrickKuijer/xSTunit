@@ -6,10 +6,9 @@ using Xunit;
 
 namespace xStunit.Interpreter.Tests
 {
-    // TcXunit-mym.2: RETURN as a statement - parses, and unwinds out of
-    // arbitrarily nested IF branches back to the nearest method/suite body
-    // boundary (CallMethod's or RunSuite's top-level ExecuteStatements call)
-    // without disturbing the method's existing return-value convention.
+    // RETURN unwinds out of arbitrarily nested branches to the nearest
+    // method-or-suite body boundary, and no further, while leaving whatever
+    // was already assigned to the return variable intact.
     public class ReturnStatementTests
     {
         // --- Parser shape ---------------------------------------------------

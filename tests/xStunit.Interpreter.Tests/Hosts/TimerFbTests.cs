@@ -5,10 +5,16 @@ using Xunit;
 
 namespace xStunit.Interpreter.Tests
 {
-    // TcXunit-w5x.15.7: TON/TOF/FB_Pulse native stubs driven by Engine.Clock.
-    // Each test wraps the native timer in an interpreted FB whose body does
-    // the bare invocation (fbTon(IN:=.., PT:=..)) and reads Q/ET back via
-    // plain field access, exercising the whole ST->native->ST round trip.
+    // Drives the TON/TOF/TP native stubs through the full ST -> native -> ST
+    // round trip: an interpreted wrapper FB does the bare invocation and reads
+    // Q/ET back by plain field access.
+    //
+    // Unlike the edge triggers and counters, a timer is CLOCK-driven, not
+    // call-driven: elapsed time is the difference between clock totals across
+    // two calls. So the first Step of each test only establishes the baseline,
+    // stepping again without advancing the clock is a no-op rather than a
+    // double count, and a clock advance is observed in full on the next Step
+    // however many cycles later.
     public class TimerFbTests
     {
         private static Engine NewWrapperEngine(string timerTypeName)
@@ -34,7 +40,7 @@ namespace xStunit.Interpreter.Tests
             instance.Fields["inVar"].Value = true;
             instance.Fields["ptVar"].Value = 500u;
 
-            Step(engine, instance); // baseline call - initializes clock tracking, no elapsed yet
+            Step(engine, instance);
 
             engine.Clock.AdvanceMs(499);
             Step(engine, instance);
@@ -79,7 +85,7 @@ namespace xStunit.Interpreter.Tests
             Assert.Equal(true, instance.Fields["measuredQ"].Value);
 
             instance.Fields["inVar"].Value = false;
-            Step(engine, instance); // falling edge - Q still true, ET starts from 0
+            Step(engine, instance); // TOF holds Q true past the falling edge, and ET starts there
 
             engine.Clock.AdvanceMs(299);
             Step(engine, instance);
@@ -100,7 +106,7 @@ namespace xStunit.Interpreter.Tests
             instance.Fields["inVar"].Value = true;
             instance.Fields["ptVar"].Value = 200u;
 
-            Step(engine, instance); // rising edge - pulse starts
+            Step(engine, instance);
             Assert.Equal(true, instance.Fields["measuredQ"].Value);
 
             engine.Clock.AdvanceMs(199);
@@ -109,22 +115,22 @@ namespace xStunit.Interpreter.Tests
             Assert.Equal(199u, instance.Fields["measuredEt"].Value);
 
             engine.Clock.AdvanceMs(1);
-            Step(engine, instance); // IN still true, but pulse elapses on its own
+            Step(engine, instance); // pulse width is fixed, so Q drops while IN is still true
             Assert.Equal(false, instance.Fields["measuredQ"].Value);
             Assert.Equal(200u, instance.Fields["measuredEt"].Value);
 
             instance.Fields["inVar"].Value = false;
             Step(engine, instance);
             instance.Fields["inVar"].Value = true;
-            Step(engine, instance); // fresh rising edge re-triggers
+            Step(engine, instance);
             Assert.Equal(true, instance.Fields["measuredQ"].Value);
             Assert.Equal(0u, instance.Fields["measuredEt"].Value);
         }
 
-        // TcXunit-tzeg.1: TP is the real IEC 61131-3 spelling of the pulse
-        // timer that FB_Pulse aliases, so declaring one by either name must
-        // walk the identical Q/ET trace - this mirrors the FB_Pulse test
-        // above assertion for assertion.
+        // Deliberately duplicates the FB_Pulse test above assertion for
+        // assertion. TP is the real IEC 61131-3 spelling and FB_Pulse only this
+        // project's alias for it, so the two names must walk an identical Q/ET
+        // trace - collapsing this into one test would stop proving that.
         [Fact]
         public void Tp_FiresFixedWidthPulseOnRisingEdge_IdenticallyToFbPulse()
         {
@@ -133,7 +139,7 @@ namespace xStunit.Interpreter.Tests
             instance.Fields["inVar"].Value = true;
             instance.Fields["ptVar"].Value = 200u;
 
-            Step(engine, instance); // rising edge - pulse starts
+            Step(engine, instance);
             Assert.Equal(true, instance.Fields["measuredQ"].Value);
 
             engine.Clock.AdvanceMs(199);
@@ -142,23 +148,23 @@ namespace xStunit.Interpreter.Tests
             Assert.Equal(199u, instance.Fields["measuredEt"].Value);
 
             engine.Clock.AdvanceMs(1);
-            Step(engine, instance); // IN still true, but pulse elapses on its own
+            Step(engine, instance); // pulse width is fixed, so Q drops while IN is still true
             Assert.Equal(false, instance.Fields["measuredQ"].Value);
             Assert.Equal(200u, instance.Fields["measuredEt"].Value);
 
             instance.Fields["inVar"].Value = false;
             Step(engine, instance);
             instance.Fields["inVar"].Value = true;
-            Step(engine, instance); // fresh rising edge re-triggers
+            Step(engine, instance);
             Assert.Equal(true, instance.Fields["measuredQ"].Value);
             Assert.Equal(0u, instance.Fields["measuredEt"].Value);
         }
 
-        // TcXunit-x5pt moved the Clock's base unit to ns for LTON/LTOF/LTP.
-        // A TIME timer's ET is uint milliseconds and cannot represent the
-        // remainder, so it truncates: sub-ms advances are still accumulated in
-        // the clock (nothing is lost), they just don't surface in ET until a
-        // whole millisecond has gone by.
+        // The Clock counts in ns so the LTIME timers can use it, but a TIME
+        // timer's ET is uint milliseconds and cannot hold the remainder. It
+        // truncates rather than losing it: sub-ms advances still accumulate in
+        // the clock, they just don't surface in ET until a whole millisecond
+        // has gone by, so two sub-ms steps summing to 1 ms do fire a 1 ms PT.
         [Fact]
         public void Ton_SubMillisecondAdvances_AccumulateButOnlySurfaceAsWholeMs()
         {
@@ -190,7 +196,7 @@ namespace xStunit.Interpreter.Tests
             {
                 instance.Fields["inVar"].Value = true;
                 instance.Fields["ptVar"].Value = 1000u;
-                Step(engine, instance); // baseline call for each, both at clock 0
+                Step(engine, instance);
             }
 
             engine.Clock.AdvanceMs(700);

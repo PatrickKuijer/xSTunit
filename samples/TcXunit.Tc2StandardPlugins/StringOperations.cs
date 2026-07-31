@@ -1,5 +1,5 @@
 using System;
-using TcXunit.Interpreter.Extensibility;
+using xStunit.Interpreter.Extensibility;
 
 namespace TcXunit.Tc2StandardPlugins
 {

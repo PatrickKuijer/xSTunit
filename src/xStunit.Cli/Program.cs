@@ -1,0 +1,9 @@
+using System;
+
+namespace xStunit.Cli
+{
+    public static class Program
+    {
+        public static int Main(string[] args) => CliRunner.Run(args, Console.Out);
+    }
+}

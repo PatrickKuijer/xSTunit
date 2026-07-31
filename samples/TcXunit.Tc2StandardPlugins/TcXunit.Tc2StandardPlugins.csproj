@@ -17,7 +17,7 @@
   <ItemGroup>
     <!-- Private=false: see TcXunit.SamplePlugins.csproj for why the contract
          assembly must not be copied next to the plugin. -->
-    <ProjectReference Include="..\..\src\TcXunit.Interpreter\TcXunit.Interpreter.csproj" Private="false" />
+    <ProjectReference Include="..\..\src\xStunit.Interpreter\xStunit.Interpreter.csproj" Private="false" />
   </ItemGroup>
 
 </Project>

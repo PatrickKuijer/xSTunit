@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+    <AssemblyName>tcxunit</AssemblyName>
+    <RootNamespace>xStunit.Cli</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\xStunit.Parser\xStunit.Parser.csproj" />
+    <ProjectReference Include="..\xStunit.Interpreter\xStunit.Interpreter.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -1,4 +1,4 @@
-using TcXunit.Interpreter.Extensibility;
+using xStunit.Interpreter.Extensibility;
 
 namespace TcXunit.SamplePlugins
 {

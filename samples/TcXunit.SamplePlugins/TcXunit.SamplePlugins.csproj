@@ -19,7 +19,7 @@
          would at best be ignored and at worst (in a host without that
          redirect) produce a second, incompatible copy of the interface. Real
          plugins should reference TcXunit.Interpreter the same way. -->
-    <ProjectReference Include="..\..\src\TcXunit.Interpreter\TcXunit.Interpreter.csproj" Private="false" />
+    <ProjectReference Include="..\..\src\xStunit.Interpreter\xStunit.Interpreter.csproj" Private="false" />
   </ItemGroup>
 
 </Project>

@@ -1,0 +1,48 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <!--
+    xStunit.Vsix.csproj is a classic packages.config VSSDK project (net472,
+    references WebView2/EnvDTE/VS SDK assemblies) that does not build outside
+    Visual Studio on Windows; see src/xStunit.Vsix/README.md and
+    docs/design-system.html's Testing Decisions. A normal ProjectReference to
+    it is not viable here (nor in CI). Instead this project source-links the
+    handful of files under TestRunner/ that have zero VS SDK/WebView2
+    dependency; the "one genuinely testable seam" the TcXunit-1tt epic calls
+    out. TcxunitConfig.cs and TcxunitProcessRunner.cs originally could NOT be
+    linked here: both used System.Web.Script.Serialization.JavaScriptSerializer,
+    a .NET Framework only API with no netstandard/net8.0-compatible package.
+    TcXunit-cmp swapped both (and ResultsToolWindowControl.xaml.cs's postMessage
+    envelope parsing) to System.Text.Json instead, which is available on both
+    net472 and net8.0; TcxunitConfig.cs is linked below as a result.
+    TcxunitProcessRunner.cs still isn't: RunAsync itself shells out via
+    System.Diagnostics.Process, not something worth unit testing here, and its
+    only pure logic (argument construction) already lives in
+    TcxunitArgumentBuilder.cs, linked separately. TcxunitArgumentBuilder.cs
+    (added TcXunit-1tt.8) takes plain strings/lists rather than a TcxunitConfig
+    instance (see its own file comment) and is linked, covering the epic's
+    "suite argument construction for rerun-failed" testing decision (a
+    repeated suite &lt;name&gt; flag). Note: this comment avoids the
+    double-hyphen aside this codebase otherwise favors in .cs/.js/.css files,
+    since XML comments may not contain one; semicolons/parens stand in
+    instead.
+  -->
+  <ItemGroup>
+    <Compile Include="..\..\src\xStunit.Vsix\TestRunner\TcxunitModels.cs" Link="TestRunner\TcxunitModels.cs" />
+    <Compile Include="..\..\src\xStunit.Vsix\TestRunner\TcxunitConfig.cs" Link="TestRunner\TcxunitConfig.cs" />
+    <Compile Include="..\..\src\xStunit.Vsix\TestRunner\TcxunitArgumentBuilder.cs" Link="TestRunner\TcxunitArgumentBuilder.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
+    <PackageReference Include="xunit" Version="2.9.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
+  </ItemGroup>
+
+</Project>

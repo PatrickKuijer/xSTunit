@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\xStunit.Parser\xStunit.Parser.csproj" />
+    <ProjectReference Include="..\xStunit.Runner\xStunit.Runner.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- TcXunit-2v8: structured logging for the catch-and-summarize paths in
+         SuiteCaseRunner/CliRunner (full ex.ToString() to a rolling log file
+         instead of the truncated ex.Message surfaced to xUnit/Test Explorer). -->
+    <PackageReference Include="Serilog" Version="3.1.1" />
+    <PackageReference Include="Serilog.Sinks.File" Version="5.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="xStunit.Interpreter.Tests" />
+  </ItemGroup>
+
+</Project>

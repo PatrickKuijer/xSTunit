@@ -4,14 +4,11 @@ using Xunit;
 
 namespace xStunit.Vsix.Tests
 {
-    // TcXunit-1tt.8's rerun-failed feature re-invokes xstunit with --suite <name>
-    // repeated once per failed suite (TcXunit-6fb.3's CLI flag). The epic's own
-    // Testing Decisions call this out explicitly as in-scope for this project:
-    // "--suite argument construction for rerun-failed". XstunitArgumentBuilder is
-    // the pure (no JavaScriptSerializer/VS SDK dependency) class that construction
-    // was pulled out into so it's testable under net8.0 -- see
-    // xStunit.Vsix.Tests.csproj's own comment on why XstunitProcessRunner.cs itself
-    // can't be source-linked here.
+    // XstunitArgumentBuilder.cs is source-linked into this net8.0 project (see the
+    // csproj) because the extension it ships in targets net472 and does not build
+    // outside Visual Studio. These are the only tests of the command line the
+    // extension hands to xstunit.exe; a mistake there breaks no build, it surfaces
+    // only as a bad invocation at runtime inside the IDE.
     public class XstunitArgumentBuilderTests
     {
         [Fact]
@@ -77,8 +74,7 @@ namespace xStunit.Vsix.Tests
         public void BuildArguments_SuiteNameWithSpaces_IsQuotedAsOneToken()
         {
             // Suite type names are IEC 61131-3 identifiers and never contain spaces in
-            // practice, but the quoting must not assume that -- same defensive stance
-            // EscapeArgument already takes for paths.
+            // practice; the quoting must not rely on that.
             var arguments = XstunitArgumentBuilder.BuildArguments(
                 "xstunit",
                 new[] { "C:\\proj\\Pous" },
@@ -146,8 +142,7 @@ namespace xStunit.Vsix.Tests
         {
             // Win32/CommandLineToArgvW rule: a run of backslashes immediately before the
             // closing quote must be doubled, or the last backslash escapes the quote
-            // instead of terminating the token. Regression coverage for the exact bug
-            // class BuildStartInfo's own comment (XstunitProcessRunner.cs) describes.
+            // instead of terminating the token.
             var escaped = XstunitArgumentBuilder.EscapeArgument("C:\\proj\\Pous\\");
 
             Assert.Equal("\"C:\\proj\\Pous\\\\\"", escaped);

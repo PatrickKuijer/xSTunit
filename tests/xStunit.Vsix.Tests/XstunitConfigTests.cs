@@ -5,14 +5,10 @@ using Xunit;
 
 namespace xStunit.Vsix.Tests
 {
-    // XstunitConfig.Load() was previously untestable outside net472 (see
-    // XstunitConfig.cs's history and TcXunit-cmp): it used
-    // System.Web.Script.Serialization.JavaScriptSerializer, which has no
-    // net8.0-compatible package. Swapping it to System.Text.Json let this file be
-    // source-linked into this net8.0 test project (see this project's own csproj
-    // comment) -- these tests cover the "XstunitConfig loading/defaults" gap the
-    // TcXunit-1tt epic's own Testing Decisions originally called for but which
-    // TcXunit-1tt.2 had to defer.
+    // XstunitConfig.cs is source-linked into this net8.0 project (see the csproj);
+    // the net472 extension it ships in does not build outside Visual Studio, so
+    // these are the only tests that ever run against xstunit.json's loading rules
+    // and defaults.
     public class XstunitConfigTests
     {
         private static string CreateTempDirectory()
@@ -90,9 +86,8 @@ namespace xStunit.Vsix.Tests
 
                 var config = XstunitConfig.Load(directory);
 
-                // No slash/backslash in "xstunit" -- must stay a bare command name so
-                // XstunitProcessRunner's cmd.exe /c invocation resolves it via PATH,
-                // not get rewritten into a path relative to the config directory.
+                // A bare name has to stay bare so the cmd.exe invocation resolves it via
+                // PATH, rather than being rewritten relative to the config directory.
                 Assert.Equal("xstunit", config.CliPath);
             }
             finally
@@ -169,8 +164,6 @@ namespace xStunit.Vsix.Tests
 
                 var config = XstunitConfig.Load(directory);
 
-                // No slash/backslash in "Plugins" -- mirrors cliPath's bare-name case:
-                // left unresolved rather than joined against the config directory.
                 Assert.Equal("Plugins", config.Plugins);
             }
             finally
@@ -228,9 +221,8 @@ namespace xStunit.Vsix.Tests
         [Fact]
         public void Load_UppercasePropertyNames_StillBindsCaseInsensitively()
         {
-            // Mirrors JavaScriptSerializer's default case-insensitive member binding,
-            // which this class's deserialization relied on before the System.Text.Json
-            // swap -- SerializerOptions.PropertyNameCaseInsensitive keeps that contract.
+            // xstunit.json is hand-written, so a casing difference against the config's
+            // own fields must still bind rather than leave the property silently null.
             var directory = CreateTempDirectory();
             try
             {

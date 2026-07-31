@@ -4,16 +4,12 @@ using Xunit;
 
 namespace xStunit.Vsix.Tests
 {
-    // XstunitModels.cs is deserialized in production by
-    // System.Web.Script.Serialization.JavaScriptSerializer (net472-only, see
-    // XstunitProcessRunner.cs), which is not available under net8.0. These tests
-    // exercise the same model classes with System.Text.Json instead --
-    // JavaScriptSerializer's default object converter matches JSON member names to
-    // CLR property names case-insensitively, so PropertyNameCaseInsensitive = true
-    // here mirrors that production binding behavior rather than testing a
-    // different contract. What's under test is the model's *shape* (property
-    // names/types line up with the CLI's `--format json` output), not which
-    // serializer library is used to fill it in.
+    // The only guard on the JSON wire shape xStunit.Cli emits. The extension reads
+    // that JSON out of process and has no ProjectReference to the CLI, so renaming a
+    // key there breaks no build -- the property just comes back null and the results
+    // tree renders a blank. XstunitModels.cs is source-linked here (see the csproj)
+    // and the options below match XstunitProcessRunner's, so what is pinned is the
+    // models' shape, not the serializer filling them.
     public class XstunitModelsDeserializationTests
     {
         private static readonly JsonSerializerOptions Options = new JsonSerializerOptions
@@ -81,9 +77,6 @@ namespace xStunit.Vsix.Tests
             Assert.False(suite.Tests[1].Passed);
             Assert.Equal("RetriesOnTimeout", suite.Tests[1].Name);
             Assert.Equal(9, suite.Tests[1].DurationMs);
-            // TcXunit-3tx.2: failures are objects now; `message` still holds
-            // the same formatted line the bare string used to be, which is what
-            // the results tree renders.
             var failure = Assert.Single(suite.Tests[1].Failures);
             Assert.Equal("FAILED TEST 'RetriesOnTimeout', EXP: 3, ACT: 1", failure.Message);
         }
@@ -115,10 +108,9 @@ namespace xStunit.Vsix.Tests
         [Fact]
         public void Deserialize_SuiteFailedToLoad_WithExplicitNullDurationMs_LeavesDurationMsNull()
         {
-            // TcXunit-6fb.2: a suite that failed to load never ran, so the CLI
-            // emits durationMs: null rather than a fabricated 0 -- this model's
-            // long? must round-trip that null rather than throwing or coercing
-            // it to 0.
+            // A suite that failed to load never ran, so the CLI emits durationMs:
+            // null rather than a fabricated 0; a UI showing "0 ms" for a suite that
+            // never executed would be a lie.
             const string json = @"{
                 ""suites"": [
                     {
@@ -143,10 +135,6 @@ namespace xStunit.Vsix.Tests
         [Fact]
         public void Deserialize_SuiteWithoutDurationMsField_LeavesDurationMsNull()
         {
-            // Belt-and-braces alongside the explicit-null case above: a payload
-            // that simply omits durationMs (rather than emitting it as JSON
-            // null) must also leave the nullable long at its default of null,
-            // not throw.
             const string json = @"{
                 ""suites"": [ { ""name"": ""FB_ChecksumTests"", ""tests"": [] } ],
                 ""passed"": 0,
@@ -163,9 +151,9 @@ namespace xStunit.Vsix.Tests
         [Fact]
         public void Deserialize_TestDurationMs_MapsNonNegativeLong()
         {
-            // TcXunit-6fb.1: every test entry that appears in the JSON ran (a
-            // suite that failed to load has no test entries at all), so
-            // XstunitTestResult.DurationMs is a plain non-nullable long.
+            // Every test entry the CLI emits ran -- a suite that failed to load
+            // emits no test entries at all -- which is why this duration is a
+            // plain long while the suite's is nullable.
             const string json = @"{
                 ""suites"": [
                     {
@@ -199,12 +187,8 @@ namespace xStunit.Vsix.Tests
             Assert.Null(result.Suites);
         }
 
-        // TcXunit-229.15 (BREAKING wire change): the CLI renamed suites[]'s
-        // "errorKind"/"errorConstruct" to "kind"/"construct", so those two keys
-        // read the same at every level of the JSON. This extension parses that
-        // JSON OUT OF PROCESS - it has no ProjectReference to the CLI, so the
-        // rename could not have produced a compile error here, only a silently
-        // null property. This test is the thing that would have caught it.
+        // A suite error reuses the same "kind"/"construct" keys the top-level error
+        // shape uses, so a consumer reads them identically at every level of the JSON.
         [Fact]
         public void Deserialize_SuiteError_MapsKindAndConstructUnderTheSharedKeys()
         {
@@ -230,9 +214,8 @@ namespace xStunit.Vsix.Tests
             Assert.Equal("SEL", suite.Construct);
         }
 
-        // The fifth kind (TcXunit-229.15) carries its offending token in the
-        // same `construct` field, never a parse-error-only one - so a consumer
-        // that renders `construct` needs no new branch for it.
+        // A parse error carries its offending token in the same `construct` field the
+        // other kinds use, so a renderer needs no extra branch for it.
         [Fact]
         public void Deserialize_SuiteParseError_MapsTheOffendingTokenAsTheConstruct()
         {
@@ -258,8 +241,8 @@ namespace xStunit.Vsix.Tests
             Assert.Equal("@", suite.Construct);
         }
 
-        // A passing suite emits neither key, and both must land as null rather
-        // than as an empty string a renderer would treat as "there is a kind".
+        // A passing suite emits neither key; both must land as null rather than as an
+        // empty string a renderer would read as "there is a kind".
         [Fact]
         public void Deserialize_SuiteWithoutKindOrConstruct_LeavesBothNull()
         {
@@ -280,8 +263,8 @@ namespace xStunit.Vsix.Tests
         [Fact]
         public void Deserialize_SuiteFailedWithCallStack_MapsFramesInnermostFirst()
         {
-            // TcXunit-7s6: suites[].callStack, innermost frame first, suite
-            // entry point last -- TcXunit-9fs's model must round-trip it.
+            // The CLI orders callStack innermost frame first, suite entry point
+            // last; reversing it would point the reader at the wrong line.
             const string json = @"{
                 ""suites"": [
                     {
@@ -321,9 +304,8 @@ namespace xStunit.Vsix.Tests
         [Fact]
         public void Deserialize_SuiteWithoutCallStackField_LeavesCallStackNull()
         {
-            // A passing suite or a load-level failure that never entered an
-            // interpreted ST body -- the CLI omits callStack entirely rather
-            // than emitting an empty array.
+            // Where nothing interpreted ever ran, the CLI omits callStack entirely
+            // rather than emitting an empty array.
             const string json = @"{
                 ""suites"": [ { ""name"": ""FB_WireRecordTests"", ""tests"": [] } ],
                 ""passed"": 0,
@@ -340,9 +322,8 @@ namespace xStunit.Vsix.Tests
         [Fact]
         public void Deserialize_SuiteWithoutFilePath_LeavesFilePathNull()
         {
-            // filePath is always emitted by the current CLI (TcXunit-8gj), but the
-            // model must not throw if a field is simply absent from the payload --
-            // deserializers leave unset properties at their default.
+            // The current CLI always emits filePath; an older or partial payload that
+            // omits it must still load, with navigation-to-source simply unavailable.
             const string json = @"{
                 ""suites"": [ { ""name"": ""FB_NoPathTests"", ""tests"": [] } ],
                 ""passed"": 0,

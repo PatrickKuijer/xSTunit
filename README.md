@@ -99,13 +99,13 @@ public sealed class CheckSum16Function : IXstunitNativeFunction
 Build the plugin project and point the CLI at its output directory:
 
 ```bash
-dotnet build samples/TcXunit.SamplePlugins -c Release
-xstunit run <path-to-POUs> --plugins samples/TcXunit.SamplePlugins/bin/Release/netstandard2.0
+dotnet build samples/xStunit.SamplePlugins -c Release
+xstunit run <path-to-POUs> --plugins samples/xStunit.SamplePlugins/bin/Release/netstandard2.0
 ```
 
 Every `*.dll` in the directory is scanned for `IXstunitNativeFunction` implementations with a public parameterless constructor; a DLL that isn't managed, fails type load, or collides on a function name already registered is skipped and reported — never fatal. Registered functions are consulted last (after intrinsics, methods, and real `FUNCTION` POUs), so a plugin only fills a hole that would otherwise be an error — it can never shadow real source. The VSIX forwards a `plugins` directory from `xstunit.json` the same way.
 
-Full worked example, argument/return type table, and guarantees: [`samples/TcXunit.SamplePlugins/README.md`](samples/TcXunit.SamplePlugins/README.md) (epic TcXunit-rl4).
+Full worked example, argument/return type table, and guarantees: [`samples/xStunit.SamplePlugins/README.md`](samples/xStunit.SamplePlugins/README.md) (epic TcXunit-rl4).
 
 ## Issue tracking
 

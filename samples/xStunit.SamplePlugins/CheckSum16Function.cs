@@ -1,6 +1,6 @@
 using xStunit.Interpreter.Extensibility;
 
-namespace TcXunit.SamplePlugins
+namespace xStunit.SamplePlugins
 {
     // Worked example of the TcXunit-6k2 native-function extension point,
     // standing in for Tc2_Utilities' F_CheckSum16.

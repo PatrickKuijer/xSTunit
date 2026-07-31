@@ -1,7 +1,7 @@
 using System;
 using xStunit.Interpreter.Extensibility;
 
-namespace TcXunit.Tc2StandardPlugins
+namespace xStunit.StandardStringPlugins
 {
     // The Tc2_Standard string-function bodies, written once and shared by the
     // narrow (STRING) and wide (WSTRING) registrations in StringFunction.cs

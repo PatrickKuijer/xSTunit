@@ -1,6 +1,6 @@
 using xStunit.Interpreter.Extensibility;
 
-namespace TcXunit.Tc2StandardPlugins
+namespace xStunit.StandardStringPlugins
 {
     // One Tc2_Standard string-function body, evaluated under a given
     // character measure. See StringOperations for the bodies themselves.

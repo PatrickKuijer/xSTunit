@@ -29,9 +29,9 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "xStunit.Vsix.Tests", "tests
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "samples", "samples", "{5D20AA90-6969-D8BD-9DCD-8634F4692FDA}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TcXunit.SamplePlugins", "samples\TcXunit.SamplePlugins\TcXunit.SamplePlugins.csproj", "{1562EAE8-D32E-4649-9700-827CA1FF0448}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "xStunit.SamplePlugins", "samples\xStunit.SamplePlugins\xStunit.SamplePlugins.csproj", "{1562EAE8-D32E-4649-9700-827CA1FF0448}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TcXunit.Tc2StandardPlugins", "samples\TcXunit.Tc2StandardPlugins\TcXunit.Tc2StandardPlugins.csproj", "{ABAF88B9-AEC2-4B63-BCD7-2169865DEAD2}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "xStunit.StandardStringPlugins", "samples\xStunit.StandardStringPlugins\xStunit.StandardStringPlugins.csproj", "{ABAF88B9-AEC2-4B63-BCD7-2169865DEAD2}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

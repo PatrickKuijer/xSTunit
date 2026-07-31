@@ -5,7 +5,7 @@
     TcXunit interpreter fixture (TcXunit-93l9). Exercises the Tc2_Standard
     WSTRING function set (WCONCAT, WDELETE, WFIND, WINSERT, WLEFT, WLEN,
     WMID, WREPLACE, WRIGHT) resolving through the native-function
-    plugin/registry path (samples/TcXunit.Tc2StandardPlugins), not a built-in
+    plugin/registry path (samples/xStunit.StandardStringPlugins), not a built-in
     intrinsic.
 
     Unlike CONCAT - which TcXunit-3lt made an interpreter intrinsic, so its

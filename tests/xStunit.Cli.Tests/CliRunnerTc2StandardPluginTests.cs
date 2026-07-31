@@ -23,7 +23,7 @@ namespace xStunit.Cli.Tests
         {
             _pluginDir = Path.Combine(Path.GetTempPath(), "tcxunit-tc2std-plugin-test-" + Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(_pluginDir);
-            File.Copy(PluginDll(), Path.Combine(_pluginDir, "TcXunit.Tc2StandardPlugins.dll"));
+            File.Copy(PluginDll(), Path.Combine(_pluginDir, "xStunit.StandardStringPlugins.dll"));
         }
 
         public void Dispose()
@@ -74,7 +74,7 @@ namespace xStunit.Cli.Tests
             // 8 narrow-STRING functions (TcXunit-8po) + 9 WSTRING
             // counterparts (TcXunit-93l9, exercised by
             // CliRunnerWideStringPluginTests) in the one plugin assembly.
-            Assert.Contains("plugin: TcXunit.Tc2StandardPlugins.dll (17 function(s))", text);
+            Assert.Contains("plugin: xStunit.StandardStringPlugins.dll (17 function(s))", text);
         }
 
         private static string FixtureDir([CallerFilePath] string callerFile = "") =>
@@ -84,11 +84,11 @@ namespace xStunit.Cli.Tests
         private static string PluginDll([CallerFilePath] string callerFile = "")
         {
             var repoRoot = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(callerFile)!, "..", ".."));
-            var binRoot = Path.Combine(repoRoot, "samples", "TcXunit.Tc2StandardPlugins", "bin");
+            var binRoot = Path.Combine(repoRoot, "samples", "xStunit.StandardStringPlugins", "bin");
 
             if (Directory.Exists(binRoot))
             {
-                var found = Directory.GetFiles(binRoot, "TcXunit.Tc2StandardPlugins.dll", SearchOption.AllDirectories);
+                var found = Directory.GetFiles(binRoot, "xStunit.StandardStringPlugins.dll", SearchOption.AllDirectories);
                 if (found.Length > 0)
                 {
                     Array.Sort(found, (a, b) => File.GetLastWriteTimeUtc(b).CompareTo(File.GetLastWriteTimeUtc(a)));
@@ -97,8 +97,8 @@ namespace xStunit.Cli.Tests
             }
 
             throw new InvalidOperationException(
-                $"Tc2StandardPlugins not built - expected TcXunit.Tc2StandardPlugins.dll under {binRoot}. " +
-                "Build samples/TcXunit.Tc2StandardPlugins (the Cli.Tests project reference should do this automatically).");
+                $"Tc2StandardPlugins not built - expected xStunit.StandardStringPlugins.dll under {binRoot}. " +
+                "Build samples/xStunit.StandardStringPlugins (the Cli.Tests project reference should do this automatically).");
         }
     }
 }

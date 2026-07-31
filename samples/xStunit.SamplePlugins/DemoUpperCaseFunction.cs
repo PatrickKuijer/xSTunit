@@ -1,6 +1,6 @@
 using xStunit.Interpreter.Extensibility;
 
-namespace TcXunit.SamplePlugins
+namespace xStunit.SamplePlugins
 {
     // Second sample (TcXunit-6k2), showing the shape of a native function that
     // takes and returns plain scalars rather than walking a byte buffer - and

@@ -22,7 +22,7 @@ namespace xStunit.Cli.Tests
             // guard to get a clean result.
             _pluginDir = Path.Combine(Path.GetTempPath(), "tcxunit-plugin-test-" + Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(_pluginDir);
-            File.Copy(SamplePluginDll(), Path.Combine(_pluginDir, "TcXunit.SamplePlugins.dll"));
+            File.Copy(SamplePluginDll(), Path.Combine(_pluginDir, "xStunit.SamplePlugins.dll"));
         }
 
         public void Dispose()
@@ -72,7 +72,7 @@ namespace xStunit.Cli.Tests
             var text = output.ToString();
             Assert.Equal(0, exitCode);
             Assert.Contains("3 passed, 0 failed", text);
-            Assert.Contains("plugin: TcXunit.SamplePlugins.dll (2 function(s))", text);
+            Assert.Contains("plugin: xStunit.SamplePlugins.dll (2 function(s))", text);
         }
 
         [Fact]
@@ -119,7 +119,7 @@ namespace xStunit.Cli.Tests
         {
             var junkDir = Path.Combine(_pluginDir, "junk");
             Directory.CreateDirectory(junkDir);
-            File.Copy(SamplePluginDll(), Path.Combine(junkDir, "TcXunit.SamplePlugins.dll"));
+            File.Copy(SamplePluginDll(), Path.Combine(junkDir, "xStunit.SamplePlugins.dll"));
             File.WriteAllText(Path.Combine(junkDir, "NotAnAssembly.dll"), "this is not a PE file");
 
             var output = new StringWriter();
@@ -143,11 +143,11 @@ namespace xStunit.Cli.Tests
         private static string SamplePluginDll([CallerFilePath] string callerFile = "")
         {
             var repoRoot = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(callerFile)!, "..", ".."));
-            var binRoot = Path.Combine(repoRoot, "samples", "TcXunit.SamplePlugins", "bin");
+            var binRoot = Path.Combine(repoRoot, "samples", "xStunit.SamplePlugins", "bin");
 
             if (Directory.Exists(binRoot))
             {
-                var found = Directory.GetFiles(binRoot, "TcXunit.SamplePlugins.dll", SearchOption.AllDirectories);
+                var found = Directory.GetFiles(binRoot, "xStunit.SamplePlugins.dll", SearchOption.AllDirectories);
                 if (found.Length > 0)
                 {
                     Array.Sort(found, (a, b) => File.GetLastWriteTimeUtc(b).CompareTo(File.GetLastWriteTimeUtc(a)));
@@ -156,8 +156,8 @@ namespace xStunit.Cli.Tests
             }
 
             throw new InvalidOperationException(
-                $"sample plugin not built - expected TcXunit.SamplePlugins.dll under {binRoot}. " +
-                "Build samples/TcXunit.SamplePlugins (the Cli.Tests project reference should do this automatically).");
+                $"sample plugin not built - expected xStunit.SamplePlugins.dll under {binRoot}. " +
+                "Build samples/xStunit.SamplePlugins (the Cli.Tests project reference should do this automatically).");
         }
     }
 }

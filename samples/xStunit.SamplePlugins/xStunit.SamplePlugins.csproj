@@ -4,7 +4,7 @@
     <TargetFramework>netstandard2.0</TargetFramework>
     <LangVersion>latest</LangVersion>
     <Nullable>disable</Nullable>
-    <RootNamespace>TcXunit.SamplePlugins</RootNamespace>
+    <RootNamespace>xStunit.SamplePlugins</RootNamespace>
     <!-- Not packed or shipped: this exists to be built and pointed at with
          the CLI's plugins option, as the worked example of the TcXunit-6k2
          extension point. -->
@@ -13,12 +13,12 @@
 
   <ItemGroup>
     <!-- Private=false: the contract assembly must NOT be copied next to the
-         plugin. The host already has TcXunit.Interpreter loaded, and
+         plugin. The host already has xStunit.Interpreter loaded, and
          PluginLoadContext deliberately redirects it there so the plugin's
-         ITcXunitNativeFunction is the *same type* as the host's. A local copy
+         IXstunitNativeFunction is the *same type* as the host's. A local copy
          would at best be ignored and at worst (in a host without that
          redirect) produce a second, incompatible copy of the interface. Real
-         plugins should reference TcXunit.Interpreter the same way. -->
+         plugins should reference xStunit.Interpreter the same way. -->
     <ProjectReference Include="..\..\src\xStunit.Interpreter\xStunit.Interpreter.csproj" Private="false" />
   </ItemGroup>
 

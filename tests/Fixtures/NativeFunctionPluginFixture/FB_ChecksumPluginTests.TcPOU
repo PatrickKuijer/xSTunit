@@ -13,7 +13,7 @@
       - a non-pointer signature, to show the boundary isn't checksum-specific
 
     Expected values match the SAMPLE plugin's deliberately trivial additive
-    algorithm (samples/TcXunit.SamplePlugins), NOT Beckhoff's real
+    algorithm (samples/xStunit.SamplePlugins), NOT Beckhoff's real
     F_CheckSum16 - see that file's warning. This fixture asserts that
     dispatch, argument binding, and pointer reads work, not that any
     particular vendor checksum is reproduced.

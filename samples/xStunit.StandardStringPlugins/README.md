@@ -4,7 +4,7 @@
 whose call chain reaches `DELETE`, `FIND`, `INSERT`, `LEFT`, `LEN`, `MID`,
 `REPLACE`, or `RIGHT` - or any of their `W`-prefixed `WSTRING` counterparts -
 can't resolve them the way it resolves a `FUNCTION` POU in your own tree (see
-`samples/TcXunit.SamplePlugins` for the general native-function-plugin
+`samples/xStunit.SamplePlugins` for the general native-function-plugin
 extension point, TcXunit-6k2).
 
 Unlike that project's `F_CheckSum16` (a stand-in for a proprietary,
@@ -21,8 +21,8 @@ already-resolved rather than adding unreachable code.
 ## Using it
 
 ```bash
-dotnet build samples/TcXunit.Tc2StandardPlugins -c Release
-tcxunit run <path-to-POUs> --plugins samples/TcXunit.Tc2StandardPlugins/bin/Release/netstandard2.0
+dotnet build samples/xStunit.StandardStringPlugins -c Release
+tcxunit run <path-to-POUs> --plugins samples/xStunit.StandardStringPlugins/bin/Release/netstandard2.0
 ```
 
 ## Functions covered

@@ -1,7 +1,7 @@
 using System.Text;
 using xStunit.Interpreter.Extensibility;
 
-namespace TcXunit.Tc2StandardPlugins
+namespace xStunit.StandardStringPlugins
 {
     // Tc2_Standard WCONCAT (TcXunit-93l9): concatenates STR1..STR10, with
     // STR1/STR2 required and STR3..STR10 optional trailing arguments - the

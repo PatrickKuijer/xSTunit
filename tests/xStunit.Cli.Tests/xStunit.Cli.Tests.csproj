@@ -23,11 +23,11 @@
          own load context, which would prove nothing about the loader. The
          reference exists only to guarantee the DLL is on disk, in the same
          configuration, before the test looks for it. -->
-    <ProjectReference Include="..\..\samples\TcXunit.SamplePlugins\TcXunit.SamplePlugins.csproj"
+    <ProjectReference Include="..\..\samples\xStunit.SamplePlugins\xStunit.SamplePlugins.csproj"
                       ReferenceOutputAssembly="false" />
     <!-- TcXunit-8po: same reasoning as the SamplePlugins reference above,
          for the Tc2_Standard string-function plugin. -->
-    <ProjectReference Include="..\..\samples\TcXunit.Tc2StandardPlugins\TcXunit.Tc2StandardPlugins.csproj"
+    <ProjectReference Include="..\..\samples\xStunit.StandardStringPlugins\xStunit.StandardStringPlugins.csproj"
                       ReferenceOutputAssembly="false" />
   </ItemGroup>
 

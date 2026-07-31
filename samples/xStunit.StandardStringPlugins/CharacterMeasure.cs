@@ -1,6 +1,6 @@
 using System;
 
-namespace TcXunit.Tc2StandardPlugins
+namespace xStunit.StandardStringPlugins
 {
     // How a string function counts and slices "characters" (TcXunit-p4qb).
     //

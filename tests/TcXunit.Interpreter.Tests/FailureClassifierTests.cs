@@ -45,7 +45,7 @@ namespace TcXunit.Interpreter.Tests
         // out loud, instead of being smuggled in as plc-fault ("your code is
         // broken") or load-error ("nothing ran").
         [Fact]
-        public void Classify_FormatException_IsParseErrorWhenLocated()
+        public void Classify_ParseFailure_IsParseErrorWhenLocated()
         {
             var located = new PlcSourceLocationException("FB_X", "MethodY", new ParseFailure("Unexpected token"));
 
@@ -60,7 +60,7 @@ namespace TcXunit.Interpreter.Tests
         // described TcXunit's own call path, not the failure - so the kind can't
         // depend on it.
         [Fact]
-        public void Classify_FormatException_IsParseErrorWhenUnlocatedToo()
+        public void Classify_ParseFailure_IsParseErrorWhenUnlocatedToo()
         {
             var kind = FailureClassifier.Classify(new ParseFailure("Unexpected token"), out _);
 
@@ -71,7 +71,7 @@ namespace TcXunit.Interpreter.Tests
         // field unsupported-construct uses, never a parse-error-only field, so
         // `kind` + `construct` is one vocabulary at every level of the JSON.
         [Fact]
-        public void Classify_LexerFormatException_CarriesTheOffendingTokenAsTheConstruct()
+        public void Classify_LexerParseFailure_CarriesTheOffendingTokenAsTheConstruct()
         {
             var ex = new ParseFailure("Unexpected character '@' at position 13 in: n := 1;\nn := @ 2;");
 
@@ -83,7 +83,7 @@ namespace TcXunit.Interpreter.Tests
         // The parser's own messages name the token as Token.ToString()
         // ("Type:Text") rather than quoting it.
         [Fact]
-        public void Classify_ParserFormatException_CarriesTheOffendingTokenAsTheConstruct()
+        public void Classify_ParserParseFailure_CarriesTheOffendingTokenAsTheConstruct()
         {
             var ex = new ParseFailure("Expected Semicolon but got Identifier:FOO at token index 4");
 
@@ -96,7 +96,7 @@ namespace TcXunit.Interpreter.Tests
         // classifies - `construct` is nullable for every kind, and a missing
         // token must never cost the classification.
         [Fact]
-        public void Classify_TokenlessFormatException_IsStillParseErrorWithNoConstruct()
+        public void Classify_TokenlessParseFailure_IsStillParseErrorWithNoConstruct()
         {
             var kind = FailureClassifier.Classify(new ParseFailure("Expected END_IF"), out var construct);
 

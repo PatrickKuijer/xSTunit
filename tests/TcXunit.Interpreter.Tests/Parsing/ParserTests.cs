@@ -26,7 +26,7 @@ namespace TcXunit.Interpreter.Tests
         // unsupported-construct above on no evidence. The exception TYPE this
         // parser raises is unchanged either way; only the classifier moved.
         [Fact]
-        public void ParseStatements_LiteralAssignmentTarget_ThrowsFormatException()
+        public void ParseStatements_LiteralAssignmentTarget_ThrowsParseFailure()
         {
             Assert.Throws<ParseFailure>(() => Parser.ParseStatements("5 := x;"));
         }

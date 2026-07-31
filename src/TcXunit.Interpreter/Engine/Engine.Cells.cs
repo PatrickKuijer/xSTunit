@@ -17,11 +17,16 @@ namespace TcXunit.Interpreter
             IReadOnlyList<NamedArg> namedArgs,
             Frame callerFrame)
         {
-            var match = namedArgs.FirstOrDefault(a => a.Name == paramName);
-            if (match != null)
-                return ResolveCellForLValue(match.Value, callerFrame);
-            if (posIndex < positionalArgs.Count)
-                return ResolveCellForLValue(positionalArgs[posIndex], callerFrame);
+            // posIndex is a by-value parameter here (one fixed declared
+            // position per call), so passing it by ref to the shared binder is
+            // safe: the increment lands on this local copy and is discarded.
+            if (ArgBinder.TryResolveArg(
+                paramName,
+                name => namedArgs.FirstOrDefault(a => a.Name == name)?.Value,
+                positionalArgs,
+                ref posIndex,
+                out var argExpr))
+                return ResolveCellForLValue(argExpr, callerFrame);
 
             throw new InvalidOperationException($"Transmit missing required argument '{paramName}'");
         }
@@ -33,11 +38,14 @@ namespace TcXunit.Interpreter
             IReadOnlyList<Expr> positionalArgs,
             IReadOnlyList<NamedArg> namedArgs)
         {
-            var match = namedArgs.FirstOrDefault(a => a.Name == paramName);
-            if (match != null)
-                return match.Value;
-            if (posIndex < positionalArgs.Count)
-                return positionalArgs[posIndex];
+            // Same fixed-position usage as ResolveNamedOrPositionalCell above.
+            if (ArgBinder.TryResolveArg(
+                paramName,
+                name => namedArgs.FirstOrDefault(a => a.Name == name)?.Value,
+                positionalArgs,
+                ref posIndex,
+                out var argExpr))
+                return argExpr;
 
             throw new InvalidOperationException($"{methodName} missing required argument '{paramName}'");
         }

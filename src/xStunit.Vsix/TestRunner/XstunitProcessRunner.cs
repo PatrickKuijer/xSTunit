@@ -10,15 +10,15 @@ using System.Threading.Tasks;
 namespace xStunit.Vsix.TestRunner
 {
     /// <summary>
-    /// Shells out to `tcxunit &lt;path-a&gt; [&lt;path-b&gt; ...] --format json
-    /// [--suite &lt;name&gt; ...]` (chosen over referencing TcXunit's libraries
+    /// Shells out to `xstunit &lt;path-a&gt; [&lt;path-b&gt; ...] --format json
+    /// [--suite &lt;name&gt; ...]` (chosen over referencing xStunit's libraries
     /// in-process - see TcXunit-6nt) and parses the resulting JSON.
     /// Proves out whether Process.Start works unrestricted from inside XAE Shell.
     /// </summary>
-    internal sealed class TcxunitProcessRunner
+    internal sealed class XstunitProcessRunner
     {
-        // TcxunitModels.cs's properties are PascalCase; the CLI's JSON is camelCase (see
-        // TcxunitModelsDeserializationTests.cs, which asserts against this same option set).
+        // XstunitModels.cs's properties are PascalCase; the CLI's JSON is camelCase (see
+        // XstunitModelsDeserializationTests.cs, which asserts against this same option set).
         private static readonly JsonSerializerOptions SerializerOptions = new JsonSerializerOptions
         {
             PropertyNameCaseInsensitive = true,
@@ -29,7 +29,7 @@ namespace xStunit.Vsix.TestRunner
         /// added by TcXunit-1tt.3 so ResultsToolWindowControl's UI thread isn't
         /// blocked for the duration of a run (WaitForExit() used to run right on
         /// the WPF Button_Click handler) and so a Stop click has something to
-        /// cancel. Cancelling kills the in-flight tcxunit process tree and the
+        /// cancel. Cancelling kills the in-flight xstunit process tree and the
         /// returned Task ends in the canceled state (OperationCanceledException),
         /// which the caller distinguishes from a genuine run failure -- "stopped
         /// on purpose" vs. "errored".
@@ -37,10 +37,10 @@ namespace xStunit.Vsix.TestRunner
         /// suiteNames (TcXunit-1tt.8) is optional: null/empty runs every suite under
         /// config.Paths exactly as before, while a non-empty list restricts the run to
         /// just those suites via a repeated --suite &lt;name&gt; (TcXunit-6fb.3) -- what
-        /// "rerun failed" uses to re-invoke tcxunit scoped to only the suites that just
+        /// "rerun failed" uses to re-invoke xstunit scoped to only the suites that just
         /// failed.
         /// </summary>
-        public async Task<TcxunitRunResult> RunAsync(TcxunitConfig config, string workingDirectory, CancellationToken cancellationToken, IReadOnlyList<string> suiteNames = null)
+        public async Task<XstunitRunResult> RunAsync(XstunitConfig config, string workingDirectory, CancellationToken cancellationToken, IReadOnlyList<string> suiteNames = null)
         {
             var startInfo = BuildStartInfo(config, workingDirectory, suiteNames);
 
@@ -76,17 +76,17 @@ namespace xStunit.Vsix.TestRunner
 
                 if (stdout.Length == 0)
                 {
-                    return new TcxunitRunResult
+                    return new XstunitRunResult
                     {
-                        Error = $"tcxunit produced no output (exit code {process.ExitCode}). stderr: {stderr}",
+                        Error = $"xstunit produced no output (exit code {process.ExitCode}). stderr: {stderr}",
                         ExitCode = process.ExitCode,
                     };
                 }
 
                 var stdoutText = stdout.ToString();
-                var result = JsonSerializer.Deserialize<TcxunitRunResult>(stdoutText, SerializerOptions);
+                var result = JsonSerializer.Deserialize<XstunitRunResult>(stdoutText, SerializerOptions);
                 result.ExitCode = process.ExitCode;
-                // Keep the CLI's own JSON text around (see TcxunitRunResult.RawJson)
+                // Keep the CLI's own JSON text around (see XstunitRunResult.RawJson)
                 // so the WebView2 host can forward it verbatim rather than
                 // re-serializing this object -- see TcXunit-1tt.2.
                 result.RawJson = stdoutText;
@@ -94,14 +94,14 @@ namespace xStunit.Vsix.TestRunner
             }
         }
 
-        private static ProcessStartInfo BuildStartInfo(TcxunitConfig config, string workingDirectory, IReadOnlyList<string> suiteNames)
+        private static ProcessStartInfo BuildStartInfo(XstunitConfig config, string workingDirectory, IReadOnlyList<string> suiteNames)
         {
             // Argument construction (including --plugins <dir> per config.Plugins,
             // --suite <name> per suiteNames, and the Win32-style quoting each token
-            // needs) lives in TcxunitArgumentBuilder -- pulled out to a class with no VS
+            // needs) lives in XstunitArgumentBuilder -- pulled out to a class with no VS
             // SDK dependency so it can be unit tested under net8.0 (see that file's own
             // comment and tests/xStunit.Vsix.Tests).
-            var arguments = TcxunitArgumentBuilder.BuildArguments(config.CliPath, config.Paths, suiteNames, config.Plugins);
+            var arguments = XstunitArgumentBuilder.BuildArguments(config.CliPath, config.Paths, suiteNames, config.Plugins);
 
             // Run via "cmd.exe /c" rather than invoking config.CliPath directly.
             // Process.Start with UseShellExecute=false calls CreateProcess directly,
@@ -113,8 +113,8 @@ namespace xStunit.Vsix.TestRunner
             // cmd.exe's "/c" parsing only strips the first and last quote character
             // of the whole command line (rather than respecting each argument's own
             // quoting), so a command line with multiple quoted tokens - e.g.
-            // "...\tcxunit.exe" "path with spaces" --format json - gets mangled into
-            // a single bogus command (`tcxunit.exe" "path...` is not recognized).
+            // "...\xstunit.exe" "path with spaces" --format json - gets mangled into
+            // a single bogus command (`xstunit.exe" "path...` is not recognized).
             // Wrapping the entire thing in one extra pair of quotes makes cmd strip
             // only that outer pair, leaving the inner per-argument quoting intact.
             return new ProcessStartInfo
@@ -131,11 +131,11 @@ namespace xStunit.Vsix.TestRunner
 
         // Process.Kill() on net472 (no Kill(entireProcessTree: true) overload -- that's
         // .NET 5+) only terminates the exact process we started, which is cmd.exe, not
-        // the tcxunit.exe it launched as a child ("cmd.exe /c ..." per BuildStartInfo
-        // above) -- a plain Kill() here would leave the actual tcxunit run still
+        // the xstunit.exe it launched as a child ("cmd.exe /c ..." per BuildStartInfo
+        // above) -- a plain Kill() here would leave the actual xstunit run still
         // executing in the background after Stop supposedly stopped it. taskkill /T
         // recurses the whole process tree rooted at cmd.exe's PID, which is what
-        // Stop's acceptance criteria ("kills the running tcxunit child process")
+        // Stop's acceptance criteria ("kills the running xstunit child process")
         // actually requires. Best-effort: if taskkill itself can't run (missing from
         // PATH, process already gone), fall back to a plain Kill so at least the
         // direct child is reaped rather than throwing out of a CancellationToken

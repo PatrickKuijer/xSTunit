@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    Deploys the built TcXunit.Vsix extension directly into a Visual Studio /
+    Deploys the built xStunit.Vsix extension directly into a Visual Studio /
     TwinCAT XAE Shell Extensions folder, bypassing VSIXInstaller.
 
 .DESCRIPTION
@@ -126,7 +126,7 @@ foreach ($file in $includeFiles) {
 
 # Resources\, x86\, and x64\ are mirrored (not just copied) so a file removed
 # from the source tree doesn't linger in an old deploy. x86\/x64\ hold the
-# two arch-specific WebView2Loader.dll builds (see TcXunit.Vsix.csproj);
+# two arch-specific WebView2Loader.dll builds (see xStunit.Vsix.csproj);
 # ResultsToolWindowControl picks the right one at runtime by process bitness.
 foreach ($folder in @('Resources', 'x86', 'x64')) {
     robocopy (Join-Path $sourceDir $folder) (Join-Path $destDir $folder) /MIR /NFL /NDL /NJH /NJS | Out-Null

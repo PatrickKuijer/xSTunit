@@ -5,7 +5,7 @@
     <TargetFramework>net8.0</TargetFramework>
     <LangVersion>latest</LangVersion>
     <Nullable>disable</Nullable>
-    <AssemblyName>tcxunit</AssemblyName>
+    <AssemblyName>xstunit</AssemblyName>
     <RootNamespace>xStunit.Cli</RootNamespace>
   </PropertyGroup>
 

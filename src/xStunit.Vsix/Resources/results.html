@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>TcXunit Results</title>
+<title>xStunit Results</title>
 <link rel="stylesheet" href="vsix-tokens.css" />
 <link rel="stylesheet" href="vsix-shell.css" />
 <link rel="stylesheet" href="results.css" />
@@ -13,17 +13,17 @@
     WebView2 page loaded by ResultsToolWindowControl.xaml.cs, which follows the VS
     host's light/dark theme (document.body.dataset.theme, pushed via
     ExecuteScriptAsync -- see BuildApplyThemeScript there) and, after a run,
-    pushes the CLI's run-result JSON in by calling window.tcxunitRenderResult(...)
+    pushes the CLI's run-result JSON in by calling window.xstunitRenderResult(...)
     (see results.js, and BuildRenderResultScript on the host side).
 
     #runButton (TcXunit-1tt.3) is the panel's one send-btn/stop-btn per
     design-system.html's "exactly two [buttons]" rule and user story 12
     ("unambiguous about which action is live"): a click posts the string
     'run' or 'stop' to the WPF host via window.chrome.webview.postMessage
-    (see results.js), which drives TcxunitProcessRunner.RunAsync and pushes
-    window.tcxunitSetRunning(bool) back in to flip this button's label/class
+    (see results.js), which drives XstunitProcessRunner.RunAsync and pushes
+    window.xstunitSetRunning(bool) back in to flip this button's label/class
     and toggle #prog. This retires the separate native WPF "Run tests
-    (tcxunit)" button TcXunit-1tt.1/.2 left in ResultsToolWindowControl.xaml,
+    (xstunit)" button TcXunit-1tt.1/.2 left in ResultsToolWindowControl.xaml,
     per that button's own since-removed comment foreshadowing this ticket.
 
     #prog is the CSS-only sweep (results.css) shown only while a run is in
@@ -32,12 +32,12 @@
 
     #emptyState is design-system.html's ".empty-state" block (Components --
     Core, so its rules live in vsix-shell.css) shown verbatim until the first
-    window.tcxunitRenderResult(...) call swaps it out for #tree. As of
+    window.xstunitRenderResult(...) call swaps it out for #tree. As of
     TcXunit-qjt this is no longer a one-way, permanent swap: a run that ends
-    without ever reaching tcxunitRenderResult (Stop, or a host-level error)
+    without ever reaching xstunitRenderResult (Stop, or a host-level error)
     reverts the page from #runningState back to this empty state instead of
     leaving a stale placeholder on screen -- see results.js's
-    tcxunitSetRunning and #runningState's own comment below.
+    xstunitSetRunning and #runningState's own comment below.
 
     #tree is results.css/.tree's render target, filled in by results.js. The
     .tw-statusbar region is required per docs/design-system.html section 6
@@ -68,11 +68,11 @@
     posts {type:'rerunFailed'} to the WPF host over the same JSON-envelope
     postMessage channel #tree's node-open double-click uses (TcXunit-1tt.4).
     The host -- not this page -- tracks which suites failed in the last run,
-    so the message carries no payload; the host re-invokes tcxunit with
+    so the message carries no payload; the host re-invokes xstunit with
     --suite <name> per failed suite and pushes a normal
-    window.tcxunitRenderResult(...) back in, replacing #tree exactly like any
+    window.xstunitRenderResult(...) back in, replacing #tree exactly like any
     other run. Starts `disabled` in markup (no run yet = no failures); results.js
-    toggles the attribute after every render and on tcxunitSetRunning, per the
+    toggles the attribute after every render and on xstunitSetRunning, per the
     mockup's ".ghost-btn[disabled]" rule ("disabled when the last run had zero
     failures").
 
@@ -80,13 +80,13 @@
     duration of a run, in #tree's place -- a separate element from #emptyState
     (not a relabeled/reused one) so it can later become the anchor for
     per-suite progress rows if streaming ever lands, per a companion future
-    ticket. window.tcxunitBeginRun() (called by
+    ticket. window.xstunitBeginRun() (called by
     ResultsToolWindowControl.xaml.cs's StartRunAsync right before the CLI
     process starts) clears #tree's rows/counts and swaps this in; a completed
-    run's window.tcxunitRenderResult(...) swaps it back out for #tree, and a
+    run's window.xstunitRenderResult(...) swaps it back out for #tree, and a
     stopped/errored run (no new render) reverts to #emptyState instead of
     leaving this frozen on screen once nothing is actually running -- see
-    results.js's tcxunitSetRunning. This supersedes TcXunit-1tt.3's original
+    results.js's xstunitSetRunning. This supersedes TcXunit-1tt.3's original
     "results from a prior run stay visible during a subsequent run" decision,
     per explicit user feedback.
   -->

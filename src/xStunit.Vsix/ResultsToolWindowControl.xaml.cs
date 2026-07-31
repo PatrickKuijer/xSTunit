@@ -22,15 +22,15 @@ namespace xStunit.Vsix
     /// The WebView2 page's #runButton (Resources/results.html/results.js) drives a run:
     /// a click posts 'run'/'stop' over window.chrome.webview.postMessage, handled here by
     /// OnWebMessageReceived, which calls StartRunAsync/StopRun. StartRunAsync shells
-    /// out via TcxunitProcessRunner.RunAsync (TcXunit-1tt.3 -- async + cancellable, so the
+    /// out via XstunitProcessRunner.RunAsync (TcXunit-1tt.3 -- async + cancellable, so the
     /// UI thread isn't blocked for a run's duration and Stop has something to cancel) and
-    /// pushes the result into the page via window.tcxunitRenderResult(...); StopRun cancels
-    /// the in-flight run, which kills the child tcxunit process. window.tcxunitSetRunning(bool)
+    /// pushes the result into the page via window.xstunitRenderResult(...); StopRun cancels
+    /// the in-flight run, which kills the child xstunit process. window.xstunitSetRunning(bool)
     /// is pushed in around the run so the page's button/prog-sweep state always reflects
     /// whether a process is actually running, never an optimistic guess made on click.
     /// The former native WPF "Run tests" Button is retired -- see ResultsToolWindowControl.xaml's
     /// comment. StatusText remains for host-level errors the page itself can't show (WebView2
-    /// failing to initialize, tcxunit.json missing/invalid).
+    /// failing to initialize, xstunit.json missing/invalid).
     ///
     /// TcXunit-1tt.4 (click-to-navigate) reuses OnWebMessageReceived for a second message
     /// shape: a double-clicked suite/failed-test row posts a JSON object
@@ -44,18 +44,18 @@ namespace xStunit.Vsix
     /// {type:'rerunFailed'}, posted by results.js's #rerunFailedButton. Unlike openFile it
     /// carries no payload -- this host, not the page, is the one tracking which suites
     /// failed (_lastFailedSuiteNames, refreshed from every completed run's deserialized
-    /// TcxunitRunResult in StartRunAsync), so the page only has to ask. Handling it re-runs
+    /// XstunitRunResult in StartRunAsync), so the page only has to ask. Handling it re-runs
     /// StartRunAsync with that suite list, which threads through to
-    /// TcxunitProcessRunner.RunAsync's suiteNames parameter and becomes a repeated
+    /// XstunitProcessRunner.RunAsync's suiteNames parameter and becomes a repeated
     /// --suite &lt;name&gt; (TcXunit-6fb.3) on the CLI invocation -- restricting the run to
     /// just those suites and replacing (not merging into) the displayed tree via the exact
-    /// same window.tcxunitRenderResult(...) path a normal run already uses.
+    /// same window.xstunitRenderResult(...) path a normal run already uses.
     ///
     /// TcXunit-qjt (reset stale results, live run-state feedback) adds two more pushes
-    /// around every StartRunAsync run: PushBeginRun (window.tcxunitBeginRun(), right
+    /// around every StartRunAsync run: PushBeginRun (window.xstunitBeginRun(), right
     /// before the CLI process starts) clears #tree/counts and shows a running
     /// placeholder instead of leaving a prior run's rows on screen for the new run's
-    /// duration, and PushStatus (window.tcxunitSetStatus(state, text), alongside every
+    /// duration, and PushStatus (window.xstunitSetStatus(state, text), alongside every
     /// status-line branch below) drives the page's own .tw-statusbar dot/#statusText --
     /// previously hardcoded to "Ready" and never updated. This supersedes TcXunit-1tt.3's
     /// original "results already rendered from a prior run stay visible/updating during
@@ -70,7 +70,7 @@ namespace xStunit.Vsix
     /// </summary>
     public partial class ResultsToolWindowControl : UserControl
     {
-        private const string VirtualHostName = "tcxunit.results";
+        private const string VirtualHostName = "xstunit.results";
 
         // results.js's postMessage envelopes use camelCase keys ("type", "filePath").
         private static readonly JsonSerializerOptions MessageEnvelopeSerializerOptions = new JsonSerializerOptions
@@ -94,7 +94,7 @@ namespace xStunit.Vsix
         // refreshed at the end of every successful StartRunAsync (including a rerun-failed
         // one) and left untouched by a stopped/errored run -- StatusText already reports
         // those, and there is nothing to update this list from since no new
-        // TcxunitRunResult exists in that case. A suite counts as failed if it never loaded
+        // XstunitRunResult exists in that case. A suite counts as failed if it never loaded
         // (Error set) or has at least one failing test, matching results.js's own
         // suite-status logic (renderSuite's hasError/anyFail). Starts empty: "no run yet"
         // and "last run had zero failures" both correctly leave rerunFailed with nothing to
@@ -148,7 +148,7 @@ namespace xStunit.Vsix
 
                 var userDataFolder = Path.Combine(
                     Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                    "TcXunit",
+                    "xStunit",
                     "WebView2");
 
                 var environment = await CoreWebView2Environment.CreateAsync(
@@ -363,11 +363,11 @@ namespace xStunit.Vsix
                 + "if(document.body){apply();}else{document.addEventListener('DOMContentLoaded',apply);}})();";
         }
 
-        /// <summary>Starts one run: pushes window.tcxunitSetRunning(true) in (which flips
+        /// <summary>Starts one run: pushes window.xstunitSetRunning(true) in (which flips
         /// #runButton to its Stop state and shows the .prog sweep -- see PushSetRunning),
-        /// awaits TcxunitProcessRunner.RunAsync, then pushes either the result into the
+        /// awaits XstunitProcessRunner.RunAsync, then pushes either the result into the
         /// tree or an error into StatusText, and finally pushes
-        /// window.tcxunitSetRunning(false) back in. A stray second 'run' message while
+        /// window.xstunitSetRunning(false) back in. A stray second 'run' message while
         /// _runCts is already non-null (the button should already read Stop, so this is
         /// defensive, not an expected path) is a no-op -- one run at a time, per the
         /// acceptance criteria's "unambiguous about which action is live".
@@ -375,8 +375,8 @@ namespace xStunit.Vsix
         /// suiteNames is null for a normal #runButton-driven run (every suite under
         /// config.Paths) and non-null/non-empty for TcXunit-1tt.8's rerun-failed
         /// (_lastFailedSuiteNames from the prior completed run) -- threaded straight through
-        /// to TcxunitProcessRunner.RunAsync, which turns it into a repeated --suite &lt;name&gt;.
-        /// Either way the result REPLACES #tree via the same window.tcxunitRenderResult(...)
+        /// to XstunitProcessRunner.RunAsync, which turns it into a repeated --suite &lt;name&gt;.
+        /// Either way the result REPLACES #tree via the same window.xstunitRenderResult(...)
         /// call below; a rerun-failed result is not merged into the existing tree.</summary>
         private async Task StartRunAsync(IReadOnlyList<string> suiteNames = null)
         {
@@ -405,15 +405,15 @@ namespace xStunit.Vsix
             try
             {
                 var directory = ResolveProjectDirectory();
-                var config = TcxunitConfig.Load(directory);
-                var runner = new TcxunitProcessRunner();
+                var config = XstunitConfig.Load(directory);
+                var runner = new XstunitProcessRunner();
                 var result = await runner.RunAsync(config, directory, this._runCts.Token, suiteNames).ConfigureAwait(true);
 
                 if (!string.IsNullOrEmpty(result.Error))
                 {
                     this.ShowError("Error: " + result.Error);
                     this.PushStatus("error", "Error: " + result.Error);
-                    // No new TcxunitRunResult worth trusting (early-exit error shape has no
+                    // No new XstunitRunResult worth trusting (early-exit error shape has no
                     // Suites) -- leave _lastFailedSuiteNames exactly as it was rather than
                     // clearing it. This is now inert either way: PushBeginRun already reset
                     // the page's own hasFailures to false for this run, so #rerunFailedButton
@@ -438,7 +438,7 @@ namespace xStunit.Vsix
                 // PushBeginRun above and stays that way: TcXunit-qjt supersedes
                 // TcXunit-1tt.3's original "results already rendered ... stay visible ...
                 // during a subsequent run" decision, per explicit user feedback (a stale
-                // tree was indistinguishable from a fresh one). tcxunitSetRunning(false),
+                // tree was indistinguishable from a fresh one). xstunitSetRunning(false),
                 // pushed from the finally block below, reverts the page from
                 // #runningState back to #emptyState since no new render happened here.
                 this.SetStatusText("Stopped.");
@@ -446,8 +446,8 @@ namespace xStunit.Vsix
             }
             catch (Exception ex)
             {
-                // Covers TcxunitConfig.Load/ResolveProjectDirectory failures too (e.g. a
-                // missing/misplaced tcxunit.json) -- both happen inside this try block, above,
+                // Covers XstunitConfig.Load/ResolveProjectDirectory failures too (e.g. a
+                // missing/misplaced xstunit.json) -- both happen inside this try block, above,
                 // so their exceptions land here same as a runner failure. Routed through
                 // ShowError, not a direct SetStatusText call, for consistency with every other
                 // host-level error path in this file (see ShowError's remarks below).
@@ -462,14 +462,14 @@ namespace xStunit.Vsix
         }
 
         /// <summary>Computes the failed suite names from a completed run's result, for
-        /// TcXunit-1tt.8's rerun-failed to hand back to TcxunitProcessRunner.RunAsync as
+        /// TcXunit-1tt.8's rerun-failed to hand back to XstunitProcessRunner.RunAsync as
         /// its suiteNames filter next time. Mirrors results.js's own per-suite status logic
         /// exactly (renderSuite there): a suite counts as failed if it never loaded
         /// (Error non-empty, "no tests were run") or has at least one test with
         /// Passed == false. result.Suites is null for the early-exit error shape, but
         /// callers only reach here once result.Error is confirmed empty, so that case does
         /// not need special-casing beyond the null-conditional below.</summary>
-        private static List<string> ComputeFailedSuiteNames(TcxunitRunResult result)
+        private static List<string> ComputeFailedSuiteNames(XstunitRunResult result)
         {
             var suites = result?.Suites;
             if (suites == null)
@@ -485,7 +485,7 @@ namespace xStunit.Vsix
                 .ToList();
         }
 
-        /// <summary>Cancels the in-flight run, if any -- TcxunitProcessRunner.RunAsync's
+        /// <summary>Cancels the in-flight run, if any -- XstunitProcessRunner.RunAsync's
         /// CancellationToken.Register callback is what actually kills the child process
         /// tree (see KillProcessTree there); this just requests it. A 'stop' message with
         /// no run in flight (button already reads "Run tests") is a no-op.</summary>
@@ -500,7 +500,7 @@ namespace xStunit.Vsix
         /// "CoreWebView2 might not be ready yet" null-check every push into the page
         /// needs (mirrors ChatToolWindowControl's own pattern). Shared by
         /// PushSetRunning/PushBeginRun/PushStatus below so each only has to build its
-        /// own `window.tcxunitXxx(...)` call string, not repeat the guard.</summary>
+        /// own `window.xstunitXxx(...)` call string, not repeat the guard.</summary>
         private void PushScript(string script)
         {
             if (this.Browser.CoreWebView2 != null)
@@ -509,18 +509,18 @@ namespace xStunit.Vsix
             }
         }
 
-        /// <summary>Pushes window.tcxunitSetRunning(running) into the page (see
+        /// <summary>Pushes window.xstunitSetRunning(running) into the page (see
         /// Resources/results.js) so #runButton's label/class and #prog's visibility are
-        /// always a direct reflection of whether TcxunitProcessRunner.RunAsync actually
+        /// always a direct reflection of whether XstunitProcessRunner.RunAsync actually
         /// has a process in flight, never an optimistic guess made purely from the
         /// click.</summary>
         private void PushSetRunning(bool running)
         {
             this.PushScript(
-                "(function(){if(window.tcxunitSetRunning){window.tcxunitSetRunning(" + (running ? "true" : "false") + ");}})();");
+                "(function(){if(window.xstunitSetRunning){window.xstunitSetRunning(" + (running ? "true" : "false") + ");}})();");
         }
 
-        /// <summary>TcXunit-qjt: pushes window.tcxunitBeginRun() into the page (see
+        /// <summary>TcXunit-qjt: pushes window.xstunitBeginRun() into the page (see
         /// Resources/results.js), called from StartRunAsync right before the CLI process
         /// starts. Clears #tree's previously-rendered rows/counts and swaps in
         /// #runningState so the panel can never be mistaken for showing fresh/complete
@@ -529,10 +529,10 @@ namespace xStunit.Vsix
         /// TcXunit-1tt.3's original, now-superseded, design).</summary>
         private void PushBeginRun()
         {
-            this.PushScript("(function(){if(window.tcxunitBeginRun){window.tcxunitBeginRun();}})();");
+            this.PushScript("(function(){if(window.xstunitBeginRun){window.xstunitBeginRun();}})();");
         }
 
-        /// <summary>TcXunit-qjt: pushes window.tcxunitSetStatus(state, text) into the page
+        /// <summary>TcXunit-qjt: pushes window.xstunitSetStatus(state, text) into the page
         /// (see Resources/results.js), so the WebView2 page's own .tw-statusbar dot/
         /// #statusText -- previously hardcoded to "Ready" and never updated by any
         /// code -- reflects Running while a run is in flight and Ready/Stopped/Error once
@@ -550,22 +550,22 @@ namespace xStunit.Vsix
             var stateLiteral = JsonSerializer.Serialize(state ?? string.Empty);
             var textLiteral = JsonSerializer.Serialize(text ?? string.Empty);
             this.PushScript(
-                "(function(){if(window.tcxunitSetStatus){window.tcxunitSetStatus(" + stateLiteral + "," + textLiteral + ");}})();");
+                "(function(){if(window.xstunitSetStatus){window.xstunitSetStatus(" + stateLiteral + "," + textLiteral + ");}})();");
         }
 
         /// <summary>Pushes one run's results into the page by calling
-        /// window.tcxunitRenderResult(result) (see Resources/results.js) -- same
+        /// window.xstunitRenderResult(result) (see Resources/results.js) -- same
         /// ExecuteScriptAsync mechanism as BuildApplyThemeScript above, chosen over
         /// PostWebMessageAsJson because this is a single one-shot push after a
         /// completed run, not an ongoing bidirectional stream (contrast with
         /// TcAgentPlugin's chat panel, which does need that). rawJson is the CLI's
-        /// own `tcxunit ... --format json` stdout text (TcxunitProcessRunner stashes
-        /// it verbatim on TcxunitRunResult.RawJson) embedded directly as a JS object
+        /// own `xstunit ... --format json` stdout text (XstunitProcessRunner stashes
+        /// it verbatim on XstunitRunResult.RawJson) embedded directly as a JS object
         /// literal -- valid JSON is valid JS expression syntax, so no JSON.parse
         /// round-trip or escaping is needed here.</summary>
         private static string BuildRenderResultScript(string rawJson)
         {
-            return "(function(){function apply(){if(window.tcxunitRenderResult){window.tcxunitRenderResult(" + rawJson + ");}}"
+            return "(function(){function apply(){if(window.xstunitRenderResult){window.xstunitRenderResult(" + rawJson + ");}}"
                 + "if(document.readyState!=='loading'){apply();}else{document.addEventListener('DOMContentLoaded',apply);}})();";
         }
 

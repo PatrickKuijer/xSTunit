@@ -1,6 +1,6 @@
-# TcXunit.Vsix
+# xStunit.Vsix
 
-VSIX tool window for TwinCAT XAE Shell that shells out to `tcxunit run <path>
+VSIX tool window for TwinCAT XAE Shell that shells out to `xstunit run <path>
 --format json`, parses the JSON, and renders a pass/fail tree. Replaces XAE
 Shell's missing Test Explorer, sidestepping XAE Shell stripping non-TwinCAT
 csproj entries from the native `.sln` on every save (see TcXunit-6nt).
@@ -16,36 +16,36 @@ AnyCPU, VS2017 SDK 15.0 — mirrors the working scaffolding pattern from
 `TcAgentPlugin/src/TcAgent`, since XAE Shell is an Isolated Shell built on
 VS2017. This means it builds only on a Windows machine with VS2017 (or the
 XAE Shell's own devenv) and the VS SDK installed — `dotnet build
-TcXunit.sln` from the CLI will skip or fail on this project; build it via
+xStunit.sln` from the CLI will skip or fail on this project; build it via
 `devenv.exe`/MSBuild with the VS SDK targets, same as `TcAgentPlugin`.
 
-- `TcXunitVsixPackage.cs` / `ResultsToolWindow.cs` — the `AsyncPackage` +
+- `XStunitVsixPackage.cs` / `ResultsToolWindow.cs` — the `AsyncPackage` +
   `ToolWindowPane`.
 - `Commands/ShowResultsToolWindowCommand.cs` + `VSCommandTable.vsct` — menu
-  command ("TcXunit Results") that shows the tool window.
-- `TestRunner/TcxunitConfig.cs` — reads `tcxunit.json` (schema is a first
-  guess — see `tcxunit.json.sample`).
-- `TestRunner/TcxunitProcessRunner.cs` + `TcxunitModels.cs` — shells out to
-  `tcxunit run <path> --format json` via `Process.Start` and deserializes the
+  command ("xStunit Results") that shows the tool window.
+- `TestRunner/XstunitConfig.cs` — reads `xstunit.json` (schema is a first
+  guess — see `xstunit.json.sample`).
+- `TestRunner/XstunitProcessRunner.cs` + `XstunitModels.cs` — shells out to
+  `xstunit run <path> --format json` via `Process.Start` and deserializes the
   JSON with `System.Text.Json` (swapped off `JavaScriptSerializer`/
-  `System.Web.Extensions` per TcXunit-cmp, so `TcxunitConfig.cs` and
-  `TcxunitModels.cs` can be unit-tested under net8.0 in
-  `tests/TcXunit.Vsix.Tests`). `RunAsync` (added by TcXunit-1tt.3) is
+  `System.Web.Extensions` per TcXunit-cmp, so `XstunitConfig.cs` and
+  `XstunitModels.cs` can be unit-tested under net8.0 in
+  `tests/xStunit.Vsix.Tests`). `RunAsync` (added by TcXunit-1tt.3) is
   async/cancellable — cancelling kills the whole child process tree
   (`taskkill /T`, since a plain `Process.Kill()` on net472 only kills the
-  immediate `cmd.exe` wrapper, not the `tcxunit.exe` it launched).
+  immediate `cmd.exe` wrapper, not the `xstunit.exe` it launched).
 - `ResultsToolWindowControl.xaml(.cs)` — a `Microsoft.Web.WebView2.Wpf.WebView2`
   that loads `Resources/results.html`, plus a `StatusText` line for host-level
   errors the page itself can't show (WebView2 failing to initialize,
-  `tcxunit.json` missing/invalid). Per TcXunit-1tt (rebuild as WebView2 per
+  `xstunit.json` missing/invalid). Per TcXunit-1tt (rebuild as WebView2 per
   `docs/design-system.html`), the results tree renders as HTML/CSS inside the
   WebView2 rather than a WPF `TreeView` (TcXunit-1tt.2). As of TcXunit-1tt.3
   the toolbar's `#runButton` inside the WebView2 page is the only "Run
   tests"/"Stop" action — the native WPF button TcXunit-1tt.1/.2 left in place
   is retired. A click posts `'run'`/`'stop'` to
   `ResultsToolWindowControl.xaml.cs` over `window.chrome.webview.postMessage`
-  (`CoreWebView2.WebMessageReceived`), which drives `TcxunitProcessRunner.RunAsync`
-  and pushes `window.tcxunitSetRunning(bool)` back in so the button/`.prog`
+  (`CoreWebView2.WebMessageReceived`), which drives `XstunitProcessRunner.RunAsync`
+  and pushes `window.xstunitSetRunning(bool)` back in so the button/`.prog`
   sweep always reflect whether a process is actually running. As of
   TcXunit-1tt.4, double-clicking a suite row or a failed test row (which
   inherits its parent suite's `filePath` — no per-test file granularity
@@ -66,7 +66,7 @@ TcXunit.sln` from the CLI will skip or fail on this project; build it via
 
 ## Building on Windows
 
-1. Open `TcXunit.sln` in VS2017 (or the XAE Shell's own devenv). Restore
+1. Open `xStunit.sln` in VS2017 (or the XAE Shell's own devenv). Restore
    NuGet packages (`packages.config` — pulls `Microsoft.VSSDK.BuildTools`
    etc.).
 2. Build. Not yet compiled since migration — expect first-build friction:
@@ -74,18 +74,18 @@ TcXunit.sln` from the CLI will skip or fail on this project; build it via
    BuildTools), or `VSToolsPath`/`Microsoft.VsSDK.targets` import failing if
    the VS SDK isn't registered the way `TcAgentPlugin` expects.
 3. Deploy locally (`F5` / `/rootsuffix Exp`, or into XAE Shell directly) and
-   verify: the "TcXunit Results" tool window shows up (Other Windows menu),
+   verify: the "xStunit Results" tool window shows up (Other Windows menu),
    its WebView2 area loads (dark/light matching the XAE Shell theme — toggle
    Tools > Options > Environment > General to confirm it updates live), and
    shows the empty-state copy ("No results yet...") before any run. Clicking
-   "Run tests" (needs a real `tcxunit.json` — copy `tcxunit.json.sample` and
-   fill in `testProjectPath`, plus the `tcxunit` CLI on PATH or `cliPath` set
+   "Run tests" (needs a real `xstunit.json` — copy `xstunit.json.sample` and
+   fill in `testProjectPath`, plus the `xstunit` CLI on PATH or `cliPath` set
    to a full path; optionally set `plugins` to a directory of
    `ITcXunitNativeFunction` plugin assemblies — forwarded to the CLI as
-   `--plugins <dir>`, resolved relative to `tcxunit.json`'s own directory the
+   `--plugins <dir>`, resolved relative to `xstunit.json`'s own directory the
    same way `cliPath` is) swaps the button to "Stop", shows the `.prog` sweep above
    the tree, and on completion renders the pass/fail tree and swaps the
    button back to "Run tests". Clicking "Stop" mid-run should kill the
-   `tcxunit` process (verify via Task Manager) and return the button to "Run
+   `xstunit` process (verify via Task Manager) and return the button to "Run
    tests" without touching whatever tree was already rendered from a prior
    run.

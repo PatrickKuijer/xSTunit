@@ -37,7 +37,7 @@ namespace xStunit.Vsix
             var window = this.package.FindToolWindow(typeof(ResultsToolWindow), 0, true);
             if (window?.Frame == null)
             {
-                throw new NotSupportedException("Cannot create the TcXunit Results tool window.");
+                throw new NotSupportedException("Cannot create the xStunit Results tool window.");
             }
 
             var windowFrame = (IVsWindowFrame)window.Frame;

@@ -1,11 +1,11 @@
 // TcXunit-1tt.2: static results tree render (node anatomy, banner, assert
-// detail). Builds the .tree DOM from a TcxunitRunResult (see
-// src/TcXunit.Vsix/TestRunner/TcxunitModels.cs for the C# shape; wire JSON is
+// detail). Builds the .tree DOM from a XstunitRunResult (see
+// src/xStunit.Vsix/TestRunner/XstunitModels.cs for the C# shape; wire JSON is
 // camelCase: { suites: [{ name, filePath, error, tests: [{ name, passed,
 // failures }] }], passed, failed, exitCode, error } per
 // docs/design-system.html section 8's "Data" rule).
 //
-// window.tcxunitRenderResult(result) is called by
+// window.xstunitRenderResult(result) is called by
 // ResultsToolWindowControl.xaml.cs's StartRunAsync via ExecuteScriptAsync,
 // passing the CLI's own JSON output as a literal JS expression (not a string
 // to JSON.parse -- see BuildRenderResultScript in that file).
@@ -13,10 +13,10 @@
 // TcXunit-1tt.3 adds the other half of the run lifecycle: #runButton posts
 // 'run'/'stop' strings to the WPF host over window.chrome.webview.postMessage
 // (CoreWebView2.WebMessageReceived on the host side), and the host calls
-// window.tcxunitSetRunning(bool) back in once the run actually starts/ends --
+// window.xstunitSetRunning(bool) back in once the run actually starts/ends --
 // the button's label/class and #prog's visibility are host-driven, not
 // optimistically flipped on click, so they can never desync from whether a
-// tcxunit process is actually running.
+// xstunit process is actually running.
 //
 // TcXunit-1tt.4 adds click-to-navigate: a suite row's .node-open (and, per
 // the epic's explicit design decision, a failed leaf test row's -- it has no
@@ -70,15 +70,15 @@
 // run (ResultsToolWindowControl.xaml.cs's _lastFailedSuiteNames) -- so a
 // click just posts the JSON envelope {type:'rerunFailed'}, the same
 // window.chrome.webview.postMessage channel TcXunit-1tt.4's openFile uses,
-// and the host does the rest (re-invokes tcxunit with --suite <name> per
-// failed suite, then pushes a normal window.tcxunitRenderResult(...) back in
+// and the host does the rest (re-invokes xstunit with --suite <name> per
+// failed suite, then pushes a normal window.xstunitRenderResult(...) back in
 // -- REPLACING #tree exactly like any other run, never merging into it,
 // since there is no separate "partial render" code path here at all). This
 // page's only two jobs are (1) posting the click and (2) keeping the
 // button's `disabled` attribute correct -- per the mockup's
 // ".ghost-btn[disabled]" state, disabled whenever the last render had zero
 // failures OR a run is currently in flight (updateRerunFailedButton, wired
-// into both tcxunitRenderResult and tcxunitSetRunning below).
+// into both xstunitRenderResult and xstunitSetRunning below).
 //
 // TcXunit-1tt.7 adds keyboard nav: #tree carries tabindex="0" (results.html)
 // as the one tabbable element for a "roving selection" over its .node rows
@@ -97,10 +97,10 @@
 // prior run stay visible/updating during a subsequent run" decision, per
 // explicit user feedback: a stale tree left on screen for the full duration
 // of a new run turned out to be indistinguishable from a fresh one. Two new
-// global entry points -- window.tcxunitBeginRun() (clears #tree/counts and
+// global entry points -- window.xstunitBeginRun() (clears #tree/counts and
 // swaps in #runningState, called by StartRunAsync right before its CLI
-// process starts) and window.tcxunitSetStatus(state, text) (drives the
-// .tw-statusbar dot/#statusText, called alongside tcxunitSetRunning at every
+// process starts) and window.xstunitSetStatus(state, text) (drives the
+// .tw-statusbar dot/#statusText, called alongside xstunitSetRunning at every
 // one of StartRunAsync's status-line branches) -- plus #runningState itself
 // (results.html) are this ticket's additions; see their own comments below
 // for how they fit into the existing render/running-state plumbing.
@@ -136,8 +136,8 @@
 
   // TcXunit-1tt.8: the two independent reasons #rerunFailedButton can be
   // disabled -- "last render had zero failures" (hasFailures, set by
-  // tcxunitRenderResult) and "a run is currently in flight" (isRunning, set
-  // by tcxunitSetRunning). Neither alone is the whole rule: a passing run
+  // xstunitRenderResult) and "a run is currently in flight" (isRunning, set
+  // by xstunitSetRunning). Neither alone is the whole rule: a passing run
   // must disable it regardless of run state, and a run in flight must
   // disable it regardless of the previous result (one action live at a
   // time, same reasoning #runButton/#prog already follow).
@@ -145,9 +145,9 @@
   var isRunning = false;
 
   // FB_TestSuite.Fail()'s baked failure-message format (see
-  // src/TcXunit.Runner/TcUnitStub/FB_TestSuite.cs):
+  // src/xStunit.Runner/TcUnitStub/FB_TestSuite.cs):
   //   FAILED TEST '<name>', EXP: <expected>, ACT: <actual>[, MSG: <message>]
-  // TcxunitTestResult.Failures is free text, not structured expected/actual
+  // XstunitTestResult.Failures is free text, not structured expected/actual
   // fields -- this regex is how the .assert block recovers them. A failure
   // message that doesn't match (e.g. some future/foreign shape) still
   // renders, just as plain text instead of bolded expected/actual.
@@ -292,8 +292,8 @@
   // expected, actual, assert, pou, method, bodyLine, ... }) instead of bare
   // strings. `message` is the identical formatted line the string used to be,
   // so this renderer needs nothing else. No string fallback: the page only ever
-  // renders JSON that TcxunitProcessRunner already deserialized into
-  // TcxunitFailure, so a bare-string payload could not reach here anyway.
+  // renders JSON that XstunitProcessRunner already deserialized into
+  // XstunitFailure, so a bare-string payload could not reach here anyway.
   function failureText(failure) {
     return (failure && failure.message) || '';
   }
@@ -726,7 +726,7 @@
   // Applies/clears .node.selected (results.css) and keeps selectedRow in
   // sync. Passing null clears the selection entirely (used on every render,
   // since a rerun/rerun-failed replaces #tree's rows -- see
-  // tcxunitRenderResult below -- and a stale element reference would only
+  // xstunitRenderResult below -- and a stale element reference would only
   // ever be wrong).
   function setSelectedRow(row) {
     if (selectedRow) {
@@ -823,7 +823,7 @@
   }
 
   // Global entry point -- see the file banner above for who calls this and how.
-  window.tcxunitRenderResult = function (result) {
+  window.xstunitRenderResult = function (result) {
     if (!treeEl) {
       return;
     }
@@ -864,10 +864,10 @@
     applyTextFilter();
 
     // TcXunit-qjt: every completed run swaps #runningState (shown for the
-    // run's duration by tcxunitBeginRun below) and #emptyState (the
+    // run's duration by xstunitBeginRun below) and #emptyState (the
     // pre-first-run copy) back out for #tree, unconditionally -- a rerun no
     // longer needs the "already showing the tree" guard TcXunit-1tt.3 used to
-    // have here, since tcxunitBeginRun now always hides the tree at the start
+    // have here, since xstunitBeginRun now always hides the tree at the start
     // of every run.
     if (runningStateEl) {
       runningStateEl.hidden = true;
@@ -881,13 +881,13 @@
   // TcXunit-qjt: clears #tree's rows/counts and swaps in #runningState, in
   // #emptyState's/#tree's place, right before a run's CLI process starts
   // (ResultsToolWindowControl.xaml.cs's StartRunAsync calls this ahead of
-  // window.tcxunitSetRunning(true) below) -- so the panel can never show a
+  // window.xstunitSetRunning(true) below) -- so the panel can never show a
   // mix of a prior run's stale rows and a new run in flight. hasFailures
   // resets to false along with the counts: there is no result on screen for
-  // #rerunFailedButton to rerun until the next tcxunitRenderResult call sets
+  // #rerunFailedButton to rerun until the next xstunitRenderResult call sets
   // it again (isRunning already disables the button for the run's own
   // duration -- see updateRerunFailedButton).
-  window.tcxunitBeginRun = function () {
+  window.xstunitBeginRun = function () {
     if (!treeEl) {
       return;
     }
@@ -918,7 +918,7 @@
   // results.css) or anything else (including 'ready') for the default green
   // dot -- results.css only defines the three non-default classes since
   // "ready" is the dot's plain, class-less state already in markup.
-  window.tcxunitSetStatus = function (state, text) {
+  window.xstunitSetStatus = function (state, text) {
     if (statusDotEl) {
       statusDotEl.classList.remove('running', 'stopped', 'error');
       if (state === 'running' || state === 'stopped' || state === 'error') {
@@ -933,9 +933,9 @@
   // Global entry point -- called by ResultsToolWindowControl.xaml.cs's
   // StartRunAsync/StopRun (via PushSetRunning) once a run has actually
   // started or actually ended, so this is always a true reflection of
-  // whether a tcxunit child process is running, never an optimistic guess
+  // whether a xstunit child process is running, never an optimistic guess
   // made on click.
-  window.tcxunitSetRunning = function (running) {
+  window.xstunitSetRunning = function (running) {
     isRunning = !!running;
 
     if (runButton) {
@@ -946,14 +946,14 @@
       progEl.hidden = !running;
     }
 
-    // TcXunit-qjt: a run that ends without ever calling tcxunitRenderResult
+    // TcXunit-qjt: a run that ends without ever calling xstunitRenderResult
     // (Stop, or a host-level error -- both skip straight to the finally
     // block that calls this with running=false) leaves #runningState still
     // showing; left alone that would freeze a "Running..." placeholder on
     // screen for a run that is no longer running. Reverting to #emptyState
-    // is correct either way here since tcxunitBeginRun already cleared
+    // is correct either way here since xstunitBeginRun already cleared
     // #tree -- there is nothing to show. A run that DID render already
-    // hid #runningState itself (see tcxunitRenderResult above), so this is a
+    // hid #runningState itself (see xstunitRenderResult above), so this is a
     // no-op in that case.
     if (!running && runningStateEl && !runningStateEl.hidden) {
       runningStateEl.hidden = true;
@@ -974,7 +974,7 @@
       if (!(window.chrome && window.chrome.webview)) {
         // Not hosted inside the VS WebView2 control (e.g. opened directly in
         // a browser for a quick visual check) -- nothing to post to, and
-        // nothing would ever call tcxunitSetRunning back, so there is
+        // nothing would ever call xstunitSetRunning back, so there is
         // nothing safe to do here.
         return;
       }

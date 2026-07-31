@@ -4,73 +4,73 @@ using Xunit;
 
 namespace xStunit.Vsix.Tests
 {
-    // TcXunit-1tt.8's rerun-failed feature re-invokes tcxunit with --suite <name>
+    // TcXunit-1tt.8's rerun-failed feature re-invokes xstunit with --suite <name>
     // repeated once per failed suite (TcXunit-6fb.3's CLI flag). The epic's own
     // Testing Decisions call this out explicitly as in-scope for this project:
-    // "--suite argument construction for rerun-failed". TcxunitArgumentBuilder is
+    // "--suite argument construction for rerun-failed". XstunitArgumentBuilder is
     // the pure (no JavaScriptSerializer/VS SDK dependency) class that construction
     // was pulled out into so it's testable under net8.0 -- see
-    // xStunit.Vsix.Tests.csproj's own comment on why TcxunitProcessRunner.cs itself
+    // xStunit.Vsix.Tests.csproj's own comment on why XstunitProcessRunner.cs itself
     // can't be source-linked here.
-    public class TcxunitArgumentBuilderTests
+    public class XstunitArgumentBuilderTests
     {
         [Fact]
         public void BuildArguments_NullSuiteNames_OmitsSuiteFlag()
         {
-            var arguments = TcxunitArgumentBuilder.BuildArguments(
-                "tcxunit",
+            var arguments = XstunitArgumentBuilder.BuildArguments(
+                "xstunit",
                 new[] { "C:\\proj\\Pous" },
                 suiteNames: null);
 
-            Assert.Equal("\"tcxunit\" \"C:\\proj\\Pous\" --format json", arguments);
+            Assert.Equal("\"xstunit\" \"C:\\proj\\Pous\" --format json", arguments);
         }
 
         [Fact]
         public void BuildArguments_EmptySuiteNames_OmitsSuiteFlag()
         {
-            var arguments = TcxunitArgumentBuilder.BuildArguments(
-                "tcxunit",
+            var arguments = XstunitArgumentBuilder.BuildArguments(
+                "xstunit",
                 new[] { "C:\\proj\\Pous" },
                 suiteNames: new List<string>());
 
-            Assert.Equal("\"tcxunit\" \"C:\\proj\\Pous\" --format json", arguments);
+            Assert.Equal("\"xstunit\" \"C:\\proj\\Pous\" --format json", arguments);
         }
 
         [Fact]
         public void BuildArguments_OneFailedSuite_AppendsOneSuiteFlag()
         {
-            var arguments = TcxunitArgumentBuilder.BuildArguments(
-                "tcxunit",
+            var arguments = XstunitArgumentBuilder.BuildArguments(
+                "xstunit",
                 new[] { "C:\\proj\\Pous" },
                 new[] { "FB_WidgetWireRecordsTests" });
 
             Assert.Equal(
-                "\"tcxunit\" \"C:\\proj\\Pous\" --format json --suite \"FB_WidgetWireRecordsTests\"",
+                "\"xstunit\" \"C:\\proj\\Pous\" --format json --suite \"FB_WidgetWireRecordsTests\"",
                 arguments);
         }
 
         [Fact]
         public void BuildArguments_MultipleFailedSuites_RepeatsSuiteFlagInOrder()
         {
-            var arguments = TcxunitArgumentBuilder.BuildArguments(
-                "tcxunit",
+            var arguments = XstunitArgumentBuilder.BuildArguments(
+                "xstunit",
                 new[] { "C:\\proj\\Pous" },
                 new[] { "FB_WidgetWireRecordsTests", "FB_ChecksumTests" });
 
             Assert.Equal(
-                "\"tcxunit\" \"C:\\proj\\Pous\" --format json --suite \"FB_WidgetWireRecordsTests\" --suite \"FB_ChecksumTests\"",
+                "\"xstunit\" \"C:\\proj\\Pous\" --format json --suite \"FB_WidgetWireRecordsTests\" --suite \"FB_ChecksumTests\"",
                 arguments);
         }
 
         [Fact]
         public void BuildArguments_MultiplePaths_QuotesEachPathSeparately()
         {
-            var arguments = TcxunitArgumentBuilder.BuildArguments(
-                "tcxunit",
+            var arguments = XstunitArgumentBuilder.BuildArguments(
+                "xstunit",
                 new[] { "C:\\proj\\PousA", "C:\\proj\\PousB" },
                 suiteNames: null);
 
-            Assert.Equal("\"tcxunit\" \"C:\\proj\\PousA\" \"C:\\proj\\PousB\" --format json", arguments);
+            Assert.Equal("\"xstunit\" \"C:\\proj\\PousA\" \"C:\\proj\\PousB\" --format json", arguments);
         }
 
         [Fact]
@@ -79,65 +79,65 @@ namespace xStunit.Vsix.Tests
             // Suite type names are IEC 61131-3 identifiers and never contain spaces in
             // practice, but the quoting must not assume that -- same defensive stance
             // EscapeArgument already takes for paths.
-            var arguments = TcxunitArgumentBuilder.BuildArguments(
-                "tcxunit",
+            var arguments = XstunitArgumentBuilder.BuildArguments(
+                "xstunit",
                 new[] { "C:\\proj\\Pous" },
                 new[] { "FB_Has Spaces" });
 
             Assert.Equal(
-                "\"tcxunit\" \"C:\\proj\\Pous\" --format json --suite \"FB_Has Spaces\"",
+                "\"xstunit\" \"C:\\proj\\Pous\" --format json --suite \"FB_Has Spaces\"",
                 arguments);
         }
 
         [Fact]
         public void BuildArguments_NullPluginsDirectory_OmitsPluginsFlag()
         {
-            var arguments = TcxunitArgumentBuilder.BuildArguments(
-                "tcxunit",
+            var arguments = XstunitArgumentBuilder.BuildArguments(
+                "xstunit",
                 new[] { "C:\\proj\\Pous" },
                 suiteNames: null,
                 pluginsDirectory: null);
 
-            Assert.Equal("\"tcxunit\" \"C:\\proj\\Pous\" --format json", arguments);
+            Assert.Equal("\"xstunit\" \"C:\\proj\\Pous\" --format json", arguments);
         }
 
         [Fact]
         public void BuildArguments_EmptyPluginsDirectory_OmitsPluginsFlag()
         {
-            var arguments = TcxunitArgumentBuilder.BuildArguments(
-                "tcxunit",
+            var arguments = XstunitArgumentBuilder.BuildArguments(
+                "xstunit",
                 new[] { "C:\\proj\\Pous" },
                 suiteNames: null,
                 pluginsDirectory: string.Empty);
 
-            Assert.Equal("\"tcxunit\" \"C:\\proj\\Pous\" --format json", arguments);
+            Assert.Equal("\"xstunit\" \"C:\\proj\\Pous\" --format json", arguments);
         }
 
         [Fact]
         public void BuildArguments_PluginsDirectorySet_AppendsPluginsFlag()
         {
-            var arguments = TcxunitArgumentBuilder.BuildArguments(
-                "tcxunit",
+            var arguments = XstunitArgumentBuilder.BuildArguments(
+                "xstunit",
                 new[] { "C:\\proj\\Pous" },
                 suiteNames: null,
                 pluginsDirectory: "C:\\proj\\Plugins");
 
             Assert.Equal(
-                "\"tcxunit\" \"C:\\proj\\Pous\" --format json --plugins \"C:\\proj\\Plugins\"",
+                "\"xstunit\" \"C:\\proj\\Pous\" --format json --plugins \"C:\\proj\\Plugins\"",
                 arguments);
         }
 
         [Fact]
         public void BuildArguments_PluginsDirectoryAndSuiteNames_AppendsPluginsBeforeSuites()
         {
-            var arguments = TcxunitArgumentBuilder.BuildArguments(
-                "tcxunit",
+            var arguments = XstunitArgumentBuilder.BuildArguments(
+                "xstunit",
                 new[] { "C:\\proj\\Pous" },
                 new[] { "FB_WidgetWireRecordsTests" },
                 pluginsDirectory: "C:\\proj\\Plugins");
 
             Assert.Equal(
-                "\"tcxunit\" \"C:\\proj\\Pous\" --format json --plugins \"C:\\proj\\Plugins\" --suite \"FB_WidgetWireRecordsTests\"",
+                "\"xstunit\" \"C:\\proj\\Pous\" --format json --plugins \"C:\\proj\\Plugins\" --suite \"FB_WidgetWireRecordsTests\"",
                 arguments);
         }
 
@@ -147,8 +147,8 @@ namespace xStunit.Vsix.Tests
             // Win32/CommandLineToArgvW rule: a run of backslashes immediately before the
             // closing quote must be doubled, or the last backslash escapes the quote
             // instead of terminating the token. Regression coverage for the exact bug
-            // class BuildStartInfo's own comment (TcxunitProcessRunner.cs) describes.
-            var escaped = TcxunitArgumentBuilder.EscapeArgument("C:\\proj\\Pous\\");
+            // class BuildStartInfo's own comment (XstunitProcessRunner.cs) describes.
+            var escaped = XstunitArgumentBuilder.EscapeArgument("C:\\proj\\Pous\\");
 
             Assert.Equal("\"C:\\proj\\Pous\\\\\"", escaped);
         }
@@ -156,7 +156,7 @@ namespace xStunit.Vsix.Tests
         [Fact]
         public void EscapeArgument_EmbeddedQuote_IsEscaped()
         {
-            var escaped = TcxunitArgumentBuilder.EscapeArgument("FB_Has\"Quote");
+            var escaped = XstunitArgumentBuilder.EscapeArgument("FB_Has\"Quote");
 
             Assert.Equal("\"FB_Has\\\"Quote\"", escaped);
         }

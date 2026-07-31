@@ -4,9 +4,9 @@ using Xunit;
 
 namespace xStunit.Vsix.Tests
 {
-    // TcxunitModels.cs is deserialized in production by
+    // XstunitModels.cs is deserialized in production by
     // System.Web.Script.Serialization.JavaScriptSerializer (net472-only, see
-    // TcxunitProcessRunner.cs), which is not available under net8.0. These tests
+    // XstunitProcessRunner.cs), which is not available under net8.0. These tests
     // exercise the same model classes with System.Text.Json instead --
     // JavaScriptSerializer's default object converter matches JSON member names to
     // CLR property names case-insensitively, so PropertyNameCaseInsensitive = true
@@ -14,7 +14,7 @@ namespace xStunit.Vsix.Tests
     // different contract. What's under test is the model's *shape* (property
     // names/types line up with the CLI's `--format json` output), not which
     // serializer library is used to fill it in.
-    public class TcxunitModelsDeserializationTests
+    public class XstunitModelsDeserializationTests
     {
         private static readonly JsonSerializerOptions Options = new JsonSerializerOptions
         {
@@ -58,7 +58,7 @@ namespace xStunit.Vsix.Tests
                 ""exitCode"": 1
             }";
 
-            var result = JsonSerializer.Deserialize<TcxunitRunResult>(json, Options);
+            var result = JsonSerializer.Deserialize<XstunitRunResult>(json, Options);
 
             Assert.NotNull(result);
             Assert.Equal(1, result.Passed);
@@ -105,7 +105,7 @@ namespace xStunit.Vsix.Tests
                 ""exitCode"": 1
             }";
 
-            var result = JsonSerializer.Deserialize<TcxunitRunResult>(json, Options);
+            var result = JsonSerializer.Deserialize<XstunitRunResult>(json, Options);
 
             var suite = Assert.Single(result.Suites);
             Assert.Equal("Unresolved type FB_CrcHelper referenced from VAR block.", suite.Error);
@@ -134,7 +134,7 @@ namespace xStunit.Vsix.Tests
                 ""exitCode"": 1
             }";
 
-            var result = JsonSerializer.Deserialize<TcxunitRunResult>(json, Options);
+            var result = JsonSerializer.Deserialize<XstunitRunResult>(json, Options);
 
             var suite = Assert.Single(result.Suites);
             Assert.Null(suite.DurationMs);
@@ -154,7 +154,7 @@ namespace xStunit.Vsix.Tests
                 ""exitCode"": 0
             }";
 
-            var result = JsonSerializer.Deserialize<TcxunitRunResult>(json, Options);
+            var result = JsonSerializer.Deserialize<XstunitRunResult>(json, Options);
 
             var suite = Assert.Single(result.Suites);
             Assert.Null(suite.DurationMs);
@@ -165,7 +165,7 @@ namespace xStunit.Vsix.Tests
         {
             // TcXunit-6fb.1: every test entry that appears in the JSON ran (a
             // suite that failed to load has no test entries at all), so
-            // TcxunitTestResult.DurationMs is a plain non-nullable long.
+            // XstunitTestResult.DurationMs is a plain non-nullable long.
             const string json = @"{
                 ""suites"": [
                     {
@@ -180,7 +180,7 @@ namespace xStunit.Vsix.Tests
                 ""exitCode"": 0
             }";
 
-            var result = JsonSerializer.Deserialize<TcxunitRunResult>(json, Options);
+            var result = JsonSerializer.Deserialize<XstunitRunResult>(json, Options);
 
             var suite = Assert.Single(result.Suites);
             var test = Assert.Single(suite.Tests);
@@ -192,7 +192,7 @@ namespace xStunit.Vsix.Tests
         {
             const string json = @"{ ""error"": ""no TcUnit suites found under /path"", ""kind"": ""load-error"" }";
 
-            var result = JsonSerializer.Deserialize<TcxunitRunResult>(json, Options);
+            var result = JsonSerializer.Deserialize<XstunitRunResult>(json, Options);
 
             Assert.Equal("no TcUnit suites found under /path", result.Error);
             Assert.Equal("load-error", result.Kind);
@@ -223,7 +223,7 @@ namespace xStunit.Vsix.Tests
                 ""exitCode"": 1
             }";
 
-            var result = JsonSerializer.Deserialize<TcxunitRunResult>(json, Options);
+            var result = JsonSerializer.Deserialize<XstunitRunResult>(json, Options);
 
             var suite = Assert.Single(result.Suites);
             Assert.Equal("unsupported-construct", suite.Kind);
@@ -240,7 +240,7 @@ namespace xStunit.Vsix.Tests
                 ""suites"": [
                     {
                         ""name"": ""FB_UnreadableTests"",
-                        ""error"": ""FB_UnreadableTests: TcXunit could not read this body at line 2"",
+                        ""error"": ""FB_UnreadableTests: xStunit could not read this body at line 2"",
                         ""kind"": ""parse-error"",
                         ""construct"": ""@"",
                         ""tests"": []
@@ -251,7 +251,7 @@ namespace xStunit.Vsix.Tests
                 ""exitCode"": 1
             }";
 
-            var result = JsonSerializer.Deserialize<TcxunitRunResult>(json, Options);
+            var result = JsonSerializer.Deserialize<XstunitRunResult>(json, Options);
 
             var suite = Assert.Single(result.Suites);
             Assert.Equal("parse-error", suite.Kind);
@@ -270,7 +270,7 @@ namespace xStunit.Vsix.Tests
                 ""exitCode"": 0
             }";
 
-            var result = JsonSerializer.Deserialize<TcxunitRunResult>(json, Options);
+            var result = JsonSerializer.Deserialize<XstunitRunResult>(json, Options);
 
             var suite = Assert.Single(result.Suites);
             Assert.Null(suite.Kind);
@@ -301,7 +301,7 @@ namespace xStunit.Vsix.Tests
                 ""exitCode"": 1
             }";
 
-            var result = JsonSerializer.Deserialize<TcxunitRunResult>(json, Options);
+            var result = JsonSerializer.Deserialize<XstunitRunResult>(json, Options);
 
             var suite = Assert.Single(result.Suites);
             Assert.Equal(3, suite.CallStack.Count);
@@ -331,7 +331,7 @@ namespace xStunit.Vsix.Tests
                 ""exitCode"": 0
             }";
 
-            var result = JsonSerializer.Deserialize<TcxunitRunResult>(json, Options);
+            var result = JsonSerializer.Deserialize<XstunitRunResult>(json, Options);
 
             var suite = Assert.Single(result.Suites);
             Assert.Null(suite.CallStack);
@@ -350,7 +350,7 @@ namespace xStunit.Vsix.Tests
                 ""exitCode"": 0
             }";
 
-            var result = JsonSerializer.Deserialize<TcxunitRunResult>(json, Options);
+            var result = JsonSerializer.Deserialize<XstunitRunResult>(json, Options);
 
             var suite = Assert.Single(result.Suites);
             Assert.Null(suite.FilePath);

@@ -8,7 +8,7 @@ using Task = System.Threading.Tasks.Task;
 namespace xStunit.Vsix
 {
     /// <summary>
-    /// Hosts the "TcXunit Results" tool window: registers the ToolWindowPane
+    /// Hosts the "xStunit Results" tool window: registers the ToolWindowPane
     /// and the menu command that shows it. Scaffolding mirrors
     /// C:\Git\TcAgentPlugin\src\TcAgent\ChatToolWindowPackage.cs.
     /// </summary>
@@ -17,7 +17,7 @@ namespace xStunit.Vsix
     [ProvideMenuResource("Menus.ctmenu", 1)]
     [ProvideToolWindow(typeof(ResultsToolWindow))]
     [Guid(PackageGuids.PackageGuidString)]
-    public sealed class TcXunitVsixPackage : AsyncPackage
+    public sealed class xStunitVsixPackage : AsyncPackage
     {
         protected override async Task InitializeAsync(CancellationToken cancellationToken, IProgress<ServiceProgressData> progress)
         {

@@ -5,19 +5,19 @@ using Xunit;
 
 namespace xStunit.Vsix.Tests
 {
-    // TcxunitConfig.Load() was previously untestable outside net472 (see
-    // TcxunitConfig.cs's history and TcXunit-cmp): it used
+    // XstunitConfig.Load() was previously untestable outside net472 (see
+    // XstunitConfig.cs's history and TcXunit-cmp): it used
     // System.Web.Script.Serialization.JavaScriptSerializer, which has no
     // net8.0-compatible package. Swapping it to System.Text.Json let this file be
     // source-linked into this net8.0 test project (see this project's own csproj
-    // comment) -- these tests cover the "TcxunitConfig loading/defaults" gap the
+    // comment) -- these tests cover the "XstunitConfig loading/defaults" gap the
     // TcXunit-1tt epic's own Testing Decisions originally called for but which
     // TcXunit-1tt.2 had to defer.
-    public class TcxunitConfigTests
+    public class XstunitConfigTests
     {
         private static string CreateTempDirectory()
         {
-            var directory = Path.Combine(Path.GetTempPath(), "TcxunitConfigTests_" + Guid.NewGuid().ToString("N"));
+            var directory = Path.Combine(Path.GetTempPath(), "XstunitConfigTests_" + Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(directory);
             return directory;
         }
@@ -28,13 +28,13 @@ namespace xStunit.Vsix.Tests
             var directory = CreateTempDirectory();
             try
             {
-                File.WriteAllText(Path.Combine(directory, "tcxunit.json"),
-                    @"{ ""paths"": [""./POUs"", ""./MorePOUs""], ""cliPath"": ""tcxunit"" }");
+                File.WriteAllText(Path.Combine(directory, "xstunit.json"),
+                    @"{ ""paths"": [""./POUs"", ""./MorePOUs""], ""cliPath"": ""xstunit"" }");
 
-                var config = TcxunitConfig.Load(directory);
+                var config = XstunitConfig.Load(directory);
 
                 Assert.Equal(new[] { "./POUs", "./MorePOUs" }, config.Paths);
-                Assert.Equal("tcxunit", config.CliPath);
+                Assert.Equal("xstunit", config.CliPath);
             }
             finally
             {
@@ -48,11 +48,11 @@ namespace xStunit.Vsix.Tests
             var directory = CreateTempDirectory();
             try
             {
-                File.WriteAllText(Path.Combine(directory, "tcxunit.json"), @"{ ""paths"": [""./POUs""] }");
+                File.WriteAllText(Path.Combine(directory, "xstunit.json"), @"{ ""paths"": [""./POUs""] }");
 
-                var config = TcxunitConfig.Load(directory);
+                var config = XstunitConfig.Load(directory);
 
-                Assert.Equal("tcxunit", config.CliPath);
+                Assert.Equal("xstunit", config.CliPath);
             }
             finally
             {
@@ -66,12 +66,12 @@ namespace xStunit.Vsix.Tests
             var directory = CreateTempDirectory();
             try
             {
-                File.WriteAllText(Path.Combine(directory, "tcxunit.json"),
-                    @"{ ""paths"": [""./POUs""], ""cliPath"": ""./tools/tcxunit.exe"" }");
+                File.WriteAllText(Path.Combine(directory, "xstunit.json"),
+                    @"{ ""paths"": [""./POUs""], ""cliPath"": ""./tools/xstunit.exe"" }");
 
-                var config = TcxunitConfig.Load(directory);
+                var config = XstunitConfig.Load(directory);
 
-                Assert.Equal(Path.GetFullPath(Path.Combine(directory, "./tools/tcxunit.exe")), config.CliPath);
+                Assert.Equal(Path.GetFullPath(Path.Combine(directory, "./tools/xstunit.exe")), config.CliPath);
             }
             finally
             {
@@ -85,15 +85,15 @@ namespace xStunit.Vsix.Tests
             var directory = CreateTempDirectory();
             try
             {
-                File.WriteAllText(Path.Combine(directory, "tcxunit.json"),
-                    @"{ ""paths"": [""./POUs""], ""cliPath"": ""tcxunit"" }");
+                File.WriteAllText(Path.Combine(directory, "xstunit.json"),
+                    @"{ ""paths"": [""./POUs""], ""cliPath"": ""xstunit"" }");
 
-                var config = TcxunitConfig.Load(directory);
+                var config = XstunitConfig.Load(directory);
 
-                // No slash/backslash in "tcxunit" -- must stay a bare command name so
-                // TcxunitProcessRunner's cmd.exe /c invocation resolves it via PATH,
+                // No slash/backslash in "xstunit" -- must stay a bare command name so
+                // XstunitProcessRunner's cmd.exe /c invocation resolves it via PATH,
                 // not get rewritten into a path relative to the config directory.
-                Assert.Equal("tcxunit", config.CliPath);
+                Assert.Equal("xstunit", config.CliPath);
             }
             finally
             {
@@ -107,9 +107,9 @@ namespace xStunit.Vsix.Tests
             var directory = CreateTempDirectory();
             try
             {
-                File.WriteAllText(Path.Combine(directory, "tcxunit.json"), @"{ ""paths"": [""./POUs""] }");
+                File.WriteAllText(Path.Combine(directory, "xstunit.json"), @"{ ""paths"": [""./POUs""] }");
 
-                var config = TcxunitConfig.Load(directory);
+                var config = XstunitConfig.Load(directory);
 
                 Assert.Null(config.Plugins);
             }
@@ -125,10 +125,10 @@ namespace xStunit.Vsix.Tests
             var directory = CreateTempDirectory();
             try
             {
-                File.WriteAllText(Path.Combine(directory, "tcxunit.json"),
+                File.WriteAllText(Path.Combine(directory, "xstunit.json"),
                     @"{ ""paths"": [""./POUs""], ""plugins"": ""./plugins"" }");
 
-                var config = TcxunitConfig.Load(directory);
+                var config = XstunitConfig.Load(directory);
 
                 Assert.Equal(Path.GetFullPath(Path.Combine(directory, "./plugins")), config.Plugins);
             }
@@ -145,10 +145,10 @@ namespace xStunit.Vsix.Tests
             var rooted = Path.GetFullPath(Path.Combine(Path.GetTempPath(), "SomePlugins"));
             try
             {
-                File.WriteAllText(Path.Combine(directory, "tcxunit.json"),
+                File.WriteAllText(Path.Combine(directory, "xstunit.json"),
                     $@"{{ ""paths"": [""./POUs""], ""plugins"": ""{rooted.Replace("\\", "\\\\")}"" }}");
 
-                var config = TcxunitConfig.Load(directory);
+                var config = XstunitConfig.Load(directory);
 
                 Assert.Equal(rooted, config.Plugins);
             }
@@ -164,10 +164,10 @@ namespace xStunit.Vsix.Tests
             var directory = CreateTempDirectory();
             try
             {
-                File.WriteAllText(Path.Combine(directory, "tcxunit.json"),
+                File.WriteAllText(Path.Combine(directory, "xstunit.json"),
                     @"{ ""paths"": [""./POUs""], ""plugins"": ""Plugins"" }");
 
-                var config = TcxunitConfig.Load(directory);
+                var config = XstunitConfig.Load(directory);
 
                 // No slash/backslash in "Plugins" -- mirrors cliPath's bare-name case:
                 // left unresolved rather than joined against the config directory.
@@ -185,7 +185,7 @@ namespace xStunit.Vsix.Tests
             var directory = CreateTempDirectory();
             try
             {
-                Assert.Throws<FileNotFoundException>(() => TcxunitConfig.Load(directory));
+                Assert.Throws<FileNotFoundException>(() => XstunitConfig.Load(directory));
             }
             finally
             {
@@ -199,9 +199,9 @@ namespace xStunit.Vsix.Tests
             var directory = CreateTempDirectory();
             try
             {
-                File.WriteAllText(Path.Combine(directory, "tcxunit.json"), @"{ ""paths"": [] }");
+                File.WriteAllText(Path.Combine(directory, "xstunit.json"), @"{ ""paths"": [] }");
 
-                Assert.Throws<InvalidOperationException>(() => TcxunitConfig.Load(directory));
+                Assert.Throws<InvalidOperationException>(() => XstunitConfig.Load(directory));
             }
             finally
             {
@@ -215,9 +215,9 @@ namespace xStunit.Vsix.Tests
             var directory = CreateTempDirectory();
             try
             {
-                File.WriteAllText(Path.Combine(directory, "tcxunit.json"), @"{ ""cliPath"": ""tcxunit"" }");
+                File.WriteAllText(Path.Combine(directory, "xstunit.json"), @"{ ""cliPath"": ""xstunit"" }");
 
-                Assert.Throws<InvalidOperationException>(() => TcxunitConfig.Load(directory));
+                Assert.Throws<InvalidOperationException>(() => XstunitConfig.Load(directory));
             }
             finally
             {
@@ -234,13 +234,13 @@ namespace xStunit.Vsix.Tests
             var directory = CreateTempDirectory();
             try
             {
-                File.WriteAllText(Path.Combine(directory, "tcxunit.json"),
-                    @"{ ""Paths"": [""./POUs""], ""CliPath"": ""tcxunit"" }");
+                File.WriteAllText(Path.Combine(directory, "xstunit.json"),
+                    @"{ ""Paths"": [""./POUs""], ""CliPath"": ""xstunit"" }");
 
-                var config = TcxunitConfig.Load(directory);
+                var config = XstunitConfig.Load(directory);
 
                 Assert.Equal(new[] { "./POUs" }, config.Paths);
-                Assert.Equal("tcxunit", config.CliPath);
+                Assert.Equal("xstunit", config.CliPath);
             }
             finally
             {

@@ -9,7 +9,7 @@ namespace xStunit.Vsix
     {
         public ResultsToolWindow() : base(null)
         {
-            this.Caption = "TcXunit Results";
+            this.Caption = "xStunit Results";
             this.Content = new ResultsToolWindowControl();
         }
     }

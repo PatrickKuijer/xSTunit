@@ -4,15 +4,15 @@ using System.Text;
 namespace xStunit.Vsix.TestRunner
 {
     /// <summary>
-    /// Pure command-line construction for a `tcxunit &lt;path-a&gt; [&lt;path-b&gt; ...]
+    /// Pure command-line construction for a `xstunit &lt;path-a&gt; [&lt;path-b&gt; ...]
     /// --format json [--plugins &lt;dir&gt;] [--suite &lt;name&gt; ...]` invocation. Split out of
-    /// TcxunitProcessRunner (TcXunit-1tt.8) so it can be unit tested under net8.0. At the
-    /// time this class was split out, TcxunitProcessRunner.cs and TcxunitConfig.cs both
+    /// XstunitProcessRunner (TcXunit-1tt.8) so it can be unit tested under net8.0. At the
+    /// time this class was split out, XstunitProcessRunner.cs and XstunitConfig.cs both
     /// used System.Web.Script.Serialization.JavaScriptSerializer (net472-only, no net8.0
     /// package), which blocked source-linking either into tests/xStunit.Vsix.Tests --
     /// TcXunit-cmp later swapped both to System.Text.Json, removing that blocker (see
-    /// TcxunitConfig.cs, now linked into that test project too). This class still takes
-    /// plain strings/lists rather than a TcxunitConfig instance regardless, since that
+    /// XstunitConfig.cs, now linked into that test project too). This class still takes
+    /// plain strings/lists rather than a XstunitConfig instance regardless, since that
     /// remains the simpler seam for pure argument-construction logic.
     ///
     /// suiteNames is TcXunit-1tt.8's "rerun failed" feature: the WPF host passes the last
@@ -20,7 +20,7 @@ namespace xStunit.Vsix.TestRunner
     /// (TcXunit-6fb.3's CLI flag), restricting the next run to just those suites. Null or
     /// empty reproduces the exact argument string a normal run has always used.
     /// </summary>
-    internal static class TcxunitArgumentBuilder
+    internal static class XstunitArgumentBuilder
     {
         public static string BuildArguments(string cliPath, IEnumerable<string> paths, IReadOnlyList<string> suiteNames, string pluginsDirectory = null)
         {

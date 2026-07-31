@@ -146,10 +146,10 @@
       <HintPath>..\..\packages\Microsoft.Web.WebView2.1.0.2592.51\lib\net462\Microsoft.Web.WebView2.Wpf.dll</HintPath>
     </Reference>
     <!--
-      TcxunitConfig.cs, TcxunitProcessRunner.cs, and ResultsToolWindowControl.xaml.cs use
+      XstunitConfig.cs, XstunitProcessRunner.cs, and ResultsToolWindowControl.xaml.cs use
       System.Text.Json directly (swapped off System.Web.Script.Serialization.JavaScriptSerializer
-      per TcXunit-cmp, so TcxunitConfig.cs could be source-linked into tests/xStunit.Vsix.Tests
-      the way TcxunitModels.cs already was). Same package versions
+      per TcXunit-cmp, so XstunitConfig.cs could be source-linked into tests/xStunit.Vsix.Tests
+      the way XstunitModels.cs already was). Same package versions
       TcAgentPlugin/src/TcAgent already ships and proves work under XAE Shell's devenv (see that
       project's TcAgent.csproj Content block and ChatToolWindowPackage.cs); System.Text.Json's
       net461 asset plus its own net461-compatible dependency closure. Referenced without an
@@ -211,14 +211,14 @@
     <Analyzer Include="..\..\packages\Microsoft.VisualStudio.Threading.Analyzers.15.8.122\analyzers\cs\Microsoft.VisualStudio.Threading.Analyzers.dll" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="TcXunitVsixPackage.cs" />
+    <Compile Include="xStunitVsixPackage.cs" />
     <Compile Include="ResultsToolWindow.cs" />
     <Compile Include="Guids.cs" />
     <Compile Include="Commands\ShowResultsToolWindowCommand.cs" />
-    <Compile Include="TestRunner\TcxunitArgumentBuilder.cs" />
-    <Compile Include="TestRunner\TcxunitConfig.cs" />
-    <Compile Include="TestRunner\TcxunitModels.cs" />
-    <Compile Include="TestRunner\TcxunitProcessRunner.cs" />
+    <Compile Include="TestRunner\XstunitArgumentBuilder.cs" />
+    <Compile Include="TestRunner\XstunitConfig.cs" />
+    <Compile Include="TestRunner\XstunitModels.cs" />
+    <Compile Include="TestRunner\XstunitProcessRunner.cs" />
     <Compile Include="ResultsToolWindowControl.xaml.cs">
       <DependentUpon>ResultsToolWindowControl.xaml</DependentUpon>
     </Compile>

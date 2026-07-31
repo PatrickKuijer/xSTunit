@@ -4,21 +4,21 @@ namespace xStunit.Vsix.TestRunner
 {
     /// <summary>
     /// Mirrors the camelCase JSON shape emitted by
-    /// `tcxunit run --format json` (see xStunit.Cli.CliRunner):
+    /// `xstunit run --format json` (see xStunit.Cli.CliRunner):
     /// { suites: [{ name, filePath, error, kind, construct, durationMs, callStack, tests: [{ name, passed, failures, durationMs }] }], passed, failed, exitCode }
     /// and its early-exit error shape: { error, kind }.
     /// </summary>
     /// <remarks>
     /// This extension has NO ProjectReference to xStunit.Cli - it targets
-    /// net472, shells out to the tcxunit executable and deserializes its stdout
+    /// net472, shells out to the xstunit executable and deserializes its stdout
     /// - so a rename on the CLI's side cannot produce a compile error here. It
     /// produces a silently-null property instead. Any change to the CLI's wire
     /// shape has to be mirrored into this file by hand, in the same change;
-    /// TcxunitModelsDeserializationTests is where that gets pinned.
+    /// XstunitModelsDeserializationTests is where that gets pinned.
     /// </remarks>
-    internal sealed class TcxunitRunResult
+    internal sealed class XstunitRunResult
     {
-        public List<TcxunitSuiteResult> Suites { get; set; }
+        public List<XstunitSuiteResult> Suites { get; set; }
 
         public int Passed { get; set; }
 
@@ -35,7 +35,7 @@ namespace xStunit.Vsix.TestRunner
         // every level of the JSON without a special case for the top one.
         public string Kind { get; set; }
 
-        // Not part of the CLI's wire shape -- TcxunitProcessRunner stashes the
+        // Not part of the CLI's wire shape -- XstunitProcessRunner stashes the
         // exact stdout text here after deserializing it, so
         // ResultsToolWindowControl can forward that same camelCase JSON straight
         // into the WebView2 page (see BuildRenderResultScript) instead of
@@ -44,7 +44,7 @@ namespace xStunit.Vsix.TestRunner
         public string RawJson { get; set; }
     }
 
-    internal sealed class TcxunitSuiteResult
+    internal sealed class XstunitSuiteResult
     {
         public string Name { get; set; }
 
@@ -78,7 +78,7 @@ namespace xStunit.Vsix.TestRunner
         // "errorConstruct" alongside Kind above (TcXunit-229.15).
         public string Construct { get; set; }
 
-        public List<TcxunitTestResult> Tests { get; set; }
+        public List<XstunitTestResult> Tests { get; set; }
 
         // Added for TcXunit-1tt.6: the results tree's .node-dur slot (suite
         // rows) renders this. The CLI has emitted "durationMs" on SuiteReport
@@ -92,12 +92,12 @@ namespace xStunit.Vsix.TestRunner
         // innermost frame first. Null (not an empty list) for a passing suite
         // or a load-level failure that never entered an interpreted ST body,
         // matching the CLI's own null-vs-empty-array convention.
-        public List<TcxunitCallStackFrame> CallStack { get; set; }
+        public List<XstunitCallStackFrame> CallStack { get; set; }
     }
 
-    // One frame of TcxunitSuiteResult.CallStack (TcXunit-9fs), mirroring the
+    // One frame of XstunitSuiteResult.CallStack (TcXunit-9fs), mirroring the
     // CLI's CallStackFrameReport shape.
-    internal sealed class TcxunitCallStackFrame
+    internal sealed class XstunitCallStackFrame
     {
         public string PouTypeName { get; set; }
 
@@ -112,7 +112,7 @@ namespace xStunit.Vsix.TestRunner
         public int? BodyLine { get; set; }
     }
 
-    internal sealed class TcxunitTestResult
+    internal sealed class XstunitTestResult
     {
         public string Name { get; set; }
 
@@ -122,7 +122,7 @@ namespace xStunit.Vsix.TestRunner
         // expected/actual + assert name + location) instead of a bare string.
         // `message` carries the identical formatted line the string used to be,
         // so nothing this extension already renders changed meaning.
-        public List<TcxunitFailure> Failures { get; set; }
+        public List<XstunitFailure> Failures { get; set; }
 
         // Added for TcXunit-1tt.6: the results tree's .node-dur slot (leaf
         // test rows). The CLI has emitted "durationMs" on TestReport since
@@ -139,7 +139,7 @@ namespace xStunit.Vsix.TestRunner
     /// callStack, which exist for non-interactive consumers and are ignored
     /// here rather than carried as fields nothing reads.
     /// </summary>
-    internal sealed class TcxunitFailure
+    internal sealed class XstunitFailure
     {
         /// <summary>
         /// The formatted "FAILED TEST '<c>name</c>', EXP: ..., ACT: ..." line --

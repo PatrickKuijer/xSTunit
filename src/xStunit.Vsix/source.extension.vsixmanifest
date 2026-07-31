@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <PackageManifest Version="2.0.0" xmlns="http://schemas.microsoft.com/developer/vsx-schema/2011" xmlns:d="http://schemas.microsoft.com/developer/vsx-schema-design/2011">
   <Metadata>
-    <Identity Id="TcXunitVsix.78a251f2-b67d-4fa5-a694-47748a870679" Version="0.1.0" Language="en-US" Publisher="Patrick Kuijer" />
-    <DisplayName>TcXunit Results</DisplayName>
-    <Description xml:space="preserve">Tool window that shells out to tcxunit and renders pass/fail results inside TwinCAT's XAE Shell. See README.md.</Description>
+    <Identity Id="xStunitVsix.78a251f2-b67d-4fa5-a694-47748a870679" Version="0.1.0" Language="en-US" Publisher="Patrick Kuijer" />
+    <DisplayName>xStunit Results</DisplayName>
+    <Description xml:space="preserve">Tool window that shells out to xstunit and renders pass/fail results inside TwinCAT's XAE Shell. See README.md.</Description>
   </Metadata>
   <Installation>
     <InstallationTarget Id="Microsoft.VisualStudio.Community" Version="[15.0, 16.0)" />

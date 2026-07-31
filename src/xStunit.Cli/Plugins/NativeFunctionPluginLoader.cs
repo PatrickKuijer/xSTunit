@@ -36,7 +36,7 @@ namespace xStunit.Cli.Plugins
         // gets the chance to be confusing.
         private static readonly HashSet<string> HostAssemblyNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
-            "xStunit.Interpreter", "xStunit.Parser", "xStunit.Runner", "tcxunit",
+            "xStunit.Interpreter", "xStunit.Parser", "xStunit.Runner", "xstunit",
         };
 
         public static NativeFunctionRegistry Load(

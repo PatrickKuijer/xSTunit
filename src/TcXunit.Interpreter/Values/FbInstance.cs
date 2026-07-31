@@ -77,9 +77,6 @@ namespace TcXunit.Interpreter
         public LoopbackHost NativeLoopbackHost =>
             NativeKind == NativeHostKind.Loopback ? (LoopbackHost)NativeHost : null;
 
-        // Non-null when ActualTypeName is a native edge-trigger type (R_TRIG/
-        // F_TRIG) - the native host backing this instance's CLK->Q behavior
-        // (TcXunit-f6b's native-stub boundary).
         // Non-null when ActualTypeName is a native bistable latch type (RS/SR) -
         // the native host backing this instance's SET/RESET->Q1 behavior
         // (TcXunit-ejjl's native-stub boundary).
@@ -92,6 +89,9 @@ namespace TcXunit.Interpreter
         public CounterHost NativeCounterHost =>
             NativeKind == NativeHostKind.Counter ? (CounterHost)NativeHost : null;
 
+        // Non-null when ActualTypeName is a native edge-trigger type (R_TRIG/
+        // F_TRIG) - the native host backing this instance's CLK->Q behavior
+        // (TcXunit-f6b's native-stub boundary).
         public EdgeTriggerHost NativeEdgeTriggerHost =>
             NativeKind == NativeHostKind.Edge ? (EdgeTriggerHost)NativeHost : null;
 

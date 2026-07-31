@@ -97,7 +97,7 @@ namespace TcXunit.Interpreter
                     switch (callee.NativeKind)
                     {
                         case NativeHostKind.Timer:
-                            BindTimerInputs(callee, positionalArgs, namedArgs, callerFrame);
+                            BindNativeInputs(callee, TimerPositionalParams, positionalArgs, namedArgs, callerFrame);
                             // Nanoseconds, not TotalMs: the LTIME timers
                             // (LTON/LTOF/LTP) count in ns, and the host scales
                             // back to its own PT/ET width (TcXunit-x5pt).
@@ -108,7 +108,7 @@ namespace TcXunit.Interpreter
                         // precedent as the native timer above, but the host
                         // only tracks CLK->Q (no PT/ET, no clock dependency).
                         case NativeHostKind.Edge:
-                            BindEdgeTriggerInputs(callee, positionalArgs, namedArgs, callerFrame);
+                            BindNativeInputs(callee, EdgeTriggerPositionalParams, positionalArgs, namedArgs, callerFrame);
                             callee.NativeEdgeTriggerHost.Update(callee);
                             return null;
 
@@ -117,7 +117,7 @@ namespace TcXunit.Interpreter
                         // names differ between RS and SR, so the host supplies
                         // them (TcXunit-ejjl).
                         case NativeHostKind.BistableLatch:
-                            BindBistableLatchInputs(callee, positionalArgs, namedArgs, callerFrame);
+                            BindNativeInputs(callee, callee.NativeBistableLatchHost.PositionalInputNames, positionalArgs, namedArgs, callerFrame);
                             callee.NativeBistableLatchHost.Update(callee);
                             return null;
 
@@ -517,27 +517,6 @@ namespace TcXunit.Interpreter
                     cell.Value = Evaluate(arg.Value, callerFrame);
         }
 
-        private void BindTimerInputs(
-            FbInstance callee,
-            IReadOnlyList<Expr> positionalArgs,
-            IReadOnlyList<NamedArg> namedArgs,
-            Frame callerFrame) =>
-            BindNativeInputs(callee, TimerPositionalParams, positionalArgs, namedArgs, callerFrame);
-
-        private void BindEdgeTriggerInputs(
-            FbInstance callee,
-            IReadOnlyList<Expr> positionalArgs,
-            IReadOnlyList<NamedArg> namedArgs,
-            Frame callerFrame) =>
-            BindNativeInputs(callee, EdgeTriggerPositionalParams, positionalArgs, namedArgs, callerFrame);
-
-        private void BindBistableLatchInputs(
-            FbInstance callee,
-            IReadOnlyList<Expr> positionalArgs,
-            IReadOnlyList<NamedArg> namedArgs,
-            Frame callerFrame) =>
-            BindNativeInputs(callee, callee.NativeBistableLatchHost.PositionalInputNames, positionalArgs, namedArgs, callerFrame);
-
         // Declared VAR_INPUT/VAR_IN_OUT params for a bare-invoked interpreted
         // FB, in base-to-derived declaration order (matches IEC positional
         // arg order and the Fields-materialization loop in NewInstance).
@@ -564,7 +543,7 @@ namespace TcXunit.Interpreter
             return result;
         }
 
-        // Generalizes BindTimerInputs beyond the native TON/TOF/FB_Pulse
+        // Generalizes BindNativeInputs beyond the native TON/TOF/FB_Pulse
         // boundary: binds bare-invocation args into the callee's persisted
         // Fields by name or IEC positional order, then runs the callee's own
         // top-level body once (TcXunit-0v1).

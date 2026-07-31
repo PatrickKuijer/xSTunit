@@ -9,10 +9,10 @@ Status: **built**. Tickets: `TcXunit-w5x.15.7` (TIME timers), `TcXunit-x5pt`
 
 One `Engine.Clock` per suite run — process-wide, not per-instance. It's a
 monotonic absolute running total in **nanoseconds**; nothing rewinds it.
-`Advance(ms)` and `AdvanceNs(ns)` accumulate into that same total, and
+`AdvanceMs(ms)` and `AdvanceNs(ns)` accumulate into that same total, and
 `TotalMs` is the truncating ms view of it.
 
-There's no direct ST syntax to call `Engine.Clock.Advance` shown in the
+There's no direct ST syntax to call `Engine.Clock.AdvanceMs` shown in the
 current fixtures (it's driven from the C# test harness in today's tests).
 If your fixture needs to advance simulated time, do it the same way the
 existing interpreter tests do — advance the shared clock between

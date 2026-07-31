@@ -72,7 +72,7 @@ namespace TcXunit.Interpreter.Tests
 
             Fault(engine, wrapper, "Drop");
             txFb.Fields["Buffer"].Value = 7;
-            engine.Clock.Advance(100);
+            engine.Clock.AdvanceMs(100);
             Transmit(engine, wrapper);
 
             Assert.False(LinkUp(wrapper));
@@ -91,7 +91,7 @@ namespace TcXunit.Interpreter.Tests
             Fault(engine, wrapper, "Drop");
             Fault(engine, wrapper, "Restore");
             txFb.Fields["Buffer"].Value = 9;
-            engine.Clock.Advance(50);
+            engine.Clock.AdvanceMs(50);
             Transmit(engine, wrapper);
 
             Assert.True(LinkUp(wrapper));
@@ -109,7 +109,7 @@ namespace TcXunit.Interpreter.Tests
 
             Fault(engine, wrapper, "Freeze");
             txFb.Fields["Buffer"].Value = 5;
-            engine.Clock.Advance(200);
+            engine.Clock.AdvanceMs(200);
             Transmit(engine, wrapper);
 
             Assert.True(LinkUp(wrapper));
@@ -153,7 +153,7 @@ namespace TcXunit.Interpreter.Tests
             Assert.Equal(0, rxFb.Fields["Buffer"].Value);
 
             txFb.Fields["Buffer"].Value = 3;
-            engine.Clock.Advance(30);
+            engine.Clock.AdvanceMs(30);
             Transmit(engine, wrapper);
 
             Assert.Equal(1, rxFb.Fields["Buffer"].Value); // oldest queued value delivered

@@ -56,7 +56,7 @@ vendor's test framework. Concretely:
    `MOCK_FUNCTION ... RETURNS`, `ADVANCE_TIME(ns)`;
    `docs/TESTING.md:60-177`) is architecturally close in *spirit* to
    TcXunit's own model (one bracketed unit per test, assertion family,
-   simulated-clock advance via `Engine.Clock.Advance`/`ADVANCE_TIME`) but
+   simulated-clock advance via `Engine.Clock.AdvanceMs`/`ADVANCE_TIME`) but
    diverges in every naming/structural specific — another data point (after
    TF1140) that there is no single "the" ST unit-test convention in the wild;
    TcUnit-style (`TEST()`/`TEST_FINISHED()` inline in a suite FB), TF1140/
@@ -161,7 +161,7 @@ vendor's test framework. Concretely:
   TcXunit today, confirmed by grep of `NativeMethodBridge.cs` and
   `TcUnitSuiteHost.cs`).
 - `ADVANCE_TIME(nanoseconds)` (`docs/TESTING.md:120-136`) is directly
-  analogous to TcXunit's `Engine.Clock.Advance(dt)`
+  analogous to TcXunit's `Engine.Clock.AdvanceMs(dt)`
   (`wiki/03-simulated-clock-and-timers.md`) — same underlying idea (advance a
   simulated scan-cycle clock without wall-clock delay), different surface
   (STruC++ exposes it as a first-class test-DSL statement token; TcXunit

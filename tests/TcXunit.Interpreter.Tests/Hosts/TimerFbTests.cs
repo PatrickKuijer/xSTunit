@@ -36,12 +36,12 @@ namespace TcXunit.Interpreter.Tests
 
             Step(engine, instance); // baseline call - initializes clock tracking, no elapsed yet
 
-            engine.Clock.Advance(499);
+            engine.Clock.AdvanceMs(499);
             Step(engine, instance);
             Assert.Equal(false, instance.Fields["measuredQ"].Value);
             Assert.Equal(499u, instance.Fields["measuredEt"].Value);
 
-            engine.Clock.Advance(1);
+            engine.Clock.AdvanceMs(1);
             Step(engine, instance);
             Assert.Equal(true, instance.Fields["measuredQ"].Value);
             Assert.Equal(500u, instance.Fields["measuredEt"].Value);
@@ -56,7 +56,7 @@ namespace TcXunit.Interpreter.Tests
             instance.Fields["ptVar"].Value = 500u;
 
             Step(engine, instance);
-            engine.Clock.Advance(500);
+            engine.Clock.AdvanceMs(500);
             Step(engine, instance);
             Assert.Equal(true, instance.Fields["measuredQ"].Value);
 
@@ -81,12 +81,12 @@ namespace TcXunit.Interpreter.Tests
             instance.Fields["inVar"].Value = false;
             Step(engine, instance); // falling edge - Q still true, ET starts from 0
 
-            engine.Clock.Advance(299);
+            engine.Clock.AdvanceMs(299);
             Step(engine, instance);
             Assert.Equal(true, instance.Fields["measuredQ"].Value);
             Assert.Equal(299u, instance.Fields["measuredEt"].Value);
 
-            engine.Clock.Advance(1);
+            engine.Clock.AdvanceMs(1);
             Step(engine, instance);
             Assert.Equal(false, instance.Fields["measuredQ"].Value);
             Assert.Equal(300u, instance.Fields["measuredEt"].Value);
@@ -103,12 +103,12 @@ namespace TcXunit.Interpreter.Tests
             Step(engine, instance); // rising edge - pulse starts
             Assert.Equal(true, instance.Fields["measuredQ"].Value);
 
-            engine.Clock.Advance(199);
+            engine.Clock.AdvanceMs(199);
             Step(engine, instance);
             Assert.Equal(true, instance.Fields["measuredQ"].Value);
             Assert.Equal(199u, instance.Fields["measuredEt"].Value);
 
-            engine.Clock.Advance(1);
+            engine.Clock.AdvanceMs(1);
             Step(engine, instance); // IN still true, but pulse elapses on its own
             Assert.Equal(false, instance.Fields["measuredQ"].Value);
             Assert.Equal(200u, instance.Fields["measuredEt"].Value);
@@ -136,12 +136,12 @@ namespace TcXunit.Interpreter.Tests
             Step(engine, instance); // rising edge - pulse starts
             Assert.Equal(true, instance.Fields["measuredQ"].Value);
 
-            engine.Clock.Advance(199);
+            engine.Clock.AdvanceMs(199);
             Step(engine, instance);
             Assert.Equal(true, instance.Fields["measuredQ"].Value);
             Assert.Equal(199u, instance.Fields["measuredEt"].Value);
 
-            engine.Clock.Advance(1);
+            engine.Clock.AdvanceMs(1);
             Step(engine, instance); // IN still true, but pulse elapses on its own
             Assert.Equal(false, instance.Fields["measuredQ"].Value);
             Assert.Equal(200u, instance.Fields["measuredEt"].Value);
@@ -193,7 +193,7 @@ namespace TcXunit.Interpreter.Tests
                 Step(engine, instance); // baseline call for each, both at clock 0
             }
 
-            engine.Clock.Advance(700);
+            engine.Clock.AdvanceMs(700);
             Step(engine, b);
             Step(engine, a);
 

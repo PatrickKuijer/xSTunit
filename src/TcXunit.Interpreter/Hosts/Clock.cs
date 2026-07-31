@@ -19,12 +19,12 @@ namespace TcXunit.Interpreter
         public long TotalNs { get; private set; }
 
         // Truncating ms view of the same total. Callers that only ever
-        // Advance(ms) see exactly the value they always did; a caller mixing
+        // AdvanceMs see exactly the value they always did; a caller mixing
         // in AdvanceNs sees whole elapsed milliseconds, sub-ms remainder
         // excluded (it is still counted in TotalNs).
         public long TotalMs => TotalNs / NanosecondsPerMillisecond;
 
-        public void Advance(long deltaMs) => TotalNs += deltaMs * NanosecondsPerMillisecond;
+        public void AdvanceMs(long deltaMs) => TotalNs += deltaMs * NanosecondsPerMillisecond;
 
         public void AdvanceNs(long deltaNs) => TotalNs += deltaNs;
     }

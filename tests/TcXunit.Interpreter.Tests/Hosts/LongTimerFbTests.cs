@@ -77,12 +77,12 @@ namespace TcXunit.Interpreter.Tests
             Step(engine, instance);
 
             // 5 s: past uint.MaxValue ns, where a 32-bit ET would have wrapped.
-            engine.Clock.Advance(5_000);
+            engine.Clock.AdvanceMs(5_000);
             Step(engine, instance);
             Assert.Equal(false, instance.Fields["measuredQ"].Value);
             Assert.Equal(5_000_000_000UL, instance.Fields["measuredEt"].Value);
 
-            engine.Clock.Advance(3_595_000); // one hour total
+            engine.Clock.AdvanceMs(3_595_000); // one hour total
             Step(engine, instance);
             Assert.Equal(true, instance.Fields["measuredQ"].Value);
             Assert.Equal(OneHourNs, instance.Fields["measuredEt"].Value);
@@ -145,12 +145,12 @@ namespace TcXunit.Interpreter.Tests
             instance.Fields["inVar"].Value = false;
             Step(engine, instance);
 
-            engine.Clock.Advance(9_999);
+            engine.Clock.AdvanceMs(9_999);
             Step(engine, instance);
             Assert.Equal(true, instance.Fields["measuredQ"].Value);
             Assert.Equal(9_999_000_000UL, instance.Fields["measuredEt"].Value);
 
-            engine.Clock.Advance(1);
+            engine.Clock.AdvanceMs(1);
             Step(engine, instance);
             Assert.Equal(false, instance.Fields["measuredQ"].Value);
             Assert.Equal(10_000_000_000UL, instance.Fields["measuredEt"].Value);
@@ -167,12 +167,12 @@ namespace TcXunit.Interpreter.Tests
             Step(engine, instance); // rising edge - pulse starts
             Assert.Equal(true, instance.Fields["measuredQ"].Value);
 
-            engine.Clock.Advance(5_999);
+            engine.Clock.AdvanceMs(5_999);
             Step(engine, instance);
             Assert.Equal(true, instance.Fields["measuredQ"].Value);
             Assert.Equal(5_999_000_000UL, instance.Fields["measuredEt"].Value);
 
-            engine.Clock.Advance(1);
+            engine.Clock.AdvanceMs(1);
             Step(engine, instance); // IN still true, but pulse elapses on its own
             Assert.Equal(false, instance.Fields["measuredQ"].Value);
             Assert.Equal(6_000_000_000UL, instance.Fields["measuredEt"].Value);
@@ -198,12 +198,12 @@ namespace TcXunit.Interpreter.Tests
 
             Step(engine, instance);
 
-            engine.Clock.Advance(1);
+            engine.Clock.AdvanceMs(1);
             Step(engine, instance);
             Assert.Equal(false, instance.Fields["measuredQ"].Value);
             Assert.Equal(1_000_000UL, instance.Fields["measuredEt"].Value);
 
-            engine.Clock.Advance(1);
+            engine.Clock.AdvanceMs(1);
             Step(engine, instance);
             Assert.Equal(true, instance.Fields["measuredQ"].Value);
             Assert.Equal(2_000_000UL, instance.Fields["measuredEt"].Value);

@@ -20,7 +20,11 @@ namespace TcXunit.Interpreter.Tests
         }
 
         // A genuinely malformed assignment target (not an lvalue shape at
-        // all) must still be an ordinary FormatException/plc-fault.
+        // all) must still be an ordinary FormatException - which TcXunit-229.15
+        // classifies as parse-error (the front end cannot tell "malformed" from
+        // "beyond the subset", and says so) rather than claiming the
+        // unsupported-construct above on no evidence. The exception TYPE this
+        // parser raises is unchanged either way; only the classifier moved.
         [Fact]
         public void ParseStatements_LiteralAssignmentTarget_ThrowsFormatException()
         {

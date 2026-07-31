@@ -427,6 +427,11 @@ namespace TcXunit.Cli
                     // itself - the message string is prose for a human and is
                     // never the thing a consumer switches on.
                     var errorKind = FailureClassifier.Classify(ex, out var errorConstruct);
+                    // TcXunit-229.15: the one-line error an agent reads gets
+                    // that kind's guidance appended, so the JSON object is
+                    // self-contained - a consumer never has to have read this
+                    // repo's README to know whether to edit the POU or stop.
+                    var errorText = WithGuidance(ex.Message, errorKind);
                     // No suite ran to completion here (load/instantiation/default-value
                     // failure), so there's no elapsed time to report - null, not a
                     // fabricated zero (TcXunit-6fb.2). ex.Message already carries the
@@ -435,7 +440,7 @@ namespace TcXunit.Cli
                     // JSON wire format changing shape - suites[].error stays a
                     // plain string.
                     suiteReports.Add(new SuiteReport(
-                        suiteName, failFilePath, ex.Message, errorKind, errorConstruct,
+                        suiteName, failFilePath, errorText, errorKind, errorConstruct,
                         Array.Empty<TestReport>(), null, fileLine, callStack));
                     failCount++;
                     anyFailed = true;
@@ -449,12 +454,11 @@ namespace TcXunit.Cli
                         // from "suite is still stuck". Outcome is "fail" (not
                         // a third "skip" state): it already counts toward
                         // failCount/exitCode above the same as a suite that
-                        // ran with a failing test, and errorKind ("load-error"
-                        // here) is what tells a consumer *why* if it wants to
-                        // render that differently.
+                        // ran with a failing test, and `kind` is what tells a
+                        // consumer *why* if it wants to render that differently.
                         output.WriteLine(JsonSerializer.Serialize(
                             new SuiteReport(
-                                suiteName, failFilePath, ex.Message, errorKind, errorConstruct,
+                                suiteName, failFilePath, errorText, errorKind, errorConstruct,
                                 Array.Empty<TestReport>(), null, fileLine, callStack, "suite-result", "fail"),
                             StreamJsonOptions));
                     }
@@ -545,18 +549,85 @@ namespace TcXunit.Cli
 
         private static FailureReport ToFailureReport(TcXunit.Runner.TcUnitStub.AssertionFailure failure) =>
             new FailureReport(
-                failure.Message,
+                WithGuidance(failure.Message, failure.Kind),
                 failure.Kind,
-                failure.Construct,
+                failure.Construct ?? ParseErrorConstruct(failure),
                 failure.Assert,
                 failure.Expected,
                 failure.Actual,
                 failure.AssertMessage,
                 failure.Site.PouTypeName,
                 failure.Site.MethodName,
-                NullableLine(failure.Site.BodyLine),
+                NullableLine(failure.Site.BodyLine) ?? ParseErrorBodyLine(failure),
                 NullableLine(failure.Site.Line),
                 failure.CallStack?.Select(ToCallStackFrameReport).ToArray());
+
+        // TcXunit-229.15: a fault charged to a test is classified inside the
+        // engine (Engine.Diagnostics.ToTestFailure), which hands this boundary
+        // only a kind and a message - so a parse-error's token and line are
+        // recovered here, from that message, exactly as the suite-level path
+        // recovers them from the exception. Same two fields either way
+        // (`construct`, `bodyLine`), never a parse-error-only field.
+        private static string ParseErrorConstruct(TcXunit.Runner.TcUnitStub.AssertionFailure failure) =>
+            failure.Kind == FailureKind.ParseError ? FailureClassifier.OffendingToken(failure.Message) : null;
+
+        // Only ever fills a bodyLine that is otherwise UNKNOWN, and only for a
+        // parse-error: a parse failure happens before any statement runs, so
+        // the frame it is attributed to has no Stmt.Line to stamp. Leaving it
+        // null while this kind's own message says "at line N" would be
+        // incoherent - `bodyLine` is the field an agent opens the source with.
+        // `line` (the raw .TcPOU XML line) stays null: deriving it needs the
+        // body's BodyStartLine, which never reaches this boundary, and a
+        // guessed file line is worse than an absent one.
+        private static int? ParseErrorBodyLine(TcXunit.Runner.TcUnitStub.AssertionFailure failure) =>
+            failure.Kind == FailureKind.ParseError
+                ? NullableLine(FailureClassifier.ParseErrorBodyLine(failure.Message))
+                : null;
+
+        // TcXunit-229.15: the message a consumer reads, followed by what to DO
+        // about a failure of that kind (FailureKind.Guidance). TcXunit's
+        // consumer is usually a model choosing its next edit from one JSON
+        // object; "Unexpected character '@' at position 33" states a fact and
+        // answers nothing, and the two possible responses - fix the ST, or stop
+        // and escalate - are opposites.
+        //
+        // The one exception is a formatted TcUnit assert line ("FAILED TEST
+        // 'X', EXP: 99, ACT: 3, MSG: ..."), which is reproduced byte for byte
+        // from upstream TcUnit's FB_AdsAssertMessageFormatter and is what text
+        // output prints and the VSIX results tree renders. That string has a
+        // verbatim contract, so guidance is not appended to it - and it is the
+        // one kind whose factual message already names the change to make. A
+        // fault charged to a test (kind assertion via a convergence failure
+        // included) never goes through that formatter and does get guidance.
+        private static string WithGuidance(string message, string kind)
+        {
+            if (kind == FailureKind.Assertion)
+                return message;
+
+            var guidance = FailureKind.Guidance(kind);
+            if (string.IsNullOrEmpty(guidance))
+                return message;
+
+            if (kind == FailureKind.ParseError)
+            {
+                // The form TcXunit-229.9 settled on: say plainly that the body
+                // could not be READ, and that the cause is one of two things
+                // TcXunit genuinely cannot tell apart - never assert which.
+                var bodyLine = FailureClassifier.ParseErrorBodyLine(message);
+                var at = bodyLine != PlcSourceLocationException.UnknownLine
+                    ? $" at line {bodyLine}"
+                    : string.Empty;
+                guidance = $"TcXunit could not read this body{at} - " +
+                    "either it uses ST beyond TcXunit's subset, or it is invalid ST. " + guidance;
+            }
+
+            // " -- " rather than a space: the factual half often ends in ST
+            // punctuation (";", ")") or, for a parse-error, in the raw body
+            // text itself, so a bare space runs the two halves into one
+            // sentence. The delimiter is where "what happened" stops and "what
+            // to do" starts.
+            return string.IsNullOrEmpty(message) ? guidance : message + " -- " + guidance;
+        }
 
         // Takes an AssertSite, which is what both sources of a frame carry:
         // PlcCallStackFrame.Site for a suite-level error, and the failure's own
@@ -677,7 +748,13 @@ Examples:
                 string error, IReadOnlyList<SkipReport> skipped, IReadOnlyList<CoverageReport> coverage, string streamEvent = null)
             {
                 Event = streamEvent;
-                Error = error;
+                // TcXunit-229.15: always load-error here (see Kind below), so
+                // the guidance is appended once, in the constructor, rather
+                // than at each of WriteError's call sites. Text output keeps
+                // the bare "error: <message>" line - it is read by a human at
+                // a console, who has the README; this string is the one an
+                // agent reads with nothing else to go on.
+                Error = WithGuidance(error, FailureKind.LoadError);
                 Skipped = skipped;
                 Coverage = coverage;
             }
@@ -841,8 +918,8 @@ Examples:
                 string name,
                 string filePath,
                 string error,
-                string errorKind,
-                string errorConstruct,
+                string kind,
+                string construct,
                 IReadOnlyList<TestReport> tests,
                 long? durationMs,
                 int? fileLine,
@@ -855,8 +932,8 @@ Examples:
                 Name = name;
                 FilePath = filePath;
                 Error = error;
-                ErrorKind = errorKind;
-                ErrorConstruct = errorConstruct;
+                Kind = kind;
+                Construct = construct;
                 Tests = tests;
                 DurationMs = durationMs;
                 FileLine = fileLine;
@@ -875,7 +952,7 @@ Examples:
             // suite that never ran to completion (Error != null) still
             // reports "fail" here rather than a third "skip" state - it
             // already counts toward failCount/exitCode the same as a suite
-            // that ran with a failing TEST(), and ErrorKind is what tells a
+            // that ran with a failing TEST(), and `kind` is what tells a
             // consumer *why* if it wants to render that case differently.
             [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
             public string Outcome { get; }
@@ -893,13 +970,24 @@ Examples:
             // The distinction that matters to an agent consuming this is
             // unsupported-construct vs. everything else: it means the ST is
             // correct and TcXunit is behind, so the POU must not be edited.
-            public string ErrorKind { get; }
+            //
+            // TcXunit-229.15 (BREAKING): serialized as `kind`, not the
+            // `errorKind` this used to emit. `kind`/`construct` is now the one
+            // vocabulary at every level of the JSON - the top-level error, this
+            // suite-level error, and each per-test failure - so a consumer
+            // reads the same two keys wherever a failure surfaces instead of
+            // learning that suites happen to spell them differently.
+            public string Kind { get; }
 
-            // The specific construct behind an unsupported-construct error
-            // (e.g. "SEL"), so escalation names it without parsing Error. Null
-            // for every other kind, and for an unsupported-construct whose
-            // throw site knew only that something was unsupported.
-            public string ErrorConstruct { get; }
+            // The specific construct behind the error: the unimplemented ST
+            // construct for an unsupported-construct (e.g. "SEL"), or the
+            // offending token for a parse-error, so escalation names it without
+            // parsing Error. Null for every other kind, and for a throw site
+            // that knew only that something was unsupported.
+            //
+            // TcXunit-229.15 (BREAKING): serialized as `construct`, not
+            // `errorConstruct` - same rationale as Kind above.
+            public string Construct { get; }
             public IReadOnlyList<TestReport> Tests { get; }
 
             // TcXunit-6fb.2: suite-level wall-clock time from Engine.RunSuite's
@@ -1007,11 +1095,15 @@ Examples:
                 Line = line;
             }
 
-            // The formatted line text output prints, unchanged.
+            // The formatted line text output prints. For an assert failure this
+            // is verbatim what text output prints; for a fault charged to this
+            // test it is the located message plus that kind's guidance
+            // (TcXunit-229.15, see WithGuidance).
             public string Message { get; }
 
-            // One of the FailureKind constants - the same vocabulary
-            // suites[].errorKind uses.
+            // One of the FailureKind constants - the same vocabulary, under the
+            // same key, that the top-level error and suites[].kind use
+            // (TcXunit-229.15).
             public string Kind { get; }
 
             // The unimplemented ST construct behind an unsupported-construct

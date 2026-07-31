@@ -5,9 +5,17 @@ namespace TcXunit.Vsix.TestRunner
     /// <summary>
     /// Mirrors the camelCase JSON shape emitted by
     /// `tcxunit run --format json` (see TcXunit.Cli.CliRunner):
-    /// { suites: [{ name, filePath, error, durationMs, callStack, tests: [{ name, passed, failures, durationMs }] }], passed, failed, exitCode }
-    /// and its early-exit error shape: { error }.
+    /// { suites: [{ name, filePath, error, kind, construct, durationMs, callStack, tests: [{ name, passed, failures, durationMs }] }], passed, failed, exitCode }
+    /// and its early-exit error shape: { error, kind }.
     /// </summary>
+    /// <remarks>
+    /// This extension has NO ProjectReference to TcXunit.Cli - it targets
+    /// net472, shells out to the tcxunit executable and deserializes its stdout
+    /// - so a rename on the CLI's side cannot produce a compile error here. It
+    /// produces a silently-null property instead. Any change to the CLI's wire
+    /// shape has to be mirrored into this file by hand, in the same change;
+    /// TcxunitModelsDeserializationTests is where that gets pinned.
+    /// </remarks>
     internal sealed class TcxunitRunResult
     {
         public List<TcxunitSuiteResult> Suites { get; set; }
@@ -19,6 +27,13 @@ namespace TcXunit.Vsix.TestRunner
         public int ExitCode { get; set; }
 
         public string Error { get; set; }
+
+        // TcXunit-3tx.1/229.15: the kind of the run-level Error above. Always
+        // "load-error" - every error reported through this shape is a
+        // usage/discovery failure that produced no results at all - and
+        // modelled only so the same two keys (kind/construct) can be read at
+        // every level of the JSON without a special case for the top one.
+        public string Kind { get; set; }
 
         // Not part of the CLI's wire shape -- TcxunitProcessRunner stashes the
         // exact stdout text here after deserializing it, so
@@ -40,6 +55,28 @@ namespace TcXunit.Vsix.TestRunner
         public string FilePath { get; set; }
 
         public string Error { get; set; }
+
+        // TcXunit-229.15: the machine-readable counterpart to Error - one of
+        // the FailureKind strings ("assertion", "plc-fault",
+        // "unsupported-construct", "load-error", "parse-error"), null for a
+        // suite that didn't fail.
+        //
+        // The CLI emitted this as "errorKind" from TcXunit-3tx.1 until
+        // TcXunit-229.15 renamed it to "kind", so that the top-level error,
+        // this suite-level error and every per-test failure all use one pair of
+        // keys. This model never picked the old name up, so nothing here read
+        // it under the old spelling and nothing broke on the rename - it is
+        // modelled now so the next consumer that wants to render "the
+        // interpreter is behind" differently from "the PLC code is wrong"
+        // doesn't have to rediscover that the field exists.
+        public string Kind { get; set; }
+
+        // The construct behind Kind: the unimplemented ST construct for an
+        // unsupported-construct (e.g. "SEL"), or the offending token for a
+        // parse-error. Null for every other kind, and whenever the throw site
+        // knew only that something was unsupported. Renamed from
+        // "errorConstruct" alongside Kind above (TcXunit-229.15).
+        public string Construct { get; set; }
 
         public List<TcxunitTestResult> Tests { get; set; }
 

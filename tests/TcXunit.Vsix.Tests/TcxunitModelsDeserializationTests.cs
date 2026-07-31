@@ -190,12 +190,91 @@ namespace TcXunit.Vsix.Tests
         [Fact]
         public void Deserialize_EarlyExitErrorShape_MapsTopLevelError()
         {
-            const string json = @"{ ""error"": ""no TcUnit suites found under /path"" }";
+            const string json = @"{ ""error"": ""no TcUnit suites found under /path"", ""kind"": ""load-error"" }";
 
             var result = JsonSerializer.Deserialize<TcxunitRunResult>(json, Options);
 
             Assert.Equal("no TcUnit suites found under /path", result.Error);
+            Assert.Equal("load-error", result.Kind);
             Assert.Null(result.Suites);
+        }
+
+        // TcXunit-229.15 (BREAKING wire change): the CLI renamed suites[]'s
+        // "errorKind"/"errorConstruct" to "kind"/"construct", so those two keys
+        // read the same at every level of the JSON. This extension parses that
+        // JSON OUT OF PROCESS - it has no ProjectReference to the CLI, so the
+        // rename could not have produced a compile error here, only a silently
+        // null property. This test is the thing that would have caught it.
+        [Fact]
+        public void Deserialize_SuiteError_MapsKindAndConstructUnderTheSharedKeys()
+        {
+            const string json = @"{
+                ""suites"": [
+                    {
+                        ""name"": ""FB_SelSuiteTests"",
+                        ""error"": ""TcUnit native call 'SEL' isn't supported yet"",
+                        ""kind"": ""unsupported-construct"",
+                        ""construct"": ""SEL"",
+                        ""tests"": []
+                    }
+                ],
+                ""passed"": 0,
+                ""failed"": 1,
+                ""exitCode"": 1
+            }";
+
+            var result = JsonSerializer.Deserialize<TcxunitRunResult>(json, Options);
+
+            var suite = Assert.Single(result.Suites);
+            Assert.Equal("unsupported-construct", suite.Kind);
+            Assert.Equal("SEL", suite.Construct);
+        }
+
+        // The fifth kind (TcXunit-229.15) carries its offending token in the
+        // same `construct` field, never a parse-error-only one - so a consumer
+        // that renders `construct` needs no new branch for it.
+        [Fact]
+        public void Deserialize_SuiteParseError_MapsTheOffendingTokenAsTheConstruct()
+        {
+            const string json = @"{
+                ""suites"": [
+                    {
+                        ""name"": ""FB_UnreadableTests"",
+                        ""error"": ""FB_UnreadableTests: TcXunit could not read this body at line 2"",
+                        ""kind"": ""parse-error"",
+                        ""construct"": ""@"",
+                        ""tests"": []
+                    }
+                ],
+                ""passed"": 0,
+                ""failed"": 1,
+                ""exitCode"": 1
+            }";
+
+            var result = JsonSerializer.Deserialize<TcxunitRunResult>(json, Options);
+
+            var suite = Assert.Single(result.Suites);
+            Assert.Equal("parse-error", suite.Kind);
+            Assert.Equal("@", suite.Construct);
+        }
+
+        // A passing suite emits neither key, and both must land as null rather
+        // than as an empty string a renderer would treat as "there is a kind".
+        [Fact]
+        public void Deserialize_SuiteWithoutKindOrConstruct_LeavesBothNull()
+        {
+            const string json = @"{
+                ""suites"": [ { ""name"": ""FB_PassingTests"", ""tests"": [] } ],
+                ""passed"": 1,
+                ""failed"": 0,
+                ""exitCode"": 0
+            }";
+
+            var result = JsonSerializer.Deserialize<TcxunitRunResult>(json, Options);
+
+            var suite = Assert.Single(result.Suites);
+            Assert.Null(suite.Kind);
+            Assert.Null(suite.Construct);
         }
 
         [Fact]

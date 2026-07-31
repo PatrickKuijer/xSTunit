@@ -1,6 +1,6 @@
 # xStunit.Vsix
 
-VSIX tool window for TwinCAT XAE Shell that shells out to `xstunit run <path>
+VSIX tool window for TwinCAT XAE Shell that shells out to `xstunit <path>
 --format json`, parses the JSON, and renders a pass/fail tree. Replaces XAE
 Shell's missing Test Explorer, sidestepping XAE Shell stripping non-TwinCAT
 csproj entries from the native `.sln` on every save (see TcXunit-6nt).
@@ -26,7 +26,7 @@ xStunit.sln` from the CLI will skip or fail on this project; build it via
 - `TestRunner/XstunitConfig.cs` — reads `xstunit.json` (schema is a first
   guess — see `xstunit.json.sample`).
 - `TestRunner/XstunitProcessRunner.cs` + `XstunitModels.cs` — shells out to
-  `xstunit run <path> --format json` via `Process.Start` and deserializes the
+  `xstunit <path> --format json` via `Process.Start` and deserializes the
   JSON with `System.Text.Json` (swapped off `JavaScriptSerializer`/
   `System.Web.Extensions` per TcXunit-cmp, so `XstunitConfig.cs` and
   `XstunitModels.cs` can be unit-tested under net8.0 in

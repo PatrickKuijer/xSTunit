@@ -3,7 +3,7 @@ using System.Collections.Generic;
 namespace xStunit.Vsix.TestRunner
 {
     /// <summary>
-    /// Mirrors the camelCase JSON emitted by `xstunit run --format json`, and by
+    /// Mirrors the camelCase JSON emitted by `xstunit &lt;path&gt; --format json`, and by
     /// `--stream`'s final summary line, which is the same CLI type serialized twice
     /// (see xStunit.Cli.CliRunner):
     /// { suites: [{ name, filePath, error, kind, construct, durationMs, callStack, tests: [{ name, passed, failures, durationMs }] }], passed, failed, exitCode }

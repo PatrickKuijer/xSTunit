@@ -81,10 +81,10 @@ namespace xStunit.Interpreter
             var left = ParseUnary();
             while (IsKeyword("MOD") || Current.Type == TokenType.Asterisk || Current.Type == TokenType.Slash)
             {
-                // '**' (IEC 61131-3 §2.5.1.5 EXPT, highest-precedence
-                // exponentiation) tokenizes as two adjacent Asterisk tokens -
-                // valid grammar this parser does not implement, not malformed
-                // source (TcXunit-3tx.5).
+                // '**' (IEC 61131-3 §2.5.1.5 EXPT) tokenizes as two adjacent
+                // Asterisk tokens. Named as an unsupported construct rather
+                // than left to fail as a parse error: it is valid grammar
+                // this parser does not implement, not malformed source.
                 if (Current.Type == TokenType.Asterisk && _pos + 1 < _tokens.Count && _tokens[_pos + 1].Type == TokenType.Asterisk)
                     throw new UnsupportedConstructException("**", "Exponentiation operator '**' is not supported yet");
 
@@ -117,11 +117,10 @@ namespace xStunit.Interpreter
             return ParsePostfix(ParsePrimary());
         }
 
-        // Stamps every leaf/parenthesized/literal-initializer node with the
-        // line of the token that opened it (TcXunit-p3t.2). Only stamps when
-        // the node has no line yet: "(a + b)" hands back the inner node,
-        // which already knows where it started, and the [n(v)] array-repeat
-        // shorthand shares one Expr instance across n slots.
+        // Stamps the line of the token that opened the node, but only when it
+        // has none yet: "(a + b)" hands back the inner node, which already
+        // knows where it started, and the [n(v)] array-repeat shorthand
+        // shares one Expr instance across n slots.
         private Expr ParsePrimary()
         {
             var line = Current.Line;
@@ -185,8 +184,8 @@ namespace xStunit.Interpreter
                         Advance();
                         var superNode = new SuperRefExpr();
 
-                        // SUPER^(args) - TwinCAT shorthand for calling the base
-                        // FB_init directly, distinct from SUPER^.Method(args).
+                        // SUPER^(args) is TwinCAT shorthand for calling the
+                        // base FB_init, distinct from SUPER^.Method(args).
                         if (Current.Type == TokenType.LParen)
                             return ParseCallArgs(superNode, "FB_init");
 
@@ -199,22 +198,19 @@ namespace xStunit.Interpreter
                     return new IdentifierExpr(name);
                 }
                 default:
-                    // Left as FormatException, not converted (TcXunit-3tx.5):
+                    // A ParseException rather than an unsupported construct:
                     // every token type reaching here (Assign, Colon, operator
-                    // tokens, RParen/RBracket, Eof, ...) is one an expression
-                    // can never legally start with, in IEC 61131-3 or any
-                    // extension of it - unlike '**' (handled by name in
-                    // ParseMod before falling through here), there is no
-                    // specific missing construct to name, only positions
-                    // where the source itself is incomplete or wrong.
+                    // tokens, RParen/RBracket, Eof, ...) is one no expression
+                    // can legally start with under IEC 61131-3 or any
+                    // extension of it, so there is no missing construct to
+                    // name - only source that is incomplete or wrong.
                     throw new ParseException($"Unexpected token {Current} at index {_pos}", CurrentToken, Current.Line);
             }
         }
 
-        // Applies postfix ^ (deref) and .Member(args) (call) operators to an
-        // already-parsed primary/THIS^/SUPER^ node. Each wrapper node inherits
-        // the receiver's line, since that is where the whole postfix chain
-        // starts (TcXunit-p3t.2).
+        // Applies postfix ^ (deref), .Member(args) and [index] operators to
+        // an already-parsed node. Each wrapper inherits the receiver's line,
+        // since that is where the whole postfix chain starts.
         private Expr ParsePostfix(Expr node)
         {
             while (true)
@@ -271,7 +267,6 @@ namespace xStunit.Interpreter
             return new StructLiteralExpr(fieldInits);
         }
 
-        // [v0, v1, ...] with the [n(v)] repeat shorthand expanded inline.
         private Expr ParseArrayLiteral()
         {
             Expect(TokenType.LBracket);
@@ -320,12 +315,10 @@ namespace xStunit.Interpreter
                     }
                     else if (Current.Type == TokenType.Identifier && _tokens[_pos + 1].Type == TokenType.Arrow)
                     {
-                        // Name => expr: VAR_OUTPUT binding syntax. Recorded as
-                        // a named arg with IsOutput set; BindParams' Input/
-                        // InOut-only lookup ignores it, and CallMethod's
-                        // WriteBackOutputArgs (TcXunit-wmh) writes the
-                        // callee's output value back into this arg's lvalue
-                        // after the call returns.
+                        // Name => expr binds a VAR_OUTPUT. BindParams'
+                        // Input/InOut-only lookup ignores it; CallMethod's
+                        // WriteBackOutputArgs writes the callee's output back
+                        // into this arg's lvalue once the call returns.
                         var argName = Advance().Text;
                         Advance(); // =>
                         named.Add(new NamedArg(argName, ParseExpr(), isOutput: true));

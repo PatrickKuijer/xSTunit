@@ -1,10 +1,10 @@
 namespace xStunit.Interpreter
 {
-    // Deep-clones STRUCT/ARRAY payload values so Transmit copies rather than
-    // aliases (TcXunit-w5x.15.10 / T7's design: "Dictionary<string, Cell> is
-    // a mutable reference type... STRUCT payload copy needs an explicit
-    // per-field clone"). Everything else (numerics, bool, string) is a value
-    // type or CLR-immutable, so the reference itself is safe to reuse as-is.
+    // Deep-clones STRUCT/ARRAY payloads so a copy is a copy: both hold their
+    // contents in mutable CLR reference types, so reusing the reference would
+    // alias the source and make later writes visible through both. Everything
+    // else (numerics, bool, string) is boxed value-type or CLR-immutable, and
+    // the reference is safe to hand back as-is.
     internal static class CellCloner
     {
         public static object CloneValue(object value)

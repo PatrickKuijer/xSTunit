@@ -6,24 +6,22 @@ using Serilog.Events;
 namespace xStunit.Interpreter.Logging
 {
     /// <summary>
-    /// Process-wide structured logging for xStunit's catch-and-summarize paths (TcXunit-2v8).
-    /// CliRunner collapses exceptions down to ex.Message for the concise failure
-    /// surfaced in its console/JSON output; this additionally logs the full ex.ToString() (message +
-    /// stack trace + inner exceptions) to a rolling log file, so a failing suite's actual call
-    /// site can be reconstructed from the log instead of hand-editing a catch block, rebuilding,
-    /// and reverting.
-    ///
-    /// Verbosity is toggled by the XSTUNIT_VERBOSE env var (Information by default, Debug when
-    /// set to a truthy value) rather than a config file, per the original proposal. The log
-    /// directory can be overridden via XSTUNIT_LOG_DIR (defaults to %TEMP%/xStunit/logs) so tests
-    /// don't write into a developer's real temp directory.
-    ///
-    /// No dependency on Microsoft.Extensions.Logging here, unlike the sibling tcagentplugin repo's
-    /// AppLogging/SerilogLoggerAdapter: that repo hand-rolls an MEL bridge because its VSIX host
-    /// has no app.config for a binding redirect between its own MEL reference and the one
-    /// Serilog.Extensions.Logging would pull in. TcXunit is plain SDK-style/PackageReference with
-    /// no such constraint, so callers use this type directly instead of an ILogger abstraction.
+    /// Process-wide structured logging for the catch-and-summarize paths.
+    /// CliRunner collapses an exception down to <c>ex.Message</c> for the concise failure it
+    /// surfaces in console/JSON output; this writes the full <c>ex.ToString()</c> (message,
+    /// stack trace, inner exceptions) to a rolling log file, so a failing suite's real call
+    /// site can be recovered from the log rather than by instrumenting a catch block and
+    /// rebuilding.
     /// </summary>
+    /// <remarks>
+    /// Configured entirely by environment variable, deliberately: <c>XSTUNIT_VERBOSE</c> raises
+    /// the level from Information to Debug, and <c>XSTUNIT_LOG_DIR</c> redirects the log
+    /// directory away from its <c>%TEMP%/xStunit/logs</c> default so tests never write into a
+    /// developer's real temp directory.
+    ///
+    /// Callers use this type directly rather than an ILogger abstraction; nothing here depends
+    /// on Microsoft.Extensions.Logging.
+    /// </remarks>
     public static class XstunitLog
     {
         private const string VerboseEnvVar = "XSTUNIT_VERBOSE";
@@ -33,10 +31,12 @@ namespace xStunit.Interpreter.Logging
         private static ILogger _logger;
 
         /// <summary>
-        /// Logs a caught exception's full ex.ToString() (message + stack trace + inner
-        /// exceptions) at Error level. Safe to call with a null exception (no-op) so call sites
-        /// don't need an extra null check around it.
+        /// Logs a caught exception's full <c>ex.ToString()</c> at Error level. A null
+        /// <paramref name="exception"/> is a no-op, so call sites in a catch-and-summarize path
+        /// need no null check of their own.
         /// </summary>
+        /// <param name="context">Names the operation being attempted, for the log line.</param>
+        /// <param name="exception">The caught exception; null is ignored.</param>
         public static void LogException(string context, Exception exception)
         {
             if (exception == null)
@@ -47,10 +47,12 @@ namespace xStunit.Interpreter.Logging
 
         /// <summary>
         /// Debug-level trace for engine decision points (POU skip/reject reasons, duplicate-type
-        /// resolution, suite discovery) so a failing suite's actual code path can be reconstructed
-        /// from the log without re-instrumenting. Only reaches the log file when XSTUNIT_VERBOSE
-        /// is set - otherwise a no-op cost of a single IsEnabled check.
+        /// resolution, suite discovery), so a failing suite's code path can be reconstructed
+        /// from the log without re-instrumenting. Reaches the log file only when
+        /// <c>XSTUNIT_VERBOSE</c> is set; otherwise it costs a single level check.
         /// </summary>
+        /// <param name="messageTemplate">Serilog message template, with <c>{Named}</c> holes.</param>
+        /// <param name="propertyValues">Values for the template's holes, in order.</param>
         public static void LogDebug(string messageTemplate, params object[] propertyValues)
         {
             GetOrCreateLogger().Debug(messageTemplate, propertyValues);
@@ -66,7 +68,7 @@ namespace xStunit.Interpreter.Logging
                 || string.Equals(value, "yes", StringComparison.OrdinalIgnoreCase);
         }
 
-        // Pure so the env-var toggle rule can be unit tested without touching Serilog/file I/O.
+        // Pure so the env-var toggle rule can be unit tested without touching Serilog or file I/O.
         internal static LogEventLevel ResolveMinimumLevel(string verboseEnvValue) =>
             IsTruthy(verboseEnvValue) ? LogEventLevel.Debug : LogEventLevel.Information;
 
@@ -75,10 +77,9 @@ namespace xStunit.Interpreter.Logging
                 ? Path.Combine(Path.GetTempPath(), "xStunit", "logs")
                 : logDirEnvValue;
 
-        // Test seam only: forces the next LogException/LogDebug call to rebuild the logger from
-        // the current env vars instead of reusing whatever was cached by an earlier call. Disposes
-        // the current logger first so its file sink releases the log file - otherwise a test that
-        // deletes its temp log directory right after this call would race the sink's file handle.
+        // Forces the next LogException/LogDebug call to rebuild the logger from the current env
+        // vars instead of the cached one. Disposes first so the file sink releases its handle -
+        // a test that deletes its temp log directory immediately after would otherwise race it.
         internal static void ResetForTests()
         {
             lock (SyncRoot)

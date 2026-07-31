@@ -3,13 +3,14 @@ using xStunit.Parser;
 
 namespace xStunit.Interpreter
 {
-    // Thrown by DutStructLoader.Load (TcXunit-dvd) when the same
-    // STRUCT type name is declared in more than one .TcDUT file across the
-    // merged set of POU directories. Mirrors DuplicatePouTypeException's
-    // shape/behavior for POU types: a duplicate STRUCT name is ambiguous and
-    // must stop registry construction before any suite runs, naming the type
-    // and every conflicting file path, instead of letting TypeRegistry's
-    // constructor silently let the later file win.
+    // The same STRUCT type name is declared in more than one .TcDUT file
+    // across the merged set of POU directories. Thrown by DutStructLoader.Load.
+    //
+    // The STRUCT member of the DuplicateNameException family - a sibling of
+    // DuplicateGvlNameException (.TcGVL names) and DuplicatePouTypeException
+    // (.TcPOU types), differing only in which kind of name it reports.
+    // Fail-fast because TypeRegistry's constructor would otherwise silently
+    // let whichever file loaded last win.
     public sealed class DuplicateStructTypeException : DuplicateNameException
     {
         public string TypeName => Name;

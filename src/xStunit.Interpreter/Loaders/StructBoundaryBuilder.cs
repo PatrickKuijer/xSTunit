@@ -4,12 +4,12 @@ using System.Linq;
 
 namespace xStunit.Interpreter
 {
-    // Pure-introspection STRUCT test-data builder (TcXunit-w5x.15.10 / T7's
-    // design): walks a STRUCT type's declared fields via TypeRegistry, no
-    // per-struct registration. Every field defaults to an in-range value;
-    // named overrides push just those fields to a Boundary (single-field
-    // sweep semantics - a test wanting several fields at their boundary
-    // together asks for it explicitly via multiple overrides).
+    // Builds STRUCT test data by introspecting the type's declared fields via
+    // TypeRegistry, so no struct ever needs registering here. Every field
+    // gets an in-range value; a named override pushes just that field to a
+    // Boundary, leaving the rest in range - single-field sweep semantics, so
+    // a test wanting several fields at their boundary at once must say so
+    // with several overrides.
     public sealed class StructBoundaryBuilder
     {
         private readonly TypeRegistry _registry;
@@ -46,15 +46,15 @@ namespace xStunit.Interpreter
             return instance;
         }
 
-        // Every field's normal (non-boundary) value: nested structs recurse
-        // with no overrides of their own, arrays fill every element at its
-        // element type's in-range default - matching Engine.BuildStructDefault/
-        // BuildArrayDefault's "0/false/empty" defaults without needing an
-        // Engine instance (the builder runs before any FbInstance exists).
+        // Reproduces Engine.BuildStructDefault/BuildArrayDefault's
+        // "0/false/empty" defaults without an Engine instance, because the
+        // builder runs before any FbInstance exists. Nested structs recurse
+        // with no overrides of their own; arrays fill every element at its
+        // element type's in-range default.
         private object InRangeDefault(VarDecl field)
         {
-            // Resolve through any ALIAS DUT (TcXunit-6hg) once up front, same
-            // rationale as Engine.DefaultValue.
+            // Resolved once up front so every branch below sees the underlying
+            // type, not an ALIAS DUT name - same as Engine.DefaultValue.
             var typeName = _registry.ResolveAlias(field.TypeName);
 
             if (ArrayTypeInfo.IsArrayType(typeName))
@@ -82,10 +82,10 @@ namespace xStunit.Interpreter
 
             if (StringTypeInfo.IsStringType(typeName))
             {
-                // The size may be a non-literal constant expression (e.g. a
-                // GVL-qualified constant, TcXunit-988); reuse the same
-                // const-expression resolver ARRAY bounds already use rather
-                // than duplicating it.
+                // A STRING size may be a non-literal constant expression (e.g.
+                // a GVL-qualified constant), which is why this goes through
+                // the same resolver ARRAY bounds use rather than parsing an
+                // integer out of the type name.
                 var length = StringTypeInfo.ParseLength(typeName, ResolveArrayBound);
                 return boundary == Boundary.Min ? "" : new string('X', length);
             }
@@ -113,12 +113,11 @@ namespace xStunit.Interpreter
         }
 
         // Resolves a non-literal ARRAY bound (e.g. a GVL-qualified constant
-        // like "cRemoteClientConfig.MAX_REMOTE_ITEMS") without needing a
-        // running Engine/Frame - the builder runs before any FbInstance
-        // exists (see class remarks). GVL constants are themselves constant
-        // expressions (literals, arithmetic, or references to other GVL
-        // constants), so this recurses through TypeRegistry's already-parsed
-        // GVL declarations rather than requiring Engine.Evaluate.
+        // like "cRemoteClientConfig.MAX_REMOTE_ITEMS") without a running
+        // Engine or Frame. Possible because a GVL constant is itself a
+        // constant expression - a literal, arithmetic on literals, or another
+        // GVL constant - so recursing through TypeRegistry's already-parsed
+        // GVL declarations reaches an integer without Engine.Evaluate.
         private int ResolveArrayBound(string boundText) =>
             EvaluateConstExpr(Parser.ParseExpression(boundText));
 

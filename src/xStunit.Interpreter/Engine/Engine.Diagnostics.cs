@@ -7,33 +7,25 @@ namespace xStunit.Interpreter
 {
     public sealed partial class Engine
     {
-        // TcXunit-p3t.1: single entry point for "run a POU/METHOD body in its
-        // own frame". Every site that used to hand-roll
-        // `try { ExecuteStatements(...) } catch (MethodReturnSignal) {}` -
-        // CallMethod, InvokeFbInstance, StepCycles, RunSuite - goes through
-        // here so exactly one place knows how to attribute a fault to the PLC
-        // body that raised it.
+        // The single entry point for "run a POU/METHOD body in its own frame",
+        // used by CallMethod, InvokeFbInstance, StepCycles and RunSuite, so
+        // exactly one place knows how to attribute a fault to the PLC body that
+        // raised it.
         //
-        // The interpreter has no call stack of its own to walk after the fact
-        // (the only stack is raw CLR recursion through
-        // ExecuteStatements/ExecuteStatement/Evaluate), and by the time an
+        // The interpreter has no call stack of its own to walk after the fact -
+        // the only stack is raw CLR recursion through
+        // ExecuteStatements/ExecuteStatement/Evaluate - and by the time an
         // exception reaches the suite boundary every intermediate frame has
-        // already unwound. So instead of reconstructing a stack, each body
-        // stamps its identity onto the in-flight exception on the way out -
-        // and only if nothing has stamped it yet, which makes the INNERMOST
-        // body the one that wins, exactly as an acceptance criterion requires.
+        // unwound. So rather than reconstructing a stack, each body stamps its
+        // identity onto the in-flight exception on the way out, and only if
+        // nothing has stamped it yet: the INNERMOST body wins.
         //
-        // TcXunit-n65: statementsFactory is a *lazy* lookup
-        // (`() => _registry.GetStatements(text)`), not a resolved
-        // IReadOnlyList<Stmt>, and it is called from INSIDE this method's own
-        // try - not by the caller before ExecuteBody is even entered. A
-        // callee's ImplementationText is parsed lazily on first use
-        // (TypeRegistry.GetStatements), and if that parse itself throws (e.g.
-        // a FormatException from the lexer/parser on an unsupported
-        // construct), the fault happens while THIS frame - the callee's own -
-        // is the innermost one on the stack, so it gets attributed here
-        // rather than bubbling out unattributed to whichever caller's
-        // ExecuteBody is further up the CLR stack.
+        // statementsFactory must stay lazy and must be invoked from INSIDE this
+        // method's try, never resolved by the caller beforehand. A callee's
+        // ImplementationText is parsed on first use, and if that parse throws,
+        // the fault has to land while THIS frame - the callee's own - is
+        // innermost, or it escapes unattributed to whichever caller's
+        // ExecuteBody sits further up the CLR stack.
         private void ExecuteBody(Func<IReadOnlyList<Stmt>> statementsFactory, Frame frame)
         {
             try
@@ -52,18 +44,17 @@ namespace xStunit.Interpreter
             }
         }
 
-        // TcXunit-3tx.3: ExecuteBody's suite-body variant. A suite body is the
-        // one body where a fault does NOT have to be fatal to everything after
-        // it: if a TEST()/TEST_FINISHED() bracket was open when the fault
-        // escaped, that test owns the failure and the remaining top-level
-        // statements - the suite's other tests - can still run. Before this,
-        // one unsupported construct in one test method reported the whole suite
-        // as `tests: []`, `passed: 0`, which reads to a consuming agent as
-        // "your change broke everything".
+        // ExecuteBody's suite-body variant. A suite body is the one body where a
+        // fault need not be fatal to everything after it: if a
+        // TEST()/TEST_FINISHED() bracket was open when the fault escaped, that
+        // test owns the failure and the suite's remaining tests still run -
+        // otherwise one unsupported construct in one test method reports the
+        // whole suite as `tests: []`, `passed: 0`, which reads as "your change
+        // broke everything".
         //
-        // A fault with no open bracket has no test to charge and still takes
-        // the suite down, unchanged: it happened in setup or between tests, so
-        // nothing after it can be trusted anyway.
+        // A fault with no open bracket has no test to charge and still takes the
+        // suite down: it happened in setup or between tests, so nothing after it
+        // can be trusted anyway.
         private void ExecuteSuiteBody(Func<IReadOnlyList<Stmt>> statementsFactory, Frame frame, SuiteHost host)
         {
             IReadOnlyList<Stmt> statements;
@@ -73,8 +64,8 @@ namespace xStunit.Interpreter
             }
             catch (Exception ex)
             {
-                // A lazy parse failure of the suite's own body: nothing ran, so
-                // there is no per-test recovery to attempt (TcXunit-n65).
+                // A parse failure of the suite's own body: nothing ran, so there
+                // is no per-test recovery to attempt.
                 RecordFaultSite(ex, frame);
                 throw;
             }
@@ -124,31 +115,28 @@ namespace xStunit.Interpreter
         }
 
         // Renders an escaping fault as the failure line of the test it is
-        // charged to (TcXunit-3tx.3), reusing the same location rendering and
-        // the same FailureKind vocabulary a suite-level error gets - a fault is
-        // no less a fault for having been contained.
+        // charged to, reusing the same location rendering and the same
+        // FailureKind vocabulary a suite-level error gets - a fault is no less a
+        // fault for having been contained.
         private static AssertionFailure ToTestFailure(Exception ex)
         {
             var located = TryCreateSourceLocationException(ex);
             var kind = FailureClassifier.Classify(located ?? ex, out var construct);
 
-            // TcXunit-3tx.2/.3: a contained fault has no expected/actual pair -
-            // it never got as far as comparing anything - but it knows exactly
-            // as much about WHERE as the suite-level error it replaces did, and
-            // must carry all of it: the innermost frame plus the full chain
-            // (TcXunit-7s6/1am). Containing a fault must not cost the
-            // diagnostics that made it debuggable.
+            // A contained fault has no expected/actual pair - it never got as
+            // far as comparing anything - but it knows exactly as much about
+            // WHERE as the suite-level error it replaces, and must carry all of
+            // it: innermost frame plus the full chain. Containing a fault must
+            // not cost the diagnostics that made it debuggable.
             var site = located != null
                 ? ToAssertSite(located.CallStack[0])
                 : default(AssertSite);
 
-            // A parse failure raised while lazily parsing a callee's body is
-            // attributed to that callee's OWN frame, which never ran a
-            // statement of its own - so the interpreter's own line tracking
-            // (the source of `site` above) is genuinely unknown here. The
-            // front end's own ParseException carries a real line in that
-            // case; fold it in rather than leaving a parse-error's bodyLine
-            // null when a better answer already exists.
+            // A parse failure is attributed to the callee's own frame, which
+            // never ran a statement, so the interpreter's line tracking - the
+            // source of `site` above - genuinely has nothing. The front end's
+            // ParseException does carry a real line in that case; fold it in
+            // rather than reporting no bodyLine when a better answer exists.
             if (kind == xStunit.Runner.FailureKind.ParseError && site.BodyLine == PlcSourceLocationException.UnknownLine
                 && FailureClassifier.UnwrapParseException(located ?? ex) is ParseException parseFailure
                 && parseFailure.BodyLine != PlcSourceLocationException.UnknownLine)
@@ -186,37 +174,31 @@ namespace xStunit.Interpreter
         private const string FaultPouTypeKey = "xStunit.Interpreter.FaultPouTypeName";
         private const string FaultMethodKey = "xStunit.Interpreter.FaultMethodName";
 
-        // TcXunit-p3t.4: the .TcPOU file line, written under the same
-        // first-writer-wins rule as the two keys above, which is what makes it
-        // the INNERMOST frame's line for free - no separate bookkeeping and no
-        // way for the two halves of a location to come from different frames.
+        // The .TcPOU file line and the XAE-implementation-editor-relative line,
+        // both written under the same first-writer-wins rule as the two keys
+        // above. That is what makes them the INNERMOST frame's lines for free,
+        // with no separate bookkeeping and no way for the halves of a location
+        // to come from different frames.
         private const string FaultLineKey = "xStunit.Interpreter.FaultLine";
 
-        // TcXunit-gfs: the XAE-implementation-editor-relative line - the
-        // second already-known number (Frame.CurrentLine) this change
-        // surfaces, stamped at the same point and under the same
-        // first-writer-wins rule as FaultLineKey so both numbers always come
-        // from the same (innermost) frame.
         private const string FaultBodyLineKey = "xStunit.Interpreter.FaultBodyLine";
 
-        // TcXunit-1am: unlike the four keys above (first-writer-wins, so they
-        // always describe the innermost frame), this list gets a frame
-        // appended by EVERY ExecuteBody level the exception passes through -
-        // the innermost body appends first (it catches first), each caller's
-        // ExecuteBody appends next as the exception keeps unwinding outward,
-        // and RunSuite's own ExecuteBody (the outermost) appends last. That
-        // unwind order is exactly the "innermost first, suite entry point
-        // last" order TryCreateSourceLocationException hands to
-        // PlcSourceLocationException - no sorting needed.
+        // Unlike the four keys above, this list gets a frame appended by EVERY
+        // ExecuteBody level the exception passes through: the innermost body
+        // appends first because it catches first, each caller's ExecuteBody
+        // appends as the exception unwinds outward, and RunSuite's own
+        // ExecuteBody appends last. That unwind order is already the "innermost
+        // first, suite entry point last" order PlcSourceLocationException
+        // expects, so nothing sorts it.
         private const string FaultCallStackKey = "xStunit.Interpreter.FaultCallStack";
 
-        // TcXunit-8ldh: the one shape shared by ExecuteBody and BindParams's
-        // default-value construction - "run this, and if it faults charge the
-        // fault to `frame` on the way out". Both are pure attribution: they add
-        // a frame to the in-flight exception and change nothing else about it.
+        // The shape shared by ExecuteBody and BindParams's default-value
+        // construction: run this, and if it faults charge the fault to `frame`
+        // on the way out. Pure attribution - a frame is added to the in-flight
+        // exception and nothing else about it changes.
         //
         // ExecuteSuiteBody's catches are deliberately NOT expressed in terms of
-        // this: they look the same but also decide whether the fault can be
+        // this. They look the same but also decide whether the fault can be
         // charged to an open test case and how much of the body to skip
         // afterwards, which is a different fact about a different boundary.
         private static void RunWithFaultAttribution(Action action, Frame frame)
@@ -282,13 +264,13 @@ namespace xStunit.Interpreter
             ex is MethodReturnSignal || ex is LoopExitSignal;
 
         // Wraps ex in a PlcSourceLocationException iff some interpreted body
-        // claimed it, otherwise returns null so the caller can `throw;` the
-        // original untouched (a load/parse/host failure that never entered an
-        // ST body has no PLC location to report).
+        // claimed it, otherwise null so the caller can `throw;` the original
+        // untouched - a load/parse/host failure that never entered an ST body
+        // has no PLC location to report.
         //
-        // Called only from the outermost boundary - RunSuite - so the public
-        // Engine.CallMethod contract is unchanged and callers that switch on
-        // concrete interpreter exception types keep working.
+        // Called only from the outermost boundary, RunSuite, so that public
+        // Engine.CallMethod goes on throwing the concrete interpreter exception
+        // types its callers switch on.
         private static PlcSourceLocationException TryCreateSourceLocationException(Exception ex)
         {
             if (ex is PlcSourceLocationException || ex.Data == null || !ex.Data.Contains(FaultPouTypeKey))
@@ -298,10 +280,9 @@ namespace xStunit.Interpreter
             if (pouTypeName == null)
                 return null;
 
-            // TcXunit-p3t.4/gfs: a fault stamped by an older/hand-built path may
-            // carry no line at all, hence the UnknownLine fallback rather than
-            // an unchecked unbox - the rendering then degrades to exactly the
-            // POU.Method shape p3t.1 produced.
+            // A fault stamped by a hand-built path may carry no line at all,
+            // hence the UnknownLine fallback rather than an unchecked unbox; the
+            // rendering then degrades to a bare POU.Method location.
             var fileLine = RecordedLine(ex, FaultLineKey);
             var bodyLine = RecordedLine(ex, FaultBodyLineKey);
             var callStack = ex.Data[FaultCallStackKey] as List<PlcCallStackFrame>;

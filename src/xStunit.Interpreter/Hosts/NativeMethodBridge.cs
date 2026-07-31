@@ -5,31 +5,19 @@ using xStunit.Runner.TcUnitStub;
 
 namespace xStunit.Interpreter
 {
-    // Maps calls that fall through to the TcUnit.FB_TestSuite native-stub
-    // boundary onto SuiteHost. Grow-on-demand: only the surface the
-    // FB_CounterTests fixture exercises (TcXunit-w5x.7/.8).
+    // Maps a call that reaches the TcUnit.FB_TestSuite native-stub boundary
+    // onto SuiteHost. Grow-on-demand: only the surface the fixtures exercise.
     public static class NativeMethodBridge
     {
-        // Whether Invoke recognizes methodName, i.e. whether the TcUnit
-        // native-stub boundary is the right place to send this call
-        // (TcXunit-6k2).
+        // Whether Invoke implements methodName, which is a different question
+        // from whether the receiver happens to be a suite. Engine gates on
+        // this so a name the suite API does not implement still falls through
+        // to the global-FUNCTION and native-function lookups that come after
+        // it, instead of being claimed here and reported unsupported.
         //
-        // Exists because "the receiver is a suite" and "this call is a suite
-        // API call" are different questions, and Engine used to conflate them:
-        // a suite instance reaching an unresolved call sent it here
-        // unconditionally, so the throw at the bottom of Invoke claimed every
-        // name a suite ever failed to resolve - including global FUNCTION POUs
-        // and native library functions, which are looked up *after* this in
-        // Engine.CallMethod and so were unreachable from inside a suite. (The
-        // pre-existing TcXunit-9su global-function tests all called from a
-        // plain FUNCTION_BLOCK, whose NativeSuiteHost is null, which is why
-        // nothing caught it.) Gating on this keeps the suite API's precedence
-        // exactly as it was for names it actually implements, while letting
-        // everything else fall through to the later lookups.
-        //
-        // MUST stay in agreement with Invoke's dispatch below. Locked by
-        // NativeMethodBridgeCanInvokeTests, which asserts the two agree over
-        // every supported name.
+        // MUST stay in agreement with Invoke's dispatch below; the two are
+        // separate walks over the same set of names. Locked by
+        // NativeMethodBridgeCanInvokeTests over every supported name.
         public static bool CanInvoke(string methodName)
         {
             if (methodName == null)
@@ -58,48 +46,32 @@ namespace xStunit.Interpreter
             "AssertTrue", "AssertFalse", "AssertEquals",
         };
 
-        // TcXunit-2o9.1: whether an unresolved unqualified call from a suite
-        // body is worth claiming as "an unwired external API" (NotSupported,
-        // classifies as unsupported-construct - STOP, don't touch the POU)
-        // versus letting it fall through to the ordinary method-not-found
-        // error (classifies as plc-fault - a real defect, fixable).
+        // Whether an unresolved call from a suite body is worth blaming on an
+        // unwired external API (reported as unsupported-construct: an
+        // interpreter gap, leave the POU alone) rather than on the PLC code
+        // (reported as plc-fault: a real, fixable defect).
         //
-        // Deliberately broader than CanInvoke: CanInvoke asks "does Invoke
-        // actually implement this name", which by the time Engine.CallMethod
-        // reaches its suite-receiver last resort has already been answered
-        // "no" (the CanInvoke gate above would have dispatched it otherwise).
-        // This asks the softer question "does this name look like it BELONGS
-        // to some grow-on-demand external surface at all" - i.e. would a
-        // human reading it assume it's a TcUnit assert/API or an IEC
-        // standard-library function, rather than a typo of one of the
-        // suite's own test-case or helper methods.
+        // Deliberately broader than CanInvoke. CanInvoke asks whether Invoke
+        // implements the name - already answered "no" by the time this is
+        // reached. This asks the softer question of whether the name looks
+        // like it BELONGS to an external surface at all, and two qualify:
         //
-        // Two surfaces qualify:
+        // 1. The upstream FB_TestSuite surface (mirrored by
+        //    src/xStunit.Runner/TcUnitStub/FB_TestSuite.cs), which is entirely
+        //    TEST*/IS_TEST*/Assert* by name. Upstream names not yet wired into
+        //    CanInvoke/Invoke still match here, so they keep the "isn't
+        //    supported yet" diagnostic instead of degrading to
+        //    method-not-found.
         //
-        // 1. The upstream FB_TestSuite surface (see TcUnit's
-        //    FB_TestSuite.TcPOU, mirrored by
-        //    src/xStunit.Runner/TcUnitStub/FB_TestSuite.cs) - entirely
-        //    TEST*/IS_TEST*/Assert* by name. Grow-on-demand names not yet
-        //    wired into CanInvoke/Invoke (e.g. AssertArrayEquals_LWORD - see
-        //    ArrayAssertSupportedTypes' comment) still match here, so they
-        //    keep the "isn't supported yet" diagnostic rather than degrading
-        //    to method-not-found.
-        //
-        // 2. IEC 61131-3 standard library functions (SEL, MUX, LIMIT, ... -
-        //    the SEL repro pinned by CliRunnerFailureKindTests/
-        //    CliRunnerTestBlastRadiusTests, TcXunit-w5x.12), which this
-        //    interpreter has no per-function registry for (unlike the
-        //    TcUnit surface, there's no CanInvoke-style table to check
-        //    against) but which are conventionally written in ALL CAPS -
-        //    same convention TcUnit's own TEST/IS_TEST_FINISHED intrinsics
-        //    follow. Every suite-authored test-case/helper method name in
-        //    this codebase's own fixtures is PascalCase (CounterStartsAtZero,
-        //    UsesGlobalFunction, Passes, ...), so an all-uppercase unresolved
-        //    name is never mistaken for one of those, and a mixed-case one
-        //    (e.g. a misspelled 'CounterStartsAtZeroo' for
-        //    'CounterStartsAtZero') is never mistaken for a standard-library
-        //    call - it falls through to the ordinary method-not-found
-        //    plc-fault instead.
+        // 2. IEC 61131-3 standard library functions (SEL, MUX, LIMIT, ...).
+        //    There is no registry to check these against, only the convention
+        //    that they are written in ALL CAPS - the same convention TcUnit's
+        //    own TEST/IS_TEST_FINISHED follow. Suite-authored test-case and
+        //    helper names are PascalCase throughout this codebase's fixtures,
+        //    so the two populations do not overlap: an all-uppercase name is
+        //    never one of the suite's own methods, and a misspelling of a
+        //    PascalCase method ('CounterStartsAtZeroo') is never mistaken for
+        //    a library call and correctly stays a plc-fault.
         public static bool LooksLikeTcUnitApiName(string methodName)
         {
             if (string.IsNullOrEmpty(methodName))
@@ -116,11 +88,10 @@ namespace xStunit.Interpreter
             return IsAllUppercaseIdentifier(methodName);
         }
 
-        // True for an identifier with at least one letter and no lowercase
-        // letters (e.g. "SEL", "F_TRIG", "MUX4") - the IEC standard-library
-        // naming convention LooksLikeTcUnitApiName's case 2 above matches
-        // against. Digits/underscores are allowed anywhere and don't affect
-        // the verdict either way.
+        // True for an identifier with at least one letter and no lowercase one
+        // ("SEL", "F_TRIG", "MUX4"). Digits and underscores are allowed
+        // anywhere and never decide the verdict on their own - "_1" is not an
+        // IEC library name.
         private static bool IsAllUppercaseIdentifier(string name)
         {
             var sawLetter = false;
@@ -170,17 +141,12 @@ namespace xStunit.Interpreter
                     }
                 case "AssertEquals":
                     {
-                        // TcXunit-gd2.5: type-erased AssertEquals(Expected:
-                        // ANY, Actual: ANY, Message) dispatcher. Expected/
-                        // Actual's declared IEC type names are resolved by
-                        // Engine.Invocation.cs (from the argument
-                        // expression, before evaluation) and passed in via
-                        // anyTypeNames, since NativeMethodBridge only ever
-                        // sees the already-evaluated CLR values here -
-                        // which, for several IEC scalar types, are
-                        // ambiguous/shared CLR representations (see
-                        // ScalarAssertType.cs) and can't be told apart on
-                        // their own.
+                        // AssertEquals(Expected: ANY, Actual: ANY, Message).
+                        // The declared IEC type names have to arrive in
+                        // anyTypeNames because only evaluated CLR values reach
+                        // here, and several IEC scalar types share a CLR
+                        // representation (see ScalarAssertType.cs) - they
+                        // cannot be told apart from the values alone.
                         var args = ResolveArgs(ScalarAssertParamNames, positional, named);
                         string expectedTypeName = null;
                         string actualTypeName = null;
@@ -190,19 +156,12 @@ namespace xStunit.Interpreter
                         return null;
                     }
                 default:
-                    // TcXunit-gd2.6: table-driven ARRAY[*] equality dispatch,
-                    // same shape as the scalar dispatch below but keyed off
-                    // the AssertArrayEquals_<TYPE> suffix - checked first
-                    // since it's the more specific prefix ("AssertEquals_"
-                    // doesn't match an "AssertArrayEquals_..." name, but
-                    // checking array first keeps the two dispatches visually
-                    // paired). Restricted to ArrayAssertSupportedTypes rather
-                    // than the full ScalarAssertType registry (grow-on-demand:
-                    // LWORD is the one remaining upstream array assert not
-                    // wired up yet). REAL/LREAL (TcXunit-gd2.7) take a Delta
-                    // VAR_INPUT, same as their scalar AssertEquals_REAL/
-                    // _LREAL counterparts - HasDelta picks the right param
-                    // list, mirroring the scalar dispatch below.
+                    // ARRAY[*] equality, keyed off the AssertArrayEquals_<TYPE>
+                    // suffix. Restricted to ArrayAssertSupportedTypes rather
+                    // than the whole ScalarAssertType registry, since not
+                    // every scalar type upstream has an array assert. REAL and
+                    // LREAL take a Delta VAR_INPUT just as their scalar
+                    // counterparts do, so HasDelta picks the param list.
                     if (methodName.StartsWith("AssertArrayEquals_", StringComparison.Ordinal))
                     {
                         var typeName = methodName.Substring("AssertArrayEquals_".Length);
@@ -217,31 +176,23 @@ namespace xStunit.Interpreter
                         }
                     }
 
-                    // TcXunit-gd2.10: AssertArray2dEquals_<TYPE>/
-                    // AssertArray3dEquals_<TYPE> (REAL/LREAL only, matching
-                    // upstream - it has no non-float 2D/3D array asserts).
-                    // Unlike AssertArrayEquals_<TYPE> above, the dimension
-                    // count is baked into the method name itself ("2d"/"3d"
-                    // between "Array" and "Equals", not just a type suffix),
-                    // so the prefix is "AssertArray2dEquals_"/
-                    // "AssertArray3dEquals_" rather than a single shared
-                    // prefix - but both forward to the exact same host call
-                    // as the 1D case. AssertArrayEqualsCall/AssertArrayEquals
-                    // are already dimension-agnostic (ArrayValue.Dimensions
-                    // is a per-dimension list, and the Runner's shape-check/
-                    // UnflattenIndex loop over Count generically), confirmed
-                    // by reading ArrayValue.cs/ArrayTypeInfo.cs and upstream's
-                    // FB_TestSuite.TcPOU AssertArray2dEquals_REAL/
-                    // AssertArray3dEquals_REAL: per-element mismatches format
-                    // as "ARRAY[i,j]"/"ARRAY[i,j,k]" - identical in shape to
-                    // this dispatcher's existing
-                    // $"ARRAY[{string.Join(",", index)}]" - so no new
-                    // dispatcher logic needed, just wider prefix matching.
-                    // (Upstream's SIZE-mismatch message for 2D/3D is more
-                    // verbose - "SIZE = [lo..hi,lo..hi] (WxH)" with bounds -
-                    // than this dispatcher's flat "SIZE = WxH"; kept as-is
-                    // for consistency with the existing 1D dispatcher rather
-                    // than special-cased per dimension count.)
+                    // AssertArray2dEquals_<TYPE>/AssertArray3dEquals_<TYPE>,
+                    // REAL/LREAL only because upstream has no non-float 2D/3D
+                    // array asserts. The dimension count sits inside the
+                    // method name rather than in the type suffix, hence two
+                    // prefixes instead of one - but both forward to the same
+                    // host call as the 1D case, because
+                    // AssertArrayEqualsCall/AssertArrayEquals are already
+                    // dimension-agnostic (ArrayValue.Dimensions is a
+                    // per-dimension list and the Runner unflattens indices
+                    // generically). Adding a dimension is therefore only ever
+                    // wider prefix matching here.
+                    //
+                    // Upstream's SIZE-mismatch message for 2D/3D spells out
+                    // bounds ("SIZE = [lo..hi,lo..hi] (WxH)") where this
+                    // reports a flat "SIZE = WxH"; kept flat for consistency
+                    // with the 1D dispatcher rather than special-cased per
+                    // dimension count.
                     if (methodName.StartsWith("AssertArray2dEquals_", StringComparison.Ordinal) ||
                         methodName.StartsWith("AssertArray3dEquals_", StringComparison.Ordinal))
                     {
@@ -257,13 +208,9 @@ namespace xStunit.Interpreter
                         }
                     }
 
-                    // TcXunit-gd2.11: table-driven scalar dispatch. Parses
-                    // the AssertEquals_<TYPE> suffix from the native call
-                    // name, looks up the ScalarAssertType registry to know
-                    // whether a Delta arg is expected, and calls the one
-                    // generic host method instead of switching per type -
-                    // adding a new scalar type means adding a registry entry,
-                    // not a new case here.
+                    // Scalar dispatch, driven by the ScalarAssertType registry
+                    // rather than a case per type: adding a scalar type means
+                    // adding a registry entry, not editing this switch.
                     if (methodName.StartsWith("AssertEquals_", StringComparison.Ordinal))
                     {
                         var typeName = methodName.Substring("AssertEquals_".Length);
@@ -280,18 +227,16 @@ namespace xStunit.Interpreter
             }
         }
 
-        // The grow-on-demand diagnostic for a TcUnit-suite call this bridge
-        // doesn't implement. Shared with Engine.CallMethod (TcXunit-6k2): since
-        // the CanInvoke gate now lets unrecognized names fall through to the
-        // global-FUNCTION/native-function lookups, a suite that exhausts those
-        // too must still be told "this TcUnit API isn't wired up yet" rather
-        // than the generic method-not-found error - the receiver being a suite
-        // is what makes that the more useful of the two messages.
+        // The diagnostic for a TcUnit-suite call this bridge doesn't
+        // implement. Shared with Engine.CallMethod, which raises it only after
+        // the global-FUNCTION and native-function lookups have also failed -
+        // by then "this TcUnit API isn't wired up yet" is more useful to the
+        // reader than a generic method-not-found.
         //
-        // TcXunit-3tx.1: an UnsupportedConstructException (still a
-        // NotSupportedException, so every existing catch/assert is unaffected)
-        // so the reported failure names the construct - methodName - as a field
-        // rather than only inside prose a consumer would have to regex.
+        // UnsupportedConstructException so the reported failure carries
+        // methodName as a field rather than only inside prose a consumer would
+        // have to parse. Still a NotSupportedException, so existing catches
+        // are unaffected.
         public static NotSupportedException NotSupported(string methodName) =>
             new UnsupportedConstructException(
                 methodName,
@@ -303,27 +248,24 @@ namespace xStunit.Interpreter
         private static readonly string[] ArrayAssertParamNames = { "Expecteds", "Actuals", "Message" };
         private static readonly string[] ArrayAssertWithDeltaParamNames = { "Expecteds", "Actuals", "Delta", "Message" };
 
-        // The upstream AssertArrayEquals_<TYPE> overloads this dispatcher
-        // backs: the 12 non-float types from TcXunit-gd2.6, plus REAL/LREAL
-        // from TcXunit-gd2.7 - every scalar type in the registry except
-        // LWORD (upstream has AssertArrayEquals_LWORD too, but it's not part
-        // of this ticket's scope - grow-on-demand).
+        // Every scalar type in the ScalarAssertType registry except LWORD,
+        // which upstream has an AssertArrayEquals_ overload for but this
+        // bridge has not needed yet.
         private static readonly HashSet<string> ArrayAssertSupportedTypes = new HashSet<string>
         {
             "BOOL", "BYTE", "DINT", "DWORD", "INT", "LINT", "LREAL", "REAL", "SINT", "UDINT", "UINT", "ULINT", "USINT", "WORD",
         };
 
-        // TcXunit-gd2.10: upstream only has AssertArray2dEquals_<TYPE>/
-        // AssertArray3dEquals_<TYPE> for REAL/LREAL (no non-float 2D/3D
-        // array asserts exist upstream), unlike the 1D array asserts above.
+        // Narrower than the 1D set above because upstream declares 2D/3D array
+        // asserts for the float types only.
         private static readonly HashSet<string> MultiDimArrayAssertSupportedTypes = new HashSet<string>
         {
             "LREAL", "REAL",
         };
 
-        // TEST_ORDERED/TEST_FINISHED_NAMED/IS_TEST_FINISHED take a single
-        // TestName input in upstream - accept it either positionally or by
-        // that name (TcXunit-k28.7).
+        // TEST_ORDERED/TEST_FINISHED_NAMED/IS_TEST_FINISHED each take a single
+        // upstream input called TestName, accepted either positionally or by
+        // that name.
         private static string ResolveTestName(IReadOnlyList<object> positional, IReadOnlyDictionary<string, object> named)
         {
             if (named.TryGetValue("TestName", out var byName))
@@ -331,14 +273,13 @@ namespace xStunit.Interpreter
             return (string)positional[0];
         }
 
-        // TcXunit-bda: Assert*/AssertEquals_* calls are native intrinsics
-        // like MEMCPY/MEMSET (no VarBlockParser decls for BindParams to
-        // reconcile named args against - see Engine.ResolveIntrinsicArgs),
-        // so real ST callers that pass args positionally (e.g.
-        // AssertTrue(cond, 'msg')) hit named[...] directly and throw
-        // KeyNotFoundException. Resolve each declared param by name first,
-        // falling back to positional args in left-to-right order for
-        // params not given by name (mirrors BindParams' shared posIndex).
+        // Assert*/AssertEquals_* are native intrinsics like MEMCPY/MEMSET:
+        // there are no parsed VAR declarations for the Engine's ordinary
+        // parameter binding to reconcile named arguments against, so this
+        // bridge has to do it. Each declared parameter is resolved by name
+        // first, then filled from the positional arguments left to right -
+        // without which a perfectly ordinary positional call like
+        // AssertTrue(cond, 'msg') would find nothing under either name.
         private static IReadOnlyDictionary<string, object> ResolveArgs(
             IReadOnlyList<string> paramNamesInDeclOrder,
             IReadOnlyList<object> positional,

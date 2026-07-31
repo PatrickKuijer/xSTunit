@@ -4,11 +4,12 @@ using xStunit.Runner.TcUnitStub;
 
 namespace xStunit.Interpreter
 {
-    // Native-stub boundary (TcXunit-w5x.7): backs an interpreted FB that
-    // EXTENDS TcUnit.FB_TestSuite. The interpreter drives TEST()/
-    // AssertEquals_INT()/etc itself as it executes the suite's interpreted
-    // statements, instead of Body() being a compiled override - Body() is a
-    // no-op here on purpose.
+    // Backs an interpreted FB that EXTENDS TcUnit.FB_TestSuite, exposing the
+    // stub's protected assert/test surface to NativeMethodBridge.
+    //
+    // Body() is a deliberate no-op: upstream expects a compiled override to
+    // run the tests, but here the interpreter executes the suite's ST
+    // statements itself and calls TEST()/AssertEquals_INT()/etc as it goes.
     public sealed class SuiteHost : FB_TestSuite
     {
         protected override void Body()
@@ -31,34 +32,28 @@ namespace xStunit.Interpreter
         public void AssertFalseCall(bool condition, string message) =>
             AssertFalse(condition, message);
 
-        // Table-driven scalar dispatch (TcXunit-gd2.11): collapses the 4
-        // named AssertEquals<Type> wrappers this used to have (Int/Bool/
-        // String/Real) into one generic forward. No compile-time-name
-        // constraint is needed on this side - only NativeMethodBridge calls
-        // it, keyed off the AssertEquals_<TYPE> suffix it parsed from the
-        // native call name.
+        // typeName carries the IEC type the ST caller wrote, since one generic
+        // forward replaces what would otherwise be a wrapper per scalar type.
+        // Only NativeMethodBridge calls this, keyed off the AssertEquals_<TYPE>
+        // suffix it parsed from the native call name.
         public new void AssertEqualsScalar(string typeName, object expected, object actual, object delta, string message) =>
             base.AssertEqualsScalar(typeName, expected, actual, delta, message);
 
-        // Type-erased AssertEquals(ANY) dispatcher (TcXunit-gd2.5): thin
-        // forward, same shape as AssertEqualsScalar above - NativeMethodBridge
-        // has already resolved Expected/Actual's declared IEC type names
-        // (via Engine.Invocation.cs, before they were evaluated away to bare
-        // CLR values) by the time this is called.
+        // The type names must be passed in because the values arrive here
+        // already evaluated to bare CLR values, which for several IEC scalar
+        // types are indistinguishable. Engine.Invocation.cs resolves them from
+        // the argument expressions before evaluation.
         public void AssertEqualsAnyCall(
             string expectedTypeName, object expectedValue,
             string actualTypeName, object actualValue,
             string message) =>
             AssertEqualsAny(expectedTypeName, expectedValue, actualTypeName, actualValue, message);
 
-        // ARRAY[*] equality dispatch (TcXunit-gd2.6): flattens each
-        // ArrayValue's per-dimension (Lo, Hi) bounds into the plain
-        // size/lower-bound primitive lists AssertArrayEquals (Runner
-        // project, no ArrayValue reference) expects, then forwards its own
-        // already-flattened Elements storage straight through - no copy
-        // needed since AssertArrayEquals only reads. delta is null for the
-        // 12 non-float types; REAL/LREAL (TcXunit-gd2.7) pass their boxed
-        // Delta VAR_INPUT through here.
+        // Flattens each ArrayValue's per-dimension (Lo, Hi) bounds into the
+        // primitive size/lower-bound lists AssertArrayEquals expects, because
+        // the Runner project cannot reference ArrayValue. Elements is already
+        // flat and is passed through uncopied - AssertArrayEquals only reads
+        // it. delta is null for every non-float type.
         public void AssertArrayEqualsCall(string typeName, ArrayValue expected, ArrayValue actual, object delta, string message) =>
             AssertArrayEquals(
                 typeName,
@@ -74,19 +69,19 @@ namespace xStunit.Interpreter
 
         public IReadOnlyList<TestCaseResult> Collect() => Run();
 
-        // TcXunit-3tx.3: the two halves of "charge this fault to the open test
-        // instead of killing the suite". Thin forwards, same shape as every
-        // other member here - Engine (not this type) decides when a fault is
-        // one test's problem rather than the suite's.
+        // The two halves of "charge this fault to the open test instead of
+        // killing the suite". Engine, not this type, decides when a fault is
+        // one test's problem rather than the whole suite's.
         public bool HasOpenTestCase => HasOpenTest;
 
         public void AbortCurrentTestCase(AssertionFailure failure) => AbortCurrentTest(failure);
 
-        // TcXunit-3tx.2: announces which native call is about to run and where
-        // it is written, so a failure it records can name both. Called for
-        // every TcUnit native call, not just asserts - TEST()/TEST_FINISHED()
-        // simply never reach Fail(), and gating on "is this an assert name"
-        // here would duplicate NativeMethodBridge's dispatch table.
+        // Announces which native call is about to run and where it is written,
+        // so a failure recorded during it can name both. Called for every
+        // TcUnit native call rather than only the asserts: TEST()/
+        // TEST_FINISHED() simply never reach Fail(), and filtering on "is this
+        // an assert name" here would duplicate NativeMethodBridge's dispatch
+        // table.
         public void EnterNativeCall(string methodName, AssertSite site)
         {
             CurrentAssert = methodName;

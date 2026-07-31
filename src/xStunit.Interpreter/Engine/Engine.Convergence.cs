@@ -5,10 +5,9 @@ namespace xStunit.Interpreter
 {
     public sealed partial class Engine
     {
-        // FbInstance.StepCycles(n) - re-invokes the instance's top-level body n
-        // times, reusing the instance's existing Cell state across calls (same
-        // persistence CallMethod relies on). No dt/scheduler: caller controls
-        // ordering across multiple instances by choosing call order.
+        // Re-invokes the instance's top-level body n times, reusing its existing
+        // Cell state across calls. There is no dt and no scheduler: ordering
+        // across several instances is whatever order the caller invokes them in.
         private void StepCycles(FbInstance instance, int cycles)
         {
             var def = _registry.Get(instance.ActualTypeName);
@@ -17,31 +16,26 @@ namespace xStunit.Interpreter
 
             for (var i = 0; i < cycles; i++)
             {
-                // Top-level VAR_TEMP fields reset to default before every
-                // cycle, not just once at instantiation - TcXunit-9go.
+                // Every cycle, not just once at instantiation.
                 ResetTopLevelTempFields(instance);
 
-                // ExecuteBody owns the "a top-level RETURN inside the FB's
-                // cyclic body only ends this cycle; it must not unwind into
-                // whatever ST call (e.g. a TcUnit test method) invoked
-                // StepCycles" rule, plus fault attribution (TcXunit-p3t.1).
+                // ExecuteBody owns the rule that a top-level RETURN in the FB's
+                // cyclic body ends only this cycle and must not unwind into
+                // whatever ST call invoked StepCycles, plus fault attribution.
                 //
-                // TcXunit-n65: GetStatements is resolved lazily, inside the
-                // lambda ExecuteBody calls from within its own try - not
-                // hoisted above the loop - so a lazy parse failure in this
-                // instance's body attributes to this instance's own frame
-                // rather than to whatever caller invoked StepCycles.
-                // TypeRegistry.GetStatements caches by body text, so calling
-                // it once per cycle costs a dictionary lookup, not a re-parse.
+                // GetStatements stays inside the lambda rather than being
+                // hoisted out of the loop, so a lazy parse failure in this
+                // instance's body attributes to this instance's own frame rather
+                // than to StepCycles' caller. TypeRegistry.GetStatements caches
+                // by body text, so the per-cycle call is a dictionary lookup,
+                // not a re-parse.
                 ExecuteBody(() => _registry.GetStatements(def.ImplementationText), new Frame(instance, instance.ActualTypeName, null, def.BodyStartLine));
             }
         }
 
-        // AssertConverges/AssertConvergesAndLatches (TcXunit-w5x.15.9, T6
-        // design): the helper owns the master-then-proxy stepping loop so
-        // test authors don't hand-roll polling. Both throw (rather than
-        // record a TcUnit-style failure) with a per-field diff, matching
-        // T6's "actionable diagnosis" resolution.
+        // Owns the master-then-proxy stepping loop so test authors don't
+        // hand-roll polling. Throws a per-field diff rather than recording a
+        // TcUnit-style failure; see ConvergenceAssertionException.
         private void AssertConverges(FbInstance master, FbInstance proxy, string[] fieldNames, int maxCycles)
         {
             for (var i = 1; i <= maxCycles; i++)

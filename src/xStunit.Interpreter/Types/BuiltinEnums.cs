@@ -2,10 +2,8 @@ using System.Collections.Generic;
 
 namespace xStunit.Interpreter
 {
-    // Beckhoff library enums with no source in the solution (e.g.
-    // TcEventSeverity from Tc3_EventLogger) - registered here so
-    // Type.Member expressions resolve without needing a full DUT/library
-    // definition (TcXunit-f6b / TcXunit-qit).
+    // Enums that live in vendor libraries rather than in any file we parse, so
+    // a Type.Member expression naming one still resolves without a DUT for it.
     internal static class BuiltinEnums
     {
         public static readonly IReadOnlyDictionary<string, IReadOnlyDictionary<string, int>> Types =

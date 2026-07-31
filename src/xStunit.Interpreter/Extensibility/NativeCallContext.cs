@@ -5,14 +5,14 @@ using System.Linq;
 namespace xStunit.Interpreter.Extensibility
 {
     // Everything an IXstunitNativeFunction is allowed to see about the call
-    // being made (TcXunit-6k2): the function's name, its already-evaluated
-    // arguments, and a way to read bytes behind a POINTER argument.
+    // being made: the function's name, its already-evaluated arguments, and a
+    // way to read bytes behind a POINTER argument.
     //
     // Arguments arrive evaluated - a plugin gets CLR values, never Expr trees
-    // or Frames - so plugin code can't re-enter the interpreter, evaluate
+    // or Frames - so plugin code cannot re-enter the interpreter, evaluate
     // arbitrary ST, or observe the caller's scope. The one interpreter service
-    // exposed is ReadBytes, because the byte-layout machinery behind a POINTER
-    // TO BYTE (Engine.ByteLayout.cs) is not something a plugin could
+    // exposed is byte reading, because the byte-layout machinery behind a
+    // POINTER TO BYTE (Engine.ByteLayout.cs) is not something a plugin could
     // reasonably reimplement, and a large share of real library functions
     // (checksums, CRCs, serializers) exist precisely to walk a byte buffer.
     public sealed class NativeCallContext
@@ -32,8 +32,7 @@ namespace xStunit.Interpreter.Extensibility
         }
 
         // The ST identifier as the caller wrote it, which may differ in casing
-        // from IXstunitNativeFunction.Name (lookup is case-insensitive). Useful
-        // for error messages that should echo the source text.
+        // from IXstunitNativeFunction.Name (lookup is case-insensitive).
         public string FunctionName { get; }
 
         // Arguments passed positionally, in source order. A call that names
@@ -43,48 +42,31 @@ namespace xStunit.Interpreter.Extensibility
         // Arguments passed as `name := value`, keyed by the name as written.
         public IReadOnlyDictionary<string, object> NamedArgs { get; }
 
-        // TcXunit-kuc: positions this call has confirmed are filled by a named
-        // argument, discovered as the plugin queries them (a plugin's `position`
-        // argument is always the parameter's declared index in the signature -
-        // see every IXstunitNativeFunction under samples/ - never a running
-        // "slot within PositionalArgs" counter, since a plugin has no way to
-        // know at compile time which of its parameters a given call will name).
-        // Needed because a named argument can occupy any declared position, so
-        // a later positional argument must skip it rather than being read
-        // straight out of PositionalArgs by its raw declared index (that was
-        // the bug: `FIND(STR1 := s, '[')` left STR2 reading PositionalArgs[1],
-        // which doesn't exist - the one positional arg supplied belongs at
-        // PositionalArgs[0]).
+        // Declared positions this call is now known to fill by name,
+        // accumulated as the plugin queries them. Tracked because a named
+        // argument can occupy any declared position, so every parameter after
+        // it sits one PositionalArgs slot earlier than its declared index.
         private readonly HashSet<int> _namedPositions = new HashSet<int>();
 
-        // Resolves one declared parameter the way TwinCAT call syntax allows it
-        // to be supplied: by name, else by position. Mirrors the interpreter's
-        // own intrinsic-argument resolution (Engine.Expressions.cs's
-        // ResolveIntrinsicArgs) and BindParams (Engine.Invocation.cs) /
-        // ArgBinder: a positional argument fills the next declared parameter
-        // that isn't already spoken for by name, not the PositionalArgs slot
-        // matching its own declared index.
+        // Resolves one declared parameter the way TwinCAT call syntax allows
+        // it to be supplied: by name, else by position - a positional argument
+        // fills the next declared parameter not already spoken for by name.
+        // Same rule as the interpreter's own argument binding
+        // (Engine.Expressions.cs's ResolveIntrinsicArgs, ArgBinder).
         //
-        // `position` is always the parameter's 0-based declared index in the
-        // signature (matching every IXstunitNativeFunction under samples/,
-        // which query params left-to-right by that index). The declared index
-        // and the PositionalArgs slot coincide only once every parameter
-        // before this one has also been resolved positionally; the moment one
-        // of them is named, everything after it shifts left by one slot per
-        // named parameter that precedes it. That shift is computed here as
-        // `position` minus however many named positions less than `position`
-        // have been discovered so far (this call included, via the branch
-        // above) - correct as long as parameters are queried in ascending
-        // declared-index order, which is how every plugin in this codebase
-        // (and the natural way to write one) reads its own arguments. A
-        // plugin that deliberately queries out of order (e.g. reading a later
-        // parameter before an earlier one purely for local computation, as
-        // CheckSum16Function does) is unaffected as long as it does so only
-        // among parameters that end up all-positional or all-named for that
-        // call - mixing an out-of-order read with a *named* earlier parameter
-        // it hasn't queried yet is the one combination this can't see coming,
-        // since nothing this class receives records a plugin's full parameter
-        // list up front.
+        // `position` is the parameter's 0-based index in the DECLARED
+        // signature, never a slot within PositionalArgs; a plugin cannot know
+        // at compile time which of its parameters a given call will name. The
+        // two coincide only until some earlier parameter is passed by name,
+        // after which everything following it shifts one slot left per
+        // preceding named argument. Without that correction
+        // `FIND(STR1 := s, '[')` would send STR2 to PositionalArgs[1], which
+        // does not exist - the single positional argument is at index 0.
+        //
+        // The shift is only correct while a plugin queries its parameters in
+        // ascending declared order, since named positions are discovered as
+        // they are asked for and nothing here receives the plugin's full
+        // parameter list up front.
         //
         // Returns false when the argument was omitted, letting a plugin model
         // an optional trailing parameter (CONCAT's STR3..STR10 shape).
@@ -124,14 +106,10 @@ namespace xStunit.Interpreter.Extensibility
             if (TryGetArg(paramName, position, out var value))
                 return value;
 
-            // TcXunit-kuc: name the actual shortfall rather than a flat
-            // positional/named count that reads the same whether the caller
-            // wrote too few arguments or wrote enough but with a named
-            // argument occupying a declared position before this one - the
-            // latter shifts which PositionalArgs slot this parameter needs by
-            // however many named arguments precede it, so "missing" here
-            // means that adjusted slot didn't exist, not that PositionalArgs
-            // itself came up short by the raw declared position.
+            // A flat positional/named count reads identically whether the
+            // caller supplied too few arguments or supplied enough but named
+            // one that occupies an earlier declared position. Only the latter
+            // shifts the slot this parameter needs, so say which happened.
             var precedingNamedCount = 0;
             foreach (var namedPosition in _namedPositions)
                 if (namedPosition < position)
@@ -147,13 +125,12 @@ namespace xStunit.Interpreter.Extensibility
                 $"{FunctionName} missing required argument '{paramName}' (position {position}); {detail}");
         }
 
-        // Integer accessor covering every IEC integer type at once: the
-        // interpreter represents SINT/USINT/BYTE/INT/UINT/WORD/DINT as int but
-        // UDINT/DWORD/LINT as long and ULINT/LWORD as ulong, so a plugin that
-        // pattern-matched on `is int` alone would break the moment a caller
-        // passed a UDINT - which is exactly what a size/length argument
-        // usually is. Rejects bool and floating-point rather than silently
-        // truncating them.
+        // Covers every IEC integer type at once: the interpreter represents
+        // SINT/USINT/BYTE/INT/UINT/WORD/DINT as int but UDINT/DWORD/LINT as
+        // long and ULINT/LWORD as ulong, so a plugin pattern-matching on
+        // `is int` alone breaks the moment a caller passes a UDINT - which is
+        // what a size/length argument usually is. Rejects bool and
+        // floating-point rather than silently truncating them.
         public int RequireInt32(string paramName, int position) =>
             checked((int)RequireInt64(paramName, position));
 
@@ -211,16 +188,15 @@ namespace xStunit.Interpreter.Extensibility
             }
         }
 
-        // Reads `count` bytes starting at a POINTER argument - the ADR(buf) /
-        // ADR(buf[i]) / ADR(someStruct) shapes MEMCPY already accepts, resolved
-        // through the same byte-layout rules (Engine.ByteLayout.cs), so a
-        // plugin sees exactly the bytes MEMCPY would have copied.
+        // Reads `count` bytes behind a POINTER argument - the ADR(buf) /
+        // ADR(buf[i]) / ADR(someStruct) shapes MEMCPY already accepts,
+        // resolved through the same byte-layout rules (Engine.ByteLayout.cs),
+        // so a plugin sees exactly the bytes MEMCPY would have copied.
         //
-        // Read-only by design. A plugin can inspect a buffer to compute a
+        // Read-only by design: a plugin can inspect a buffer to compute a
         // checksum or parse a record, but cannot write back into interpreted
-        // program state; a library function that mutates its output parameter
-        // is out of scope for this extension point rather than something to
-        // reach through here.
+        // program state. A library function that mutates an output parameter
+        // is out of scope for this extension point.
         public byte[] RequireBytes(string paramName, int position, int count)
         {
             var value = RequireArg(paramName, position);
@@ -247,8 +223,6 @@ namespace xStunit.Interpreter.Extensibility
         private static string Describe(object value) =>
             value == null ? "null" : $"{value.GetType().Name} ({value})";
 
-        // Convenience for the common "all arguments were positional" test/host
-        // case, so a caller doesn't have to hand-build an empty named map.
         public static NativeCallContext ForPositional(
             string functionName, params object[] positionalArgs) =>
             new NativeCallContext(

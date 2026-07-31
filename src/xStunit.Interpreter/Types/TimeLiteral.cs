@@ -2,10 +2,12 @@ using System;
 
 namespace xStunit.Interpreter
 {
-    // Parses the raw duration text captured after T#/TIME#/LTIME# per Beckhoff's
-    // documented grammar: fixed unit order d,h,m,s,ms (LTIME adds us,ns);
-    // reordering units is illegal, and overflow (e.g. 68s) is only allowed in
-    // the first/highest unit actually used (e.g. T#100s12ms is legal).
+    // Parses the raw duration text captured after T#/TIME#/LTIME#. Units come
+    // in fixed descending order d,h,m,s,ms (LTIME adds us,ns) and reordering
+    // is illegal; a unit may exceed its own range only when it is the first
+    // one present, so T#100s12ms is legal and T#1m68s is not. TIME resolves to
+    // milliseconds, LTIME to nanoseconds - the same literal text means
+    // different numbers under the two.
     internal static class TimeLiteral
     {
         private static readonly (string Unit, long Multiplier, int Max)[] TimeSegments =
@@ -58,9 +60,9 @@ namespace xStunit.Interpreter
                 if (segmentIndex < 0 || segmentIndex <= lastSegmentIndex)
                     throw new ParseException($"Unexpected or out-of-order unit '{unit}' in TIME literal '{text}'", unit);
 
-                // Overflow is only legal in the first unit actually used (the
-                // most-significant one present); any later unit must stay within
-                // its own range (e.g. m5s68 is illegal, s > 59).
+                // lastSegmentIndex < 0 means this is the first unit present,
+                // which alone may carry the whole duration and so is not range
+                // checked; every later unit must stay inside its own range.
                 if (lastSegmentIndex >= 0 && number > segments[segmentIndex].Max)
                     throw new ParseException($"Value {number} overflows unit '{unit}' in TIME literal '{text}'", unit);
 

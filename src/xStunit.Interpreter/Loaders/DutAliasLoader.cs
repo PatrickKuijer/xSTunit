@@ -7,12 +7,11 @@ using xStunit.Parser;
 namespace xStunit.Interpreter
 {
     // Parses ALIAS .TcDUT definitions - e.g. "TYPE T_MaxString :
-    // STRING(255); END_TYPE" - across the merged set of POU directories,
-    // mirroring DutStructLoader/GvlLoader's shape (TcXunit-6hg): a
-    // structurally unexpected .TcDUT file is skipped/reported, not fatal to
-    // registry build, and the same file set is scanned independently of
-    // DutStructLoader so this can be wired in (or left out) at each call
-    // site without disturbing STRUCT loading.
+    // STRING(255); END_TYPE" - across the merged set of POU directories.
+    // Same resilience as DutStructLoader/GvlLoader: a structurally
+    // unexpected .TcDUT file is skipped and reported, never fatal to
+    // registry build. Rescans the same .TcDUT set independently of
+    // DutStructLoader, so a call site can wire in one without the other.
     //
     // An ALIAS DUT's declaration text has no STRUCT/ENUM body - just a
     // "TYPE Name : <underlying type>;" header, optionally split across two
@@ -30,13 +29,12 @@ namespace xStunit.Interpreter
             || text.StartsWith("STRUCT", StringComparison.Ordinal)
             || text.StartsWith("(", StringComparison.Ordinal);
 
-        // Extracts (name, underlyingTypeName) from an ALIAS DUT's
-        // declaration text - e.g. "T_MaxString" / "STRING(255)" from
-        // "TYPE T_MaxString : STRING(255); END_TYPE". Returns false for
-        // STRUCT/ENUM declarations (recognised by their body shape) and for
-        // anything else that doesn't look like a single underlying-type
-        // reference terminated by ';', so this can be tried independently
-        // of DutStructLoader.IsStructDeclaration.
+        // Extracts (name, underlyingTypeName) from an ALIAS DUT's declaration
+        // text - e.g. "T_MaxString" / "STRING(255)" from "TYPE T_MaxString :
+        // STRING(255); END_TYPE". Returns false for STRUCT/ENUM declarations
+        // and for anything else that isn't a single underlying-type reference
+        // terminated by ';', so a caller can try this without first consulting
+        // DutStructLoader.IsStructDeclaration.
         public static bool TryParseAlias(string declarationText, out string name, out string underlyingTypeName)
         {
             name = null;
@@ -78,14 +76,13 @@ namespace xStunit.Interpreter
             return false;
         }
 
-        // Well-known Beckhoff system-library ALIAS types (TcXunit-w51): these
-        // have no project-authored .TcDUT - they only exist as compiled
-        // library metadata (.tmc/.xti DataType entries), which is out of
-        // scope to parse for now, so DutAliasLoader can never discover them
-        // from source. Seeded here (grow-on-demand as more library aliases
-        // are hit) and merged in as defaults beneath whatever the project's
-        // own .TcDUT files define, so a project-authored alias of the same
-        // name (unlikely, but not impossible) always wins.
+        // Well-known Beckhoff system-library ALIAS types. These have no
+        // project-authored .TcDUT - they exist only as compiled library
+        // metadata (.tmc/.xti DataType entries), which nothing here parses, so
+        // they could never be discovered from source. Grown on demand as more
+        // library aliases are hit. Load seeds these FIRST so a project's own
+        // .TcDUT of the same name (unlikely, but not impossible) overwrites
+        // them rather than the other way round.
         private static readonly IReadOnlyDictionary<string, string> WellKnownLibraryAliases =
             new Dictionary<string, string>
             {

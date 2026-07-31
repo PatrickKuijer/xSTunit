@@ -8,7 +8,7 @@ namespace xStunit.Interpreter
     public sealed partial class Engine
     {
         // Bridge between the interpreter's call machinery and a host-registered
-        // stand-in for a compiled-only TwinCAT library function (TcXunit-6k2).
+        // stand-in for a compiled-only TwinCAT library function.
         //
         // Everything crosses the boundary already evaluated: the plugin gets
         // CLR values, not Expr trees, and never sees the Frame. That is the
@@ -48,12 +48,11 @@ namespace xStunit.Interpreter
             return function.Invoke(context);
         }
 
-        // Reads count bytes from behind a POINTER argument using the same
-        // byte-layout rules MEMCPY uses (Engine.ByteLayout.cs's
-        // ResolveByteTarget), so a plugin sees exactly the bytes MEMCPY would
-        // have copied out of the same pointer - whether it points at a real
-        // BYTE array element, or at a scalar/STRUCT Cell that gets packed into
-        // a byte view on the fly.
+        // Reads count bytes from behind a POINTER argument through
+        // ResolveByteTarget, so a plugin sees exactly the bytes MEMCPY would
+        // have copied out of the same pointer - whether it points at a real BYTE
+        // array element or at a scalar/STRUCT Cell packed into a byte view on
+        // the fly.
         //
         // Read-only: ResolveByteTarget's write-back Commit is deliberately
         // discarded. A plugin can inspect interpreted program state through a

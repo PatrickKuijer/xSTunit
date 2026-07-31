@@ -2,33 +2,24 @@ using System;
 
 namespace xStunit.Interpreter
 {
-    // Single source of truth for the IEC 61131-3 *elementary non-numeric*
-    // type name -> default value fact (TcXunit-mvbk). Engine.DefaultValue's
-    // BOOL/TIME/LTIME/DATE-family/STRING chain and SeedReturnCell's
-    // IsSeedableElementaryNonNumericType each encoded this same set, the
-    // latter with a comment conceding it had to be "kept in sync with the
-    // branches Engine.DefaultValue actually returns a plain constant for".
-    //
-    // Scope is deliberately narrow, mirroring IecNumericType's placement and
-    // shape (static, pure typeName->value, no Engine state):
-    //   - numeric defaults stay with IecNumericType, already single-owned;
-    //   - STRUCT/ARRAY/FB defaults stay in Engine, since they need
-    //     materialization (FbInstance, element construction), not a constant;
-    //   - POINTER TO/REFERENCE TO stay in Engine, being a prefix rule rather
-    //     than a type-name entry.
+    // Single source of truth for the initial value of an IEC 61131-3
+    // *elementary non-numeric* type - a declared VAR of one of these starts at
+    // the value returned here, not at CLR null. Everything outside that set is
+    // deliberately elsewhere: numerics belong to IecNumericType; STRUCT/ARRAY/
+    // FB defaults stay in Engine, needing materialization rather than a
+    // constant; POINTER TO/REFERENCE TO stay there too, being a prefix rule
+    // rather than a type-name entry.
     internal static class IecElementaryDefault
     {
-        // TcXunit-fzm: IEC 61131-3 type names are case-insensitive (a VAR
-        // declared 'bool' or 'Time' is exactly as valid as 'BOOL'/'TIME'), so
-        // every compare here is OrdinalIgnoreCase - the same decision as
-        // IecNumericType, StringTypeInfo, ArrayTypeInfo, and TypeRegistry.
+        // IEC 61131-3 type names are case-insensitive (a VAR declared 'bool'
+        // or 'Time' is as valid as 'BOOL'/'TIME'), hence OrdinalIgnoreCase
+        // throughout.
         public static bool TryGetDefault(string typeName, out object value)
         {
             if (typeName != null)
             {
-                // STRING/WSTRING plus their sized STRING(n)/WSTRING(n) forms,
-                // whose size text may itself be a constant expression - hence
-                // StringTypeInfo rather than a keyword compare here.
+                // A keyword compare would not do: the sized STRING(n) form's
+                // size may itself be a constant expression.
                 if (StringTypeInfo.IsStringType(typeName))
                 {
                     value = "";
@@ -53,8 +44,8 @@ namespace xStunit.Interpreter
                     return true;
                 }
 
-                // DATE/DATE_AND_TIME/TIME_OF_DAY (TcXunit-gd2.13) all box as
-                // uint (see DateTimeLiteral.cs), same as TIME above.
+                // The whole DATE family boxes as uint, like TIME above, though
+                // the three disagree on unit and origin (see DateTimeLiteral).
                 if (typeName.Equals("DATE", StringComparison.OrdinalIgnoreCase)
                     || typeName.Equals("DATE_AND_TIME", StringComparison.OrdinalIgnoreCase)
                     || typeName.Equals("TIME_OF_DAY", StringComparison.OrdinalIgnoreCase))

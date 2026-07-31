@@ -2,8 +2,10 @@ using System.Collections.Generic;
 
 namespace xStunit.Interpreter
 {
-    // ARRAY value: flattened row-major element storage plus the declared
-    // lo..hi bounds per dimension (multi-dim support - TcXunit-w5x.15.6).
+    // ARRAY value. Elements is flat row-major storage for every dimension in
+    // Dimensions, which carries the declared lo..hi bounds - IEC array
+    // indices need not start at 0, so an index only becomes an Elements
+    // offset after subtracting Lo.
     public sealed class ArrayValue
     {
         public IReadOnlyList<(int Lo, int Hi)> Dimensions { get; }

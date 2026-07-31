@@ -3,18 +3,16 @@ using System.Linq;
 
 namespace xStunit.Interpreter
 {
-    // TwinCAT PROPERTY (Get/Set) dispatch (TcXunit-sxv): a property is
-    // neither a Field (no Cell materialized at NewInstance time, TcPouParser
-    // never contributed one) nor a Method (no VAR_INPUT/OUTPUT param list to
-    // bind) - it's invoked by running its accessor body in a fresh Frame and
-    // reading/seeding a Local named after the property itself, mirroring the
-    // existing METHOD return-value convention (CallMethod reads
-    // newFrame.Locals[methodName] the same way).
+    // TwinCAT PROPERTY (Get/Set) dispatch. A property is neither a Field (no
+    // Cell is materialized for it at NewInstance time) nor a Method (there is
+    // no VAR_INPUT/OUTPUT param list to bind), so it is invoked by running its
+    // accessor body in a fresh Frame and reading or seeding a Local named after
+    // the property itself - the same convention CallMethod uses for a METHOD's
+    // return value.
     public sealed partial class Engine
     {
-        // Ancestry walk identical in shape to CallMethod's method lookup -
-        // first declaring type in the EXTENDS chain (starting at
-        // startType) whose Properties list has a matching name wins.
+        // Same ancestry walk as CallMethod's method lookup: the first type in
+        // the EXTENDS chain declaring a property of this name wins.
         private bool TryFindProperty(
             string startType,
             string propertyName,
@@ -51,20 +49,17 @@ namespace xStunit.Interpreter
 
             var frame = new Frame(instance, definingType);
 
-            // TcXunit-8we: same defect and same fix as CallMethod/
-            // CallGlobalFunction's SeedReturnCell (TcXunit-cq6) - the Get
-            // accessor's return value lives in a Local named after the
-            // property, left to be created lazily by its first assignment.
-            // A PROPERTY nGain : LREAL opening its Get with 'nGain := 0.0;'
-            // (a bare decimal literal, which lexes as REAL) got a REAL cell,
-            // and any later LREAL assignment into it was rejected as an
-            // implicit narrowing.
+            // Without this the Local holding the return value is created by its
+            // first assignment, which decides its type: a PROPERTY nGain : LREAL
+            // opening its Get with 'nGain := 0.0;' gets a REAL cell (a bare
+            // decimal literal lexes as REAL), and every later LREAL assignment
+            // into it is then rejected as an implicit narrowing. Same hazard
+            // CallMethod/CallGlobalFunction seed against.
             SeedReturnCell(frame, property.Name, property.DeclarationText);
 
-            // TcXunit-n65: routed through ExecuteBody (rather than a local
-            // try/catch(MethodReturnSignal)) so a lazy parse failure in the
-            // Get accessor's own body is attributed to this property's
-            // frame, not to whatever caller's frame is still on the stack.
+            // ExecuteBody rather than a local try/catch(MethodReturnSignal), so
+            // a parse failure in the Get accessor's own body is attributed to
+            // this property's frame instead of the caller's.
             ExecuteBody(() => _registry.GetStatements(property.GetImplementationText), frame);
 
             return frame.Locals.TryGetValue(property.Name, out var returnCell) ? returnCell.Value : null;
@@ -77,15 +72,11 @@ namespace xStunit.Interpreter
 
             var frame = new Frame(instance, definingType);
 
-            // TcXunit-8we: tag the seeded Cell with the property's declared
-            // type, same rule (IEC numeric types only) as SeedReturnCell -
-            // the incoming value itself is kept as-is (unlike the Get side,
-            // there's no default-zero to seed with here), but leaving
-            // DeclaredTypeName null left this cell an outlier among every
-            // other Cell construction site in the interpreter (fields,
-            // params, locals) and meant anything consulting
-            // Cell.DeclaredTypeName (e.g. SIZEOF) about this Local couldn't
-            // see it.
+            // The incoming value is kept as-is - unlike the Get side there is no
+            // default zero to seed - but the Cell still gets the property's
+            // declared type under SeedReturnCell's rule (IEC numeric types
+            // only), so that anything consulting Cell.DeclaredTypeName about
+            // this Local, SIZEOF among them, can see it.
             var cell = new Cell { Value = value };
             if (TryGetNumericCallableType(property.DeclarationText, out var declaredType, out _))
             {
@@ -94,7 +85,6 @@ namespace xStunit.Interpreter
             }
             frame.Locals[property.Name] = cell;
 
-            // TcXunit-n65: same reasoning as InvokePropertyGet above.
             ExecuteBody(() => _registry.GetStatements(property.SetImplementationText), frame);
         }
     }

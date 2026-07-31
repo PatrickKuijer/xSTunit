@@ -5,21 +5,20 @@ using System.Linq;
 namespace xStunit.Interpreter.Extensibility
 {
     // Name -> IXstunitNativeFunction lookup the Engine consults as its last
-    // resort before reporting a call unresolved (TcXunit-6k2).
+    // resort before reporting a call unresolved.
     //
-    // Owned by the host, not the Engine: an Engine built without one behaves
-    // exactly as it always has (every unresolved call is still an error), so
-    // this is purely additive to existing call sites. The CLI populates one
-    // from a plugin directory; a test populates one inline.
+    // Owned by the host, not the Engine: an Engine given none of these still
+    // treats every unresolved call as an error, so registering is purely
+    // additive. The CLI populates one from a plugin directory; a test
+    // populates one inline.
     public sealed class NativeFunctionRegistry
     {
         // OrdinalIgnoreCase because IEC 61131-3 identifiers are
         // case-insensitive: PLC source calling F_CheckSum16, F_CHECKSUM16, or
-        // f_checksum16 must all reach the same registration. (The interpreter's
-        // own POU/method dispatch is ordinal - a pre-existing inconsistency
-        // rather than something this type should quietly diverge on, but a
-        // case-sensitive plugin lookup would fail in a way the user cannot
-        // debug from the error message alone, so the forgiving rule wins here.)
+        // f_checksum16 must all reach the same registration. This deliberately
+        // diverges from the interpreter's own ordinal POU/method dispatch - a
+        // case-sensitive plugin lookup fails in a way the user cannot diagnose
+        // from the error message alone.
         private readonly Dictionary<string, IXstunitNativeFunction> _functions =
             new Dictionary<string, IXstunitNativeFunction>(StringComparer.OrdinalIgnoreCase);
 
@@ -33,12 +32,11 @@ namespace xStunit.Interpreter.Extensibility
 
         public IEnumerable<string> Names => _functions.Keys;
 
-        // A second registration of the same name is a hard error rather than
-        // last-one-wins: two plugins disagreeing about F_CheckSum16 is a
-        // configuration mistake whose symptom would otherwise be a wrong
-        // number in a passing test, which is far worse than a startup failure.
-        // The host decides how loud to be - the CLI turns this into a skip
-        // line for the offending DLL instead of aborting the run.
+        // A second registration of the same name throws rather than winning:
+        // two plugins disagreeing about F_CheckSum16 is a configuration
+        // mistake whose symptom would otherwise be a wrong number in a
+        // passing test. The host decides how loud to be - the CLI catches this
+        // and skips the offending DLL instead of aborting the run.
         public void Register(IXstunitNativeFunction function, string source = null)
         {
             if (function == null)
@@ -76,8 +74,8 @@ namespace xStunit.Interpreter.Extensibility
             return _functions.TryGetValue(name, out function);
         }
 
-        // Names in a stable, human-readable order, for a host that wants to
-        // report what a run has available (the CLI's --list-plugins).
+        // Each registered name paired with the source that claimed it, for a
+        // host reporting what a run has available.
         public IReadOnlyList<string> DescribeRegistrations() =>
             _functions.Keys
                 .OrderBy(n => n, StringComparer.OrdinalIgnoreCase)

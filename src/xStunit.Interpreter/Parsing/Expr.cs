@@ -4,11 +4,10 @@ namespace xStunit.Interpreter
 {
     public abstract class Expr
     {
-        // 1-based line within the ST body this expression was parsed from -
-        // the token that STARTS it, so a BinaryExpr reports its left
-        // operand's line (TcXunit-p3t.2). See Token.Line for the convention
-        // and the BodyStartLine + Line - 1 file-line formula; 0 means
-        // "unknown", the value hand-built (non-parsed) nodes keep.
+        // 1-based line within the ST body, taken from the token that STARTS
+        // the expression - so a BinaryExpr reports its left operand's line.
+        // See Token.Line for the convention and the file-line formula; 0
+        // means "unknown", the value hand-built nodes keep.
         public int Line { get; set; }
     }
 
@@ -86,7 +85,7 @@ namespace xStunit.Interpreter
     {
     }
 
-    // Plain .Member access (no call parens) - reads a field off a receiver
+    // Plain .Member access with no call parens - reads a field off a receiver
     // that evaluates to an FbInstance, e.g. fbTon.Q after fbTon(IN:=..).
     public sealed class FieldAccessExpr : Expr
     {
@@ -100,8 +99,8 @@ namespace xStunit.Interpreter
     }
 
     // arr[i] or arr[i, j, ...] - Indices.Count matches the array's declared
-    // dimension count; flattened row-major against ArrayValue.Dimensions at
-    // evaluation time (TcXunit-sej.1).
+    // dimension count, flattened row-major against ArrayValue.Dimensions at
+    // evaluation time.
     public sealed class IndexExpr : Expr
     {
         public Expr Receiver { get; }
@@ -143,17 +142,17 @@ namespace xStunit.Interpreter
         }
     }
 
-    // Struct literal initializer: (field1 := val1, field2 := val2, ...)
-    // (TcXunit-w5x.15.6). Reuses NamedArg for the field-name/value pairs.
+    // Struct literal initializer: (field1 := val1, field2 := val2, ...),
+    // reusing NamedArg for the field-name/value pairs.
     public sealed class StructLiteralExpr : Expr
     {
         public IReadOnlyList<NamedArg> FieldInits { get; }
         public StructLiteralExpr(IReadOnlyList<NamedArg> fieldInits) => FieldInits = fieldInits;
     }
 
-    // Array literal initializer: [v0, v1, ...]; the [n(v)] repeat shorthand
-    // is expanded into n copies of v's Expr node at parse time, so Elements
-    // is always the fully-expanded flat element list (TcXunit-w5x.15.6).
+    // Array literal initializer: [v0, v1, ...]. The [n(v)] repeat shorthand
+    // is expanded at parse time into n references to the SAME Expr node, so
+    // Elements is always the flat, fully-expanded element list.
     public sealed class ArrayLiteralExpr : Expr
     {
         public IReadOnlyList<Expr> Elements { get; }
@@ -165,11 +164,10 @@ namespace xStunit.Interpreter
         public string Name { get; }
         public Expr Value { get; }
 
-        // True for "Name => expr" VAR_OUTPUT-binding syntax (TcXunit-mym.5),
-        // false for the ordinary "Name := expr" VAR_INPUT/VAR_IN_OUT form.
-        // BindParams only consults NamedArgs for Input/InOut params, so an
-        // output-bound arg is inert downstream until output semantics are
-        // actually needed.
+        // True for "Name => expr" VAR_OUTPUT-binding syntax, false for the
+        // ordinary "Name := expr" VAR_INPUT/VAR_IN_OUT form. BindParams
+        // consults only the latter; Engine's WriteBackOutputArgs consults
+        // only the former.
         public bool IsOutput { get; }
 
         public NamedArg(string name, Expr value, bool isOutput = false)
@@ -180,10 +178,10 @@ namespace xStunit.Interpreter
         }
     }
 
-    // Covers both builtin calls (ADR(x), receiver == null) and method calls
-    // (receiver == null means implicit self, otherwise Identifier/ThisRef/
-    // SuperRef). Args are either all-positional or all-named per the fixture's
-    // call sites - no mixing needed (TcXunit-w5x.8/.12).
+    // A builtin call (ADR(x)) or a method call. A null Receiver covers both
+    // the builtin case and an implicit self-call; otherwise it is an
+    // Identifier, ThisRef or SuperRef. Fixture call sites are all-positional
+    // or all-named, so mixing the two has never needed to work.
     public sealed class CallExpr : Expr
     {
         public Expr Receiver { get; }

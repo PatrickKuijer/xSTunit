@@ -5,17 +5,16 @@ namespace xStunit.Interpreter
 {
     public sealed partial class Engine
     {
-        // MEMCPY/MEMSET/MEMMOVE (TcXunit-4vn): a dest/src pointer whose
-        // target is a plain scalar or STRUCT/struct-field Cell - not an
-        // ArrayElementCell - has no array element to index into (the
-        // ADR(struct.field)/ADR(scalarVar) case, as opposed to
-        // ADR(byteBuf)/ADR(byteBuf[i]), TcXunit-sej.3). Reusing the SIZEOF
-        // byte-layout math (TcXunit-l1x), pack the Cell's current value into
-        // a same-size byte buffer so the existing ArrayValue-indexed copy
-        // loop in MemCopy/MemSet can address it exactly like a real BYTE
-        // array, then hand back a Commit callback that unpacks the buffer's
-        // final bytes back into the Cell - the caller invokes it once for
-        // whichever side was actually mutated (dest only; src is read-only).
+        // Presents whatever a MEMCPY/MEMSET/MEMMOVE pointer targets as an
+        // ArrayValue of bytes plus a byte offset into it, so those intrinsics
+        // have one indexable shape to copy through.
+        //
+        // A pointer to a plain scalar or STRUCT/struct-field Cell -
+        // ADR(scalarVar), ADR(struct.field) - has no array element to index,
+        // so its value is packed into a same-size byte buffer using the SIZEOF
+        // byte-layout math. Commit unpacks the buffer's final bytes back into
+        // the Cell and is returned only for that case; the caller invokes it
+        // for whichever side was mutated (dest only - src is read-only).
         private (ArrayValue Array, int Index, Action Commit) ResolveByteTarget(Pointer ptr, string methodName, string paramName, Frame frame)
         {
             if (ptr.Target is ArrayElementCell aec)
@@ -27,15 +26,10 @@ namespace xStunit.Interpreter
                 if (elementTypeName == "BYTE")
                     return (aec.Array, aec.Index, null);
 
-                // Any other element type (e.g. a struct, or a scalar wider
-                // than a byte) means Elements.Length is an element count, not
-                // a byte count - a caller bounds-checking a SIZEOF()-computed
-                // byte size against it (ReadPointerBytes) would always see it
-                // as elementSize-times too small (TcXunit-4jt). Repack the
-                // whole underlying array into a byte view the same way the
-                // scalar/struct-field branch below does for a single Cell,
-                // and translate aec.Index (an element index) into the
-                // matching byte offset into that view.
+                // For any other element type Elements.Length is an element
+                // count, not a byte count, so a caller bounds-checking a
+                // SIZEOF()-computed byte size against it (ReadPointerBytes)
+                // would see the buffer as elementSize times too small.
                 return ResolveArrayByteTarget(aec, frame);
             }
 
@@ -61,17 +55,15 @@ namespace xStunit.Interpreter
             return (view, 0, Commit);
         }
 
-        // ResolveByteTarget's array-of-non-BYTE branch (TcXunit-4jt): packs
-        // aec's whole underlying ArrayValue into a fresh BYTE-array view,
-        // uniform elementSize apart per element (matching PackValue's own
+        // Packs aec's whole underlying ArrayValue into a fresh BYTE-array view,
+        // elements laid a uniform elementSize apart to match PackValue's own
         // ARRAY branch - no inter-element padding, only intra-element
-        // struct-field alignment), and maps aec.Index (an element index)
-        // to the byte offset of that element's first byte in the view.
-        // Mirrors ResolveByteTarget's scalar/struct-field Commit: a plugin
-        // (ReadPointerBytes) never sees it since it discards Commit, but
-        // MEMCPY/MEMSET writing through a dest pointer into an
-        // array-of-struct element still needs the mutated bytes unpacked
-        // back into the real array elements.
+        // struct-field alignment - and maps aec.Index from an element index to
+        // the byte offset of that element's first byte.
+        //
+        // Commit is needed even though ReadPointerBytes discards it: MEMCPY and
+        // MEMSET writing through a dest pointer into an array-of-struct element
+        // still have to get the mutated bytes back into the real elements.
         private (ArrayValue Array, int Index, Action Commit) ResolveArrayByteTarget(ArrayElementCell aec, Frame frame)
         {
             var elementTypeName = aec.Array.ElementTypeName;
@@ -101,14 +93,12 @@ namespace xStunit.Interpreter
             return (view, aec.Index * elementSize, Commit);
         }
 
-        // Packs cell's current value into a fresh BYTE-array view the same
-        // way ResolveByteTarget does, but without the write-back Commit -
-        // used by pointer arithmetic (EvaluatePointerArithmetic,
-        // TcXunit-sej.2), which only needs to read through a struct/scalar
-        // byte offset (ptr^ := x isn't a supported assignment target yet -
-        // Parser.RequireLValue - so there is nothing to commit back to).
-        // Rebuilt fresh on every call rather than cached: cheap enough for
-        // the sizes these fixtures use, and it means a repeated ADR(x) + i
+        // ResolveByteTarget's packing without the write-back Commit, for pointer
+        // arithmetic, which only reads through a struct/scalar byte offset -
+        // ptr^ := x is not a supported assignment target (Parser.RequireLValue),
+        // so there is nothing to commit back to.
+        //
+        // Rebuilt on every call rather than cached, so a repeated ADR(x) + i
         // always reflects x's current live value instead of a stale snapshot.
         private (ArrayValue View, int Size) PackCellToByteView(Cell cell, string typeName, Frame frame)
         {

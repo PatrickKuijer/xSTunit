@@ -69,13 +69,8 @@ namespace xStunit.Interpreter
                         return enumValue;
                     }
 
-                    // EnumTypeName.Member where EnumTypeName names a
-                    // user-defined ENUM DUT rather than a variable
-                    // (TcXunit-rk3) - same "receiver identifier doesn't
-                    // resolve as a variable" shape as the built-in-enum
-                    // check above, checked right alongside it so a
-                    // user-defined enum resolves the same way a built-in
-                    // one already does.
+                    // The same shape for a user-defined ENUM DUT, so it resolves
+                    // exactly as a built-in enum does.
                     if (fieldAccess.Receiver is IdentifierExpr dutEnumTypeId &&
                         frame.ResolveCell(dutEnumTypeId.Name) == null &&
                         _registry.TryGetEnumMembers(dutEnumTypeId.Name, out var dutEnumMembers))
@@ -85,10 +80,8 @@ namespace xStunit.Interpreter
                         return dutEnumValue;
                     }
 
-                    // GvlName.field where GvlName isn't a variable/field in
-                    // scope but a registered GVL (TcXunit-71o) - same
-                    // "receiver identifier doesn't resolve as a variable"
-                    // shape as the enum check above.
+                    // And again for GvlName.field, where GvlName is a registered
+                    // GVL rather than a variable in scope.
                     if (TryGetGvlFields(fieldAccess, frame, out var gvlFields))
                     {
                         if (!gvlFields.TryGetValue(fieldAccess.FieldName, out var gvlCell))
@@ -101,12 +94,10 @@ namespace xStunit.Interpreter
                     if (fields.TryGetValue(fieldAccess.FieldName, out var cell))
                         return cell.Value;
 
-                    // No VAR-block field matches - the receiver may be an FB
-                    // instance exposing a PROPERTY of this name instead
-                    // (TcXunit-sxv); a get-only PROPERTY was never
-                    // materialized into Fields at NewInstance time, so this
-                    // falls back to running its Get accessor rather than
-                    // treating the miss as "Unknown field".
+                    // No VAR-block field matches, but a PROPERTY is never
+                    // materialized into Fields at NewInstance time, so a miss
+                    // here falls back to running its Get accessor rather than
+                    // reporting "Unknown field".
                     if (receiverValue is FbInstance fbReceiver &&
                         TryFindProperty(fbReceiver.ActualTypeName, fieldAccess.FieldName, out var definingType, out var property))
                         return InvokePropertyGet(fbReceiver, definingType, property);
@@ -176,14 +167,9 @@ namespace xStunit.Interpreter
 
         private object EvaluateBinary(BinaryExpr binary, Frame frame)
         {
-            // AND_THEN/OR_ELSE (IEC 61131-3 §2.4.5, the short-circuit forms of
-            // AND/OR) must not evaluate their RHS at all when the LHS already
-            // decides the result - unlike every other BinaryExpr, which is
-            // evaluated eagerly below. That's what lets the standard
-            // "guard AND_THEN indexed-access" idiom skip the index expression
-            // when the guard is false. Bitstring (BYTE/WORD/DWORD) operands
-            // have no short-circuit meaning, so those still evaluate both
-            // sides and fall back to plain bitwise AND/OR.
+            // Dispatched before either operand is touched: unlike every other
+            // BinaryExpr below, AND_THEN/OR_ELSE must not evaluate their RHS
+            // eagerly. See EvaluateShortCircuit.
             if (binary.Op == "AND_THEN" || binary.Op == "OR_ELSE")
                 return EvaluateShortCircuit(binary, frame);
 
@@ -210,28 +196,21 @@ namespace xStunit.Interpreter
             if (leftVal is bool lbEq && rightVal is bool rbEq && (binary.Op == "=" || binary.Op == "<>"))
                 return binary.Op == "=" ? lbEq == rbEq : lbEq != rbEq;
 
-            // TcXunit-80v: any other BOOL usage reaching this point has no
-            // valid IEC 61131-3 semantics - either BOOL mixed with a
-            // non-BOOL operand (e.g. TRUE = 1), or a BOOL operand with an
-            // operator that has no BOOL semantics (e.g. TRUE < FALSE).
-            // Without this guard both cases fall through to the int-cast
-            // numeric path below and throw an unhelpful raw
-            // InvalidCastException; guard here for a descriptive message,
-            // mirroring EvaluateBitstring's mismatched-type guard.
+            // Any other BOOL usage - BOOL mixed with a non-BOOL operand
+            // (TRUE = 1), or an operator with no BOOL semantics (TRUE < FALSE) -
+            // has no valid IEC 61131-3 meaning, and would otherwise reach the
+            // int-cast path below and throw a bare InvalidCastException.
             if (leftVal is bool || rightVal is bool)
                 throw new NotSupportedException(
                     $"Operator '{binary.Op}' is not supported between {leftVal?.GetType().Name ?? "null"} and " +
                     $"{rightVal?.GetType().Name ?? "null"}; BOOL only supports '=' and '<>' against another BOOL");
 
-            // TcXunit-ixh: STRING/WSTRING operands (both are represented as
-            // boxed System.String - StringTypeInfo distinguishes them only at
-            // declaration time) have no numeric representation, so without
-            // this guard they fall through to the int-cast path below and
-            // throw a raw InvalidCastException. IEC 61131-3 defines ordering
-            // for ANY_STRING as ordinal/lexicographic comparison (TwinCAT
-            // compares string data byte-by-byte), so all six comparison
-            // operators are supported here, unlike the BOOL guard above which
-            // only allows '=' and '<>'.
+            // STRING and WSTRING are both boxed System.String here
+            // (StringTypeInfo tells them apart only at declaration time) and
+            // have no numeric representation. IEC 61131-3 defines ordering for
+            // ANY_STRING as ordinal comparison - TwinCAT compares string data
+            // byte-by-byte - so all six operators are valid, unlike the BOOL
+            // guard above.
             if (leftVal is string ls && rightVal is string rs)
                 return binary.Op switch
                 {
@@ -268,36 +247,31 @@ namespace xStunit.Interpreter
             };
         }
 
-        // ADR(x) +/- offset: offset moves in whole array elements, not raw
-        // bytes - correct as literal byte arithmetic when the pointee is a
-        // BYTE/SINT/USINT array (the buffer-packing case MEMCPY/MEMSET/MEMMOVE
-        // exist for), an approximation for wider element types. A pointer
-        // whose target is an array element (ArrayElementCell, including the
-        // ADR(arr)-decays-to-element-0 case) steps directly on the real
-        // backing ArrayValue. A pointer to a scalar or whole STRUCT has no
-        // array element to step through, but does have a known declared
-        // type (Cell.DeclaredTypeName) - reuse the MEMCPY/MEMSET byte-layout
-        // packer (PackCellToByteView, Engine.ByteLayout.cs) to snapshot it
-        // into a synthetic BYTE-array view and step through that instead,
-        // walking across STRUCT field/array-of-struct boundaries the same
-        // way SIZEOF's layout math does (TcXunit-sej.2). Read-only: ptr^ :=
-        // isn't a supported assignment target yet (Parser.RequireLValue), so
-        // there is no live backing store to write through for this case, only
-        // a fresh-packed snapshot good for dereferencing.
+        // ADR(x) +/- offset. The offset moves in whole array elements, not raw
+        // bytes: exact byte arithmetic when the pointee is a BYTE/SINT/USINT
+        // array - the buffer-packing case MEMCPY/MEMSET/MEMMOVE exist for - and
+        // an approximation for wider element types.
+        //
+        // A pointer at an array element (including ADR(arr), which decays to
+        // element 0) steps on the real backing ArrayValue. A pointer to a scalar
+        // or whole STRUCT has no element to step through, so its Cell is packed
+        // into a synthetic BYTE-array view and stepped through that, crossing
+        // STRUCT field and array-of-struct boundaries the way SIZEOF's layout
+        // math does. That snapshot is good only for dereferencing: ptr^ := is
+        // not a supported assignment target (Parser.RequireLValue), so there is
+        // no live backing store to write through.
         private object EvaluatePointerArithmetic(string op, object leftVal, object rightVal, Frame frame)
         {
             if (op == "-" && leftVal is Pointer && rightVal is Pointer)
                 throw new UnsupportedConstructException("-", "Pointer-minus-pointer is not supported");
 
             var (ptr, offsetVal) = leftVal is Pointer p ? (p, rightVal) : ((Pointer)rightVal, leftVal);
-            // Convert.ToInt32 rather than a direct (int) cast: the offset is
-            // an arbitrary user expression that boxes as long when it is a
-            // DINT/UDINT/LINT/ULINT/DWORD value (e.g. the UDINT loop index in
-            // the 'FOR i := 0 TO inSize - 1 DO (ipA + i)^' buffer-compare
-            // idiom) or uint for TIME/DATE, and a direct (int) cast throws
-            // InvalidCastException on those boxed types instead of narrowing
-            // them (same widening-unbox pitfall fixed in FlattenIndex,
-            // TcXunit-iyd.5).
+            // Convert.ToInt32 rather than a direct (int) cast, for the same
+            // reason as FlattenIndex: the offset is an arbitrary user
+            // expression, and a DINT/UDINT/LINT/ULINT/DWORD one boxes as long
+            // (e.g. the UDINT loop index in the
+            // 'FOR i := 0 TO inSize - 1 DO (ipA + i)^' buffer-compare idiom),
+            // which an unboxing cast rejects rather than narrows.
             var delta = Convert.ToInt32(offsetVal);
             if (op == "-")
                 delta = -delta;
@@ -323,27 +297,22 @@ namespace xStunit.Interpreter
             return new Pointer(new ArrayElementCell(aec.Array, newIndex));
         }
 
-        // Pointer '='/'<>' comparison (TcXunit-dur): the standard IEC 61131-3
-        // null-pointer-check idiom is 'IF ipSrc = 0 THEN'. An unbound/default
-        // POINTER TO x Cell holds C# null (see DefaultValue), never int 0, so
-        // the null side of the comparison is a null reference, not a numeric
-        // zero - but the literal on the other side is still the int 0. Two
-        // real (ADR-bound) pointers are compared by target-Cell identity;
-        // a bound pointer is never "null"/zero, so it compares unequal to
-        // both null and any int literal.
+        // The IEC 61131-3 null-pointer-check idiom is 'IF ipSrc = 0 THEN', which
+        // straddles two representations: an unbound POINTER TO x Cell holds C#
+        // null (see DefaultValue), never int 0, while the literal on the other
+        // side is an int. Two ADR-bound pointers compare by target-Cell
+        // identity, and a bound pointer is never null or zero, so it compares
+        // unequal to both.
         //
-        // TcXunit-dba: an interface-typed (or plain FB-reference) variable
-        // follows the same "= 0 is the assigned/null check" idiom (e.g.
-        // 'IF (iipHandler <> 0) AND iipHandler.bDoWork(...) THEN'),
-        // but it has no dedicated Pointer/null representation of its own -
-        // an unassigned interface field has no POU registered under its
-        // interface type name (TcPouParser never parses <Itf> POUs), so
-        // DefaultValue's lookups all miss and it falls through to the
-        // int-0 default; once assigned (itf := concreteFb), the field holds
-        // the concrete FB's FbInstance directly. Route FbInstance through
-        // the same null-check semantics as Pointer: assigned (FbInstance)
-        // compares unequal to zero/null, and two assigned interface
-        // variables compare by referenced-instance identity.
+        // An interface-typed (or plain FB-reference) variable follows the same
+        // "= 0 means unassigned" idiom - 'IF (iipHandler <> 0) AND
+        // iipHandler.bDoWork(...) THEN' - without a null representation of its
+        // own: no POU is registered under an interface type name, so
+        // DefaultValue's lookups all miss and it falls through to the int-0
+        // default, and once assigned the field holds the concrete FB's
+        // FbInstance directly. FbInstance therefore gets the same null-check
+        // semantics as Pointer, with two assigned interface variables comparing
+        // by referenced-instance identity.
         private static object EvaluatePointerEquality(string op, object leftVal, object rightVal)
         {
             bool equal;
@@ -363,9 +332,8 @@ namespace xStunit.Interpreter
             return op == "=" ? equal : !equal;
         }
 
-        // A pointer compared to any numeric-zero literal - int (BYTE/WORD/
-        // DINT/etc.), REAL (float), or LREAL (double) - is the null-check
-        // idiom regardless of the literal's numeric type (TcXunit-3zc).
+        // A pointer compared against any numeric zero - int, REAL or LREAL - is
+        // the null-check idiom, whatever the literal's numeric type.
         private static bool IsNumericZero(object val)
         {
             return (val is int i && i == 0)
@@ -373,12 +341,10 @@ namespace xStunit.Interpreter
                 || (val is double d && d == 0d);
         }
 
-        // ADR(x) builds a fresh ArrayElementCell wrapper on every call
-        // (TcXunit-sej.2), so two pointers to the "same" element are two
-        // distinct ArrayElementCell instances - compare the underlying
-        // ArrayValue + Index instead of Cell reference identity for that
-        // case; fall back to reference equality for a plain scalar/struct
-        // field Cell (ADR(x) on those returns the actual field Cell).
+        // ADR(x) builds a fresh ArrayElementCell on every call, so two pointers
+        // to the "same" element are distinct instances and must be compared by
+        // backing ArrayValue + Index. ADR(x) on a scalar or struct field returns
+        // the actual field Cell, so reference equality is right there.
         private static bool PointerTargetsEqual(Cell left, Cell right)
         {
             if (left is ArrayElementCell leftAec && right is ArrayElementCell rightAec)
@@ -387,22 +353,11 @@ namespace xStunit.Interpreter
             return ReferenceEquals(left, right);
         }
 
-        // MEMCPY/MEMSET/MEMMOVE (TcXunit-sej.3): dest/src must be pointers to
-        // an array element (see ResolveCellForAdr/ArrayElementCell) - this is
-        // the POINTER TO BYTE over ARRAY OF BYTE buffer-packing case these
-        // intrinsics exist for. n counts elements (== bytes for a BYTE/SINT/
-        // USINT-element array); out-of-range access throws naturally via the
-        // backing Elements[] indexer.
-        //
-        // TcXunit-996: these are native intrinsics (no VarBlockParser decls
-        // to bind against, unlike FB/method calls), so named args aren't
-        // reconciled by BindParams - resolve each declared param (destAddr/
-        // srcAddr/value/n) by name first (e.g. MEMCPY(destAddr := ipDst,
-        // srcAddr := ipSrc, inSrcSize)), consuming PositionalArgs in
-        // left-to-right order only for params *not* given by name (mirrors
-        // BindParams' shared posIndex - a positional arg's PositionalArgs
-        // slot depends on how many preceding params were named, not on the
-        // param's declared signature position).
+        // The intrinsics (MEMCPY/MEMSET/MEMMOVE, CONCAT) are native, with no
+        // VarBlockParser decls for BindParams to reconcile named args against,
+        // so this does that binding for them: each declared param by name first
+        // (MEMCPY(destAddr := ipDst, srcAddr := ipSrc, inSrcSize)), with
+        // PositionalArgs consumed left-to-right only for the params not named.
         private static IReadOnlyDictionary<string, Expr> ResolveIntrinsicArgs(
             IReadOnlyList<string> paramNamesInDeclOrder,
             IReadOnlyList<Expr> positionalArgs,
@@ -423,11 +378,9 @@ namespace xStunit.Interpreter
             return resolved;
         }
 
-        // CONCAT(STR1, STR2, ..., STR10): TwinCAT's Tc2_Standard signature -
-        // STR1/STR2 required, STR3..STR10 optional trailing args - resolved
-        // by name or IEC positional order same as the other intrinsics
-        // (ResolveIntrinsicArgs), then appended in this declared order
-        // regardless of how the caller mixed named/positional args.
+        // TwinCAT's Tc2_Standard CONCAT signature: STR1/STR2 required,
+        // STR3..STR10 optional. Appended in this declared order however the
+        // caller mixed named and positional args.
         private static readonly string[] ConcatParamNames =
             { "STR1", "STR2", "STR3", "STR4", "STR5", "STR6", "STR7", "STR8", "STR9", "STR10" };
 
@@ -448,10 +401,9 @@ namespace xStunit.Interpreter
             return ptr;
         }
 
-        // Mirrors the STRING-only guard in EvaluateBinary ("STRING can only
-        // be compared against another STRING") - CONCAT's STR* args are
-        // ANY_STRING per the IEC signature, so a non-string arg is a type
-        // error, not something to coerce via Convert.ToString.
+        // CONCAT's STR* args are ANY_STRING per the IEC signature, so a
+        // non-string arg is a type error rather than something to coerce with
+        // Convert.ToString - the same stance as EvaluateBinary's STRING guard.
         private string RequireStringArg(string methodName, string paramName, Expr argExpr, Frame frame)
         {
             var value = Evaluate(argExpr, frame);
@@ -461,19 +413,14 @@ namespace xStunit.Interpreter
             return s;
         }
 
-        // MEMCPY (overlapSafe: false) copies forward regardless of overlap,
-        // same as the C intrinsic it mirrors. MEMMOVE (overlapSafe: true)
-        // detects a forward overlap (dest inside [src, src+count) on the same
-        // backing array) and copies backward instead, so a "shift buffer
-        // down after consuming its head" pattern doesn't clobber source
-        // elements before they're read.
+        // MEMCPY (overlapSafe: false) copies forward regardless of overlap, like
+        // the C intrinsic it mirrors. MEMMOVE (overlapSafe: true) detects a
+        // forward overlap - dest inside [src, src+count) on the same backing
+        // array - and copies backward instead, so shifting a buffer down after
+        // consuming its head doesn't clobber source elements before they're
+        // read.
         //
-        // dest/src may target either a real ArrayElementCell or, since
-        // TcXunit-4vn, a plain scalar/STRUCT Cell (ADR(struct.field) or
-        // ADR(scalarVar)) - ResolveByteTarget hands back a byte-array view
-        // over either shape uniformly; only dest's Commit (writing the final
-        // bytes back into a scalar/STRUCT Cell) matters, since src is only
-        // read from.
+        // Only dest's Commit is invoked, since src is only read from.
         private Pointer MemCopy(Pointer dest, Pointer src, int count, bool overlapSafe, Frame frame)
         {
             if (count < 0)
@@ -595,14 +542,13 @@ namespace xStunit.Interpreter
             _ => throw new UnsupportedConstructException(op, $"Operator '{op}' not supported"),
         };
 
-        // Evaluates AND_THEN/OR_ELSE. For BOOL operands this is a genuine
-        // short-circuit: the RHS expression is never evaluated once the LHS
-        // already determines the result (AND_THEN stops on FALSE, OR_ELSE
-        // stops on TRUE) - this is what protects a guard-then-index idiom
-        // like 'guard AND_THEN arr[i]' from indexing out of range when the
-        // guard is false. Bitstring (BYTE/WORD/DWORD/INT) operands have no
-        // short-circuit meaning in the standard, so both sides are evaluated
-        // and the result falls back to plain bitwise AND/OR.
+        // AND_THEN/OR_ELSE, IEC 61131-3 §2.4.5. For BOOL operands this is a
+        // genuine short-circuit - the RHS is never evaluated once the LHS
+        // decides the result - which is what protects the guard-then-index
+        // idiom 'guard AND_THEN arr[i]' from indexing out of range when the
+        // guard is false. Bitstring operands have no short-circuit meaning in
+        // the standard, so those evaluate both sides and fall back to plain
+        // bitwise AND/OR.
         private object EvaluateShortCircuit(BinaryExpr binary, Frame frame)
         {
             var isAndThen = binary.Op == "AND_THEN";
@@ -756,10 +702,10 @@ namespace xStunit.Interpreter
             "SINT", "USINT", "INT", "UINT", "DINT", "UDINT", "LINT", "ULINT", "BYTE", "WORD", "DWORD", "LWORD",
         };
 
-        // Recognizes explicit <from>_TO_<to> conversion calls (e.g. LREAL_TO_INT)
-        // per TwinCAT's narrowing-cast naming convention. Not a real method, so
-        // it's intercepted here before falling through to CallMethod/native-bridge
-        // dispatch.
+        // Recognizes explicit <from>_TO_<to> conversion calls (e.g.
+        // LREAL_TO_INT) per TwinCAT's cast naming convention. These are not real
+        // methods, so they are intercepted before CallMethod/native-bridge
+        // dispatch; an unrecognized shape returns false and falls through to it.
         private bool TryEvaluateCast(CallExpr call, Frame frame, out object result)
         {
             result = null;
@@ -778,19 +724,15 @@ namespace xStunit.Interpreter
                 result = Convert.ToDouble(value);
             else if (IntegerCastTargets.Contains(toType))
                 result = Convert.ToInt32(value);
-            // TcXunit-839: REAL_TO_STRING/LREAL_TO_STRING/<integer>_TO_STRING -
-            // standard IEC 61131-3/TwinCAT calls used to build assert/diagnostic
-            // messages. Scoped to numeric source prefixes only (REAL, LREAL, or
-            // the same IntegerCastTargets set the narrowing-cast branch above
-            // recognizes) - a non-numeric prefix like BOOL_TO_STRING or
-            // TIME_TO_STRING falls through to CallMethod/native-bridge dispatch
-            // unchanged, preserving its "Method not found" error. Formats the
-            // already-boxed CLR value (float/double/int/long/ulong, per
-            // NumericCoercion's existing boxing rules) via its own
-            // invariant-culture ToString(), mirroring ScalarAssertType.FormatDouble's
-            // rationale for avoiding CurrentCulture (e.g. de-DE rendering '.' as
-            // ',') - plain digits, no TwinCAT-exact digit-count/exponent parity
-            // attempted.
+            // _TO_STRING is deliberately scoped to numeric source types only:
+            // a non-numeric prefix like BOOL_TO_STRING or TIME_TO_STRING falls
+            // through to CallMethod/native-bridge dispatch and keeps its
+            // "Method not found" error rather than being silently formatted.
+            //
+            // Invariant culture, for the same reason as
+            // ScalarAssertType.FormatDouble: a CurrentCulture of de-DE would
+            // render '.' as ','. Plain digits - no attempt at TwinCAT-exact
+            // digit-count or exponent parity.
             else if (toType == "STRING" &&
                      (fromType == "REAL" || fromType == "LREAL" || IntegerCastTargets.Contains(fromType)))
                 result = Convert.ToString(value, System.Globalization.CultureInfo.InvariantCulture);

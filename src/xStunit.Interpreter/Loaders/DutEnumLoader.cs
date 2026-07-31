@@ -7,20 +7,20 @@ using xStunit.Parser;
 namespace xStunit.Interpreter
 {
     // Parses ENUM .TcDUT definitions - e.g. "TYPE E_Color : (Red, Green,
-    // Blue); END_TYPE" or "TYPE eWidgetValueKind : (A, B) DINT;
-    // END_TYPE" - across the merged set of POU directories, mirroring
-    // DutAliasLoader's shape (TcXunit-fyu): registered into the same
-    // name -> underlying-type-text map TypeRegistry's alias mechanism
-    // already uses, so SIZEOF()/default-value/struct-boundary code paths
-    // that already call ResolveAlias resolve an enum type name to its
-    // underlying integer type (INT, IEC 61131-3's default enum base type,
-    // unless the DUT declares an explicit base type after the closing
-    // paren) without any of those call sites needing to know enums exist.
+    // Blue); END_TYPE" or "TYPE eWidgetValueKind : (A, B) DINT; END_TYPE" -
+    // across the merged set of POU directories.
+    //
+    // Returns the same name -> underlying-type-text shape DutAliasLoader
+    // does, so a caller merges enums into TypeRegistry's alias map and every
+    // existing ResolveAlias call site (SIZEOF, default values, struct
+    // boundaries) resolves an enum name to its underlying integer type
+    // without knowing enums exist. That underlying type is INT - IEC
+    // 61131-3's default enum base - unless the DUT declares one explicitly
+    // after the member list's closing paren.
     //
     // No model for enum member initializers containing parenthesised
-    // expressions (e.g. "Red := SomeFunc(1)") - not seen in any fixture yet
-    // (grow-on-demand, same rationale as DutStructLoader's STRUCT EXTENDS
-    // gap).
+    // expressions (e.g. "Red := SomeFunc(1)") - grow-on-demand, same as
+    // DutStructLoader's STRUCT EXTENDS gap.
     public static class DutEnumLoader
     {
         private const string DefaultUnderlyingType = "INT";
@@ -29,24 +29,18 @@ namespace xStunit.Interpreter
             @"^TYPE\s+(?<name>\w+)\s*:\s*\((?<body>[^)]*)\)\s*(?<base>[A-Za-z_]\w*)?\s*;",
             RegexOptions.Compiled);
 
-        // Matches a single leading "{attribute '...'}"-style pragma line
-        // (e.g. "{attribute 'qualified_only'}") or a leading "// ..." line
-        // comment, which TwinCAT emits before the "TYPE Name :" header for
-        // DUTs with pragma attributes and/or a declaration comment. Neither
-        // is part of the enum's declaration shape, so they're stripped
-        // before EnumPattern is tried (mirrors real .TcDUT declaration text
-        // - see e.g. eWidgetValueKind.TcDUT/eWidgetOpcode.TcDUT).
+        // TwinCAT emits "{attribute '...'}" pragma lines and declaration
+        // comments before the "TYPE Name :" header. Neither is part of the
+        // enum's declaration shape, so they are stripped before EnumPattern -
+        // which is anchored at the start of the text - is tried.
         private static readonly Regex LeadingPragmaOrCommentLine = new Regex(
             @"\A\s*(\{[^\n\}]*\}|//[^\n]*)\s*", RegexOptions.Compiled);
 
         // Extracts (name, underlyingTypeName, members) from an ENUM DUT's
-        // declaration text - e.g. "E_Color" / "INT" (the IEC 61131-3
-        // default) from "TYPE E_Color : (Red, Green, Blue); END_TYPE", or
-        // "eWidgetValueKind" / "DINT" when the DUT declares an
-        // explicit base type after the member list's closing paren. members
-        // is the member-name -> ordinal-value table (TcXunit-rk3), parsed
-        // from the same body capture group used above - never a second scan
-        // of the DUT file.
+        // declaration text - e.g. "E_Color" / "INT" from "TYPE E_Color :
+        // (Red, Green, Blue); END_TYPE", or "eWidgetValueKind" / "DINT" when
+        // the DUT declares an explicit base type. members is the member-name
+        // -> ordinal-value table.
         public static bool TryParseEnum(
             string declarationText, out string name, out string underlyingTypeName, out IReadOnlyDictionary<string, int> members)
         {
@@ -71,19 +65,17 @@ namespace xStunit.Interpreter
             return true;
         }
 
-        // Matches a "// ..." line comment trailing a member entry (e.g.
-        // "TypeBool := 1  // Slave ramps in depending on progress of master
-        // position.") - stripped before splitting the body on commas so an
-        // in-comment comma can't be mistaken for a member separator and an
-        // in-comment digit run can't reach int.Parse.
+        // A "// ..." comment trailing a member entry, stripped before the body
+        // is split on commas: an in-comment comma would otherwise read as a
+        // member separator, and an in-comment digit run would reach the
+        // initializer parser.
         private static readonly Regex TrailingLineComment = new Regex(@"//[^\n]*", RegexOptions.Compiled);
 
-        // Splits the member-list body (e.g. "Red,\n\tGreen,\n\tBlue" or
-        // "Ok := 0,\n\tError := 1") into member -> ordinal-value pairs,
-        // following standard IEC 61131-3 enum numbering: an explicit
-        // ":=" initializer is used verbatim, an unspecified member is one
-        // greater than the previous member's value, and the first
-        // unspecified member (no preceding member at all) defaults to 0.
+        // Splits the member-list body into member -> ordinal-value pairs,
+        // following IEC 61131-3 enum numbering: an explicit ":=" initializer
+        // is used verbatim, an unspecified member is one greater than the
+        // previous member's value, and a first member with no initializer
+        // is 0.
         private static IReadOnlyDictionary<string, int> ParseMembers(string body)
         {
             var members = new Dictionary<string, int>();
@@ -116,16 +108,12 @@ namespace xStunit.Interpreter
             return members;
         }
 
-        // Parses an explicit member initializer's value text via the same
-        // Lexer/Parser numeric-literal handling every other integer literal
-        // in an ST body goes through (rather than a bare int.Parse), so an
-        // IEC 61131-3 based literal (e.g. "16#8", "2#1010") - not just plain
-        // decimal - resolves correctly instead of throwing FormatException
-        // (regression: an ENUM DUT member initializer isn't guaranteed to be
-        // decimal). Also covers a leading unary minus (e.g. "-1"); anything
-        // else (a non-literal constant expression) is out of scope, same as
-        // this file's existing "no parenthesised-expression initializers"
-        // note.
+        // Routed through the same Lexer/Parser every other integer literal in
+        // an ST body goes through, rather than a bare int.Parse, because an
+        // ENUM member initializer is not guaranteed to be decimal - a based
+        // literal ("16#8", "2#1010") is legal IEC 61131-3 and would otherwise
+        // throw FormatException. A leading unary minus is accepted; any other
+        // constant expression is out of scope.
         private static int ParseInitializerValue(string valueText)
         {
             switch (Parser.ParseExpression(valueText))

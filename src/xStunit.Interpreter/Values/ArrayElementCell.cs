@@ -1,12 +1,10 @@
 namespace xStunit.Interpreter
 {
-    // A Cell view onto one flattened slot of an ArrayValue.Elements array,
-    // rather than owning its own storage. Lets array-element access go
-    // through the same Cell-based lvalue/ADR/REF= machinery as plain
-    // variables and struct fields, and gives Pointer arithmetic
-    // (ADR(x) + offset) a place to land: advancing a pointer means building
-    // a new ArrayElementCell at Index + delta on the same Array
-    // (TcXunit-sej.2).
+    // A Cell view onto one flattened slot of an ArrayValue.Elements array
+    // rather than storage of its own, so array elements go through the same
+    // lvalue/ADR/REF= machinery as plain variables. Also where Pointer
+    // arithmetic lands: advancing ADR(x) by an offset means a new
+    // ArrayElementCell at Index + delta on the same Array.
     public sealed class ArrayElementCell : Cell
     {
         public ArrayValue Array { get; }

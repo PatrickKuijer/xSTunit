@@ -4,15 +4,14 @@ namespace xStunit.Interpreter
 {
     public abstract class Stmt
     {
-        // 1-based line within the ST body this statement was parsed from -
-        // the token that STARTS the statement (TcXunit-p3t.2). See Token.Line
-        // for the convention and for the BodyStartLine + Line - 1 formula
-        // that turns it into a .TcPOU file line.
+        // 1-based line within the ST body, taken from the token that STARTS
+        // the statement. See Token.Line for the convention and the file-line
+        // formula.
         //
         // Settable rather than a constructor parameter: Stmt/Expr subclasses
         // are constructed in hundreds of places (mostly hand-built ASTs in
-        // the tests), and the parser is the only caller that has a line to
-        // give. 0 means "unknown", which is what hand-built nodes keep.
+        // the tests) and the parser is the only caller with a line to give.
+        // 0 means "unknown", which is what hand-built nodes keep.
         public int Line { get; set; }
     }
 
@@ -96,8 +95,6 @@ namespace xStunit.Interpreter
         }
     }
 
-    // Single label (constant expr) or a lo..hi range label; To is null for a
-    // single-value label.
     public sealed class CaseLabel
     {
         public Expr From { get; }

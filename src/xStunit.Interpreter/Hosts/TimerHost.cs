@@ -2,20 +2,22 @@ using System;
 
 namespace xStunit.Interpreter
 {
-    // Native-stub boundary for TON/TOF/TP (FB_Pulse) and their 64-bit LTIME
-    // siblings LTON/LTOF/LTP (TcXunit-w5x.15.7 / T3 design, extended by
-    // TcXunit-x5pt): same precedent as SuiteHost, but Q/ET publish into
-    // the instance's own IN/PT/Q/ET Cell fields (set up in Engine.NewInstance)
-    // instead of being collected once - the host itself only holds internal
-    // bookkeeping (last-observed clock total, edge-detect state) that ST code
-    // never sees.
+    // Stands in for the Tc2_Standard timers TON/TOF/TP (also spelled
+    // FB_Pulse) and their 64-bit LTIME siblings LTON/LTOF/LTP. Q and ET are
+    // published into the instance's own Cell fields (seeded in
+    // Engine.NewInstance); the host keeps only bookkeeping ST never sees.
+    //
+    // Time comes from the shared Clock, NOT from being called: elapsed time is
+    // the difference between clock totals across two Update calls, so calling
+    // a timer twice without advancing the clock is a no-op rather than a
+    // double count, and advancing the clock without calling the timer is
+    // observed in full on the next call.
     //
     // The ms and ns families differ ONLY in how their PT/ET fields are
     // encoded, never in behavior: LTON is TON with PT/ET in 64-bit ns instead
-    // of 32-bit ms (Beckhoff Tc2_Standard, LTON/LTOF/LTP). So the timing math
-    // below runs entirely in the clock's own nanoseconds and a DurationField
-    // handed to each host at construction does the two conversions at the
-    // boundary - three behaviors x two widths, not six behavior classes.
+    // of 32-bit ms. So the timing math below runs entirely in the clock's
+    // nanoseconds and a DurationField converts at the field boundary - three
+    // behaviors x two widths, not six behavior classes.
     public abstract class TimerHost
     {
         private readonly DurationField _durationField;
@@ -27,21 +29,20 @@ namespace xStunit.Interpreter
             _durationField = durationField;
         }
 
-        // TcXunit-nch: matched case-insensitively (typeName.ToUpperInvariant()),
-        // same decision as the NativeTimerTypes lookup in Engine.NativeHost.cs
-        // that decides to call Create in the first place - a lowercase/mixed-case
-        // spelling that passes that lookup must not then throw
-        // NotSupportedException here.
+        // Matched case-insensitively, because the lookup in Engine.NativeHost
+        // that decides to call this at all is case-insensitive too - a
+        // lowercase or mixed-case spelling that got past that lookup must not
+        // then throw here.
         public static TimerHost Create(string typeName) => typeName?.ToUpperInvariant() switch
         {
             "TON" => new OnDelayTimerHost(DurationField.Time32),
             "TOF" => new OffDelayTimerHost(DurationField.Time32),
-            // TcXunit-tzeg.1: TP is the IEC 61131-3 name for the pulse timer;
-            // FB_Pulse is only our own alias for it, so both spellings must
-            // land on the same host.
+            // TP is the IEC 61131-3 name for the pulse timer; FB_Pulse is only
+            // this project's own alias for it, so both spellings must land on
+            // the same host.
             "TP" => new PulseTimerHost(DurationField.Time32),
             "FB_PULSE" => new PulseTimerHost(DurationField.Time32),
-            // TcXunit-x5pt: the LTIME trio, identical behavior at ns width.
+            // The LTIME trio, identical behavior at ns width.
             "LTON" => new OnDelayTimerHost(DurationField.LongTime64),
             "LTOF" => new OffDelayTimerHost(DurationField.LongTime64),
             "LTP" => new PulseTimerHost(DurationField.LongTime64),
@@ -49,9 +50,9 @@ namespace xStunit.Interpreter
         };
 
         // The boxed zero this host's PT/ET fields must be seeded with: 0u for
-        // a TIME timer, 0ul for an LTIME one. Engine.NativeHost's classifier
-        // reads it off the host rather than re-deciding the width there, the
-        // same "one spelling, one owner" precedent as RS/SR's input names.
+        // a TIME timer, 0ul for an LTIME one. Exposed so Engine.NativeHost
+        // reads the width off the host instead of re-deciding it there, the
+        // same single-owner rule RS/SR's input names follow.
         public object ZeroDuration => _durationField.Box(0);
 
         public void Update(FbInstance instance, long clockTotalNs)
@@ -73,9 +74,10 @@ namespace xStunit.Interpreter
 
         protected abstract void UpdateCore(FbInstance instance, bool input, long ptNs, long deltaNs);
 
-        // Raw elapsed accumulates unclamped and drives the firing check;
-        // published ET clamps to min(rawElapsed, PT) matching TON/TOF/TP's
-        // documented contract (Q is TRUE iff ET has reached PT).
+        // Raw elapsed time accumulates unclamped and drives the firing check,
+        // but published ET clamps to min(rawElapsed, PT): TON/TOF/TP document
+        // ET as never exceeding PT, so a test asserting ET = PT must not see
+        // an overshoot from a coarse clock step.
         protected void Publish(FbInstance instance, bool q, long rawElapsedNs, long ptNs)
         {
             instance.Fields["Q"].Value = q;
@@ -84,9 +86,9 @@ namespace xStunit.Interpreter
     }
 
     // How a timer's PT/ET Cells encode a duration: TIME as uint milliseconds,
-    // LTIME as ulong nanoseconds (the same two Cell representations
-    // TimeLiteral/IecElementaryDefault already produce for T#/LTIME#
-    // literals - a timer must read and write exactly what ST assigns).
+    // LTIME as ulong nanoseconds. These are the representations
+    // TimeLiteral/IecElementaryDefault already produce for T#/LTIME# literals,
+    // and a timer must read and write exactly what ST assigns.
     public sealed class DurationField
     {
         public static readonly DurationField Time32 =

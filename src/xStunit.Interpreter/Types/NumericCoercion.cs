@@ -2,13 +2,11 @@ using System;
 
 namespace xStunit.Interpreter
 {
-    // Shared IEC 61131-3 numeric promotion/narrowing rule (TcXunit-6af.2),
-    // extracted out of Engine.Expressions.cs (EvaluateBinary's widening
-    // ladder) and Engine.Statements.cs (CoerceForAssignment), which used to
-    // reimplement the same "smaller to larger is implicit" rule twice - one
-    // as an operand-widening switch, one as a target-Cell-type inspection.
-    // Operates on plain boxed CLR values only - no Engine/Frame/TypeRegistry
-    // dependency - so it is unit-testable in isolation.
+    // The IEC 61131-3 "smaller to larger is implicit" rule, shared by binary
+    // operand widening and assignment coercion. Works on boxed CLR values
+    // alone, with no Engine/Frame/TypeRegistry to consult, so the declared IEC
+    // type is not available here - see IecNumericType for which types share a
+    // box.
     public static class NumericCoercion
     {
         // Widens both operands to their common arithmetic type, following
@@ -26,20 +24,17 @@ namespace xStunit.Interpreter
             if (left is long || right is long)
                 return (ToLong(left), ToLong(right));
 
-            // ULINT/LWORD cells box as ulong (TcXunit-6af.1), same tier as
-            // LINT/UDINT/DWORD's long - kept as its own branch rather than
-            // folded into the long branch above because long and ulong don't
-            // implicitly mix (ToLong/ToULong each only accept int alongside
-            // their own type), matching the deliberate long+float/double
-            // non-mixing above.
+            // ULINT/LWORD box as ulong, the same tier as long - a separate
+            // branch because signed and unsigned 64-bit have no common type
+            // that holds both, so ToLong/ToULong each accept only int
+            // alongside their own type.
             if (left is ulong || right is ulong)
                 return (ToULong(left), ToULong(right));
 
-            // TIME/DATE/DATE_AND_TIME/TIME_OF_DAY box as uint (DateTimeLiteral.cs,
-            // Engine.Defaults.cs) - unlike UDINT/DWORD, which box as long
-            // specifically to avoid this. Widen to long (same tier as
-            // int->long above) rather than unboxing straight to int below,
-            // which throws (boxed uint can't unbox to int).
+            // TIME and the DATE family box as uint - unlike UDINT/DWORD, which
+            // box as long specifically to avoid this. Widen to long rather
+            // than falling through to the int unbox below, which throws: a
+            // boxed uint cannot be unboxed as int.
             if (left is uint || right is uint)
                 return (ToLong(left), ToLong(right));
 
@@ -69,10 +64,8 @@ namespace xStunit.Interpreter
             _ => throw new NotSupportedException($"Cannot use {value?.GetType().Name} in numeric arithmetic"),
         };
 
-        // A negative int has no unsigned 64-bit representation - reject it
-        // explicitly rather than silently wrapping it into a huge ulong via
-        // an unchecked cast (an int literal/expression combined with a
-        // ULINT/LWORD operand is only meaningful when it's non-negative).
+        // A negative int has no unsigned 64-bit representation, so it is
+        // rejected rather than allowed to wrap into a huge ulong.
         public static ulong ToULong(object value) => value switch
         {
             ulong ul => ul,
@@ -82,12 +75,11 @@ namespace xStunit.Interpreter
             _ => throw new NotSupportedException($"Cannot use {value?.GetType().Name} in numeric arithmetic"),
         };
 
-        // INT->REAL->LREAL widens implicitly on assignment (inferred from the
-        // target cell's current CLR type, since Cell carries no declared-type
-        // tag of its own); the reverse requires an explicit X_TO_Y cast
-        // produced by TryEvaluateCast, which never returns a wider CLR type
-        // than the cast target - so a rejection here means the assignment
-        // skipped a cast.
+        // INT->REAL->LREAL widens implicitly on assignment; the reverse needs
+        // an explicit X_TO_Y cast. The target's type is inferred from the value
+        // already in its slot, so 'existing' must be the target's current
+        // contents. TryEvaluateCast never yields a wider CLR type than the
+        // cast target, so a rejection here means the assignment skipped a cast.
         public static object CoerceForAssignment(object existing, object incoming)
         {
             if (existing is int && incoming is float)
@@ -101,15 +93,14 @@ namespace xStunit.Interpreter
                 return (float)intForFloat;
             if (existing is double && (incoming is int || incoming is float))
                 return ToDouble(incoming);
-            // UDINT/DWORD/LINT cells box as long (TcXunit-6af.1); an int
-            // literal/expression assigned into one must widen the same way.
+            // UDINT/DWORD/LINT cells box as long, so an int assigned into one
+            // has to widen to match.
             if (existing is long && incoming is int intForLong)
                 return (long)intForLong;
-            // ULINT/LWORD cells box as ulong (TcXunit-6af.1); mirror the long
-            // case above, but reject a negative incoming int explicitly
-            // (InvalidOperationException, matching this method's other
-            // rejections above) instead of silently wrapping it via a cast -
-            // a negative int has no unsigned 64-bit representation.
+            // ULINT/LWORD cells box as ulong - as above, except a negative int
+            // is rejected rather than wrapped, and with this method's
+            // InvalidOperationException rather than ToULong's
+            // NotSupportedException.
             if (existing is ulong && incoming is int intForULong)
             {
                 if (intForULong < 0)

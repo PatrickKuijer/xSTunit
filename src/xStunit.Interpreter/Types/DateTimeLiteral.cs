@@ -2,20 +2,18 @@ using System;
 
 namespace xStunit.Interpreter
 {
-    // Parses the raw text captured after D#/DATE#, DT#/DATE_AND_TIME#, and
-    // TOD#/TIME_OF_DAY# literals (TcXunit-gd2.13). Unlike TIME/LTIME
-    // (TimeLiteral.cs), these are calendar/clock literals with a fixed
-    // YYYY-MM-DD / HH:MM:SS[.mmm] shape rather than a reorderable duration-
-    // segment grammar, so Lexer.cs scans the literal body as a run of
-    // digits/'-'/':'/'.' instead of reusing TIME's digit+unit-letter loop,
-    // and parsing here is a straightforward positional scan rather than
-    // TimeLiteral's segment table.
+    // Parses the raw text captured after D#/DATE#, DT#/DATE_AND_TIME# and
+    // TOD#/TIME_OF_DAY# literals. These are calendar/clock values with a fixed
+    // YYYY-MM-DD / HH:MM:SS[.mmm] shape, not TIME's reorderable duration
+    // segments, hence a positional scan here and a separate literal-body scan
+    // in the lexer. All three box as uint, but each on its own scale, so the
+    // number alone does not say what it means.
     internal static class DateTimeLiteral
     {
         private static readonly DateTime Epoch = new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc);
 
-        // DATE: whole calendar days since the 1970-01-01 UTC epoch,
-        // represented in seconds like DATE_AND_TIME - D#2024-01-01.
+        // D#2024-01-01 -> whole days since the 1970-01-01 UTC epoch, but
+        // counted in seconds so DATE and DATE_AND_TIME share a scale.
         public static uint ParseDateSeconds(string text)
         {
             var pos = 0;
@@ -27,9 +25,9 @@ namespace xStunit.Interpreter
             return ToEpochSeconds(year, month, day, 0, 0, 0, text);
         }
 
-        // DATE_AND_TIME: seconds since the 1970-01-01 UTC epoch - no
-        // fractional-second component (unlike TIME_OF_DAY), matching the
-        // IEC 61131-3 DT grammar - DT#2024-01-01-10:00:00.
+        // DT#2024-01-01-10:00:00 -> seconds since the 1970-01-01 UTC epoch.
+        // The IEC 61131-3 DT grammar has no fractional-second component, so
+        // one is rejected rather than truncated.
         public static uint ParseDateAndTimeSeconds(string text)
         {
             var pos = 0;
@@ -45,8 +43,8 @@ namespace xStunit.Interpreter
             return ToEpochSeconds(year, month, day, hour, minute, second, text);
         }
 
-        // TIME_OF_DAY: milliseconds since midnight, same unit/range as TIME
-        // - TOD#10:00:00 or TOD#10:00:00.500.
+        // TOD#10:00:00[.500] -> milliseconds since midnight, the same unit as
+        // TIME rather than the seconds the two DATE forms use.
         public static uint ParseTimeOfDayMs(string text)
         {
             var pos = 0;
@@ -99,9 +97,9 @@ namespace xStunit.Interpreter
                 if (pos == fracStart)
                     throw new ParseException($"Expected digits after '.' in literal '{text}'", ".");
 
-                // Normalize to milliseconds regardless of how many fractional
-                // digits were given (TOD#10:00:00.5 == 500ms, matching TIME's
-                // ms-granularity representation).
+                // The fraction is positional, not a decimal to be scaled:
+                // TOD#10:00:00.5 is 500ms. Anything past millisecond
+                // granularity is dropped, since that is all the result holds.
                 var fracText = text.Substring(fracStart, pos - fracStart);
                 fracText = fracText.Length >= 3 ? fracText.Substring(0, 3) : fracText.PadRight(3, '0');
                 fractionMs = int.Parse(fracText);

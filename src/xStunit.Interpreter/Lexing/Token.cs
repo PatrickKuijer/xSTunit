@@ -14,20 +14,20 @@ namespace xStunit.Interpreter
         StringLiteral,
         Assign,      // :=
         RefAssign,   // REF=
-        Colon,       // :
+        Colon,
         DotDot,      // ..
-        Eq,          // =
-        Lt,          // <
-        Gt,          // >
-        Le,          // <=
-        Ge,          // >=
+        Eq,
+        Lt,
+        Gt,
+        Le,
+        Ge,
         Ne,          // <>
         Plus,
         Minus,
-        Asterisk,    // *
-        Slash,       // /
+        Asterisk,
+        Slash,
         Arrow,       // => (VAR_OUTPUT call-arg binding)
-        Caret,       // ^
+        Caret,
         Dot,
         Comma,
         Semicolon,
@@ -44,18 +44,16 @@ namespace xStunit.Interpreter
         public string Text;
 
         // 1-based line WITHIN THE ST BODY STRING passed to Lexer.Tokenize -
-        // the body's first line is line 1, NOT the .TcPOU file line
-        // (TcXunit-p3t.2). For a token spanning lines (multi-line string
-        // literal) this is the line it starts on.
+        // the body's first line is line 1, NOT the .TcPOU file line. A token
+        // spanning lines (multi-line string literal) reports where it starts.
         //
-        // To turn this into a real file line, combine it with the body's
-        // origin recorded by the .TcPOU parser (TcXunit-p3t.3):
+        // To reach a real file line:
         //
         //     fileLine = MethodAst.BodyStartLine + node.Line - 1
         //
-        // (same formula for PouAst.BodyStartLine), because BodyStartLine is
-        // itself the 1-based file line of body line 1. Do NOT add the two
-        // raw numbers - that double-counts the first line.
+        // (same for PouAst.BodyStartLine), because BodyStartLine is itself
+        // the file line of body line 1. Do NOT add the two raw numbers -
+        // that double-counts the first line.
         //
         // 0 means "unknown": hand-built tokens that never went through the
         // lexer. Every token the lexer emits has Line >= 1.

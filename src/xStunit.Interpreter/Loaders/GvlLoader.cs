@@ -6,11 +6,10 @@ using xStunit.Parser;
 
 namespace xStunit.Interpreter
 {
-    // Used by CliRunner (TcXunit-71o) to load .TcGVL files across the merged
-    // set of POU directories, resolving global variable lists (e.g.
-    // gScratchGlobals). Mirrors DutStructLoader's resilient per-file
-    // skip/report shape - a structurally unexpected .TcGVL file must not
-    // abort registry build for the whole directory.
+    // Loads .TcGVL global variable lists across the merged set of POU
+    // directories. Same resilience as DutStructLoader: a structurally
+    // unexpected .TcGVL file is skipped and reported rather than aborting
+    // registry build for the whole directory.
     public static class GvlLoader
     {
         public static IReadOnlyList<GvlAst> Load(
@@ -31,10 +30,10 @@ namespace xStunit.Interpreter
                 gvlsWithFiles.Add((file, gvl));
             }
 
-            // Fail fast and loud on duplicate GVL names across the merged
-            // set, same rationale as DuplicateStructTypeException/
-            // DuplicatePouTypeException: a duplicate name is ambiguous and
-            // must stop registry construction before any suite runs.
+            // Checked after the whole merged set is read, not per file: a
+            // duplicate is only visible once every directory has contributed.
+            // Fatal rather than skipped - an ambiguous GVL name must stop
+            // registry construction before any suite runs.
             DuplicateNameDetector.ThrowIfDuplicate(
                 gvlsWithFiles,
                 x => x.Gvl.Name,

@@ -3,9 +3,9 @@ using xStunit.Runner;
 
 namespace xStunit.Interpreter
 {
-    // Maps an exception that escaped a run onto the FailureKind vocabulary
-    // (TcXunit-3tx.1). One place, so the CLI's JSON, its text output and any
-    // future consumer can never disagree about what a given failure means.
+    // Maps an exception that escaped a run onto the FailureKind vocabulary.
+    // One place, so the CLI's JSON, its text output and any future consumer
+    // can never disagree about what a given failure means.
     public static class FailureClassifier
     {
         // Returns the FailureKind constant for ex, and the named construct when
@@ -21,8 +21,8 @@ namespace xStunit.Interpreter
         // own failure mode inverted. A throw site opts in by name instead; see
         // UnsupportedConstructException.
         //
-        // THE STRUCTURAL RULE (TcXunit-229.9/.15). Three kinds sit on one axis
-        // and the boundaries between them are structural, not stylistic:
+        // THE STRUCTURAL RULE. Three kinds sit on one axis and the boundaries
+        // between them are structural, not stylistic:
         //
         //   load-error           container level: the file, its XML, discovery
         //                        or instantiation failed. Nothing ran.
@@ -34,11 +34,10 @@ namespace xStunit.Interpreter
         //
         // parse-error is therefore the shrinking residue, and it shrinks in one
         // direction only: a construct the parser learns to recognize by name is
-        // PROMOTED out of parse-error into unsupported-construct. There is no
-        // upfront superset grammar to sort this out in advance - TcXunit-229.5
-        // keeps the hand-rolled, grow-on-demand parser - so the residue is
-        // retired construct by construct, as each one is taught, and never by
-        // guessing at the classifier.
+        // PROMOTED out of parse-error into unsupported-construct. The front end
+        // is hand-rolled and grow-on-demand, with no upfront superset grammar to
+        // sort this out in advance, so the residue is retired construct by
+        // construct as each one is taught - never by guessing at the classifier.
         //
         // What this deliberately gives up: a FormatException cannot say whether
         // the source was beyond the subset or simply wrong, so parse-error
@@ -71,24 +70,22 @@ namespace xStunit.Interpreter
                 case ConvergenceAssertionException _:
                     return FailureKind.Assertion;
 
-                // TcXunit-229.15: the ST front end (Lexer/Parser and the
-                // literal parsers) reports every body it cannot read as a
-                // ParseException, and that is now its own kind - LOCATED OR NOT.
-                // It used to split on whether an ExecuteBody frame happened to
-                // have stamped a location on the way out, which made the same
-                // unreadable body a plc-fault when it was reached through a
-                // call and a load-error when it wasn't. That distinction
-                // described TcXunit's own call path, not the failure, and both
-                // answers were wrong: nothing about the code under test was
-                // established (so not plc-fault) and the container loaded fine
-                // (so not load-error).
+                // The ST front end (Lexer/Parser and the literal parsers)
+                // reports every body it cannot read as a ParseException, and
+                // that is its own kind LOCATED OR NOT. Splitting instead on
+                // whether an ExecuteBody frame happened to stamp a location on
+                // the way out would describe this interpreter's own call path
+                // rather than the failure, and both answers it can give are
+                // wrong: nothing about the code under test was established (so
+                // not plc-fault) and the container loaded fine (so not
+                // load-error).
                 //
-                // TcXunit-g14q: matched by the front end's OWN type, never by
-                // the FormatException base. FormatException is thrown all over
-                // the process by things that are not the front end - every
+                // Matched by the front end's OWN type, never by the
+                // FormatException base: FormatException is thrown all over the
+                // process by things that are not the front end - every
                 // Convert.To* the engine performs on interpreted values, and
                 // ArrayTypeInfo.Parse during instantiation - and claiming those
-                // as parse-error told an agent to escalate a genuine PLC defect
+                // as parse-error tells a reader to escalate a genuine PLC defect
                 // instead of fixing it. Everything that is not a ParseException
                 // falls through to the located/unlocated split below.
                 //

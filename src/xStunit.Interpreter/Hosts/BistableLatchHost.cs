@@ -3,24 +3,25 @@ using System.Collections.Generic;
 
 namespace xStunit.Interpreter
 {
-    // Native-stub boundary for the RS/SR bistable latches (TcXunit-ejjl): same
-    // precedent as EdgeTriggerHost - no clock dependency, Q1 published into the
-    // instance's own Cell fields. Unlike the timer/edge hosts, the *input field
-    // names differ per latch*: RS is (SET, RESET1), SR is (SET1, RESET). That
-    // asymmetry is the IEC 61131-3 / Tc2_Standard signature, not a typo, so the
-    // names live on the host itself and both the field seeding
-    // (Engine.NativeHost.cs) and the bare-invoke argument binding
+    // Stands in for the Tc2_Standard bistable latches RS and SR. Like the edge
+    // triggers, no clock is involved; Q1 is published into the instance's own
+    // Cell field.
+    //
+    // The input field names differ per latch: RS is (SET, RESET1), SR is
+    // (SET1, RESET). That asymmetry is the IEC 61131-3 / Tc2_Standard
+    // signature, not a typo, so the names live on the host and both the field
+    // seeding (Engine.NativeHost.cs) and the bare-invoke argument binding
     // (Engine.Invocation.cs) read them from here rather than re-spelling them.
     //
-    // The latch holds NO state of its own: Q1 is its own previous value, and
-    // that already persists in the instance's Q1 Cell across cycles.
+    // The host holds NO state of its own: a latch's only memory is its own
+    // previous Q1, which already persists across cycles in the instance's Q1
+    // Cell. Two calls in one cycle therefore behave exactly like two cycles.
     public abstract class BistableLatchHost
     {
-        // TcXunit-nch: matched case-insensitively (typeName.ToUpperInvariant()),
-        // same decision as the NativeBistableLatchTypes lookup in
-        // Engine.NativeHost.cs that decides to call Create in the first place -
-        // a lowercase/mixed-case spelling that passes that lookup must not then
-        // throw NotSupportedException here.
+        // Matched case-insensitively, because the lookup in Engine.NativeHost
+        // that decides to call this at all is case-insensitive too - a
+        // lowercase or mixed-case spelling that got past that lookup must not
+        // then throw here.
         public static BistableLatchHost Create(string typeName) => typeName?.ToUpperInvariant() switch
         {
             "RS" => new ResetDominantLatchHost(),
@@ -28,12 +29,13 @@ namespace xStunit.Interpreter
             _ => throw new NotSupportedException($"Unknown native bistable latch type '{typeName}'"),
         };
 
-        // The latch's VAR_INPUT names in IEC declaration order (set input
-        // first, reset input second) - the positional-argument order for a
-        // bare invocation like fbLatch(TRUE, FALSE).
+        // The latch's VAR_INPUTs in IEC declaration order, set input first and
+        // reset input second - the positional-argument order for a bare
+        // invocation like fbLatch(TRUE, FALSE).
         public abstract IReadOnlyList<string> PositionalInputNames { get; }
 
-        // The single VAR_OUTPUT, named Q1 by both RS and SR.
+        // The one VAR_OUTPUT, and unlike the inputs it is spelled the same by
+        // both RS and SR.
         public const string OutputName = "Q1";
 
         public void Update(FbInstance instance)

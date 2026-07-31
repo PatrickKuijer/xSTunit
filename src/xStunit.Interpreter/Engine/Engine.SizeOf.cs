@@ -6,20 +6,15 @@ namespace xStunit.Interpreter
 {
     public sealed partial class Engine
     {
-        // SIZEOF(x) - TcXunit-l1x: byte size of a variable/field or a bare
-        // type name. x is normally a declared variable/field (resolved via
-        // ResolveDeclaredTypeName, same lookup __ISVALIDREF uses); when that
-        // comes back null (not a known variable) the identifier's own text
-        // is tried as a type name instead, so SIZEOF(ST_Msg)/SIZEOF(DINT)
-        // (naming a type directly, not a variable of that type) also work.
+        // The byte sizes SIZEOF() and the MEMCPY byte-layout packing are built
+        // from.
         //
-        // STRUCT/ARRAY sizes assume TwinCAT's default natural-alignment
-        // struct packing - each field aligned to its own size (no >8-byte
-        // alignment case exists among the supported scalar sizes) and the
-        // struct's overall size padded up to its largest member's alignment.
-        // A struct's {attribute 'pack_mode' := 'N'} pragma (TcXunit-eub,
-        // StructAst.PackMode) caps that per-field alignment at N bytes
-        // instead - see PackBound/SizeOfStruct below.
+        // STRUCT and ARRAY sizes assume TwinCAT's default natural-alignment
+        // packing: each field aligned to its own size (no alignment above 8
+        // bytes arises among the supported scalars), and the struct's overall
+        // size padded up to its largest member's alignment. A struct's
+        // {attribute 'pack_mode' := 'N'} pragma caps that per-field alignment
+        // at N bytes instead - see PackBound/SizeOfStruct below.
         private static readonly IReadOnlyDictionary<string, int> ScalarByteSizes = new Dictionary<string, int>
         {
             ["SINT"] = 1,
@@ -50,6 +45,10 @@ namespace xStunit.Interpreter
             return size;
         }
 
+        // SIZEOF's argument is normally a declared variable or field, but when
+        // it doesn't resolve as one, the identifier's own text is tried as a
+        // type name - so SIZEOF(ST_Msg) and SIZEOF(DINT), naming a type rather
+        // than a variable of that type, work too.
         private string ResolveTypeNameForSizeOf(Expr argExpr, Frame frame)
         {
             var declaredType = ResolveDeclaredTypeName(argExpr, frame);
@@ -89,10 +88,9 @@ namespace xStunit.Interpreter
 
             if (StringTypeInfo.IsStringType(resolved))
             {
-                // The size may be a non-literal constant expression (e.g. a
-                // GVL-qualified constant, TcXunit-988), resolved the same
-                // way the ARRAY-bound lambda just above does: through the
-                // normal Evaluate() path rather than a bare int.Parse.
+                // The length may be a non-literal constant expression (e.g. a
+                // GVL-qualified constant), so it goes through Evaluate() rather
+                // than a bare int.Parse, same as the ARRAY bound above.
                 var length = StringTypeInfo.ParseLength(
                     resolved, boundText => Convert.ToInt32(Evaluate(Parser.ParseExpression(boundText), frame)));
                 return (length + 1, 1);
@@ -124,10 +122,9 @@ namespace xStunit.Interpreter
             return (RoundUp(offset, maxAlign), maxAlign);
         }
 
-        // pack_mode 0 (absent/default) means "no cap" - natural alignment,
-        // same as before TcXunit-eub. A positive pack_mode caps every
-        // field's alignment at that many bytes (pack_mode 1 == fully
-        // byte-packed, no padding anywhere).
+        // pack_mode 0 (absent) means no cap, i.e. natural alignment. A positive
+        // pack_mode caps every field's alignment at that many bytes; pack_mode 1
+        // is fully byte-packed, with no padding anywhere.
         private static int PackBound(StructAst structAst) =>
             structAst.PackMode > 0 ? structAst.PackMode : int.MaxValue;
 

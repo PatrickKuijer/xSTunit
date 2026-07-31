@@ -7,24 +7,23 @@ using xStunit.Parser;
 
 namespace xStunit.Interpreter
 {
-    // Used by CliRunner (TcXunit-9li) to load .TcDUT STRUCT types across the
-    // merged set of POU directories, so future entry points resolve
-    // STRUCT-typed DUTs the same way rather than each growing its own copy.
+    // Loads .TcDUT STRUCT types across the merged set of POU directories.
     //
-    // ENUM/alias/union DUTs are skipped since StructDeclParser has no model
-    // for them yet, as are STRUCT DUTs using "TYPE X EXTENDS Base:" (struct
-    // inheritance - own fields only, no model for merging in the base type's
-    // fields yet); both fall back to their prior (unsupported) behavior
-    // rather than failing registry build for every suite.
+    // ENUM/alias/union DUTs are skipped, since StructDeclParser has no model
+    // for them (DutEnumLoader and DutAliasLoader pick those up on their own
+    // pass over the same files). STRUCT inheritance - "TYPE X EXTENDS Base:"
+    // - is skipped too: there is no model for merging in the base type's
+    // fields, and StructDeclParser yields no name for that header shape, so
+    // Load drops it. Neither case fails registry build, so an unsupported DUT
+    // costs only itself rather than every suite in the directory.
     public static class DutStructLoader
     {
-        // Same line-anchored style as StructDeclParser.TypeNamePattern: finds
-        // the "TYPE Name :" header line, then checks only that line and the
-        // next non-blank line for the STRUCT keyword - not a raw Contains()
-        // over the whole declaration text. A plain Contains("STRUCT") would
-        // also match ENUM/alias DUTs whose text happens to contain that
-        // substring in a comment (e.g. "(* replaces the old STRUCT-based
-        // version *)") or in an identifier like "STRUCTURED" (TcXunit-bpk).
+        // Line-anchored on purpose: only the "TYPE Name :" header line and the
+        // next non-blank line are checked for the STRUCT keyword. A plain
+        // Contains("STRUCT") over the whole declaration text would also match
+        // an ENUM or alias DUT that merely mentions it in a comment ("(*
+        // replaces the old STRUCT-based version *)") or inside an identifier
+        // like "STRUCTURED".
         private static readonly Regex TypeHeaderPattern = new Regex(
             @"^TYPE\s+\w+(\s+EXTENDS\s+\w+)?\s*:", RegexOptions.Compiled);
         private static readonly Regex StructOnHeaderLinePattern = new Regex(
@@ -32,10 +31,10 @@ namespace xStunit.Interpreter
         private static readonly Regex StructOnlyLinePattern = new Regex(
             @"^STRUCT\b", RegexOptions.Compiled);
 
-        // True when the declaration text's TYPE header actually declares a
-        // STRUCT ("TYPE Name : STRUCT" or "TYPE Name :" / "STRUCT" on the
-        // following line), as opposed to an ENUM/alias/union DUT whose text
-        // merely contains the word "STRUCT" somewhere unrelated.
+        // True when the TYPE header actually declares a STRUCT ("TYPE Name :
+        // STRUCT", or "TYPE Name :" with "STRUCT" on the following line), as
+        // opposed to an ENUM/alias/union DUT whose text merely contains the
+        // word "STRUCT" somewhere unrelated.
         public static bool IsStructDeclaration(string declarationText)
         {
             var lines = declarationText.Replace("\r\n", "\n").Split('\n');
@@ -72,7 +71,7 @@ namespace xStunit.Interpreter
             {
                 // A structurally unexpected .TcDUT file (malformed XML,
                 // missing DUT/Declaration element) must not abort registry
-                // build for the whole directory (TcXunit-022).
+                // build for the whole directory.
                 if (!StructuralParseGuard.TryParseOrSkip(
                         file, () => TcDutParser.Parse(File.ReadAllText(file)), out var dut, out var dutSkip))
                 {
@@ -96,10 +95,10 @@ namespace xStunit.Interpreter
                 structTypesWithFiles.Add((file, structAst));
             }
 
-            // Fail fast and loud on duplicate STRUCT type names across the
-            // merged set (TcXunit-dvd): two .TcDUT files declaring the same
-            // STRUCT name must not silently let the later-loaded one win in
-            // TypeRegistry.
+            // Checked after the whole merged set is read, not per file: a
+            // duplicate is only visible once every directory has contributed.
+            // Fatal rather than skipped, because TypeRegistry would otherwise
+            // silently let whichever .TcDUT loaded last win.
             DuplicateNameDetector.ThrowIfDuplicate(
                 structTypesWithFiles,
                 x => x.Struct.Name,

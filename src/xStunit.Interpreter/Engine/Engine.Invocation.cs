@@ -16,16 +16,14 @@ namespace xStunit.Interpreter
             string dispatchStartTypeOverride,
             bool optionalIfMissing = false)
         {
-            // instance is null when the body making this call is a global
-            // FUNCTION's rather than an FB method's (CallGlobalFunction builds
-            // a Frame with no instance) - a FUNCTION has no `THIS`, so an
+            // instance is null when the calling body is a global FUNCTION's
+            // rather than an FB method's: a FUNCTION has no THIS, so an
             // unqualified call from inside one has no ancestry to dispatch
-            // against. Everything below therefore treats a null instance as
-            // "no methods, no fields, no native host" and falls through to the
-            // global-FUNCTION / native-function lookups at the bottom, instead
-            // of dereferencing it and throwing a bare NullReferenceException
-            // that names neither the call nor the missing function
-            // (TcXunit-kii).
+            // against. Everything below therefore has to treat a null instance
+            // as "no methods, no fields, no native host" and fall through to the
+            // global-FUNCTION and native-function lookups at the bottom, rather
+            // than dereferencing it and throwing a bare NullReferenceException
+            // that names neither the call nor the missing function.
             var startType = dispatchStartTypeOverride ?? instance?.ActualTypeName;
 
             string definingType = null;
@@ -71,26 +69,21 @@ namespace xStunit.Interpreter
                     return null;
                 }
 
-                // Bare FB invocation, e.g. fbTon(IN:=x, PT:=t) - methodName is
-                // parsed as a call on the current instance with no receiver,
-                // but here it names a field holding another FbInstance to
-                // invoke directly (TcXunit-w5x.15.7's TON/TOF/FB_Pulse hosts).
-                // The FB-typed variable may be a top-level instance field, or
-                // a METHOD-local VAR (e.g. a TEST case declaring
+                // Bare FB invocation, e.g. fbTon(IN:=x, PT:=t): the parser sees a
+                // receiverless call on the current instance, but methodName here
+                // names a field holding another FbInstance to invoke directly.
+                // That FB-typed variable may be a top-level instance field or a
+                // METHOD-local VAR - a TEST case declaring
                 // `sfbDigitalInput : FB_DigitalInputFilter` and calling
-                // sfbDigitalInput()) - the latter lives in the caller frame's
-                // Locals, not instance.Fields, so check both (locals take
-                // precedence, mirroring Frame.ResolveCell).
+                // sfbDigitalInput() - so both are checked, locals first,
+                // mirroring Frame.ResolveCell.
                 //
-                // What the callee IS decides how it is invoked, and it already
-                // knows: NewInstance stamped its NativeKind at construction
-                // (TcXunit-kwv6), so this switches on that one discriminator
-                // (TcXunit-fvp6) rather than re-deriving the classification
-                // from an ordered chain of null checks over four host fields.
-                // Loopback and Suite callees deliberately match no case: a
-                // bare call on either is not an invocation at all, and falls
-                // through to the loopback-fault and TcUnit-stub routing below
-                // exactly as it did when they failed every null check.
+                // How the callee is invoked follows from what it IS, which it
+                // already knows: NewInstance stamped its NativeKind at
+                // construction. Loopback and Suite callees deliberately match no
+                // case - a bare call on either is not an invocation at all, and
+                // falls through to the loopback-fault and TcUnit-stub routing
+                // below.
                 if (TryResolveCalleeCell(callerFrame, instance, methodName, out var calleeCell) &&
                     calleeCell.Value is FbInstance callee)
                 {
@@ -100,44 +93,37 @@ namespace xStunit.Interpreter
                             BindNativeInputs(callee, TimerPositionalParams, positionalArgs, namedArgs, callerFrame);
                             // Nanoseconds, not TotalMs: the LTIME timers
                             // (LTON/LTOF/LTP) count in ns, and the host scales
-                            // back to its own PT/ET width (TcXunit-x5pt).
+                            // back to its own PT/ET width.
                             callee.NativeTimerHost.Update(callee, Clock.TotalNs);
                             return null;
 
-                        // Native R_TRIG/F_TRIG, e.g. fbTrig(CLK:=x) - same
-                        // precedent as the native timer above, but the host
-                        // only tracks CLK->Q (no PT/ET, no clock dependency).
+                        // Like the timer above, but the host only tracks CLK->Q:
+                        // no PT/ET, and no clock dependency.
                         case NativeHostKind.Edge:
                             BindNativeInputs(callee, EdgeTriggerPositionalParams, positionalArgs, namedArgs, callerFrame);
                             callee.NativeEdgeTriggerHost.Update(callee);
                             return null;
 
-                        // Native RS/SR, e.g. fbLatch(SET:=x, RESET1:=y) - like
-                        // the edge trigger above, but with two inputs whose
-                        // names differ between RS and SR, so the host supplies
-                        // them (TcXunit-ejjl).
+                        // RS and SR disagree on their two input names, so the
+                        // host supplies them.
                         case NativeHostKind.BistableLatch:
                             BindNativeInputs(callee, callee.NativeBistableLatchHost.PositionalInputNames, positionalArgs, namedArgs, callerFrame);
                             callee.NativeBistableLatchHost.Update(callee);
                             return null;
 
-                        // Native CTU/CTD/CTUD, e.g. fbCounter(CU:=x, PV:=3) -
-                        // same shape as the latch above; the counters disagree
-                        // on both the number and the names of their inputs, so
-                        // the host supplies them (TcXunit-l64b).
+                        // CTU/CTD/CTUD disagree on both the number and the names
+                        // of their inputs, so again the host supplies them.
                         case NativeHostKind.Counter:
                             BindNativeInputs(callee, callee.NativeCounterHost.PositionalInputNames, positionalArgs, namedArgs, callerFrame);
                             callee.NativeCounterHost.Update(callee);
                             return null;
 
-                        // Ordinary interpreted (non-native) FB field or
-                        // method-local var, e.g. sfbLoopback(ibEnable := TRUE)
-                        // - generalizes the native-timer bare-invoke above:
+                        // Ordinary interpreted FB field or method-local var:
                         // bind VAR_INPUT/VAR_IN_OUT args into the callee's
-                        // persisted Fields, then run its top-level body once
-                        // (TcXunit-0v1). The registry guard stays: None only
-                        // says "no native stub", and an FbInstance whose type
-                        // the registry doesn't know has no body to run.
+                        // persisted Fields, then run its top-level body once.
+                        // The registry guard is required - None only says "no
+                        // native stub", and an FbInstance whose type the
+                        // registry doesn't know has no body to run.
                         case NativeHostKind.None when _registry.Get(callee.ActualTypeName) != null:
                             InvokeFbInstance(callee, positionalArgs, namedArgs, callerFrame);
                             return null;
@@ -145,9 +131,8 @@ namespace xStunit.Interpreter
                 }
 
                 // Method-name routing WITHIN the loopback host kind - a
-                // different question from the host-kind classification above,
-                // so it keeps its own switch; only its guard reads the shared
-                // discriminator (TcXunit-fvp6).
+                // different question from the host-kind classification above, so
+                // it keeps its own switch and only its guard reads the kind.
                 if (instance?.NativeKind == NativeHostKind.Loopback && IsLoopbackFaultMethod(methodName))
                 {
                     switch (methodName)
@@ -184,29 +169,25 @@ namespace xStunit.Interpreter
                 if (optionalIfMissing)
                     return null;
 
-                // CanInvoke gate (TcXunit-6k2): route to the TcUnit native-stub
-                // boundary only for names it actually implements. Without it, a
-                // suite instance sent *every* unresolved call here and got
-                // NativeMethodBridge's "isn't supported yet" throw, which made
+                // The CanInvoke gate routes to the TcUnit native-stub boundary
+                // only for names it actually implements. Without it a suite
+                // instance sends every unresolved call here and gets
+                // NativeMethodBridge's "isn't supported yet" throw, which makes
                 // the global-FUNCTION and native-function lookups below
-                // unreachable from inside a suite - i.e. a suite could not call
-                // a global FUNCTION POU at all.
+                // unreachable from inside a suite.
                 if (instance?.NativeKind == NativeHostKind.Suite && NativeMethodBridge.CanInvoke(methodName))
                 {
                     var evaluatedPositional = positionalArgs.Select(e => Evaluate(e, callerFrame)).ToList();
                     var evaluatedNamed = namedArgs.ToDictionary(a => a.Name, a => Evaluate(a.Value, callerFrame));
 
-                    // TcXunit-gd2.5: AssertEquals(Expected: ANY, Actual: ANY,
-                    // Message) needs Expected/Actual's *declared* IEC type to
-                    // pick the matching AssertEquals_<TYPE> - the interpreter
-                    // has no real ANY value carrying its own runtime type tag
-                    // (unlike a TwinCAT ANY struct's TypeClass/pValue/diSize),
-                    // so this resolves it from the *expression* the same way
-                    // SIZEOF() does (Engine.SizeOf.cs), before it's evaluated
-                    // away to a bare CLR value above - several IEC scalar
-                    // types share the same CLR representation once evaluated
-                    // (see IecNumericType.cs/ScalarAssertType.cs) and can't be
-                    // told apart from the value alone.
+                    // AssertEquals(Expected: ANY, Actual: ANY, Message) needs its
+                    // arguments' *declared* IEC type to pick the matching
+                    // AssertEquals_<TYPE>, and the interpreter has no ANY value
+                    // carrying a runtime type tag of its own (unlike a TwinCAT
+                    // ANY struct's TypeClass/pValue/diSize). Several IEC scalar
+                    // types share one CLR representation once evaluated, so the
+                    // type has to come from the *expression*, the way SIZEOF()
+                    // resolves it - and before evaluation discards it.
                     IReadOnlyDictionary<string, string> anyTypeNames = null;
                     if (methodName == "AssertEquals")
                     {
@@ -219,12 +200,12 @@ namespace xStunit.Interpreter
                         };
                     }
 
-                    // TcXunit-3tx.2: hand the host the call's name and the
-                    // caller frame's "you are here" position before dispatching,
-                    // so a failure recorded inside can say which assert failed
-                    // and where it is written. Announced here rather than
-                    // inside NativeMethodBridge because this is the only side
-                    // that has the Frame.
+                    // Hands the host the call's name and the caller frame's "you
+                    // are here" position before dispatching, so a failure
+                    // recorded inside can say which assert failed and where it
+                    // is written. Announced here rather than inside
+                    // NativeMethodBridge because this is the only side that has
+                    // the Frame.
                     instance.NativeSuiteHost.EnterNativeCall(
                         methodName,
                         new AssertSite(
@@ -236,15 +217,13 @@ namespace xStunit.Interpreter
                     return NativeMethodBridge.Invoke(instance.NativeSuiteHost, methodName, evaluatedPositional, evaluatedNamed, anyTypeNames);
                 }
 
-                // Unqualified call inside a METHOD body naming neither an
-                // ancestor method nor a callee field: falls back to a
-                // top-level global FUNCTION POU of the same name
-                // (TcXunit-9su) - a plain FUNCTION has no Method children and
-                // no FUNCTION_BLOCK/PROGRAM declaration keyword, so it never
-                // matched the ancestry walk above. Runs with no receiver
-                // instance (a FUNCTION can't see the caller's FB fields,
-                // only its own params/locals and GVLs via
-                // TryResolveGlobalCell).
+                // An unqualified call naming neither an ancestor method nor a
+                // callee field falls back to a top-level global FUNCTION POU of
+                // the same name: a plain FUNCTION has no Method children and no
+                // FUNCTION_BLOCK/PROGRAM declaration keyword, so it can never
+                // have matched the ancestry walk above. It runs with no receiver
+                // instance - a FUNCTION sees only its own params and locals,
+                // plus GVLs.
                 var globalFunctionDef = _registry.Get(methodName);
                 if (globalFunctionDef != null &&
                     GlobalFunctionDeclarationPattern.IsMatch(
@@ -252,9 +231,9 @@ namespace xStunit.Interpreter
                     return CallGlobalFunction(globalFunctionDef, positionalArgs, namedArgs, callerFrame);
 
                 // Host-registered stand-in for a compiled-only TwinCAT library
-                // function (TcXunit-6k2), e.g. Tc2_Utilities' F_CheckSum16 -
-                // there is no .TcPOU anywhere to parse for these, so nothing
-                // above could ever have resolved them.
+                // function, e.g. Tc2_Utilities' F_CheckSum16 - there is no
+                // .TcPOU anywhere to parse for these, so nothing above could
+                // ever have resolved them.
                 //
                 // Deliberately the LAST thing tried, after the global-FUNCTION
                 // POU lookup directly above: if the user's own tree really does
@@ -265,28 +244,23 @@ namespace xStunit.Interpreter
                     return InvokeNativeFunction(nativeFunction, methodName, positionalArgs, namedArgs, callerFrame);
 
                 // A suite receiver that got this far named something the TcUnit
-                // stub doesn't implement AND that isn't a POU or native
-                // function either - almost always a TcUnit assert/API, or an
-                // unimplemented IEC standard-library function (e.g. SEL), not
-                // wired up yet, so keep saying exactly that (TcXunit-6k2). But
-                // only when the name actually looks like it belongs to one of
-                // those external surfaces (see
-                // NativeMethodBridge.LooksLikeTcUnitApiName for exactly what
-                // that means) - otherwise this unconditionally classified
-                // every unresolved unqualified suite-body call as an
-                // interpreter gap (kind=unsupported-construct, "STOP, don't
-                // edit the POU"), even a plain typo of one of the suite's own
-                // methods (e.g. 'CounterStartsAtZeroo()' for
-                // 'CounterStartsAtZero()'), which is a real, fixable defect
-                // and belongs on the ordinary method-not-found path below
-                // (kind=plc-fault) instead (TcXunit-2o9.1).
+                // stub doesn't implement and that isn't a POU or native function
+                // either - almost always a TcUnit assert/API or an unimplemented
+                // IEC standard-library function (SEL, say), so say exactly that.
+                //
+                // The LooksLikeTcUnitApiName guard is what keeps that claim
+                // narrow. Without it every unresolved unqualified suite-body call
+                // is reported as an interpreter gap ("STOP, don't edit the POU"),
+                // including a plain typo of one of the suite's own methods -
+                // 'CounterStartsAtZeroo()' for 'CounterStartsAtZero()' - which is
+                // a real, fixable defect and belongs on the method-not-found path
+                // below as a plc-fault.
                 if (instance?.NativeKind == NativeHostKind.Suite && NativeMethodBridge.LooksLikeTcUnitApiName(methodName))
                     throw NativeMethodBridge.NotSupported(methodName);
 
-                // startType is null for a call made from a global FUNCTION body
-                // (no instance, so no ancestry to have searched) - saying "from
-                // type ''" there would be nonsense, so name the real situation
-                // instead (TcXunit-kii).
+                // startType is null for a call made from a global FUNCTION body -
+                // no instance, so no ancestry was ever searched - and "from type
+                // ''" would be nonsense there.
                 throw new InvalidOperationException(
                     startType != null
                         ? $"Method '{methodName}' not found starting from type '{startType}'"
@@ -295,14 +269,13 @@ namespace xStunit.Interpreter
                           "TwinCAT library, supply it via a native-function plugin.");
             }
 
-            // definingType (not instance.ActualTypeName) is the POU that owns
-            // the body about to run, so an inherited method is attributed to
-            // the base FB that actually declares it (TcXunit-p3t.1). Same
-            // reason methodDef's own BodyStartLine is what travels: an
-            // override and the method it overrides share nothing but a name,
-            // and TypeRegistry caches parsed statements by body TEXT, so the
-            // offset has to ride the frame rather than the statement list
-            // (TcXunit-p3t.4).
+            // definingType, not instance.ActualTypeName: it is the POU owning
+            // the body about to run, so an inherited method is attributed to the
+            // base FB that declares it. methodDef's own BodyStartLine travels
+            // for the same reason - an override and the method it overrides
+            // share nothing but a name, and TypeRegistry caches parsed
+            // statements by body TEXT, so the offset has to ride the frame
+            // rather than the statement list.
             var newFrame = new Frame(instance, definingType, methodName, methodDef.BodyStartLine);
             SeedReturnCell(newFrame, methodName, methodDef.DeclarationText);
             var paramDecls = _registry.GetDecls(methodDef.DeclarationText);
@@ -315,52 +288,39 @@ namespace xStunit.Interpreter
             return newFrame.Locals.TryGetValue(methodName, out var returnCell) ? returnCell.Value : null;
         }
 
-        // No ^ anchor: DeclarationText may lead with a (* ... *) block
-        // comment or // line comment (this codebase's standard convention -
-        // see TcXunit-9k6), so instead of anchoring to the very start of the
-        // string, the leading comment/whitespace run is stripped first
-        // (CallableReturnTypeParser.StripLeadingComments - shared with the
-        // header-return-type parse, which needs the identical treatment for
-        // the identical reason) and the resulting text is anchored with ^.
+        // The ^ anchor only works because callers strip the leading comment run
+        // first (CallableReturnTypeParser.StripLeadingComments, shared with the
+        // header-return-type parse): DeclarationText commonly opens with a
+        // (* ... *) or // comment, which would otherwise sit between the start
+        // of the string and the FUNCTION keyword.
         private static readonly System.Text.RegularExpressions.Regex GlobalFunctionDeclarationPattern =
             new System.Text.RegularExpressions.Regex(@"^\s*FUNCTION(?!_BLOCK)\b", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
 
-        // TcXunit-cq6: a callable's return value lives in a Local named after
-        // the callable itself, and a Cell carries no declared-type tag - so
-        // assignment compatibility is decided purely by the CLR type already
-        // in the Cell (NumericCoercion.CoerceForAssignment). Left to be
-        // created lazily by its first assignment, an LREAL-returning method
-        // opening with 'M_Read := 0.0;' got a *REAL* cell (a bare decimal
-        // literal lexes as REAL - see Engine.Defaults' TcXunit-5qs note), and
-        // every later LREAL assignment into it was rejected as an implicit
-        // narrowing. Seeding the cell from the declared return type up front
-        // gives the narrowing rule the right type to judge against, the same
-        // way BindParams already seeds each param from its VarDecl.
+        // A callable's return value lives in a Local named after the callable
+        // itself, and assignment compatibility is decided from the CLR type
+        // already in that Cell (NumericCoercion.CoerceForAssignment). Left to be
+        // created by its first assignment, an LREAL-returning method opening
+        // with 'M_Read := 0.0;' would get a *REAL* cell - a bare decimal literal
+        // lexes as REAL - and every later LREAL assignment into it would be
+        // rejected as an implicit narrowing. Seeding from the declared return
+        // type gives that rule the right type to judge against, as BindParams
+        // already does for each param.
         //
-        // IEC numeric return types are seeded first, keyed off the narrowing/
-        // widening rule they feed (their defaults are plain boxed zeros - see
-        // TryGetNumericCallableType).
+        // The remaining elementary return types
+        // (BOOL/STRING/W?STRING(n)/TIME/LTIME/DATE/DATE_AND_TIME/TIME_OF_DAY)
+        // carry no narrowing hazard, but seeding them is just as cheap and means
+        // a METHOD/FUNCTION that returns without assigning on every path - a
+        // BOOL-returning method with an early-out that never sets its own name -
+        // yields its IEC default rather than a null a caller's comparison
+        // ('IF bIsReady() THEN ...') cannot handle. Both classification and value
+        // come from IecElementaryDefault, the same owner Engine.DefaultValue
+        // defers to.
         //
-        // TcXunit-qft: the remaining *elementary* return types
-        // (BOOL/STRING/W?STRING(n)/TIME/LTIME/DATE/DATE_AND_TIME/
-        // TIME_OF_DAY) carry none of that narrowing hazard, but they do have
-        // a plain constant default already sitting in Engine.DefaultValue
-        // (false/""/0u/0ul) - seeding them too is just as cheap, and means a
-        // METHOD/FUNCTION that returns without assigning every path (e.g. a
-        // BOOL-returning method with an early-out that never sets its own
-        // name) reads its IEC default out of CallMethod instead of null,
-        // which a caller's cast/comparison (IF bIsReady() THEN ...) can't
-        // handle. Both the classification and the value come from
-        // IecElementaryDefault (TcXunit-om7f), the same owner Engine.
-        // DefaultValue defers to - nothing is re-derived here.
-        //
-        // DUT/FB/interface/POINTER return types are deliberately left
-        // unseeded - no cell until first assignment, null out of CallMethod
-        // when never assigned, exactly as before this ticket. Those would
-        // need DefaultValue's full construction path (materializing a struct/
-        // FB instance, or resolving a POINTER's null), which for a return
-        // value that carries no narrowing hazard of its own is too much to
-        // do speculatively just to seed it.
+        // DUT/FB/interface/POINTER return types are deliberately left unseeded:
+        // no cell until first assignment, null out of CallMethod when never
+        // assigned. Seeding those needs DefaultValue's full construction path -
+        // materializing a struct or FB instance - which is too much to do
+        // speculatively for a return value with no narrowing hazard of its own.
         private void SeedReturnCell(Frame frame, string name, string declarationText)
         {
             if (TryGetNumericCallableType(declarationText, out var numericType, out var zero))
@@ -382,12 +342,10 @@ namespace xStunit.Interpreter
             frame.LocalTypeNames[name] = declaredType;
         }
 
-        // Shared by SeedReturnCell above and Engine.Properties' Get/Set
-        // accessor seeding (TcXunit-8we): resolves declarationText's header
-        // return/property type and reports it only when it's an IEC numeric
-        // type, mirroring SeedReturnCell's original (TcXunit-cq6) scoping -
-        // see that ticket's reasoning above for why non-numeric return types
-        // are deliberately left alone.
+        // Shared by SeedReturnCell above and Engine.Properties' Get/Set accessor
+        // seeding: resolves declarationText's header return/property type, but
+        // reports it only when it is an IEC numeric type - the types the
+        // narrowing rule above turns on.
         private bool TryGetNumericCallableType(string declarationText, out string declaredType, out object zero)
         {
             declaredType = _registry.GetReturnTypeName(declarationText);
@@ -398,10 +356,9 @@ namespace xStunit.Interpreter
             return IecNumericType.TryGetDefault(_registry.ResolveAlias(declaredType), out zero);
         }
 
-        // Global FUNCTION invocation (TcXunit-9su): same body-execution shape
-        // as the METHOD path above, but with no receiver instance - a
-        // FUNCTION's return value is written to a Local named after the
-        // function itself (functionDef.Name), same IEC convention as METHOD.
+        // Same body-execution shape as the METHOD path above, but with no
+        // receiver instance. A FUNCTION's return value goes to a Local named
+        // after the function itself, the same IEC convention as a METHOD.
         private object CallGlobalFunction(
             xStunit.Parser.PouAst functionDef,
             IReadOnlyList<Expr> positionalArgs,
@@ -413,11 +370,6 @@ namespace xStunit.Interpreter
             var paramDecls = _registry.GetDecls(functionDef.DeclarationText);
             BindParams(paramDecls, positionalArgs, namedArgs, callerFrame, newFrame);
 
-            // TcXunit-n65: routed through ExecuteBody (rather than the old
-            // hand-rolled try/catch(MethodReturnSignal)) so a lazy parse
-            // failure in functionDef.ImplementationText is attributed to
-            // this function's own frame, same as CallMethod/InvokeFbInstance
-            // below.
             ExecuteBody(() => _registry.GetStatements(functionDef.ImplementationText), newFrame);
 
             WriteBackOutputArgs(paramDecls, namedArgs, newFrame, callerFrame);
@@ -425,10 +377,9 @@ namespace xStunit.Interpreter
             return newFrame.Locals.TryGetValue(functionDef.Name, out var returnCell) ? returnCell.Value : null;
         }
 
-        // Name => expr call args (TcXunit-mym.5) bind a VAR_OUTPUT param's
-        // value back into the caller-side lvalue after the call returns -
-        // BindParams only reads namedArgs for Input/InOut, so this is the
-        // only place output binding happens.
+        // Name => expr call args bind a VAR_OUTPUT param's value back into the
+        // caller-side lvalue after the call returns. BindParams reads namedArgs
+        // only for Input/InOut, so this is the one place output binding happens.
         private void WriteBackOutputArgs(
             IReadOnlyList<VarDecl> paramDecls,
             IReadOnlyList<NamedArg> namedArgs,
@@ -451,28 +402,24 @@ namespace xStunit.Interpreter
 
         // Resolves a bare-invocation callee cell by name, checking the caller
         // frame's Locals (METHOD-local VARs) before the instance's persisted
-        // Fields (top-level VARs) - mirrors Frame.ResolveCell's precedence.
-        // callerFrame is null for a few top-level entry points (e.g. FB_init),
-        // so only instance.Fields applies there.
+        // Fields (top-level VARs), mirroring Frame.ResolveCell's precedence.
+        // callerFrame is null for a few top-level entry points such as FB_init,
+        // where only instance.Fields applies.
         //
-        // The Locals-before-Fields precedence is only valid for a genuine
-        // bare/self invocation, where instance is the same FbInstance as
-        // callerFrame.Instance (call.Receiver is null/ThisRefExpr/
-        // SuperRefExpr in EvaluateCall). For an explicit non-self receiver
-        // (someObj.Foo()), instance is the receiver's own FbInstance, which
-        // may differ from callerFrame.Instance - in that case the caller's
-        // locals are irrelevant scope and must not be consulted, or a
-        // same-named local in the calling METHOD could shadow/hijack
-        // resolution of a call meant for the receiver (TcXunit-3zk).
+        // That Locals-before-Fields precedence is valid ONLY for a genuine
+        // bare/self invocation, i.e. when instance is the same FbInstance as
+        // callerFrame.Instance - hence the guard. For an explicit non-self
+        // receiver (someObj.Foo()) the caller's locals are irrelevant scope, and
+        // consulting them would let a same-named local in the calling METHOD
+        // hijack a call meant for the receiver.
         private static bool TryResolveCalleeCell(Frame callerFrame, FbInstance instance, string name, out Cell cell)
         {
             if (callerFrame != null && instance == callerFrame.Instance && callerFrame.Locals.TryGetValue(name, out cell))
                 return true;
 
-            // A global FUNCTION frame has no instance (TcXunit-kii) - its own
-            // locals were already consulted above (null == null makes the
-            // self-invocation test true), and there are no instance Fields
-            // behind them.
+            // A global FUNCTION frame has no instance: its own locals were
+            // already consulted above (null == null makes the self-invocation
+            // test true), and there are no instance Fields behind them.
             if (instance == null)
             {
                 cell = null;
@@ -482,26 +429,22 @@ namespace xStunit.Interpreter
             return instance.Fields.TryGetValue(name, out cell);
         }
 
-        // IN/PT bound by position (IEC order) or by name; unset args keep the
-        // timer instance's current field value (e.g. a caller that only ever
-        // passes IN relies on PT staying whatever it was last set to).
+        // The TON/TOF/TP VAR_INPUTs, in IEC declaration order.
         private static readonly string[] TimerPositionalParams = { "IN", "PT" };
 
-        // R_TRIG/F_TRIG have a single VAR_INPUT (CLK).
+        // R_TRIG/F_TRIG have a single VAR_INPUT.
         private static readonly string[] EdgeTriggerPositionalParams = { "CLK" };
 
-        // Binds a bare invocation's arguments into a native stub's already-
-        // seeded VAR_INPUT Cells: positionally against inputNames (the
+        // Binds a bare invocation's arguments into a native stub's
+        // already-seeded VAR_INPUT Cells: positionally against inputNames (the
         // callee's VAR_INPUTs in IEC declaration order), then by name. Unset
         // params deliberately keep whatever the instance already held, so a
         // caller that passes only CU relies on PV staying where it was.
         //
-        // One helper for all four native families (TcXunit-l64b): the loop is
-        // identical, only the name list differs, and for RS/SR (TcXunit-ejjl)
-        // and CTU/CTD/CTUD it isn't even a constant - the two latches and the
-        // three counters each spell their inputs differently, so those call
-        // sites pass the list straight off the callee's own host rather than
-        // re-spelling it here.
+        // One helper for all the native families, since only the name list
+        // differs - and for RS/SR and CTU/CTD/CTUD that list isn't even a
+        // constant, so those call sites take it straight off the callee's own
+        // host rather than re-spelling it here.
         private void BindNativeInputs(
             FbInstance callee,
             IReadOnlyList<string> inputNames,
@@ -543,10 +486,9 @@ namespace xStunit.Interpreter
             return result;
         }
 
-        // Generalizes BindNativeInputs beyond the native TON/TOF/FB_Pulse
-        // boundary: binds bare-invocation args into the callee's persisted
-        // Fields by name or IEC positional order, then runs the callee's own
-        // top-level body once (TcXunit-0v1).
+        // BindNativeInputs' interpreted counterpart: binds bare-invocation args
+        // into the callee's persisted Fields by name or IEC positional order,
+        // then runs the callee's own top-level body once.
         private void InvokeFbInstance(
             FbInstance callee,
             IReadOnlyList<Expr> positionalArgs,
@@ -592,21 +534,19 @@ namespace xStunit.Interpreter
                 }
                 else
                 {
-                    // TcXunit-3d1: DefaultValue runs here, BEFORE ExecuteBody
-                    // is ever entered for newFrame - so its own try/catch
-                    // (Engine.Diagnostics.cs) can't attribute a fault raised
-                    // while constructing this callee's own local/unsupplied-
-                    // param default (e.g. a nested FB's default-value
-                    // construction hitting an unresolved identifier). Without
-                    // this, the fault surfaces unattributed at whatever
-                    // frame is still active further up the CLR stack -
-                    // typically the caller - with a call stack of exactly one
-                    // frame no matter how deep the real failure is. Argument
-                    // *evaluation* just above (Evaluate(argExpr, callerFrame))
-                    // is deliberately left outside this wrapper: that runs in
-                    // the CALLER's frame/scope, and a fault there is
-                    // legitimately the caller's, already covered by the
-                    // caller's own ExecuteBody.
+                    // DefaultValue runs BEFORE ExecuteBody is entered for
+                    // newFrame, so ExecuteBody's own attribution cannot cover a
+                    // fault raised while constructing this callee's unsupplied-
+                    // param default - a nested FB's default-value construction
+                    // hitting an unresolved identifier, say. Unwrapped, such a
+                    // fault surfaces at whatever frame is still active further up
+                    // the CLR stack, typically the caller, with a call stack of
+                    // one frame however deep the real failure was.
+                    //
+                    // Argument *evaluation* just above stays outside this
+                    // wrapper on purpose: it runs in the CALLER's scope, so a
+                    // fault there is legitimately the caller's and is already
+                    // covered by the caller's own ExecuteBody.
                     value = RunWithFaultAttribution(
                         () => DefaultValue(decl, newFrame.Instance),
                         newFrame);

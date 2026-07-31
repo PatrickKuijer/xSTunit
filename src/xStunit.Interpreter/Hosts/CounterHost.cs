@@ -4,21 +4,22 @@ using System.Linq;
 
 namespace xStunit.Interpreter
 {
-    // Native-stub boundary for the Tc2_Standard counters CTU/CTD/CTUD
-    // (TcXunit-l64b): same family as TimerHost/EdgeTriggerHost/
-    // BistableLatchHost - no clock dependency, everything the caller can read
-    // back (Q/QU/QD/CV) is published into the instance's own Cell fields.
+    // Stands in for the Tc2_Standard counters CTU/CTD/CTUD. No clock is
+    // involved; everything the caller reads back (Q/QU/QD/CV) is published
+    // into the instance's own Cell fields.
     //
-    // Like BistableLatchHost, the *field names differ per counter* (CTU is
+    // Like the latches, the field names differ per counter (CTU is
     // CU/RESET->Q, CTD is CD/LOAD->Q, CTUD is CU/CD/RESET/LOAD->QU/QD), so the
-    // names live on the host itself and both the field seeding
+    // names live on the host and both the field seeding
     // (Engine.NativeHost.cs) and the bare-invoke argument binding
     // (Engine.Invocation.cs) read them from here rather than re-spelling them.
     //
     // Unlike the latches, a counter DOES hold state of its own: the previous
-    // CU/CD level behind the rising-edge detection. CV is not that state - it
-    // persists in the instance's own CV Cell across cycles, same as Q1 does
-    // for a latch.
+    // CU/CD level behind its rising-edge detection. That makes it cycle-
+    // sensitive - a counting input is only counted once per FALSE->TRUE
+    // transition, so two calls in one cycle count once and a skipped call can
+    // miss an edge entirely. CV is not part of that state; it persists in the
+    // instance's own CV Cell across cycles, as Q1 does for a latch.
     //
     // Semantics are the documented Tc2_Standard ones (CTU
     // infosys .../74400523.html, CTD .../74398987.html, CTUD .../74402059.html):
@@ -53,11 +54,10 @@ namespace xStunit.Interpreter
 
         private IReadOnlyList<string> _positionalInputNames;
 
-        // TcXunit-nch: matched case-insensitively (typeName.ToUpperInvariant()),
-        // same decision as the NativeCounterTypes lookup in
-        // Engine.NativeHost.cs that decides to call Create in the first place -
-        // a lowercase/mixed-case spelling that passes that lookup must not then
-        // throw NotSupportedException here.
+        // Matched case-insensitively, because the lookup in Engine.NativeHost
+        // that decides to call this at all is case-insensitive too - a
+        // lowercase or mixed-case spelling that got past that lookup must not
+        // then throw here.
         public static CounterHost Create(string typeName) => typeName?.ToUpperInvariant() switch
         {
             "CTU" => new UpCounterHost(),

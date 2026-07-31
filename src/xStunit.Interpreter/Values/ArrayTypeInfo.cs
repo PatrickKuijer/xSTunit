@@ -7,27 +7,24 @@ namespace xStunit.Interpreter
 {
     // Parses declared ARRAY type text - "ARRAY[lo..hi] OF type" and the
     // multi-dim form "ARRAY[lo..hi,lo..hi,...] OF type" - into dimension
-    // bounds plus element type name (TcXunit-w5x.15.6).
+    // bounds plus element type name.
     internal static class ArrayTypeInfo
     {
-        // TcXunit-fzm: IEC 61131-3 type names are case-insensitive ('array[..]
-        // of int' is exactly as valid as 'ARRAY[..] OF INT'), so both the
-        // ARRAY/OF keyword pattern and the leading-keyword check below match
-        // case-insensitively.
+        // IEC 61131-3 type names are case-insensitive ('array[..] of int' is
+        // as valid as 'ARRAY[..] OF INT'), hence IgnoreCase here and on the
+        // keyword check below.
         private static readonly Regex Pattern = new Regex(
             @"^ARRAY\s*\[(?<dims>[^\]]+)\]\s*OF\s+(?<elementType>.+)$", RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
         public static bool IsArrayType(string typeName) =>
             typeName != null && typeName.TrimStart().StartsWith("ARRAY", StringComparison.OrdinalIgnoreCase);
 
-        // resolveBound resolves a non-literal bound expression's text (e.g.
-        // "cRemoteClientConfig.MAX_REMOTE_ITEMS") to its integer value.
-        // IEC 61131-3 array bounds are constant expressions, not just bare
-        // integer literals (TcXunit-654) - callers with an Engine/Frame
-        // context to evaluate such expressions against (e.g. GVL-qualified
-        // constants) pass a resolver; callers without one (e.g.
-        // StructBoundaryBuilder, which runs before any Engine exists) pass
-        // null and keep the original literal-only behavior.
+        // IEC 61131-3 array bounds are constant expressions, not just integer
+        // literals, so resolveBound turns a non-literal bound's text (e.g.
+        // "cRemoteClientConfig.MAX_REMOTE_ITEMS") into its value. Callers with
+        // no Engine/Frame to evaluate against - StructBoundaryBuilder runs
+        // before any Engine exists - pass null and get literal-only parsing,
+        // with a FormatException on anything else.
         public static (IReadOnlyList<(int Lo, int Hi)> Dimensions, string ElementTypeName) Parse(
             string typeName, Func<string, int> resolveBound = null)
         {

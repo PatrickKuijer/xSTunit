@@ -3,22 +3,20 @@ using System.Collections.Generic;
 
 namespace xStunit.Interpreter
 {
-    // Single source of truth for IEC 61131-3 numeric type -> CLR
-    // representation (TcXunit-6af.1): default/zero value and documented
-    // min/max, one entry per type name. Previously Engine.DefaultValue,
-    // IecNumericBounds, and StructBoundaryBuilder each re-derived this table
-    // and disagreed (e.g. UDINT defaulted to C# int 0 via Engine.DefaultValue
-    // but boxed as long via StructBoundaryBuilder/IecNumericBounds).
-    // SINT/USINT/BYTE/INT/UINT/WORD/DINT are boxed as C# int (fits Int32);
-    // UDINT/DWORD/LINT/ULINT/LWORD exceed Int32 range and are boxed as their
-    // natural wider CLR type instead.
+    // Single source of truth for how each IEC 61131-3 numeric type is
+    // represented in the CLR: zero value and min/max, one entry per type name.
+    // The boxed CLR type is what the Default entry's own type says, and it is
+    // the widest thing every value of that IEC type fits in, not a
+    // width-for-width match: SINT/USINT/BYTE/INT/UINT/WORD/DINT all box as
+    // int, so a BYTE and a DINT are indistinguishable once boxed, while
+    // UDINT/DWORD/LINT box as long and ULINT/LWORD as ulong because their
+    // ranges overflow Int32. Anything keying behaviour off the declared IEC
+    // type (range checks, byte layout) must carry the type name, not the box.
     internal static class IecNumericType
     {
-        // TcXunit-fzm: IEC 61131-3 type names are case-insensitive (a VAR
-        // declared 'lreal' or 'LReal' is exactly as valid as 'LREAL'), so
-        // this table - and every other type-name lookup in the interpreter -
-        // compares with StringComparer.OrdinalIgnoreCase rather than the
-        // default ordinal comparer.
+        // IEC 61131-3 type names are case-insensitive (a VAR declared 'lreal'
+        // is as valid as 'LREAL'), so this table - like every other type-name
+        // lookup in the interpreter - is OrdinalIgnoreCase.
         private static readonly Dictionary<string, (object Default, object Min, object Max)> Types =
             new Dictionary<string, (object Default, object Min, object Max)>(StringComparer.OrdinalIgnoreCase)
             {

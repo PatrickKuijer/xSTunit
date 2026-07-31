@@ -3,22 +3,19 @@ using System.Text.RegularExpressions;
 
 namespace xStunit.Interpreter
 {
-    // Parses the raw VAR/VAR_INPUT/VAR_OUTPUT/VAR_IN_OUT/VAR_TEMP declaration
+    // Turns the raw VAR/VAR_INPUT/VAR_OUTPUT/VAR_IN_OUT/VAR_TEMP declaration
     // text a FUNCTION_BLOCK or METHOD carries in its Declaration CDATA into
-    // typed VarDecl entries. Also doubles as the STRUCT field-list parser for
-    // StructDeclParser (STRUCT/END_STRUCT toggle the same section state as
-    // VAR/END_VAR, mapped to VarSection.Local - TcXunit-w5x.15.6). Scoped to
-    // the fixture's grammar (TcXunit-w5x.8): single name per line, no comma
-    // lists.
+    // typed VarDecl entries. Also doubles as StructDeclParser's field-list
+    // parser: STRUCT/END_STRUCT toggle the same section state as VAR/END_VAR.
+    // Scoped to the fixtures' grammar - one name per line, no comma lists.
     public static class VarBlockParser
     {
         // The W?STRING(...) size may be any IEC 61131-3 constant expression
-        // (int literal, GVL-qualified constant, +-*/), not just a bare
-        // digit literal - TcXunit-988. [^()]+ (rather than \d+) accepts
-        // that whole expression text verbatim; StringTypeInfo/
-        // StructBoundaryBuilder resolve it later via
-        // ResolveArrayBound/EvaluateConstExpr, mirroring how ARRAY bounds
-        // are resolved (TcXunit-654).
+        // (int literal, GVL-qualified constant, +-*/), not just a bare digit
+        // literal, so the type group takes [^()]+ rather than \d+ and passes
+        // that expression text through verbatim. StringTypeInfo/
+        // StructBoundaryBuilder resolve it later, the same way ARRAY bounds
+        // are resolved.
         private static readonly Regex VarLinePattern = new Regex(
             @"^(?<name>\w+)\s*:\s*(?<type>POINTER TO \w+|REFERENCE TO \w+|ARRAY\s*\[[^\]]+\]\s*OF\s*\w+|W?STRING\s*\(\s*[^()]+\s*\)|\w+)\s*(:=\s*(?<default>.+?))?;$",
             RegexOptions.Compiled);
@@ -48,20 +45,11 @@ namespace xStunit.Interpreter
                     case "VAR_IN_OUT":
                         currentSection = VarSection.InOut;
                         continue;
-                    // VAR_TEMP locals are re-initialized to their default
-                    // every call/invocation, never persisted like a VAR
-                    // field. Inside a METHOD/ACTION this falls out of
-                    // BindParams already rebuilding non-Input/InOut decls
-                    // fresh in a new Frame per CallMethod call (TcXunit-3g7);
-                    // at a FUNCTION_BLOCK/PROGRAM's own top level there is no
-                    // such per-call Frame (the field has to live in
-                    // instance.Fields for dot-access/methods to see it), so
-                    // it gets its own VarSection.Temp instead of aliasing to
-                    // Local - Engine.IsPersistedField still materializes it
-                    // into Fields at NewInstance(), but
-                    // Engine.ResetTopLevelTempFields additionally resets it
-                    // to default before every top-level body invocation
-                    // (TcXunit-9go).
+                    // A top-level VAR_TEMP gets its own section rather than
+                    // aliasing to Local: it has to live in instance.Fields
+                    // for dot-access and methods to see it, so there is no
+                    // per-call Frame to give it the reset-every-invocation
+                    // semantics VAR_TEMP requires. See VarSection.Temp.
                     case "VAR_TEMP":
                         currentSection = VarSection.Temp;
                         continue;
@@ -76,13 +64,11 @@ namespace xStunit.Interpreter
                         continue;
                 }
 
-                // A GVL's VAR_GLOBAL header, optionally followed by
-                // CONSTANT/RETAIN/PERSISTENT modifiers on the same line
-                // (e.g. "VAR_GLOBAL CONSTANT", "VAR_GLOBAL RETAIN
-                // PERSISTENT") - TcXunit-71o. Modifiers don't affect
-                // default-value construction (no TwinCAT retain/persistence
-                // semantics are modeled), only which section a field lands
-                // in.
+                // A GVL's VAR_GLOBAL header may carry CONSTANT/RETAIN/
+                // PERSISTENT modifiers on the same line. They are ignored
+                // rather than recorded: no retain/persistence semantics are
+                // modelled, so they change nothing but the section a field
+                // lands in.
                 if (line == "VAR_GLOBAL" || line.StartsWith("VAR_GLOBAL "))
                 {
                     currentSection = VarSection.Global;
@@ -107,10 +93,9 @@ namespace xStunit.Interpreter
             return result;
         }
 
-        // Strips a trailing "// ..." line comment or "(* ... *)" block
-        // comment, ignoring "//", "(*" and "*)" that appear inside a
-        // single- or double-quoted string literal (e.g. a STRING default
-        // value containing those sequences). TcXunit-dem, TcXunit-n3w.
+        // Strips a trailing "// ..." or "(* ... *)" comment, ignoring those
+        // sequences when they appear inside a single- or double-quoted string
+        // literal - a STRING default value is allowed to contain them.
         private static string StripTrailingComment(string line)
         {
             char? quoteChar = null;

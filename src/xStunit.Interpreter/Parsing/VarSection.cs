@@ -9,13 +9,11 @@ namespace xStunit.Interpreter
         Global,
 
         // VAR_TEMP declared directly in a FUNCTION_BLOCK/PROGRAM's own
-        // top-level declaration block (as opposed to inside a METHOD/ACTION
-        // body, which stays mapped to Local - BindParams already rebuilds
-        // those fresh in a new Frame every CallMethod call). Distinguished
-        // from Local so Engine.NewInstance/IsPersistedField and the
-        // top-level-body reset path (Engine.ResetTopLevelTempFields) can
-        // treat it as reset-on-every-invocation storage rather than a
-        // persisted VAR field (TcXunit-9go).
+        // top-level declaration block. A METHOD/ACTION's VAR_TEMP stays
+        // mapped to Local, because BindParams already rebuilds those fresh in
+        // a new Frame per call; only the top-level case needs its own section
+        // so Engine.ResetTopLevelTempFields can clear it every invocation
+        // instead of persisting it like a VAR field.
         Temp,
     }
 }

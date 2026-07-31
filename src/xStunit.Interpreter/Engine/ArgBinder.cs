@@ -2,21 +2,18 @@ using System.Collections.Generic;
 
 namespace xStunit.Interpreter
 {
-    // Shared named-arg-first/positional-fallback resolution (TcXunit-6af.3).
-    // BindParams (Engine.Invocation.cs), ResolveIntrinsicArgs
-    // (Engine.Expressions.cs), and NativeMethodBridge.ResolveArgs each
-    // reimplemented the same algorithm independently and had already drifted
-    // once. All three walk their declared params left-to-right, take an
-    // explicit named arg if present, otherwise consume the next unconsumed
-    // positional arg (posIndex is shared/running across params, not tied to
-    // declared position) - this is that one primitive, parameterized over the
-    // arg/value shape (Expr for unevaluated call args, object for already-
-    // evaluated native-call args).
+    // Named-arg-first, positional-fallback binding, shared by BindParams
+    // (Engine.Invocation.cs), ResolveIntrinsicArgs (Engine.Expressions.cs)
+    // and NativeMethodBridge.ResolveArgs.
+    //
+    // posIndex runs across the whole declared param list rather than tracking
+    // a param's declared position: a positional arg's slot depends on how many
+    // preceding params were supplied by name. T is the arg shape - Expr for
+    // unevaluated call args, object for already-evaluated native-call args.
     internal static class ArgBinder
     {
-        // tryGetNamed returns null when paramName has no explicit named arg.
-        // T is always a reference type here (Expr, object), so null is a safe
-        // "not found" sentinel.
+        // tryGetNamed returns null when paramName has no explicit named arg;
+        // T is a reference type here, so null is a safe "not found" sentinel.
         public static bool TryResolveArg<T>(
             string paramName,
             System.Func<string, T> tryGetNamed,

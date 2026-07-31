@@ -3,9 +3,11 @@ using System.Linq;
 
 namespace xStunit.Interpreter
 {
-    // Finds FB types whose ancestry reaches the TcUnit.FB_TestSuite native
-    // boundary (TcXunit-w5x.7's discovery convention: any FB extending
-    // FB_TestSuite, directly or transitively, is a suite).
+    // The discovery convention: an FB is a test suite when following its
+    // EXTENDS chain through the TypeRegistry reaches TcUnit.FB_TestSuite,
+    // directly or transitively. That base type is a native boundary with no
+    // registered definition of its own, so the walk matches it by name and
+    // stops as soon as a link is missing from the registry.
     public static class SuiteDiscovery
     {
         private const string TestSuiteBaseType = "TcUnit.FB_TestSuite";

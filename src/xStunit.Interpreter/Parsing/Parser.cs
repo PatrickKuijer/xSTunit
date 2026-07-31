@@ -4,12 +4,14 @@ using xStunit.Runner;
 
 namespace xStunit.Interpreter
 {
-    // Recursive-descent parser for the fixture's statement/expression subset
-    // (TcXunit-w5x.8/.12): assignment, REF=, IF/ELSE/END_IF, and calls
-    // (builtin/self/THIS^/SUPER^/receiver-qualified) with positional or named
-    // args, plus plain .Member field reads (TcXunit-w5x.15.7). No chained
-    // member access beyond one level, no LHS deref - neither is exercised by
-    // the fixture yet.
+    // Recursive-descent parser for the subset of ST the fixtures use, grown
+    // on demand rather than built out to the full IEC 61131-3 grammar. A
+    // construct it rejects may simply be one no fixture has needed yet.
+    //
+    // Precedence runs lowest to highest down the ParseOr -> ParseXor ->
+    // ParseAnd -> ParseComparison -> ParseAdditive -> ParseMod -> ParseUnary
+    // -> ParsePostfix chain; every binary level is left-associative except
+    // comparison, which takes at most one operator and so does not chain.
     public sealed partial class Parser
     {
         private readonly List<Token> _tokens;
@@ -50,18 +52,17 @@ namespace xStunit.Interpreter
             return Advance();
         }
 
-        // The offending token text for the `construct` field, or null for a
-        // token that carries no meaningful text (e.g. Eof) - matches the
-        // nullable convention every other kind's `construct` uses.
+        // Null for a token carrying no meaningful text (e.g. Eof), matching
+        // the nullable convention every other `construct` field uses.
         private string CurrentToken => string.IsNullOrEmpty(Current.Text) ? null : Current.Text;
 
         private bool IsKeyword(string keyword) =>
             Current.Type == TokenType.Identifier && Current.Text == keyword;
 
         // IEC 61131-3 doesn't require a ; after END_IF/END_FOR/END_WHILE/
-        // END_CASE/END_REPEAT, but plenty of real ST code writes one anyway
-        // (TcXunit-sum). Swallow it here so the enclosing ParseStatementList
-        // doesn't mistake it for the start of a new statement.
+        // END_CASE/END_REPEAT, but plenty of real ST writes one anyway.
+        // Swallowing it here keeps ParseStatementList from mistaking it for
+        // the start of a new statement.
         private void SkipOptionalSemicolon()
         {
             if (Current.Type == TokenType.Semicolon)
@@ -79,10 +80,10 @@ namespace xStunit.Interpreter
             return stmts;
         }
 
-        // Stamps every parsed statement with the in-body line of the token
-        // that started it (TcXunit-p3t.2). Nested statements are stamped by
-        // their own pass through here, so IF/FOR/CASE bodies get real lines
-        // rather than their enclosing statement's.
+        // Stamps each statement with the in-body line of the token that
+        // started it. Nested statements are stamped by their own pass through
+        // here, so IF/FOR/CASE bodies get their own lines rather than the
+        // enclosing statement's.
         private Stmt ParseStatement()
         {
             var line = Current.Line;
@@ -146,31 +147,27 @@ namespace xStunit.Interpreter
                 return new ExprStmt(call);
             }
 
-            // Left as FormatException, not converted (TcXunit-3tx.5): the
-            // complete IEC 61131-3 ST statement grammar - assignment,
-            // invocation, RETURN, IF/CASE, FOR/WHILE/REPEAT/EXIT - is already
-            // dispatched above by name, same as UnsupportedConstructException
-            // is claimed by name elsewhere. There is no known valid construct
-            // that reaches this fallback only malformed source does (e.g. a
-            // bare non-call expression used as a statement), so claiming
-            // unsupported-construct here would be a guess, not evidence.
+            // A ParseException rather than an UnsupportedConstructException:
+            // the whole IEC 61131-3 statement grammar - assignment,
+            // invocation, RETURN, IF/CASE, FOR/WHILE/REPEAT/EXIT - is
+            // dispatched by name above, so no valid construct reaches here.
+            // Only malformed source does (e.g. a bare non-call expression
+            // used as a statement), and calling that unsupported would be a
+            // guess.
             throw new ParseException(
                 $"Statement did not resolve to an assignment or call at token index {_pos}", CurrentToken, Current.Line);
         }
 
-        // Assignment targets: plain identifier, .Member field access, or
-        // [idx] array indexing (any depth/mix of the latter two). LHS deref
-        // (x^ :=) is recognized but rejected below as unsupported-construct,
-        // not silently accepted (TcXunit-3tx.5).
         private static Expr RequireLValue(Expr target)
         {
             if (target is IdentifierExpr || target is FieldAccessExpr || target is IndexExpr)
                 return target;
 
-            // x^ := ... is valid IEC 61131-3 (pointer-dereference assignment)
-            // - the read side already works (Engine.Expressions.cs evaluates
-            // DerefExpr), only the write side is an unimplemented v1-subset
-            // gap, not a defect in the source (TcXunit-3tx.5).
+            // x^ := ... is valid IEC 61131-3 pointer-dereference assignment,
+            // and the read side already works (Engine evaluates DerefExpr) -
+            // only the write side is missing. Rejecting it as an unsupported
+            // construct rather than a parse error keeps it from being
+            // reported as a defect in the source under test.
             if (target is DerefExpr)
                 throw new UnsupportedConstructException("x^ :=", "Pointer dereference on the assignment left-hand side (x^ := ...) is not supported in the v1 subset");
 
@@ -192,17 +189,16 @@ namespace xStunit.Interpreter
         }
 
         // Handles the ELSIF/ELSE/END_IF tail of an IF. An ELSIF...THEN chain
-        // is represented as a nested IfStmt in the Else branch (each ELSIF
-        // recurses here for its own tail), so the engine needs no changes -
-        // it already executes IfStmt.Else via ExecuteStatements recursively.
+        // is desugared into a nested IfStmt in the Else branch, so the engine
+        // needs no ELSIF concept of its own - executing IfStmt.Else
+        // recursively already covers it.
         private Stmt ParseIfTail(Expr condition, List<Stmt> thenBranch)
         {
             var elseBranch = new List<Stmt>();
             if (IsKeyword("ELSIF"))
             {
-                // The synthesized IfStmt for an ELSIF never passes through
-                // ParseStatement, so stamp it here from the ELSIF keyword
-                // itself (TcXunit-p3t.2).
+                // The synthesized IfStmt never passes through ParseStatement,
+                // so it has to be stamped here from the ELSIF keyword itself.
                 var elsifLine = Current.Line;
                 Advance();
                 var elsifCondition = ParseExpr();
@@ -361,11 +357,10 @@ namespace xStunit.Interpreter
             return labels;
         }
 
-        // Lookahead-only check for "does the current position start a new
-        // CASE arm's label list (label[, label...]:)" without consuming any
-        // tokens - distinguishes a label boundary from an ordinary statement
-        // (assignment/call), which never has a bare ':' immediately after a
-        // comma-separated run of literals/identifiers.
+        // Whether the current position starts a new CASE arm's label list,
+        // decided by lookahead without consuming anything. The distinguishing
+        // shape is a bare ':' after a comma-separated run of literals/
+        // identifiers, which an ordinary statement never has.
         private bool IsCaseArmBoundary()
         {
             if (IsKeyword("ELSE") || IsKeyword("END_CASE"))

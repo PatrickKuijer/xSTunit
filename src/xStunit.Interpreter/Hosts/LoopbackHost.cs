@@ -2,14 +2,18 @@ using System.Collections.Generic;
 
 namespace xStunit.Interpreter
 {
-    // Native-stub boundary for Loopback (TcXunit-w5x.15.5 / T4 design, fault
-    // vocabulary per TcXunit-w5x.15.8 / T5 design): one Loopback instance = one
-    // fixed link. Transmit is a discrete copy (sink.Value = source.Value,
-    // per-field cloned for STRUCT/ARRAY payloads via CellCloner - TcXunit-w5x.15.10),
-    // called explicitly by the test author - no implicit wiring, no StepCycles
-    // hook. One active fault mode at a time - each fault-setting call clears
-    // any other pending fault state. LinkUp and LastUpdateTime are published
-    // into the owning instance's own Cell fields (set up in Engine.NewInstance),
+    // A simulated communication link: one Loopback instance is one fixed
+    // link, and Transmit copies a source Cell to a sink Cell (deep-cloned via
+    // CellCloner, so a STRUCT/ARRAY payload delivered earlier is not aliased
+    // by a later mutation of the source).
+    //
+    // Unlike the timers and edge triggers, this is NOT cycle-driven: nothing
+    // steps it, and Transmit only happens when the test author writes it. The
+    // fault modes below therefore count transmissions, never cycles or time.
+    //
+    // At most one fault mode is active at a time - every fault-setting call
+    // clears whatever was pending. LinkUp and LastUpdateTime are published
+    // into the owning instance's Cell fields (seeded in Engine.NewInstance),
     // the same way TimerHost publishes Q/ET.
     public sealed class LoopbackHost
     {

@@ -4,25 +4,20 @@ using System.Text;
 
 namespace xStunit.Interpreter
 {
-    // Tokenizes the ST statement subset the fixture actually uses
-    // (TcXunit-w5x.8/.12). No unary minus, no real/string escapes -
-    // grow-on-demand as new fixture bodies need them.
+    // Tokenizes only the ST subset the fixtures actually use, extended
+    // on demand as new fixture bodies need it rather than built out to the
+    // full IEC 61131-3 grammar up front. A construct this lexer doesn't
+    // recognize is a gap, not necessarily a bug.
     public static class Lexer
     {
-        // Strips (* ... *) and // ... comments from text, leaving everything
-        // else - including string literal contents - untouched. Used by
-        // SuiteCoverage (TcXunit-2o9.2) so a type name mentioned only inside
-        // a comment isn't treated as a real reference from a suite.
+        // Strips (* ... *) and // ... comments, leaving everything else -
+        // including string literal contents - untouched.
         //
-        // Mirrors the comment-recognition branches from Tokenize above
-        // (same "(*"/"*)"/"//" detection, same string-literal skip via
-        // TryConsumeDollarEscape so an escaped quote doesn't end a string
-        // early) rather than duplicating that logic with a second regex.
-        // Deliberately NOT a call to Tokenize itself: callers pass whole
-        // declaration text, which may carry constructs Tokenize doesn't
-        // handle (e.g. a leading {attribute '...'} pragma) and would throw
-        // on; this only needs to recognize comments and strings, so
-        // everything else is copied through unchanged.
+        // Deliberately not implemented as a call to Tokenize: callers pass
+        // whole declaration text, which may carry constructs Tokenize would
+        // throw on (e.g. a leading {attribute '...'} pragma). Only comments
+        // and string literals need recognizing here; the rest is copied
+        // through verbatim.
         public static string StripComments(string text)
         {
             var sb = new StringBuilder(text.Length);
@@ -88,11 +83,11 @@ namespace xStunit.Interpreter
             var tokens = new List<Token>();
             var i = 0;
 
-            // Line tracking (TcXunit-p3t.2). `i` only ever moves forward, so
-            // folding whatever was consumed since the previous token into the
-            // counter once per loop turn is O(n) overall and covers skipped
-            // whitespace, // comments and multi-line (* *) comments alike -
-            // no per-branch bookkeeping to forget.
+            // `i` only ever moves forward, so folding whatever was consumed
+            // since the previous token into the counter once per loop turn is
+            // O(n) overall and covers skipped whitespace, // comments and
+            // multi-line (* *) comments alike - no per-branch bookkeeping to
+            // forget.
             var line = 1;
             var counted = 0;
 
@@ -100,9 +95,9 @@ namespace xStunit.Interpreter
             {
                 CountLineBreaks(text, ref counted, i, ref line);
 
-                // Stamped on whatever token this turn produces: a token's
-                // Line is where it STARTS, so a multi-line string literal
-                // keeps its opening line.
+                // Captured before the token is consumed: a token's Line is
+                // where it STARTS, so a multi-line string literal keeps its
+                // opening line.
                 var tokenLine = line;
                 var c = text[i];
 
@@ -172,9 +167,9 @@ namespace xStunit.Interpreter
                         continue;
                     }
 
-                    // DATE/DATE_AND_TIME/TIME_OF_DAY (TcXunit-gd2.13): calendar/
-                    // clock literals, not TIME's duration-segment grammar, so
-                    // their body is a run of digits/'-'/':'/'.' rather than
+                    // DATE/DATE_AND_TIME/TIME_OF_DAY are calendar/clock
+                    // literals, not TIME's duration-segment grammar, so their
+                    // body is a run of digits/'-'/':'/'.' rather than
                     // digits+unit-letters.
                     if ((word == "DATE_AND_TIME" || word == "DT") && i < text.Length && text[i] == '#')
                     {
@@ -218,7 +213,7 @@ namespace xStunit.Interpreter
 
                     // IEC 61131-3 §2.4.2 based literal: <base>#<digits>, e.g.
                     // 16#ABCD (hex), 8#17 (octal), 2#1010 (binary), with
-                    // optional '_' digit separators (TcXunit-nsm).
+                    // optional '_' digit separators.
                     if (i < text.Length && text[i] == '#'
                         && int.TryParse(text.Substring(start, i - start), out var numberBase))
                     {
@@ -238,10 +233,10 @@ namespace xStunit.Interpreter
                     continue;
                 }
 
-                // STRING literals use '...' and WSTRING literals use "..."
-                // (TcXunit-gd2.4) - both produce the same StringLiteral
-                // token since Cell values are plain C# strings regardless
-                // of the variable's declared STRING/WSTRING type.
+                // STRING literals use '...' and WSTRING literals use "...",
+                // but both produce the same StringLiteral token: Cell values
+                // are plain C# strings regardless of the variable's declared
+                // STRING/WSTRING type.
                 if (c == '\'' || c == '"')
                 {
                     var quote = c;
@@ -320,8 +315,7 @@ namespace xStunit.Interpreter
                 {
                     // '&' is IEC 61131-3's alias for AND (§2.4.5, table 4) -
                     // lexed straight to the same Identifier/"AND" token so
-                    // every AND-aware parser/evaluator path (including
-                    // AND_THEN's short-circuit precedence) handles it with
+                    // every AND-aware parser/evaluator path handles it with
                     // no separate token type needed.
                     case '&': tokens.Add(new Token(TokenType.Identifier, "AND", tokenLine)); i++; continue;
                     case '=': tokens.Add(new Token(TokenType.Eq, "=", tokenLine)); i++; continue;
@@ -353,10 +347,10 @@ namespace xStunit.Interpreter
         }
 
         // Folds the line breaks in text[counted..end) into line, advancing
-        // counted to end (TcXunit-p3t.2). "\r\n" counts as ONE break -
-        // TwinCAT writes CRLF into .TcPOU bodies while the fixtures on disk
-        // are LF, and both must yield the same line numbers - as does a bare
-        // "\n" or a lone "\r".
+        // counted to end. "\r\n" counts as ONE break, as does a bare "\n" or
+        // a lone "\r": TwinCAT writes CRLF into .TcPOU bodies while the
+        // fixtures on disk are LF, and both must report the same line numbers
+        // to the user.
         private static void CountLineBreaks(string text, ref int counted, int end, ref int line)
         {
             while (counted < end)
@@ -370,12 +364,11 @@ namespace xStunit.Interpreter
             }
         }
 
-        // The 1-based line containing offset within text, using the same
-        // CRLF-as-one-break rule as CountLineBreaks (TcXunit-p3t.2) so a
-        // ParseException's BodyLine agrees with every other line number this
-        // lexer produces. Standalone rather than reusing CountLineBreaks's
-        // running (counted, line) state - a throw site needs a line for one
-        // arbitrary offset, not the next stretch of an in-progress scan.
+        // The 1-based line containing offset, counted from scratch: a throw
+        // site needs a line for one arbitrary offset, not the next stretch of
+        // the in-progress scan CountLineBreaks is driving. Shares that
+        // method's CRLF-as-one-break rule so a ParseException's BodyLine
+        // agrees with every other line number this lexer produces.
         private static int LineAt(string text, int offset)
         {
             var line = 1;
@@ -384,14 +377,11 @@ namespace xStunit.Interpreter
             return line;
         }
 
-        // Recognizes IEC 61131-3 '$'-escape sequences inside single-quoted STRING
-        // or double-quoted WSTRING literals (e.g. $$ -> '$', $' -> '\'' (or
-        // $" -> '"' for WSTRING), $hh -> two-hex-digit character code). quote
-        // is the literal's own delimiter ('\'' or '"'), so $<quote> escapes
-        // that literal's embedded quote character. On a match, advances i past
-        // the escape sequence and returns the decoded character; returns null
-        // (and leaves i untouched) if text[i..] is not a recognized escape, so
-        // the caller falls back to treating '$' as a literal character.
+        // Decodes an IEC 61131-3 '$'-escape at text[i], where quote is the
+        // enclosing literal's own delimiter so $<quote> escapes an embedded
+        // quote. On a match, advances i past the escape and returns the
+        // decoded character; returns null and leaves i untouched otherwise,
+        // so the caller falls back to treating '$' as a literal character.
         private static char? TryConsumeDollarEscape(string text, ref int i, char quote)
         {
             var next = text[i + 1];
@@ -422,21 +412,20 @@ namespace xStunit.Interpreter
             return null;
         }
 
-        // Returns true if c is 0-9, a-f, or A-F.
         private static bool IsHexDigit(char c)
             => (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
 
-        // Char class for the body of D#/DT#/TOD# literals (TcXunit-gd2.13):
-        // digits plus the date/time separators '-', ':', '.' - no letters,
-        // unlike TIME's digits+unit-letters body.
+        // Char class for the body of D#/DT#/TOD# literals: digits plus the
+        // date/time separators, and no letters - unlike TIME's
+        // digits+unit-letters body.
         private static bool IsDateTimeLiteralChar(char c)
             => char.IsDigit(c) || c == '-' || c == ':' || c == '.';
 
-        // Decodes an IEC 61131-3 §2.4.2 based-literal digit run (already
-        // stripped of '_' separators) for the given base (2, 8, or 16 -
-        // the only bases the standard defines; TcXunit-nsm). Letters A-Z/a-z
-        // count as digits 10-35 so callers get a clear "invalid digit"
-        // error rather than silent misparsing for out-of-range digits.
+        // Decodes a based-literal digit run (already stripped of '_'
+        // separators) for the given base - 2, 8 or 16, the only ones IEC
+        // 61131-3 §2.4.2 defines. Letters A-Z/a-z count as digits 10-35 even
+        // above the base, so an out-of-range digit produces a clear "invalid
+        // digit" error rather than silently misparsing.
         private static long ParseBasedLiteral(string digits, int numberBase, string text, int position)
         {
             if (numberBase != 2 && numberBase != 8 && numberBase != 16)
@@ -471,9 +460,9 @@ namespace xStunit.Interpreter
             return value;
         }
 
-        // Consumes an optional '.digits' fraction and/or '[eE][+-]digits' exponent
-        // starting at i, advancing i past whatever it consumes. Returns true if
-        // anything real-valued (fraction and/or exponent) was found.
+        // Consumes an optional '.digits' fraction and/or '[eE][+-]digits'
+        // exponent at i, advancing i past whatever it takes. True means the
+        // number is real-valued rather than an integer.
         private static bool ConsumeFraction(string text, ref int i)
         {
             var isReal = false;

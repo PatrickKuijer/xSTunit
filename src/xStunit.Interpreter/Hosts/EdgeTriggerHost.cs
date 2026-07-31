@@ -2,20 +2,21 @@ using System;
 
 namespace xStunit.Interpreter
 {
-    // Native-stub boundary for R_TRIG/F_TRIG (TcXunit-f6b): same precedent as
-    // TimerHost, but no clock dependency - Q fires for exactly one call on the
-    // relevant CLK transition, driven purely by the previous-CLK bookkeeping
-    // this host holds.
+    // Stands in for the Tc2_Standard edge detectors R_TRIG/F_TRIG. Unlike the
+    // timers these need no clock: Q is TRUE for exactly one CALL - not one
+    // unit of simulated time - after the relevant CLK transition, so the only
+    // state required is the previous CLK level this host remembers. That
+    // makes the host cycle-driven in the strict sense: skipping a call skips
+    // an edge, and calling twice in one cycle consumes it early.
     public abstract class EdgeTriggerHost
     {
         private bool _lastClk;
         private bool _initialized;
 
-        // TcXunit-nch: matched case-insensitively (typeName.ToUpperInvariant()),
-        // same decision as the NativeEdgeTriggerTypes lookup in Engine.cs
-        // that decides to call Create in the first place - a lowercase/
-        // mixed-case spelling that passes that lookup must not then throw
-        // NotSupportedException here.
+        // Matched case-insensitively, because the lookup in Engine that
+        // decides to call this at all is case-insensitive too - a lowercase or
+        // mixed-case spelling that got past that lookup must not then throw
+        // here.
         public static EdgeTriggerHost Create(string typeName) => typeName?.ToUpperInvariant() switch
         {
             "R_TRIG" => new RTrigHost(),
@@ -27,8 +28,10 @@ namespace xStunit.Interpreter
         {
             var clk = (bool)instance.Fields["CLK"].Value;
 
-            // First call has no prior CLK to compare against - no edge, just
-            // record the baseline (mirrors TimerHost's _initialized guard).
+            // The first call has no prior CLK to compare against, so it only
+            // records a baseline: an instance whose CLK is already TRUE on
+            // call one does NOT report an edge. (CounterHost deliberately
+            // decides the opposite for its own counting inputs.)
             var q = _initialized && IsEdge(_lastClk, clk);
             _lastClk = clk;
             _initialized = true;

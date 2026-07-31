@@ -431,7 +431,7 @@ namespace TcXunit.Cli
                     // that kind's guidance appended, so the JSON object is
                     // self-contained - a consumer never has to have read this
                     // repo's README to know whether to edit the POU or stop.
-                    var errorText = WithGuidance(ex.Message, errorKind);
+                    var errorText = WithGuidance(ex.Message, errorKind, isVerbatim: false);
                     // No suite ran to completion here (load/instantiation/default-value
                     // failure), so there's no elapsed time to report - null, not a
                     // fabricated zero (TcXunit-6fb.2). ex.Message already carries the
@@ -549,7 +549,7 @@ namespace TcXunit.Cli
 
         private static FailureReport ToFailureReport(TcXunit.Runner.TcUnitStub.AssertionFailure failure) =>
             new FailureReport(
-                WithGuidance(failure.Message, failure.Kind),
+                WithGuidance(failure),
                 failure.Kind,
                 failure.Construct ?? ParseErrorConstruct(failure),
                 failure.Assert,
@@ -596,12 +596,29 @@ namespace TcXunit.Cli
         // from upstream TcUnit's FB_AdsAssertMessageFormatter and is what text
         // output prints and the VSIX results tree renders. That string has a
         // verbatim contract, so guidance is not appended to it - and it is the
-        // one kind whose factual message already names the change to make. A
-        // fault charged to a test (kind assertion via a convergence failure
-        // included) never goes through that formatter and does get guidance.
-        private static string WithGuidance(string message, string kind)
+        // one message whose factual half already names the change to make.
+        //
+        // TcXunit-4iop: what identifies that line is the failure's STRUCTURED
+        // fields, not its kind. FB_TestSuite.Fail() is the only path that
+        // formats that string, and the only path that populates
+        // Assert/Expected/Actual/AssertMessage; Engine.Diagnostics.ToTestFailure
+        // leaves them null by design ("a contained fault has no expected/actual
+        // pair"). So `Expected != null` IS "this Message has a verbatim
+        // contract" - no prefix matching, and no second field saying what
+        // Expected/Actual already say. Keying on kind instead exempted every
+        // assertion-kind failure, including a convergence failure that never
+        // went near the formatter, and left Guidance(Assertion) unreachable.
+        private static string WithGuidance(TcXunit.Runner.TcUnitStub.AssertionFailure failure) =>
+            WithGuidance(failure.Message, failure.Kind, isVerbatim: failure.Expected != null);
+
+        // Overload for the two call sites that have no failure object at all -
+        // a suite-level error and the run-level ErrorReport. Neither can be a
+        // formatter line (no AssertionFailure, so no Expected/Actual), hence
+        // isVerbatim spelled out at the call site rather than defaulted here:
+        // the exemption should never be something a caller gets by omission.
+        private static string WithGuidance(string message, string kind, bool isVerbatim)
         {
-            if (kind == FailureKind.Assertion)
+            if (isVerbatim)
                 return message;
 
             var guidance = FailureKind.Guidance(kind);
@@ -754,7 +771,7 @@ Examples:
                 // the bare "error: <message>" line - it is read by a human at
                 // a console, who has the README; this string is the one an
                 // agent reads with nothing else to go on.
-                Error = WithGuidance(error, FailureKind.LoadError);
+                Error = WithGuidance(error, FailureKind.LoadError, isVerbatim: false);
                 Skipped = skipped;
                 Coverage = coverage;
             }

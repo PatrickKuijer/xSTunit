@@ -3,6 +3,7 @@ using System.IO;
 using System.Linq;
 using System.Text.Json;
 using TcXunit.Cli;
+using TcXunit.Runner;
 using Xunit;
 
 namespace TcXunit.Cli.Tests
@@ -269,6 +270,44 @@ namespace TcXunit.Cli.Tests
             Assert.Equal(2, failure.GetProperty("bodyLine").GetInt32());
         }
 
+        // TcXunit-4iop: the guidance carve-out used to be keyed on the KIND
+        // (`kind == FailureKind.Assertion`), which exempted every
+        // assertion-kind failure and made FailureKind.Guidance(Assertion) dead
+        // code. Only FB_TestSuite.Fail() has a verbatim contract, and it is the
+        // only path that fills expected/actual - a convergence failure fills
+        // neither, so it gets its kind's guidance like the other four.
+        //
+        // Unlike the other fixtures here, this one faults INSIDE a
+        // TEST()/TEST_FINISHED() bracket: that is what charges the fault to the
+        // test (TcXunit-3tx.3) and routes it through ToTestFailure, which is
+        // the exact path the old guard swallowed.
+        [Fact]
+        public void Run_ConvergenceAssertion_CarriesTheAssertionGuidanceEvenThoughItsKindIsAssertion()
+        {
+            File.WriteAllText(Path.Combine(_tempDir, "FB_ConvergenceTests.TcPOU"), ConvergenceSuiteXml);
+            File.WriteAllText(Path.Combine(_tempDir, "FB_ConvergenceMaster.TcPOU"), ConvergenceMasterXml);
+            File.WriteAllText(Path.Combine(_tempDir, "FB_ConvergenceRamp.TcPOU"), ConvergenceRampXml);
+            var output = new StringWriter();
+
+            CliRunner.Run(new[] { _tempDir, "--format", "json" }, output);
+
+            using var document = JsonDocument.Parse(output.ToString());
+            var failure = document.RootElement
+                .GetProperty("suites")[0]
+                .GetProperty("tests")
+                .EnumerateArray()
+                .Single(t => !t.GetProperty("passed").GetBoolean())
+                .GetProperty("failures")[0];
+
+            Assert.Equal("assertion", failure.GetProperty("kind").GetString());
+            // No expected/actual pair: nothing was compared by a TcUnit assert,
+            // so there is no verbatim formatter line to protect.
+            Assert.Equal(JsonValueKind.Null, failure.GetProperty("expected").ValueKind);
+            var message = failure.GetProperty("message").GetString();
+            Assert.Contains("AssertConverges: fields did not converge", message);
+            Assert.Contains(FailureKind.Guidance(FailureKind.Assertion), message);
+        }
+
         private static JsonElement FirstSuite(string json)
         {
             using var document = JsonDocument.Parse(json);
@@ -393,6 +432,59 @@ AssertEquals_INT(Expected := 1, Actual := 1, Message := '');
 TEST_FINISHED();]]></ST>
       </Implementation>
     </Method>
+  </POU>
+</TcPlcObject>";
+
+        // The master holds a value the ramping proxy never reaches within the
+        // cycle budget, so AssertConverges throws
+        // ConvergenceAssertionException - classified `assertion`
+        // (FailureClassifier) but raised nowhere near FB_TestSuite.Fail().
+        private const string ConvergenceSuiteXml = @"<?xml version=""1.0"" encoding=""utf-8""?>
+<TcPlcObject Version=""1.1.0.1"">
+  <POU Name=""FB_ConvergenceTests"" Id=""{00000000-0000-0000-0000-0000000000c0}"" SpecialFunc=""None"">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_ConvergenceTests EXTENDS TcUnit.FB_TestSuite
+VAR
+	master : FB_ConvergenceMaster;
+	proxy : FB_ConvergenceRamp;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[NeverConverges();]]></ST>
+    </Implementation>
+    <Method Name=""NeverConverges"" Id=""{00000000-0000-0000-0000-0000000000c1}"">
+      <Declaration><![CDATA[METHOD PRIVATE NeverConverges]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('NeverConverges');
+master.Value := 99;
+AssertConverges(master, proxy, ['Value'], 2);
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+  </POU>
+</TcPlcObject>";
+
+        private const string ConvergenceMasterXml = @"<?xml version=""1.0"" encoding=""utf-8""?>
+<TcPlcObject Version=""1.1.0.1"">
+  <POU Name=""FB_ConvergenceMaster"" Id=""{00000000-0000-0000-0000-0000000000c2}"" SpecialFunc=""None"">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_ConvergenceMaster
+VAR
+	Value : INT;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>";
+
+        private const string ConvergenceRampXml = @"<?xml version=""1.0"" encoding=""utf-8""?>
+<TcPlcObject Version=""1.1.0.1"">
+  <POU Name=""FB_ConvergenceRamp"" Id=""{00000000-0000-0000-0000-0000000000c3}"" SpecialFunc=""None"">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_ConvergenceRamp
+VAR
+	Value : INT;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[Value := Value + 1;]]></ST>
+    </Implementation>
   </POU>
 </TcPlcObject>";
 

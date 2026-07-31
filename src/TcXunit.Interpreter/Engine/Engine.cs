@@ -166,46 +166,29 @@ namespace TcXunit.Interpreter
 
             var chain = new List<string>();
             var current = typeName;
-            var nativeBoundaryHit = false;
             while (current != null)
             {
                 var def = _registry.Get(current);
                 if (def == null)
-                {
-                    nativeBoundaryHit = true;
                     break;
-                }
                 chain.Add(current);
                 current = def.BaseTypeName;
             }
 
-            if (nativeBoundaryHit)
-            {
-                if (NativeTimerTypes.Contains(current))
-                {
-                    instance.NativeTimerHost = TimerHost.Create(current);
-                    instance.Fields["IN"] = new Cell { Value = false };
-                    instance.Fields["PT"] = new Cell { Value = 0u };
-                    instance.Fields["Q"] = new Cell { Value = false };
-                    instance.Fields["ET"] = new Cell { Value = 0u };
-                }
-                else if (string.Equals(current, "Loopback", StringComparison.OrdinalIgnoreCase))
-                {
-                    instance.NativeLoopbackHost = new LoopbackHost();
-                    instance.Fields["LinkUp"] = new Cell { Value = true };
-                    instance.Fields["LastUpdateTime"] = new Cell { Value = 0L };
-                }
-                else if (NativeEdgeTriggerTypes.Contains(current))
-                {
-                    instance.NativeEdgeTriggerHost = EdgeTriggerHost.Create(current);
-                    instance.Fields["CLK"] = new Cell { Value = false };
-                    instance.Fields["Q"] = new Cell { Value = false };
-                }
-                else
-                {
-                    instance.NativeSuiteHost = new TcUnitSuiteHost();
-                }
-            }
+            // current is now the walk's unresolved tail - the base type this
+            // ancestry names but the registry doesn't know - or null when the
+            // chain ran to its end inside the registry. That single value is
+            // the whole input to native classification (TcXunit-kwv6): which
+            // kind, which host, and which fields that host expects to find
+            // already seeded all come back together from
+            // ClassifyNativeHost (Engine.NativeHost.cs) instead of being
+            // decided by an inline type-name switch here, whose host-building
+            // and field-seeding halves could drift apart.
+            var nativeHost = ClassifyNativeHost(current);
+            instance.NativeKind = nativeHost.Kind;
+            instance.NativeHost = nativeHost.Host;
+            foreach (var field in nativeHost.DefaultFields)
+                instance.Fields[field.Key] = new Cell { Value = field.Value };
 
             for (var i = chain.Count - 1; i >= 0; i--)
             {
@@ -242,8 +225,8 @@ namespace TcXunit.Interpreter
         // callers that actually touch the field. Native stub types (TON,
         // Loopback, R_TRIG/F_TRIG, ...) aren't registry types - DefaultValue
         // handles those via NativeTimerTypes/NativeEdgeTriggerTypes/
-        // "Loopback" and NewInstance's own nativeBoundaryHit branch above,
-        // neither of which recurses, so they stay eager too.
+        // NativeLoopbackType and NewInstance's own ClassifyNativeHost call
+        // above, neither of which recurses, so they stay eager too.
         private Cell CreateFieldCell(VarDecl decl, FbInstance owningInstance)
         {
             if (_registry.Get(_registry.ResolveAlias(decl.TypeName)) != null)

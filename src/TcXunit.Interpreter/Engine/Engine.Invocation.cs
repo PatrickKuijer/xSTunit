@@ -81,46 +81,53 @@ namespace TcXunit.Interpreter
                 // sfbDigitalInput()) - the latter lives in the caller frame's
                 // Locals, not instance.Fields, so check both (locals take
                 // precedence, mirroring Frame.ResolveCell).
+                //
+                // What the callee IS decides how it is invoked, and it already
+                // knows: NewInstance stamped its NativeKind at construction
+                // (TcXunit-kwv6), so this switches on that one discriminator
+                // (TcXunit-fvp6) rather than re-deriving the classification
+                // from an ordered chain of null checks over four host fields.
+                // Loopback and Suite callees deliberately match no case: a
+                // bare call on either is not an invocation at all, and falls
+                // through to the loopback-fault and TcUnit-stub routing below
+                // exactly as it did when they failed every null check.
                 if (TryResolveCalleeCell(callerFrame, instance, methodName, out var calleeCell) &&
-                    calleeCell.Value is FbInstance callee &&
-                    callee.NativeTimerHost != null)
+                    calleeCell.Value is FbInstance callee)
                 {
-                    BindTimerInputs(callee, positionalArgs, namedArgs, callerFrame);
-                    callee.NativeTimerHost.Update(callee, Clock.TotalMs);
-                    return null;
+                    switch (callee.NativeKind)
+                    {
+                        case NativeHostKind.Timer:
+                            BindTimerInputs(callee, positionalArgs, namedArgs, callerFrame);
+                            callee.NativeTimerHost.Update(callee, Clock.TotalMs);
+                            return null;
+
+                        // Native R_TRIG/F_TRIG, e.g. fbTrig(CLK:=x) - same
+                        // precedent as the native timer above, but the host
+                        // only tracks CLK->Q (no PT/ET, no clock dependency).
+                        case NativeHostKind.Edge:
+                            BindEdgeTriggerInputs(callee, positionalArgs, namedArgs, callerFrame);
+                            callee.NativeEdgeTriggerHost.Update(callee);
+                            return null;
+
+                        // Ordinary interpreted (non-native) FB field or
+                        // method-local var, e.g. sfbLoopback(ibEnable := TRUE)
+                        // - generalizes the native-timer bare-invoke above:
+                        // bind VAR_INPUT/VAR_IN_OUT args into the callee's
+                        // persisted Fields, then run its top-level body once
+                        // (TcXunit-0v1). The registry guard stays: None only
+                        // says "no native stub", and an FbInstance whose type
+                        // the registry doesn't know has no body to run.
+                        case NativeHostKind.None when _registry.Get(callee.ActualTypeName) != null:
+                            InvokeFbInstance(callee, positionalArgs, namedArgs, callerFrame);
+                            return null;
+                    }
                 }
 
-                // Bare invocation of a native R_TRIG/F_TRIG, e.g.
-                // fbTrig(CLK:=x) - same precedent as the native-timer
-                // bare-invoke above, but the host only tracks CLK->Q (no
-                // PT/ET, no clock dependency).
-                if (TryResolveCalleeCell(callerFrame, instance, methodName, out var edgeCalleeCell) &&
-                    edgeCalleeCell.Value is FbInstance edgeCallee &&
-                    edgeCallee.NativeEdgeTriggerHost != null)
-                {
-                    BindEdgeTriggerInputs(edgeCallee, positionalArgs, namedArgs, callerFrame);
-                    edgeCallee.NativeEdgeTriggerHost.Update(edgeCallee);
-                    return null;
-                }
-
-                // Bare invocation of an ordinary interpreted (non-native) FB
-                // field or method-local var, e.g. sfbLoopback(ibEnable := TRUE)
-                // - generalizes the native-timer bare-invoke above: bind
-                // VAR_INPUT/VAR_IN_OUT args into the callee's persisted
-                // Fields, then run its top-level body once (TcXunit-0v1).
-                if (TryResolveCalleeCell(callerFrame, instance, methodName, out var interpretedCalleeCell) &&
-                    interpretedCalleeCell.Value is FbInstance interpretedCallee &&
-                    interpretedCallee.NativeTimerHost == null &&
-                    interpretedCallee.NativeLoopbackHost == null &&
-                    interpretedCallee.NativeSuiteHost == null &&
-                    interpretedCallee.NativeEdgeTriggerHost == null &&
-                    _registry.Get(interpretedCallee.ActualTypeName) != null)
-                {
-                    InvokeFbInstance(interpretedCallee, positionalArgs, namedArgs, callerFrame);
-                    return null;
-                }
-
-                if (instance?.NativeLoopbackHost != null && IsLoopbackFaultMethod(methodName))
+                // Method-name routing WITHIN the loopback host kind - a
+                // different question from the host-kind classification above,
+                // so it keeps its own switch; only its guard reads the shared
+                // discriminator (TcXunit-fvp6).
+                if (instance?.NativeKind == NativeHostKind.Loopback && IsLoopbackFaultMethod(methodName))
                 {
                     switch (methodName)
                     {

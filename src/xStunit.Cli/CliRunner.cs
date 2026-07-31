@@ -11,20 +11,26 @@ using xStunit.Runner;
 
 namespace xStunit.Cli
 {
-    // Testable core of `tcxunit run <path>` (TcXunit-w5x.7 item 5). Program.Main
-    // is a thin wrapper so this can be driven from xUnit without a subprocess.
+    /// <summary>
+    /// Testable core of the `tcxunit` command line; <see cref="Program"/> is a
+    /// thin wrapper so a run can be driven from a test without a subprocess.
+    /// </summary>
+    /// <remarks>
+    /// The exit code is a contract: 0 all tests passed, 1 at least one test
+    /// failed, 2 usage or discovery error (bad path, bad flag value, no suites
+    /// found). A file that cannot be loaded is skipped and reported, never
+    /// fatal, so a run that skipped files still exits 0 or 1 by test outcome -
+    /// exit 2 means the run produced no results at all.
+    /// </remarks>
     public static class CliRunner
     {
         public static int Run(string[] args, TextWriter output)
         {
-            // --help/-h (TcXunit-3cu): a standalone pre-scan rather than an
-            // else-if branch in the loop below, deliberately - --plugins,
-            // --format, and --suite each consume the next token unconditionally
-            // as their value, so "tcxunit --plugins --help" would swallow
-            // "--help" as a directory name instead of recognizing it if this
-            // lived inside that loop. Scanning the whole array up front means
-            // --help wins regardless of position. Exit 0: this is a successful,
-            // explicitly requested action, not a usage error.
+            // A whole-array pre-scan rather than a branch in the parse loop
+            // below: --plugins, --format and --suite each consume the next
+            // token unconditionally as their value, so "tcxunit --plugins
+            // --help" would swallow --help as a directory name. Exit 0 - an
+            // explicitly requested action that succeeded, not a usage error.
             if (args.Any(a => string.Equals(a, "--help", StringComparison.OrdinalIgnoreCase) ||
                                string.Equals(a, "-h", StringComparison.OrdinalIgnoreCase)))
             {
@@ -32,43 +38,12 @@ namespace xStunit.Cli
                 return 0;
             }
 
-            // --format json|text (TcXunit prototype spike: structured output for
-            // non-console consumers, e.g. a VSIX tool window shelling out to the
-            // CLI instead of parsing plain-text lines). Accepted anywhere in args,
-            // both "--format json" and "--format=json"; everything else is a path.
             var format = "text";
             var paths = new List<string>();
-            // --suite <name> (TcXunit-6fb.3): repeatable, restricts the run to
-            // the named suite(s) instead of everything SuiteDiscovery finds -
-            // e.g. a VSIX "rerun failed" action re-running only the suites it
-            // cares about. Parsed the same way as --format (both "--suite x"
-            // and "--suite=x"), interleaved freely with paths/--format.
             var suiteFilters = new List<string>();
-            // --plugins <dir> (TcXunit-6k2): directory of assemblies supplying
-            // IXstunitNativeFunction stand-ins for compiled-only TwinCAT
-            // library functions (Tc2_Utilities' F_CheckSum16 and friends),
-            // which have no .TcPOU source anywhere to parse. Parsed like
-            // --format/--suite; omitted means no plugins, i.e. exactly the
-            // pre-existing behavior.
             string pluginDirectory = null;
-            // --coverage (TcXunit-3tx.4): additionally report which loaded POUs
-            // any suite exercises, and - the useful half - which none does. A
-            // next-task list for an agent rather than a CI gate, so it is a
-            // report only: it never changes the exit code. Opt-in because a
-            // large tree's list is long and most runs don't want it.
+            // A work list, never a gate: coverage never changes the exit code.
             var withCoverage = false;
-            // --stream (TcXunit-ce1): opt-in NDJSON progress mode for large
-            // suite counts - one JSON object per line instead of one blob at
-            // the end: an initial "discovery" event listing every suite
-            // about to run (so a consumer can render a "waiting" list up
-            // front), a "suite-start"/"suite-result" pair per suite as it
-            // executes, and a final "summary" event carrying the same
-            // aggregate data --format json already reports in one shot.
-            // Independent of --format. When NOT passed, output is exactly
-            // what it always was - this is the CLI's most-consumed contract
-            // (the VSIX shells out to it without ever passing --stream), so
-            // every new code path below is gated behind this flag rather
-            // than changed in place.
             var streaming = false;
             for (var i = 0; i < args.Length; i++)
             {
@@ -138,39 +113,26 @@ namespace xStunit.Cli
 
             if (args.Length == 0)
             {
-                // TcXunit-3cu: kept short (path args + flag names only, no
-                // descriptions) - full detail lives in --help so this error
-                // path doesn't duplicate it. "run" was never a real
-                // subcommand (Program.Main passes args straight to Run), so
-                // it's dropped here rather than carried forward as a token
-                // that would itself fail with "path does not exist: run".
+                // Flag names only: the descriptions live in --help rather than
+                // being duplicated on this error path.
                 output.WriteLine("usage: tcxunit <path-to-POUs-directory> [<path-to-POUs-directory> ...] [--format text|json] [--suite <name>] [--plugins <dir>] [--coverage] [--stream]");
                 output.WriteLine("Run 'tcxunit --help' for flag descriptions and examples.");
                 return 2;
             }
 
-            // Files that couldn't be loaded but must not abort the run
-            // (TcXunit-iyd.7) - reported individually at the end of the run
-            // instead of collapsing the whole invocation into a discovery
-            // error.
             var skipped = new List<SkippedFile>();
 
-            // TcXunit-3tx.4: null until the POU set and suite list are both
-            // known (see below), and stays null unless --coverage was passed.
-            // Declared up here only so WriteError can report it too - a tree
-            // with no suites is precisely the tree where everything is
-            // uncovered.
+            // Declared this early only so WriteError can report it too: a tree
+            // with no suites is precisely the tree where every POU is
+            // uncovered. Stays null unless --coverage was passed.
             IReadOnlyList<PouCoverage> coverage = null;
 
             int WriteError(string message)
             {
                 if (streaming)
                 {
-                    // TcXunit-ce1: a single NDJSON "error" line, same data as
-                    // the --format json ErrorReport plus the event tag - this
-                    // can fire before any suite/discovery event is emitted
-                    // (a bad path, "no suites found"), so it stands alone
-                    // rather than assuming a discovery line already went out.
+                    // Stands alone: this can fire before any discovery or suite
+                    // event has been emitted (a bad path, "no suites found").
                     output.WriteLine(JsonSerializer.Serialize(
                         new ErrorReport(message, ToSkipReports(skipped), ToCoverageReports(coverage), "error"), StreamJsonOptions));
                 }
@@ -194,25 +156,19 @@ namespace xStunit.Cli
                     return WriteError($"path does not exist: {path}");
             }
 
-            // Parse each *.TcPOU individually rather than via
+            // Parsed file by file rather than through
             // MultiDirectoryPouLoader.Load, which propagates the first
-            // TcPouRejectedException and takes the entire run down with it
-            // (TcXunit-iyd.7): a real production tree always contains POUs
-            // outside the v1 parse subset (Tc2_System, __NEW, ...), and one of
-            // them must not make every *other* suite in the tree unrunnable.
-            // Same skip-and-report shape used throughout this loader
-            // (PLC-b62/TcXunit-swk), keyed by full file path for the same
-            // collision-avoidance reason (TcXunit-pvp). A suite that actually
-            // depends on a skipped POU still fails clearly at run time with
-            // an unresolved-type error.
+            // TcPouRejectedException and takes the whole run down with it: a
+            // real tree always contains POUs outside the parse subset
+            // (Tc2_System, __NEW, ...), and one of them must not make every
+            // other suite in the tree unrunnable. A suite that genuinely
+            // depends on a skipped POU still fails clearly at run time with an
+            // unresolved-type error.
             var loaded = new List<LoadedPou>();
             foreach (var file in MultiDirectoryPouLoader.FindPouFiles(args))
             {
                 try
                 {
-                    // Structurally unexpected POUs (malformed XML, missing
-                    // Declaration/Implementation/ST, a GVL/DUT file caught by
-                    // the *.TcPOU glob) are skipped the same way.
                     if (StructuralParseGuard.TryParseOrSkip(
                             file, () => TcPouParser.Parse(File.ReadAllText(file)), out var pou, out var skip))
                         loaded.Add(new LoadedPou(pou, file));
@@ -225,10 +181,10 @@ namespace xStunit.Cli
                 }
             }
 
-            // Duplicate type names across the merged directory set stay a hard,
-            // fail-fast error here: it means the caller pointed the CLI at an
-            // inconsistent set of directories, which is a usage/discovery
-            // error rather than an unsupported-file skip.
+            // A duplicate type name across the merged directory set is a hard
+            // error, not a skip: it means the caller pointed the CLI at an
+            // inconsistent set of directories, which is usage, not an
+            // unsupported file. Every duplicate-name check below follows suit.
             try
             {
                 MultiDirectoryPouLoader.CheckForDuplicates(loaded);
@@ -240,13 +196,6 @@ namespace xStunit.Cli
 
             var types = loaded.Select(l => l.Pou).ToList();
 
-            // .TcDUT STRUCT types (TcXunit-9li): loaded via DutStructLoader so
-            // `tcxunit run` resolves STRUCT-typed DUTs instead of silently
-            // failing to resolve any suite/FB that depends on one. Per-file
-            // parse failures are isolated the same resilient way
-            // DutStructLoader isolates them (unsupported DUT kinds are
-            // skipped, not fatal); a duplicate STRUCT name across files is a
-            // hard error, same as a duplicate POU type name above.
             IReadOnlyList<StructAst> structTypes;
             try
             {
@@ -258,24 +207,17 @@ namespace xStunit.Cli
                 return WriteError(ex.Message);
             }
 
-            // ALIAS .TcDUT definitions (TcXunit-6hg, e.g. T_MaxString ->
-            // STRING(255)): loaded via DutAliasLoader, same resolution shape
-            // as DutStructLoader/GvlLoader above.
             var aliases = DutAliasLoader.Load(args, out var aliasSkipped).ToDictionary(kv => kv.Key, kv => kv.Value);
             skipped.AddRange(aliasSkipped);
 
-            // ENUM .TcDUT definitions (TcXunit-fyu, e.g. E_Color -> INT):
-            // registered into the same alias map so SIZEOF() and every other
-            // ResolveAlias call site resolves an enum type name to its
-            // underlying integer type without a separate lookup path.
+            // Enum names are merged into the alias map so SIZEOF() and every
+            // other ResolveAlias call site resolves an enum to its underlying
+            // integer type without a second lookup path.
             var enumAliases = DutEnumLoader.Load(args, out var enumSkipped, out var enumMembers);
             skipped.AddRange(enumSkipped);
             foreach (var enumAlias in enumAliases)
                 aliases[enumAlias.Key] = enumAlias.Value;
 
-            // .TcGVL global variable lists (TcXunit-71o): loaded via
-            // GvlLoader, same resilient/fail-fast shape as DutStructLoader
-            // above.
             IReadOnlyList<GvlAst> gvls;
             try
             {
@@ -302,35 +244,25 @@ namespace xStunit.Cli
                 suiteNames = suiteNames.Where(name => requested.Contains(name)).ToList();
             }
 
-            // TcXunit-3tx.4: computed from the same loaded types and the same
-            // discovered suite names the run uses - the coverage list describes
-            // this run's tree, not a separate scan of it. (suiteNames may have
-            // been narrowed by --suite just above; that is deliberate, since a
-            // filtered run's coverage should describe what that run covered.)
-            //
             // Computed BEFORE the no-suites bail-out below: a tree with no
-            // suites at all is the case where every POU is uncovered, i.e. the
-            // longest and most useful work list there is, and reporting nothing
-            // for it would be exactly backwards.
+            // suites is the case where every POU is uncovered - the longest and
+            // most useful work list there is. Uses the possibly --suite-filtered
+            // list, so coverage describes what this run actually covered.
             if (withCoverage)
                 coverage = SuiteCoverage.Analyze(types, suiteNames);
 
             if (suiteNames.Count == 0)
                 return WriteError($"no TcUnit suites found under {string.Join(", ", args)}");
 
-            // TcXunit-6k2: plugin-supplied native functions, resolved only
-            // after every real POU in the tree has failed to resolve a call
-            // (see Engine.CallMethod), so a plugin can never shadow real
-            // source. Load failures join the same skip list as unloadable
-            // POUs, for the same reason: reduced coverage is reported, not
-            // fatal.
+            // Plugin-supplied native functions are resolved only after every
+            // real POU in the tree has failed to resolve a call (see
+            // Engine.CallMethod), so a plugin can never shadow real source.
             var nativeFunctions = Plugins.NativeFunctionPluginLoader.Load(
                 pluginDirectory, out var pluginSkips, out var pluginsLoaded);
             skipped.AddRange(pluginSkips);
-            // Streaming suppresses this plain-text line same as the PASS/FAIL
-            // lines below (TcXunit-ce1): stdout must stay one-JSON-object-
-            // per-line for a --stream consumer, and a bare "plugin: ..." line
-            // interleaved with NDJSON would break that.
+            // Under --stream, stdout must stay one JSON object per line: any
+            // plain-text line interleaved with the NDJSON breaks that contract,
+            // which is why every text write below is gated the same way.
             if (!asJson && !streaming && pluginDirectory != null)
             {
                 foreach (var plugin in pluginsLoaded)
@@ -345,14 +277,6 @@ namespace xStunit.Cli
 
             if (streaming)
             {
-                // TcXunit-ce1: the "discovery" event - every suite about to
-                // run, before any of them have. SuiteDiscovery.FindSuiteTypeNames
-                // (via suiteNames above) already produces the full suite list
-                // independent of execution, so this is just that same list
-                // paired with each suite's file path, emitted as the first
-                // NDJSON line - a consumer can render every suite as
-                // "waiting" immediately instead of only learning suite count
-                // from the final summary.
                 var discoverySuites = suiteNames.Select(name =>
                 {
                     suiteFilePaths.TryGetValue(name, out var discoveryFilePath);
@@ -374,36 +298,35 @@ namespace xStunit.Cli
                 }
                 catch (Exception ex)
                 {
-                    // Same rationale as SuiteCaseRunner's catch sites (TcXunit-2v8): the
-                    // "FAIL (...)" line/SuiteReport.Error only carries ex.Message, the full
-                    // ex.ToString() (stack trace + inner exceptions) goes to the TcXunit log
-                    // file so this doesn't need re-instrumenting to diagnose.
+                    // Catches broadly ON PURPOSE: this is an isolation
+                    // boundary, so one suite that throws cannot abort the
+                    // suites after it. Narrowing to an enumerated list of
+                    // "expected" types is a regression - anything off the list
+                    // escapes and takes the rest of the run with it.
+                    //
+                    // Only ex.Message reaches the FAIL line and
+                    // SuiteReport.Error; the full ex.ToString() (stack trace,
+                    // inner exceptions) goes to the log, so diagnosing a
+                    // failure needs no re-instrumenting.
                     XstunitLog.LogException($"CliRunner.Run: suite '{suiteName}' failed to run", ex);
-                    // TcXunit-p3t.1: name the PLC POU + method that was
-                    // executing when it threw, not just the suite. Engine
-                    // only produces a PlcSourceLocationException when an
-                    // interpreted ST body actually faulted; a load-level
-                    // failure (unresolvable type in default-value
-                    // construction, say) has no location and keeps the
-                    // original single-line shape.
+                    // Non-null only when an interpreted ST body actually
+                    // faulted; a load-level failure (an unresolvable type in
+                    // default-value construction, say) has no PLC location, and
+                    // every location-derived field below stays null for it.
                     var located = ex as PlcSourceLocationException;
                     if (!asJson && !streaming)
                     {
-                        // located.Message rather than Location + inner message
-                        // (TcXunit-p3t.4/gfs): the exception owns the one rendering
-                        // of "where", so the body-relative line appears here and in
-                        // the JSON error string below without two formatters to keep
-                        // in step - and degrades to the bare "FB_Y.MethodZ: ..."
-                        // shape by itself when no line is known.
+                        // located.Message rather than a locally composed
+                        // location + inner message: the exception owns the one
+                        // rendering of "where", shared with the JSON error
+                        // string below, so there are never two formatters to
+                        // keep in step.
                         var detail = located != null ? $"in {located.Message}" : ex.Message;
                         output.WriteLine($"{suiteName}: FAIL ({detail})");
 
-                        // TcXunit-7s6: the full interpreted call chain, one frame
-                        // per indented line beneath the FAIL line, innermost
-                        // first - printed in addition to (never instead of) the
-                        // single-line Error above, so existing text-output
-                        // consumers that only look at the FAIL line are
-                        // unaffected.
+                        // Frames print beneath the FAIL line, never instead of
+                        // it: a text consumer that reads only the FAIL line
+                        // must keep working.
                         if (located != null)
                         {
                             foreach (var frame in located.CallStack)
@@ -411,39 +334,21 @@ namespace xStunit.Cli
                         }
                     }
                     suiteFilePaths.TryGetValue(suiteName, out var failFilePath);
-                    // TcXunit-gfs: the raw .TcPOU XML line, carried as a separate
-                    // structured field for a non-interactive consumer (e.g. an AI
-                    // agent) that opens the fixture/POU file directly by path
-                    // rather than through XAE - null when the failure never
-                    // entered an interpreted ST body, or its line is unknown.
                     var fileLine = located != null ? NullableLine(located.Line) : null;
-                    // TcXunit-7s6: the ordered call-stack, additive alongside the
-                    // pre-existing single-frame Error/FileLine fields - null (not
-                    // an empty array) when the failure never entered an
-                    // interpreted ST body, so a load-level failure keeps the same
-                    // JSON shape it always had.
                     var callStack = located?.CallStack.Select(f => ToCallStackFrameReport(f.Site)).ToArray();
-                    // TcXunit-3tx.1: classify once, here, from the exception
-                    // itself - the message string is prose for a human and is
-                    // never the thing a consumer switches on.
+                    // Classified once, here, from the exception itself: the
+                    // message is prose for a human and is never what a consumer
+                    // switches on.
                     var errorKind = FailureClassifier.Classify(ex, out var errorConstruct);
-                    // A parse-error's body line comes from the front end's
-                    // own structured field, not from re-parsing ex.Message.
+                    // A parse error's body line comes from the front end's own
+                    // structured field, never from re-parsing ex.Message.
                     var errorBodyLine = errorKind == FailureKind.ParseError
                         ? FailureClassifier.UnwrapParseException(ex)?.BodyLine ?? PlcSourceLocationException.UnknownLine
                         : PlcSourceLocationException.UnknownLine;
-                    // TcXunit-229.15: the one-line error an agent reads gets
-                    // that kind's guidance appended, so the JSON object is
-                    // self-contained - a consumer never has to have read this
-                    // repo's README to know whether to edit the POU or stop.
+                    // Guidance is appended so the JSON object is self-contained:
+                    // a consumer never has to have read this repo to know
+                    // whether to edit the POU or stop and escalate.
                     var errorText = WithGuidance(ex.Message, errorKind, isVerbatim: false, errorBodyLine);
-                    // No suite ran to completion here (load/instantiation/default-value
-                    // failure), so there's no elapsed time to report - null, not a
-                    // fabricated zero (TcXunit-6fb.2). ex.Message already carries the
-                    // "FB_Y.MethodZ(5): ..." prefix for an interpreted fault
-                    // (TcXunit-p3t.1/gfs), so the error string gets richer without the
-                    // JSON wire format changing shape - suites[].error stays a
-                    // plain string.
                     suiteReports.Add(new SuiteReport(
                         suiteName, failFilePath, errorText, errorKind, errorConstruct,
                         Array.Empty<TestReport>(), null, fileLine, callStack));
@@ -451,16 +356,9 @@ namespace xStunit.Cli
                     anyFailed = true;
                     if (streaming)
                     {
-                        // TcXunit-ce1: a suite that never ran to completion
-                        // (unresolved type, unresolvable method call, ...)
-                        // still gets exactly one suite-result line, so a
-                        // --stream consumer's "waiting" list always empties
-                        // out - it never has to distinguish "suite finished"
-                        // from "suite is still stuck". Outcome is "fail" (not
-                        // a third "skip" state): it already counts toward
-                        // failCount/exitCode above the same as a suite that
-                        // ran with a failing test, and `kind` is what tells a
-                        // consumer *why* if it wants to render that differently.
+                        // A suite that never ran to completion still emits
+                        // exactly one suite-result line, so a --stream
+                        // consumer's "waiting" list always empties out.
                         output.WriteLine(JsonSerializer.Serialize(
                             new SuiteReport(
                                 suiteName, failFilePath, errorText, errorKind, errorConstruct,
@@ -477,11 +375,6 @@ namespace xStunit.Cli
                     {
                         output.WriteLine(result.ToString());
 
-                        // TcXunit-3tx.3: a fault charged to one test prints its
-                        // call chain beneath that test's FAIL line, exactly as
-                        // a suite-level error does beneath its own
-                        // (TcXunit-7s6) - the fault moved, its diagnostics
-                        // didn't.
                         foreach (var failure in result.Failures)
                         {
                             if (failure.CallStack == null)
@@ -505,9 +398,6 @@ namespace xStunit.Cli
                 suiteReports.Add(new SuiteReport(suiteName, filePath, null, null, null, testReports, suiteDurationMs, null, null));
                 if (streaming)
                 {
-                    // TcXunit-ce1: outcome mirrors what already drives
-                    // anyFailed/exitCode above - "fail" if any TEST() in this
-                    // suite failed, "pass" otherwise.
                     var suiteOutcome = testReports.Any(t => !t.Passed) ? "fail" : "pass";
                     output.WriteLine(JsonSerializer.Serialize(
                         new SuiteReport(suiteName, filePath, null, null, null, testReports, suiteDurationMs, null, null, "suite-result", suiteOutcome),
@@ -515,21 +405,15 @@ namespace xStunit.Cli
                 }
             }
 
-            // Skipped files do not change the exit code (TcXunit-iyd.7): a run
-            // that skipped unsupported POUs but ran everything else is still a
-            // completed run (0/1 by test outcome), deliberately distinct from
-            // the exit 2 reserved for usage/discovery errors that produced no
-            // results at all. The skip list + count is what tells the caller
-            // coverage was reduced.
+            // Skipped files must never change the exit code: a run that skipped
+            // unsupported POUs but ran everything else is still a completed run
+            // (0 or 1 by test outcome). Exit 2 stays reserved for usage and
+            // discovery errors that produced no results at all; the skip list
+            // is what tells the caller coverage was reduced.
             var exitCode = anyFailed ? 1 : 0;
 
             if (streaming)
             {
-                // TcXunit-ce1: the final "summary" NDJSON line - same
-                // aggregate data (suites/passed/failed/exitCode/skipped/
-                // coverage) as the non-streaming --format json blob below,
-                // just tagged with the event so a --stream consumer doesn't
-                // need a second code path to read the end-of-run totals.
                 output.WriteLine(JsonSerializer.Serialize(
                     new RunReport(suiteReports, passCount, failCount, exitCode, ToSkipReports(skipped), ToCoverageReports(coverage), "summary"),
                     StreamJsonOptions));
@@ -552,11 +436,9 @@ namespace xStunit.Cli
             return exitCode;
         }
 
-        // `Construct` and `Site.BodyLine` are already the right values by the
-        // time a fault reaches this boundary - the engine
-        // (Engine.Diagnostics.ToTestFailure) populates both from the
-        // ParseException's own structured fields, not from re-parsing its
-        // message. This boundary just reads them through.
+        // Reads Construct and Site.BodyLine straight through: the engine
+        // populates both from the ParseException's own structured fields, so
+        // nothing here recovers them by re-parsing a message.
         private static FailureReport ToFailureReport(xStunit.Runner.TcUnitStub.AssertionFailure failure) =>
             new FailureReport(
                 WithGuidance(failure),
@@ -572,40 +454,28 @@ namespace xStunit.Cli
                 NullableLine(failure.Site.Line),
                 failure.CallStack?.Select(ToCallStackFrameReport).ToArray());
 
-        // TcXunit-229.15: the message a consumer reads, followed by what to DO
-        // about a failure of that kind (FailureKind.Guidance). TcXunit's
-        // consumer is usually a model choosing its next edit from one JSON
-        // object; "Unexpected character '@' at position 33" states a fact and
-        // answers nothing, and the two possible responses - fix the ST, or stop
-        // and escalate - are opposites.
+        // The message a consumer reads, followed by what to DO about a failure
+        // of that kind: the consumer is usually a model choosing its next edit
+        // from one JSON object, and the two possible responses - fix the ST, or
+        // stop and escalate - are opposites that the factual half never
+        // distinguishes.
         //
-        // The one exception is a formatted TcUnit assert line ("FAILED TEST
-        // 'X', EXP: 99, ACT: 3, MSG: ..."), which is reproduced byte for byte
-        // from upstream TcUnit's FB_AdsAssertMessageFormatter and is what text
-        // output prints and the VSIX results tree renders. That string has a
-        // verbatim contract, so guidance is not appended to it - and it is the
-        // one message whose factual half already names the change to make.
-        //
-        // TcXunit-4iop: what identifies that line is the failure's STRUCTURED
-        // fields, not its kind. FB_TestSuite.Fail() is the only path that
-        // formats that string, and the only path that populates
-        // Assert/Expected/Actual/AssertMessage; Engine.Diagnostics.ToTestFailure
-        // leaves them null by design ("a contained fault has no expected/actual
-        // pair"). So `Expected != null` IS "this Message has a verbatim
-        // contract" - no prefix matching, and no second field saying what
-        // Expected/Actual already say. Keying on kind instead exempted every
-        // assertion-kind failure, including a convergence failure that never
-        // went near the formatter, and left Guidance(Assertion) unreachable.
+        // The exception is a formatted TcUnit assert line ("FAILED TEST 'X',
+        // EXP: 99, ACT: 3, MSG: ..."), reproduced byte for byte from upstream
+        // TcUnit's FB_AdsAssertMessageFormatter: it has a verbatim contract, so
+        // no guidance may be appended to it. `Expected != null` is what
+        // identifies one, because FB_TestSuite.Fail() is both the only path
+        // that formats that string and the only path that populates
+        // Assert/Expected/Actual/AssertMessage. Keying on the KIND instead
+        // would exempt every assertion-kind failure, including ones that never
+        // went near the formatter.
         private static string WithGuidance(xStunit.Runner.TcUnitStub.AssertionFailure failure) =>
             WithGuidance(failure.Message, failure.Kind, isVerbatim: failure.Expected != null, failure.Site.BodyLine);
 
-        // Overload for the two call sites that have no failure object at all -
-        // a suite-level error and the run-level ErrorReport. Neither can be a
-        // formatter line (no AssertionFailure, so no Expected/Actual), hence
-        // isVerbatim spelled out at the call site rather than defaulted here:
-        // the exemption should never be something a caller gets by omission.
-        // bodyLine defaults to unknown: neither call site has a parse-error
-        // body line of its own to offer.
+        // Overload for the call sites that have no failure object at all: a
+        // suite-level error and the run-level ErrorReport. isVerbatim has no
+        // default on purpose - the verbatim exemption must never be something a
+        // caller gets by omission.
         private static string WithGuidance(
             string message, string kind, bool isVerbatim, int bodyLine = PlcSourceLocationException.UnknownLine)
         {
@@ -618,11 +488,9 @@ namespace xStunit.Cli
 
             if (kind == FailureKind.ParseError)
             {
-                // The form TcXunit-229.9 settled on: say plainly that the body
-                // could not be READ, and that the cause is one of two things
-                // TcXunit genuinely cannot tell apart - never assert which.
-                // bodyLine is the caller's own structured field, not
-                // recovered here by re-parsing message.
+                // Says plainly that the body could not be READ, and that the
+                // cause is one of two things the runner genuinely cannot tell
+                // apart - it must never assert which.
                 var at = bodyLine != PlcSourceLocationException.UnknownLine
                     ? $" at line {bodyLine}"
                     : string.Empty;
@@ -631,28 +499,20 @@ namespace xStunit.Cli
             }
 
             // " -- " rather than a space: the factual half often ends in ST
-            // punctuation (";", ")") or, for a parse-error, in the raw body
-            // text itself, so a bare space runs the two halves into one
-            // sentence. The delimiter is where "what happened" stops and "what
-            // to do" starts.
+            // punctuation (";", ")") or in raw body text, so a bare space runs
+            // the two halves into one sentence. The delimiter is where "what
+            // happened" stops and "what to do" starts.
             return string.IsNullOrEmpty(message) ? guidance : message + " -- " + guidance;
         }
 
-        // Takes an AssertSite, which is what both sources of a frame carry:
-        // PlcCallStackFrame.Site for a suite-level error, and the failure's own
-        // CallStack entries for a fault contained into a test (TcXunit-3tx.3).
         private static CallStackFrameReport ToCallStackFrameReport(xStunit.Runner.TcUnitStub.AssertSite site) =>
             new CallStackFrameReport(site.PouTypeName, site.MethodName, NullableLine(site.Line), NullableLine(site.BodyLine));
 
-        // TcXunit-gfs/7s6: PlcSourceLocationException.UnknownLine (0) means
-        // "no line" the same way for a suite's single FileLine as for every
-        // per-frame Line/BodyLine - one place for that sentinel-to-null
-        // translation instead of a ternary at each call site.
+        // The one place the UnknownLine sentinel becomes a JSON null, so every
+        // line field on the wire uses null - never 0 - for "not known".
         private static int? NullableLine(int line) =>
             line != PlcSourceLocationException.UnknownLine ? (int?)line : null;
 
-        // TcXunit-3tx.4: one line per POU, "(none)" spelling out the entries
-        // that are the actual work list. No-ops when --coverage wasn't passed.
         private static void WriteCoverageLines(TextWriter output, IReadOnlyList<PouCoverage> coverage)
         {
             if (coverage == null)
@@ -674,10 +534,9 @@ namespace xStunit.Cli
         private static IReadOnlyList<SkipReport> ToSkipReports(IReadOnlyList<SkippedFile> skipped) =>
             skipped.Select(s => new SkipReport(s.FileKey, s.Message)).ToList();
 
-        // TcXunit-3cu: --help/-h text. One place, printed verbatim, kept in
-        // sync with the actual flags parsed above rather than duplicating
-        // them in a second string - the no-args usage line above stays a
-        // short pointer to this instead of repeating the descriptions.
+        // The single description of every flag, and so the one that must be
+        // kept in step with the parsing in Run. The no-args usage line stays a
+        // pointer here rather than a second copy.
         private static readonly string HelpText =
 @"tcxunit - xUnit-style test runner for TwinCAT/IEC 61131-3 PLC code (no TwinCAT runtime required)
 
@@ -741,10 +600,9 @@ Examples:
             PropertyNamingPolicy = JsonNamingPolicy.CamelCase
         };
 
-        // TcXunit-ce1: --stream's wire format - one compact JSON object per
-        // line (WriteIndented: false, unlike JsonOptions above), since a
-        // multi-line indented object would break NDJSON's one-line-per-event
-        // contract.
+        // --stream's wire format. Compact, unlike JsonOptions above: an
+        // indented object spans lines and would break NDJSON's
+        // one-line-per-event contract.
         private static readonly JsonSerializerOptions StreamJsonOptions = new JsonSerializerOptions
         {
             WriteIndented = false,
@@ -757,50 +615,43 @@ Examples:
                 string error, IReadOnlyList<SkipReport> skipped, IReadOnlyList<CoverageReport> coverage, string streamEvent = null)
             {
                 Event = streamEvent;
-                // TcXunit-229.15: always load-error here (see Kind below), so
-                // the guidance is appended once, in the constructor, rather
-                // than at each of WriteError's call sites. Text output keeps
-                // the bare "error: <message>" line - it is read by a human at
-                // a console, who has the README; this string is the one an
-                // agent reads with nothing else to go on.
+                // Guidance is appended here, once, rather than at each of
+                // WriteError's call sites. Text output keeps the bare
+                // "error: <message>" line: that one is read by a human at a
+                // console, this one by a consumer with nothing else to go on.
                 Error = WithGuidance(error, FailureKind.LoadError, isVerbatim: false);
                 Skipped = skipped;
                 Coverage = coverage;
             }
 
-            // TcXunit-ce1: set ("error") only when WriteError serializes this
-            // for --stream; null (and so omitted, JsonIgnoreCondition.
-            // WhenWritingNull) for the pre-existing --format json ErrorReport
-            // shape, which every non-streaming caller still gets unchanged.
+            // Set only for the --stream NDJSON line; null, and so omitted, from
+            // the --format json shape.
             [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
             public string Event { get; }
 
             public string Error { get; }
 
-            // TcXunit-3tx.1: every error reported through this shape is a
-            // usage/discovery failure - a bad path, an inconsistent directory
-            // set, a tree with no suites - so it is always load-error. Emitted
-            // as a constant rather than omitted so a consumer reads `kind` the
-            // same way whether the run died before any suite ran or one suite
-            // failed inside it.
+            // Every error reported through this shape is a usage or discovery
+            // failure, so it is always load-error. Emitted as a constant rather
+            // than omitted, so a consumer reads `kind` the same way whether the
+            // run died before any suite ran or one suite failed inside it.
             public string Kind => FailureKind.LoadError;
 
-            // Skips collected before the error surfaced (TcXunit-iyd.7) - e.g.
-            // "no TcUnit suites found" in a tree where every candidate POU was
-            // outside the v1 parse subset: without this the caller sees only
-            // "nothing found" and no reason why.
+            // Skips collected before the error surfaced - e.g. "no suites
+            // found" in a tree where every candidate POU was outside the parse
+            // subset. Without them the caller sees only "nothing found", with
+            // no reason why.
             public IReadOnlyList<SkipReport> Skipped { get; }
 
-            // TcXunit-3tx.4: --coverage still reports here. "No suites found"
-            // is a usage error for a run, but for a work list it is the most
-            // informative answer there is - every POU in the tree is uncovered.
+            // Reported even on a failed run: "no suites found" is a usage error
+            // for a run, but for a work list it is the most informative answer
+            // there is - every POU in the tree is uncovered.
             [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
             public IReadOnlyList<CoverageReport> Coverage { get; }
         }
 
-        // One unloadable file (TcXunit-iyd.7): reported rather than aborting
-        // the run. FilePath is the full on-disk path, so the offending file is
-        // unambiguous when several merged directories contain same-named POUs.
+        // FilePath is the full on-disk path, so the offending file stays
+        // unambiguous when several merged directories hold same-named POUs.
         private sealed class SkipReport
         {
             public SkipReport(string filePath, string reason)
@@ -813,10 +664,10 @@ Examples:
             public string Reason { get; }
         }
 
-        // Shapes for `--format json` (TcXunit prototype spike: structured output
-        // for non-console consumers such as a VSIX tool window). Deliberately
-        // separate from TestCaseResult/AssertionFailure so the wire format is
-        // stable even if the interpreter's internal model changes.
+        // Root of the `--format json` output, and with it the *Report family
+        // below. Kept separate from TestCaseResult/AssertionFailure on purpose:
+        // the wire format has to stay stable even when the interpreter's
+        // internal model changes.
         private sealed class RunReport
         {
             public RunReport(
@@ -837,9 +688,8 @@ Examples:
                 Coverage = coverage;
             }
 
-            // TcXunit-ce1: set ("summary") only for --stream's final NDJSON
-            // line; null (and so omitted) for the pre-existing --format json
-            // blob, which keeps its exact prior shape.
+            // Set only for --stream's final NDJSON line; null, and so omitted,
+            // from the --format json blob.
             [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
             public string Event { get; }
 
@@ -848,23 +698,19 @@ Examples:
             public int Failed { get; }
             public int ExitCode { get; }
 
-            // Files that couldn't be loaded (TcXunit-iyd.7). Always present
-            // (empty array when nothing was skipped) so consumers can read it
-            // unconditionally.
+            // Always present, empty when nothing was skipped, so a consumer can
+            // read it unconditionally.
             public IReadOnlyList<SkipReport> Skipped { get; }
 
-            // TcXunit-3tx.4: one entry per non-suite POU with the suites
-            // exercising it. Emitted only under --coverage - null (and so
-            // omitted below) otherwise, since an absent key and an empty list
-            // would otherwise be indistinguishable from "everything is
-            // uncovered".
+            // One entry per non-suite POU. Omitted entirely without --coverage,
+            // because an empty list already means something else: that every
+            // POU in the tree is uncovered.
             [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
             public IReadOnlyList<CoverageReport> Coverage { get; }
         }
 
-        // One POU's coverage (TcXunit-3tx.4). An entry whose `suites` is empty
-        // is the interesting one: it is a directly usable next task ("write a
-        // suite for F_ComputeChecksum").
+        // An entry whose `suites` is empty is the interesting one: it is a
+        // directly usable next task ("write a suite for F_ComputeChecksum").
         private sealed class CoverageReport
         {
             public CoverageReport(string pou, IReadOnlyList<string> suites)
@@ -877,11 +723,9 @@ Examples:
             public IReadOnlyList<string> Suites { get; }
         }
 
-        // TcXunit-ce1: --stream's first NDJSON line - every suite about to
-        // run, so a consumer can render a "waiting" list before any of them
-        // start. One entry per suite name SuiteDiscovery.FindSuiteTypeNames
-        // found (after --suite filtering), paired with the same file path
-        // suites[].filePath uses elsewhere.
+        // One suite of --stream's first NDJSON line, emitted before any suite
+        // runs so a consumer can render the full "waiting" list up front rather
+        // than learning the suite count from the final summary.
         private sealed class SuiteDiscoveryEntry
         {
             public SuiteDiscoveryEntry(string name, string filePath)
@@ -905,11 +749,9 @@ Examples:
             public IReadOnlyList<SuiteDiscoveryEntry> Suites { get; }
         }
 
-        // TcXunit-ce1: one of these per suite, immediately before
-        // engine.RunSuite is called for it - the "running" half of
-        // waiting/running/pass/fail/skip, paired with the suite-result line
-        // (a SuiteReport with Event="suite-result") emitted once that suite
-        // finishes.
+        // Emitted immediately before a suite runs, and paired with the
+        // suite-result line (a SuiteReport with Event="suite-result") emitted
+        // once it finishes.
         private sealed class SuiteStartEvent
         {
             public SuiteStartEvent(string suite)
@@ -949,20 +791,16 @@ Examples:
                 CallStack = callStack;
             }
 
-            // TcXunit-ce1: set ("suite-result") only when this SuiteReport is
-            // serialized standalone as one --stream NDJSON line; null (and so
-            // omitted) both in the final summary's suites[] array and in the
-            // pre-existing --format json blob, so neither shape gains a field.
+            // Set only when this report is serialized standalone as one
+            // --stream NDJSON line; null, and so omitted, both inside the
+            // summary's suites[] array and in the --format json blob.
             [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
             public string Event { get; }
 
-            // TcXunit-ce1: "pass"/"fail" for the same --stream suite-result
-            // line, null everywhere else (same rationale as Event above). A
-            // suite that never ran to completion (Error != null) still
-            // reports "fail" here rather than a third "skip" state - it
-            // already counts toward failCount/exitCode the same as a suite
-            // that ran with a failing TEST(), and `kind` is what tells a
-            // consumer *why* if it wants to render that case differently.
+            // "pass"/"fail" on that same standalone line, null everywhere else.
+            // A suite that never ran to completion reports "fail" rather than a
+            // third "skip" state: it already counts toward the exit code like
+            // any failing TEST(), and `kind` is what says why.
             [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
             public string Outcome { get; }
 
@@ -970,64 +808,38 @@ Examples:
             public string FilePath { get; }
             public string Error { get; }
 
-            // TcXunit-3tx.1: the machine-readable counterpart to Error - one of
-            // the FailureKind constants, null for a suite that didn't fail.
-            // Deliberately a SIBLING field rather than turning Error into an
-            // object: the VSIX results tree reads suites[].error as a string,
-            // and an additive field costs it nothing.
-            //
-            // The distinction that matters to an agent consuming this is
-            // unsupported-construct vs. everything else: it means the ST is
-            // correct and TcXunit is behind, so the POU must not be edited.
-            //
-            // TcXunit-229.15 (BREAKING): serialized as `kind`, not the
-            // `errorKind` this used to emit. `kind`/`construct` is now the one
-            // vocabulary at every level of the JSON - the top-level error, this
-            // suite-level error, and each per-test failure - so a consumer
-            // reads the same two keys wherever a failure surfaces instead of
-            // learning that suites happen to spell them differently.
+            // The machine-readable counterpart to Error - one of the
+            // FailureKind constants, null for a suite that didn't fail. The
+            // distinction that matters to a consumer is unsupported-construct
+            // vs. everything else: it means the ST is correct and the runner is
+            // behind, so the POU must not be edited.
             public string Kind { get; }
 
             // The specific construct behind the error: the unimplemented ST
             // construct for an unsupported-construct (e.g. "SEL"), or the
-            // offending token for a parse-error, so escalation names it without
-            // parsing Error. Null for every other kind, and for a throw site
-            // that knew only that something was unsupported.
-            //
-            // TcXunit-229.15 (BREAKING): serialized as `construct`, not
-            // `errorConstruct` - same rationale as Kind above.
+            // offending token for a parse error, so escalation can name it
+            // without parsing Error. Null for every other kind, and for a throw
+            // site that knew only that something was unsupported.
             public string Construct { get; }
             public IReadOnlyList<TestReport> Tests { get; }
 
-            // TcXunit-6fb.2: suite-level wall-clock time from Engine.RunSuite's
-            // stopwatch, alongside each test's existing durationMs. Null (not a
-            // fabricated 0) when the suite never ran to completion - see the
-            // suite-load-failure catch above.
+            // Suite-level wall-clock time. Null, not a fabricated 0, when the
+            // suite never ran to completion.
             public long? DurationMs { get; }
 
-            // TcXunit-gfs: the raw .TcPOU XML line for a suite failure whose
-            // location is known (a PlcSourceLocationException with a known
-            // line) - Error's "FB_Y.MethodZ(N): ..." prefix carries the
-            // XAE-body-relative line instead (TcXunit-gfs), so this is the one
-            // place the raw file line still surfaces for a consumer opening
-            // the .TcPOU file directly. Null for a passing suite, a suite-load
-            // failure with no PLC location, or a fault whose line is unknown.
+            // The raw .TcPOU XML line, for a consumer opening the file directly
+            // rather than through XAE; Error's own "FB_Y.MethodZ(N): ..." prefix
+            // carries the editor-relative line instead. Null for a passing
+            // suite, and for a failure with no known PLC location.
             public int? FileLine { get; }
 
-            // TcXunit-7s6: the full interpreted call chain behind Error,
-            // innermost frame first (CallStack[0] describes the same fault as
-            // Error/FileLine above), suite entry point last. Additive - Error
-            // keeps its pre-existing single-line shape - and null (not an
-            // empty array) for a passing suite or a load-level failure that
-            // never entered an interpreted ST body.
+            // The full interpreted call chain behind Error, innermost frame
+            // first (CallStack[0] describes the same fault as Error/FileLine
+            // above), suite entry point last. Null - not an empty array - for a
+            // passing suite or a failure that never entered an ST body.
             public IReadOnlyList<CallStackFrameReport> CallStack { get; }
         }
 
-        // One PLC-level frame of a call-stack JSON entry (TcXunit-7s6),
-        // mirroring PlcCallStackFrame's own fields. A separate DTO rather than
-        // serializing PlcCallStackFrame directly, same rationale as the other
-        // *Report types: the wire format stays stable even if the
-        // interpreter's internal model changes.
         private sealed class CallStackFrameReport
         {
             public CallStackFrameReport(string pouTypeName, string methodName, int? line, int? bodyLine)
@@ -1040,17 +852,14 @@ Examples:
 
             public string PouTypeName { get; }
 
-            // Null for a frame with no method to name (a suite body, a bare-
-            // invoked FB body, or a StepCycles cycle) - same convention as
-            // PlcSourceLocationException.MethodName.
+            // Null for a frame with no method to name: a suite body, a
+            // bare-invoked FB body, or a StepCycles cycle.
             public string MethodName { get; }
 
-            // The raw .TcPOU XML line, or null when unknown - same convention
-            // as SuiteReport.FileLine, applied per frame.
+            // The raw .TcPOU XML line, null when unknown.
             public int? Line { get; }
 
-            // The XAE-implementation-editor-relative line, or null when
-            // unknown.
+            // The XAE-implementation-editor-relative line, null when unknown.
             public int? BodyLine { get; }
         }
 
@@ -1070,10 +879,9 @@ Examples:
             public long DurationMs { get; }
         }
 
-        // One per-test failure (TcXunit-3tx.1/.2). Was a bare string; the
-        // formatted line lives on in Message, so nothing readable was lost,
-        // but everything a consumer previously had to regex back out of that
-        // string is now a field of its own.
+        // One per-test failure. Message carries the formatted line a human
+        // reads; every field beside it is there so a consumer never has to
+        // regex that string back apart.
         private sealed class FailureReport
         {
             public FailureReport(
@@ -1104,15 +912,13 @@ Examples:
                 Line = line;
             }
 
-            // The formatted line text output prints. For an assert failure this
-            // is verbatim what text output prints; for a fault charged to this
-            // test it is the located message plus that kind's guidance
-            // (TcXunit-229.15, see WithGuidance).
+            // For an assert failure, verbatim what text output prints; for a
+            // fault charged to this test, the located message plus that kind's
+            // guidance (see WithGuidance).
             public string Message { get; }
 
             // One of the FailureKind constants - the same vocabulary, under the
-            // same key, that the top-level error and suites[].kind use
-            // (TcXunit-229.15).
+            // same key, that the top-level error and suites[].kind use.
             public string Kind { get; }
 
             // The unimplemented ST construct behind an unsupported-construct
@@ -1147,12 +953,10 @@ Examples:
             // suites[].fileLine vs. the body-relative line in its error text.
             public int? Line { get; }
 
-            // TcXunit-3tx.3: for a fault charged to this test, the full
-            // interpreted call chain behind it, innermost frame first - the
-            // same array (and the same contract) suites[].callStack carries for
-            // a suite-level error, since a contained fault is the same fault.
-            // Null for an assertion failure, whose Pou/Method/BodyLine above
-            // already say where it is written.
+            // For a fault charged to this test, the same call chain (and the
+            // same contract) suites[].callStack carries for a suite-level
+            // error. Null for an assertion failure, whose Pou/Method/BodyLine
+            // above already say where it is written.
             public IReadOnlyList<CallStackFrameReport> CallStack { get; }
         }
     }

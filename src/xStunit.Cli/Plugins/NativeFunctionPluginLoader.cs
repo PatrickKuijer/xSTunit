@@ -9,31 +9,23 @@ using xStunit.Parser;
 
 namespace xStunit.Cli.Plugins
 {
-    // Loads IXstunitNativeFunction implementations from a directory of plugin
-    // assemblies (TcXunit-6k2).
-    //
     // Lives in the CLI rather than the interpreter for a hard reason, not a
     // stylistic one: AssemblyLoadContext doesn't exist in netstandard2.0, which
     // xStunit.Interpreter targets so the VSIX can consume it. The interpreter
-    // therefore owns the contract and the registry; each host owns how it fills
-    // that registry. A host with no plugin story at all simply doesn't call
-    // this.
+    // owns the contract and the registry; each host owns how it fills that
+    // registry, and a host with no plugin story simply never calls this.
     //
-    // Resilience matches the rest of the run pipeline (TcXunit-iyd.7): a
-    // malformed, unmanaged, or type-load-failing DLL in the plugin folder is
-    // skipped and reported, never fatal. Losing one plugin should degrade the
-    // suites that needed it - with the clear "no native function is registered"
-    // error from Engine - not take down every other suite in the tree.
+    // A bad DLL in the plugin folder is skipped and reported, never fatal:
+    // losing one plugin should degrade only the suites that needed it, with
+    // Engine's clear "no native function is registered" error.
     internal static class NativeFunctionPluginLoader
     {
-        // Assemblies that must never be loaded *as plugins* even if a build
-        // drops copies of them next to one. Loading a second copy of
-        // xStunit.Interpreter into the plugin context would create a second,
-        // non-identical IXstunitNativeFunction type, and every plugin in that
-        // DLL would then silently fail the interface check with no obvious
-        // reason. PluginLoadContext already redirects these to the host (see
-        // Load below); skipping them here as well means the failure never even
-        // gets the chance to be confusing.
+        // Never loaded *as plugins*, even when a build drops copies of them
+        // beside one: a second copy of xStunit.Interpreter in the plugin
+        // context defines a second, non-identical IXstunitNativeFunction, and
+        // every plugin in that DLL then silently fails the interface check.
+        // PluginLoadContext.Load already redirects these to the host; skipping
+        // them here too denies that failure its second chance to happen.
         private static readonly HashSet<string> HostAssemblyNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
             "xStunit.Interpreter", "xStunit.Parser", "xStunit.Runner", "xstunit",
@@ -73,28 +65,23 @@ namespace xStunit.Cli.Plugins
                 }
                 catch (BadImageFormatException)
                 {
-                    // A native DLL or otherwise non-managed file that happens to
-                    // share the folder - not an error worth reporting loudly,
-                    // but worth reporting.
                     skipped.Add(new SkippedFile(dll, "not a managed assembly"));
                 }
                 catch (ReflectionTypeLoadException ex)
                 {
-                    // Typically a plugin built against a different TcXunit
-                    // version: name the first underlying loader error, which is
-                    // the one that actually says which type failed to resolve.
+                    // The first loader exception is the one that names the type
+                    // that failed to resolve; the outer message does not.
                     var detail = ex.LoaderExceptions.FirstOrDefault()?.Message ?? ex.Message;
                     skipped.Add(new SkippedFile(dll, $"plugin types could not be loaded: {detail}"));
                 }
                 catch (Exception ex)
                 {
-                    // Includes a duplicate-name InvalidOperationException from
-                    // NativeFunctionRegistry.Register: the offending DLL is
-                    // skipped, the run continues with whatever registered
-                    // first. Anything already registered from this same DLL
-                    // before the clash stays registered - partial, but strictly
-                    // better than dropping working functions, and the skip line
-                    // says which file was involved.
+                    // Catches broadly ON PURPOSE: one bad DLL must not stop the
+                    // remaining plugins from loading. Includes the
+                    // duplicate-name InvalidOperationException from
+                    // NativeFunctionRegistry.Register, where whatever this DLL
+                    // registered before the clash stays registered - partial,
+                    // but better than dropping working functions.
                     skipped.Add(new SkippedFile(dll, ex.Message));
                 }
             }
@@ -125,13 +112,13 @@ namespace xStunit.Cli.Plugins
             return count;
         }
 
-        // Per-plugin load context, isolating each plugin's private dependencies
-        // from every other plugin's (two plugins may legitimately ship
-        // different versions of some helper package).
+        // One context per plugin, so each plugin's private dependencies stay
+        // isolated from every other plugin's - two plugins may legitimately
+        // ship different versions of the same helper package.
         //
-        // isCollectible: true so a long-lived host - the VSIX, if this
-        // eventually moves there - can unload a plugin set between runs rather
-        // than pinning every plugin ever loaded for the process lifetime.
+        // isCollectible so a long-lived host can unload a plugin set between
+        // runs instead of pinning every plugin ever loaded for the process
+        // lifetime.
         private sealed class PluginLoadContext : AssemblyLoadContext
         {
             private readonly AssemblyDependencyResolver _resolver;
@@ -144,17 +131,13 @@ namespace xStunit.Cli.Plugins
 
             protected override Assembly Load(AssemblyName assemblyName)
             {
-                // THE load-context rule that makes plugins work at all: any
-                // assembly the host has already loaded must resolve to the
-                // host's copy, never to a copy sitting beside the plugin.
-                //
-                // Returning null defers to the default context. If instead this
-                // loaded a private copy of xStunit.Interpreter, the plugin's
-                // IXstunitNativeFunction would be a *different type* from the
-                // host's despite the identical name, so
-                // `typeof(IXstunitNativeFunction).IsAssignableFrom(pluginType)`
-                // would be false and the plugin would be silently ignored -
-                // the single most confusing failure mode this design has.
+                // THE rule that makes plugins work at all: an assembly the host
+                // has already loaded must resolve to the host's copy, never to
+                // a copy sitting beside the plugin (returning null defers to
+                // the default context). A private copy of xStunit.Interpreter
+                // would give the plugin a *different* IXstunitNativeFunction
+                // type despite the identical name, IsAssignableFrom would be
+                // false, and the plugin would be silently ignored.
                 if (Default.Assemblies.Any(a => string.Equals(
                         a.GetName().Name, assemblyName.Name, StringComparison.OrdinalIgnoreCase)))
                     return null;

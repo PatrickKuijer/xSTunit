@@ -1,0 +1,12 @@
+<Project>
+
+  <!-- Emit XML doc output for the libraries consumed by downstream code (Cli and Vsix
+       are entry points, not referenced as libraries, so they're excluded). CS1591 is
+       suppressed so the flag is purely an emit switch: doc coverage grows with the
+       ongoing comment-overhaul work (xstunit-wc4g) instead of landing as a warning wall. -->
+  <PropertyGroup Condition="'$(MSBuildProjectName)' == 'xStunit.Interpreter' Or '$(MSBuildProjectName)' == 'xStunit.Runner' Or '$(MSBuildProjectName)' == 'xStunit.Parser'">
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+  </PropertyGroup>
+
+</Project>

@@ -19,7 +19,25 @@ namespace TcXunit.Interpreter
         private (ArrayValue Array, int Index, Action Commit) ResolveByteTarget(Pointer ptr, string methodName, string paramName, Frame frame)
         {
             if (ptr.Target is ArrayElementCell aec)
-                return (aec.Array, aec.Index, null);
+            {
+                // A BYTE-element array already IS a byte view - Elements is
+                // directly byte-indexable and Index is already a byte offset,
+                // so returning it as-is (no repacking) is correct and cheap.
+                var elementTypeName = _registry.ResolveAlias(aec.Array.ElementTypeName);
+                if (elementTypeName == "BYTE")
+                    return (aec.Array, aec.Index, null);
+
+                // Any other element type (e.g. a struct, or a scalar wider
+                // than a byte) means Elements.Length is an element count, not
+                // a byte count - a caller bounds-checking a SIZEOF()-computed
+                // byte size against it (ReadPointerBytes) would always see it
+                // as elementSize-times too small (TcXunit-4jt). Repack the
+                // whole underlying array into a byte view the same way the
+                // scalar/struct-field branch below does for a single Cell,
+                // and translate aec.Index (an element index) into the
+                // matching byte offset into that view.
+                return ResolveArrayByteTarget(aec, frame);
+            }
 
             var cell = ptr.Target;
             if (cell.DeclaredTypeName == null)
@@ -41,6 +59,46 @@ namespace TcXunit.Interpreter
             }
 
             return (view, 0, Commit);
+        }
+
+        // ResolveByteTarget's array-of-non-BYTE branch (TcXunit-4jt): packs
+        // aec's whole underlying ArrayValue into a fresh BYTE-array view,
+        // uniform elementSize apart per element (matching PackValue's own
+        // ARRAY branch - no inter-element padding, only intra-element
+        // struct-field alignment), and maps aec.Index (an element index)
+        // to the byte offset of that element's first byte in the view.
+        // Mirrors ResolveByteTarget's scalar/struct-field Commit: a plugin
+        // (ReadPointerBytes) never sees it since it discards Commit, but
+        // MEMCPY/MEMSET writing through a dest pointer into an
+        // array-of-struct element still needs the mutated bytes unpacked
+        // back into the real array elements.
+        private (ArrayValue Array, int Index, Action Commit) ResolveArrayByteTarget(ArrayElementCell aec, Frame frame)
+        {
+            var elementTypeName = aec.Array.ElementTypeName;
+            var (elementSize, _) = SizeOfType(elementTypeName, frame);
+            var elementCount = aec.Array.Elements.Length;
+            var totalSize = elementCount * elementSize;
+
+            var bytes = new byte[totalSize];
+            for (var i = 0; i < elementCount; i++)
+                PackValue(bytes, i * elementSize, aec.Array.Elements[i], elementTypeName, frame);
+
+            var elements = new object[totalSize];
+            for (var i = 0; i < totalSize; i++)
+                elements[i] = (int)bytes[i];
+
+            var view = new ArrayValue(new[] { (0, totalSize - 1) }, "BYTE", elements);
+
+            void Commit()
+            {
+                var outBytes = new byte[totalSize];
+                for (var i = 0; i < totalSize; i++)
+                    outBytes[i] = (byte)(int)elements[i];
+                for (var i = 0; i < elementCount; i++)
+                    aec.Array.Elements[i] = UnpackValue(outBytes, i * elementSize, elementTypeName, frame);
+            }
+
+            return (view, aec.Index * elementSize, Commit);
         }
 
         // Packs cell's current value into a fresh BYTE-array view the same

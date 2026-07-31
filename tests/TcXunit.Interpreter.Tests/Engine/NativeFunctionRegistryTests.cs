@@ -180,6 +180,51 @@ namespace TcXunit.Interpreter.Tests
         }
 
         [Fact]
+        public void CallMethod_NativeFunctionReadsBytesBehindAPointerIntoAnArrayOfStructs()
+        {
+            // TcXunit-4jt: ADR(arrayOfStruct)/SIZEOF(arrayOfStruct) must
+            // bounds-check the requested byte count against the array's true
+            // byte size (elementCount * elementSize), not its raw element
+            // count. uPair (USINT + INT, 2-byte aligned) is 4 bytes, so a
+            // 2-element array is 8 bytes - previously ReadPointerBytes
+            // bounds-checked SIZEOF(aPairs) (correctly 8) against
+            // Elements.Length (wrongly 2, the element count), always failing.
+            var structAst = new StructAst("uPair", new[]
+            {
+                new VarDecl("a", "USINT", null, VarSection.Local),
+                new VarDecl("b", "INT", null, VarSection.Local),
+            });
+
+            var caller = new MethodAst(
+                "bDoWork",
+                "METHOD bDoWork : BOOL",
+                "aPairs[0].a := 7;\naPairs[0].b := 258;\naPairs[1].a := 9;\naPairs[1].b := 1;\n" +
+                "nResult := F_SumBytes(ADR(aPairs), SIZEOF(aPairs));");
+
+            var fb = new PouAst(
+                "FB_Widget",
+                null,
+                "VAR\n\taPairs : ARRAY[0..1] OF uPair;\n\tnResult : INT;\nEND_VAR",
+                "",
+                new List<MethodAst> { caller });
+
+            var engine = new Engine(
+                new TypeRegistry(new[] { fb }, new[] { structAst }),
+                RegistryWith(new StubFunction("F_SumBytes", ctx =>
+                {
+                    var size = ctx.RequireInt32("nSize", 1);
+                    return ctx.RequireBytes("pData", 0, size).Sum(b => (int)b);
+                })));
+
+            var instance = engine.NewInstance("FB_Widget");
+            engine.CallMethod(instance, "bDoWork", new Expr[0], new NamedArg[0], null, null);
+
+            // Bytes: [0]=7, [1]=pad(0), [2..3]=258 LE (2,1), [4]=9, [5]=pad(0), [6..7]=1 LE (1,0)
+            // Sum = 7 + 0 + 2 + 1 + 9 + 0 + 1 + 0 = 20
+            Assert.Equal(20, instance.Fields["nResult"].Value);
+        }
+
+        [Fact]
         public void CallMethod_NativeFunctionReadingPastTheBufferEndFailsWithASizeMessage()
         {
             // A real PLC would read adjacent memory here; the interpreter has

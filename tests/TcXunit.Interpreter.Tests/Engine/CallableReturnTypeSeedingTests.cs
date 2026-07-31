@@ -179,5 +179,115 @@ namespace TcXunit.Interpreter.Tests
 
             Assert.Equal(4.25d, RunM_Run(new TypeRegistry(new[] { derived, baseFb }), "FB_Derived"));
         }
+
+        // TcXunit-qft: SeedReturnCell extended beyond IEC numerics to the
+        // remaining elementary return types (BOOL/STRING/W?STRING(n)/TIME/
+        // LTIME/DATE/DATE_AND_TIME/TIME_OF_DAY), which have a plain constant
+        // default in Engine.DefaultValue but none of the narrowing hazard
+        // TcXunit-cq6 was fixing. Unlike the LREAL cases above (which go
+        // through an LREAL-returning M_Run wrapper to observe the narrowing
+        // rule), these call the method directly - there is no coercion rule
+        // to exercise here, only "does the caller see the IEC default instead
+        // of null".
+        private static object CallDirectly(PouAst fb, string methodName)
+        {
+            var engine = new Engine(new TypeRegistry(new[] { fb }));
+            var instance = engine.NewInstance(fb.Name);
+            return engine.CallMethod(instance, methodName, new Expr[0], new NamedArg[0], null, null);
+        }
+
+        private static PouAst WidgetWithOnly(MethodAst method) =>
+            new PouAst("FB_Widget", null, "VAR\nEND_VAR", "", new List<MethodAst> { method });
+
+        [Fact]
+        public void BoolMethod_UnassignedOnAnUntakenPath_ReturnsFalseNotNull()
+        {
+            var read = new MethodAst(
+                "M_IsReady",
+                "METHOD PUBLIC M_IsReady : BOOL",
+                "IF FALSE THEN\n\tM_IsReady := TRUE;\nEND_IF");
+
+            Assert.Equal(false, CallDirectly(WidgetWithOnly(read), "M_IsReady"));
+        }
+
+        [Fact]
+        public void StringMethod_UnassignedOnAnUntakenPath_ReturnsEmptyStringNotNull()
+        {
+            var read = new MethodAst(
+                "M_Name",
+                "METHOD PUBLIC M_Name : STRING",
+                "IF FALSE THEN\n\tM_Name := 'unreachable';\nEND_IF");
+
+            Assert.Equal("", CallDirectly(WidgetWithOnly(read), "M_Name"));
+        }
+
+        [Fact]
+        public void SizedStringMethod_NeverAssignsItsReturn_ReturnsEmptyStringNotNull()
+        {
+            var read = new MethodAst("M_Name", "METHOD PUBLIC M_Name : STRING(35)", "");
+
+            Assert.Equal("", CallDirectly(WidgetWithOnly(read), "M_Name"));
+        }
+
+        [Fact]
+        public void TimeMethod_NeverAssignsItsReturn_ReturnsZeroTimeNotNull()
+        {
+            var read = new MethodAst("M_Elapsed", "METHOD PUBLIC M_Elapsed : TIME", "");
+
+            Assert.Equal(0u, CallDirectly(WidgetWithOnly(read), "M_Elapsed"));
+        }
+
+        [Fact]
+        public void LtimeMethod_NeverAssignsItsReturn_ReturnsZeroLtimeNotNull()
+        {
+            var read = new MethodAst("M_Elapsed", "METHOD PUBLIC M_Elapsed : LTIME", "");
+
+            Assert.Equal(0ul, CallDirectly(WidgetWithOnly(read), "M_Elapsed"));
+        }
+
+        [Fact]
+        public void DateAndTimeMethod_NeverAssignsItsReturn_ReturnsZeroNotNull()
+        {
+            var read = new MethodAst("M_Stamp", "METHOD PUBLIC M_Stamp : DATE_AND_TIME", "");
+
+            Assert.Equal(0u, CallDirectly(WidgetWithOnly(read), "M_Stamp"));
+        }
+
+        [Fact]
+        public void PointerMethod_NeverAssignsItsReturn_StillReturnsNull()
+        {
+            // Out of scope for TcXunit-qft, verified rather than assumed:
+            // a POINTER-returning method still gets no seeded cell at all,
+            // same as before this ticket - DefaultValue's null for POINTER
+            // TO is not the same thing as "seeded", and SeedReturnCell must
+            // not call DefaultValue for this case (that path also
+            // materializes DUT/FB instances for other type names, which is
+            // exactly the speculative work this ticket declines to do).
+            var read = new MethodAst("M_Ptr", "METHOD PUBLIC M_Ptr : POINTER TO INT", "");
+
+            Assert.Null(CallDirectly(WidgetWithOnly(read), "M_Ptr"));
+        }
+
+        [Fact]
+        public void FbMethod_NeverAssignsItsReturn_StillReturnsNull()
+        {
+            // Same "still genuinely unseeded" check as the POINTER case
+            // above, for an FB-typed return - DefaultValue *would*
+            // materialize a full FB_Timer-like instance for this type name
+            // if SeedReturnCell called it, which is the speculative
+            // construction this ticket explicitly declines to do.
+            var timer = new PouAst("FB_Sub", null, "VAR\nEND_VAR", "", new List<MethodAst>());
+            var widget = new PouAst(
+                "FB_Widget",
+                null,
+                "VAR\nEND_VAR",
+                "",
+                new List<MethodAst> { new MethodAst("M_Get", "METHOD PUBLIC M_Get : FB_Sub", "") });
+
+            var engine = new Engine(new TypeRegistry(new[] { widget, timer }));
+            var instance = engine.NewInstance("FB_Widget");
+
+            Assert.Null(engine.CallMethod(instance, "M_Get", new Expr[0], new NamedArg[0], null, null));
+        }
     }
 }

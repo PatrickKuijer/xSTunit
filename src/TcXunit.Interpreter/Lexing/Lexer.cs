@@ -9,6 +9,80 @@ namespace TcXunit.Interpreter
     // grow-on-demand as new fixture bodies need them.
     public static class Lexer
     {
+        // Strips (* ... *) and // ... comments from text, leaving everything
+        // else - including string literal contents - untouched. Used by
+        // SuiteCoverage (TcXunit-2o9.2) so a type name mentioned only inside
+        // a comment isn't treated as a real reference from a suite.
+        //
+        // Mirrors the comment-recognition branches from Tokenize above
+        // (same "(*"/"*)"/"//" detection, same string-literal skip via
+        // TryConsumeDollarEscape so an escaped quote doesn't end a string
+        // early) rather than duplicating that logic with a second regex.
+        // Deliberately NOT a call to Tokenize itself: callers pass whole
+        // declaration text, which may carry constructs Tokenize doesn't
+        // handle (e.g. a leading {attribute '...'} pragma) and would throw
+        // on; this only needs to recognize comments and strings, so
+        // everything else is copied through unchanged.
+        public static string StripComments(string text)
+        {
+            var sb = new StringBuilder(text.Length);
+            var i = 0;
+
+            while (i < text.Length)
+            {
+                var c = text[i];
+
+                if (c == '(' && i + 1 < text.Length && text[i + 1] == '*')
+                {
+                    var end = text.IndexOf("*)", i + 2, StringComparison.Ordinal);
+                    i = end < 0 ? text.Length : end + 2;
+                    continue;
+                }
+
+                if (c == '/' && i + 1 < text.Length && text[i + 1] == '/')
+                {
+                    var end = text.IndexOf('\n', i);
+                    i = end < 0 ? text.Length : end;
+                    continue;
+                }
+
+                if (c == '\'' || c == '"')
+                {
+                    var quote = c;
+                    sb.Append(c);
+                    i++;
+                    while (i < text.Length && text[i] != quote)
+                    {
+                        if (text[i] == '$' && i + 1 < text.Length)
+                        {
+                            var start = i;
+                            if (TryConsumeDollarEscape(text, ref i, quote).HasValue)
+                            {
+                                sb.Append(text, start, i - start);
+                                continue;
+                            }
+                        }
+
+                        sb.Append(text[i]);
+                        i++;
+                    }
+
+                    if (i < text.Length)
+                    {
+                        sb.Append(text[i]); // closing quote
+                        i++;
+                    }
+
+                    continue;
+                }
+
+                sb.Append(c);
+                i++;
+            }
+
+            return sb.ToString();
+        }
+
         public static List<Token> Tokenize(string text)
         {
             var tokens = new List<Token>();

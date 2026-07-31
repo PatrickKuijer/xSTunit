@@ -238,9 +238,21 @@ namespace TcXunit.Interpreter
 
                 // A suite receiver that got this far named something the TcUnit
                 // stub doesn't implement AND that isn't a POU or native
-                // function either - almost always a TcUnit assert/API not wired
-                // up yet, so keep saying exactly that (TcXunit-6k2).
-                if (instance?.NativeSuiteHost != null)
+                // function either - almost always a TcUnit assert/API, or an
+                // unimplemented IEC standard-library function (e.g. SEL), not
+                // wired up yet, so keep saying exactly that (TcXunit-6k2). But
+                // only when the name actually looks like it belongs to one of
+                // those external surfaces (see
+                // NativeMethodBridge.LooksLikeTcUnitApiName for exactly what
+                // that means) - otherwise this unconditionally classified
+                // every unresolved unqualified suite-body call as an
+                // interpreter gap (kind=unsupported-construct, "STOP, don't
+                // edit the POU"), even a plain typo of one of the suite's own
+                // methods (e.g. 'CounterStartsAtZeroo()' for
+                // 'CounterStartsAtZero()'), which is a real, fixable defect
+                // and belongs on the ordinary method-not-found path below
+                // (kind=plc-fault) instead (TcXunit-2o9.1).
+                if (instance?.NativeSuiteHost != null && NativeMethodBridge.LooksLikeTcUnitApiName(methodName))
                     throw NativeMethodBridge.NotSupported(methodName);
 
                 // startType is null for a call made from a global FUNCTION body
@@ -297,23 +309,68 @@ namespace TcXunit.Interpreter
         // gives the narrowing rule the right type to judge against, the same
         // way BindParams already seeds each param from its VarDecl.
         //
-        // Only IEC numeric return types are seeded. They're the ones the
-        // narrowing/widening rule actually turns on, and their defaults are
-        // plain boxed zeros. Other return types (a DUT, an interface, a
-        // POINTER) would need DefaultValue's full construction path, which for
-        // a registered type name means materializing an instance - too much to
-        // do speculatively for a return value that carries no narrowing
-        // hazard. Those keep today's behavior: no cell until first assignment,
-        // null out of CallMethod when never assigned. The elementary
-        // non-numerics (BOOL/STRING/TIME/DATE) sit between the two and are
-        // tracked separately (TcXunit-qft).
+        // IEC numeric return types are seeded first, keyed off the narrowing/
+        // widening rule they feed (their defaults are plain boxed zeros - see
+        // TryGetNumericCallableType).
+        //
+        // TcXunit-qft: the remaining *elementary* return types
+        // (BOOL/STRING/W?STRING(n)/TIME/LTIME/DATE/DATE_AND_TIME/
+        // TIME_OF_DAY) carry none of that narrowing hazard, but they do have
+        // a plain constant default already sitting in Engine.DefaultValue
+        // (false/""/0u/0ul) - seeding them too is just as cheap, and means a
+        // METHOD/FUNCTION that returns without assigning every path (e.g. a
+        // BOOL-returning method with an early-out that never sets its own
+        // name) reads its IEC default out of CallMethod instead of null,
+        // which a caller's cast/comparison (IF bIsReady() THEN ...) can't
+        // handle. IsSeedableElementaryNonNumericType below only classifies
+        // the type; the actual default value still comes from DefaultValue
+        // itself, not re-derived here.
+        //
+        // DUT/FB/interface/POINTER return types are deliberately left
+        // unseeded - no cell until first assignment, null out of CallMethod
+        // when never assigned, exactly as before this ticket. Those would
+        // need DefaultValue's full construction path (materializing a struct/
+        // FB instance, or resolving a POINTER's null), which for a return
+        // value that carries no narrowing hazard of its own is too much to
+        // do speculatively just to seed it.
         private void SeedReturnCell(Frame frame, string name, string declarationText)
         {
-            if (!TryGetNumericCallableType(declarationText, out var declaredType, out var zero))
+            if (TryGetNumericCallableType(declarationText, out var numericType, out var zero))
+            {
+                frame.Locals[name] = new Cell { Value = zero, DeclaredTypeName = numericType };
+                frame.LocalTypeNames[name] = numericType;
+                return;
+            }
+
+            var declaredType = _registry.GetReturnTypeName(declarationText);
+            if (declaredType == null)
                 return;
 
-            frame.Locals[name] = new Cell { Value = zero, DeclaredTypeName = declaredType };
+            var resolvedType = _registry.ResolveAlias(declaredType);
+            if (!IsSeedableElementaryNonNumericType(resolvedType))
+                return;
+
+            var value = DefaultValue(new VarDecl(name, declaredType, null, VarSection.Local), frame.Instance);
+            frame.Locals[name] = new Cell { Value = value, DeclaredTypeName = declaredType };
             frame.LocalTypeNames[name] = declaredType;
+        }
+
+        // TcXunit-qft: the elementary non-numeric return types SeedReturnCell
+        // seeds beyond IecNumericType's numerics - kept in sync with the
+        // branches Engine.DefaultValue actually returns a plain constant for
+        // (StringTypeInfo.IsStringType covers STRING/WSTRING and their sized
+        // STRING(n)/WSTRING(n) forms; the rest are ordinal-insensitive
+        // keyword compares mirroring DefaultValue's own TcXunit-fzm
+        // case-insensitivity).
+        private static bool IsSeedableElementaryNonNumericType(string resolvedTypeName)
+        {
+            return StringTypeInfo.IsStringType(resolvedTypeName)
+                || resolvedTypeName.Equals("BOOL", StringComparison.OrdinalIgnoreCase)
+                || resolvedTypeName.Equals("TIME", StringComparison.OrdinalIgnoreCase)
+                || resolvedTypeName.Equals("LTIME", StringComparison.OrdinalIgnoreCase)
+                || resolvedTypeName.Equals("DATE", StringComparison.OrdinalIgnoreCase)
+                || resolvedTypeName.Equals("DATE_AND_TIME", StringComparison.OrdinalIgnoreCase)
+                || resolvedTypeName.Equals("TIME_OF_DAY", StringComparison.OrdinalIgnoreCase);
         }
 
         // Shared by SeedReturnCell above and Engine.Properties' Get/Set
@@ -528,7 +585,30 @@ namespace TcXunit.Interpreter
                 }
                 else
                 {
-                    value = DefaultValue(decl, newFrame.Instance);
+                    // TcXunit-3d1: DefaultValue runs here, BEFORE ExecuteBody
+                    // is ever entered for newFrame - so its own try/catch
+                    // (Engine.Diagnostics.cs) can't attribute a fault raised
+                    // while constructing this callee's own local/unsupplied-
+                    // param default (e.g. a nested FB's default-value
+                    // construction hitting an unresolved identifier). Without
+                    // this, the fault surfaces unattributed at whatever
+                    // frame is still active further up the CLR stack -
+                    // typically the caller - with a call stack of exactly one
+                    // frame no matter how deep the real failure is. Argument
+                    // *evaluation* just above (Evaluate(argExpr, callerFrame))
+                    // is deliberately left outside this catch: that runs in
+                    // the CALLER's frame/scope, and a fault there is
+                    // legitimately the caller's, already covered by the
+                    // caller's own ExecuteBody.
+                    try
+                    {
+                        value = DefaultValue(decl, newFrame.Instance);
+                    }
+                    catch (Exception ex)
+                    {
+                        RecordFaultSite(ex, newFrame);
+                        throw;
+                    }
                 }
 
                 newFrame.Locals[decl.Name] = new Cell { Value = value, DeclaredTypeName = decl.TypeName };

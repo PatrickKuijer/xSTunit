@@ -99,7 +99,7 @@ src/
 tests/                  xUnit tests per project, mirroring src/
 ```
 
-Exit codes: `0` all pass, `1` any fail, `2` usage/discovery error. Unloadable files are skipped and reported per file (never exit `2`).
+Exit codes: `0` all pass, `1` any fail, `2` usage/discovery error. Unloadable files are skipped and reported per file (never exit `2`). `--help`/`-h` also exits `0` (a successful, explicitly requested action, not a run).
 
 ## Conventions & Patterns
 

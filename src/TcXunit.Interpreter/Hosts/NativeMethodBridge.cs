@@ -58,6 +58,82 @@ namespace TcXunit.Interpreter
             "AssertTrue", "AssertFalse", "AssertEquals",
         };
 
+        // TcXunit-2o9.1: whether an unresolved unqualified call from a suite
+        // body is worth claiming as "an unwired external API" (NotSupported,
+        // classifies as unsupported-construct - STOP, don't touch the POU)
+        // versus letting it fall through to the ordinary method-not-found
+        // error (classifies as plc-fault - a real defect, fixable).
+        //
+        // Deliberately broader than CanInvoke: CanInvoke asks "does Invoke
+        // actually implement this name", which by the time Engine.CallMethod
+        // reaches its suite-receiver last resort has already been answered
+        // "no" (the CanInvoke gate above would have dispatched it otherwise).
+        // This asks the softer question "does this name look like it BELONGS
+        // to some grow-on-demand external surface at all" - i.e. would a
+        // human reading it assume it's a TcUnit assert/API or an IEC
+        // standard-library function, rather than a typo of one of the
+        // suite's own test-case or helper methods.
+        //
+        // Two surfaces qualify:
+        //
+        // 1. The upstream FB_TestSuite surface (see TcUnit's
+        //    FB_TestSuite.TcPOU, mirrored by
+        //    src/TcXunit.Runner/TcUnitStub/FB_TestSuite.cs) - entirely
+        //    TEST*/IS_TEST*/Assert* by name. Grow-on-demand names not yet
+        //    wired into CanInvoke/Invoke (e.g. AssertArrayEquals_LWORD - see
+        //    ArrayAssertSupportedTypes' comment) still match here, so they
+        //    keep the "isn't supported yet" diagnostic rather than degrading
+        //    to method-not-found.
+        //
+        // 2. IEC 61131-3 standard library functions (SEL, MUX, LIMIT, ... -
+        //    the SEL repro pinned by CliRunnerFailureKindTests/
+        //    CliRunnerTestBlastRadiusTests, TcXunit-w5x.12), which this
+        //    interpreter has no per-function registry for (unlike the
+        //    TcUnit surface, there's no CanInvoke-style table to check
+        //    against) but which are conventionally written in ALL CAPS -
+        //    same convention TcUnit's own TEST/IS_TEST_FINISHED intrinsics
+        //    follow. Every suite-authored test-case/helper method name in
+        //    this codebase's own fixtures is PascalCase (CounterStartsAtZero,
+        //    UsesGlobalFunction, Passes, ...), so an all-uppercase unresolved
+        //    name is never mistaken for one of those, and a mixed-case one
+        //    (e.g. a misspelled 'CounterStartsAtZeroo' for
+        //    'CounterStartsAtZero') is never mistaken for a standard-library
+        //    call - it falls through to the ordinary method-not-found
+        //    plc-fault instead.
+        public static bool LooksLikeTcUnitApiName(string methodName)
+        {
+            if (string.IsNullOrEmpty(methodName))
+                return false;
+
+            if (CanInvoke(methodName))
+                return true;
+
+            if (methodName.StartsWith("Assert", StringComparison.Ordinal) ||
+                methodName.StartsWith("TEST", StringComparison.Ordinal) ||
+                methodName.StartsWith("IS_TEST", StringComparison.Ordinal))
+                return true;
+
+            return IsAllUppercaseIdentifier(methodName);
+        }
+
+        // True for an identifier with at least one letter and no lowercase
+        // letters (e.g. "SEL", "F_TRIG", "MUX4") - the IEC standard-library
+        // naming convention LooksLikeTcUnitApiName's case 2 above matches
+        // against. Digits/underscores are allowed anywhere and don't affect
+        // the verdict either way.
+        private static bool IsAllUppercaseIdentifier(string name)
+        {
+            var sawLetter = false;
+            foreach (var c in name)
+            {
+                if (char.IsLower(c))
+                    return false;
+                if (char.IsUpper(c))
+                    sawLetter = true;
+            }
+            return sawLetter;
+        }
+
         public static object Invoke(
             TcUnitSuiteHost host,
             string methodName,

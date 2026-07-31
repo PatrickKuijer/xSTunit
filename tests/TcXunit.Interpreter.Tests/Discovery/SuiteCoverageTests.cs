@@ -80,6 +80,51 @@ namespace TcXunit.Interpreter.Tests
             Assert.True(Single(coverage, "FB_CounterExtended").IsCovered);
         }
 
+        // TcXunit-2o9.2: a type named only inside a (* ... *) comment is not a
+        // real reference - counting it as covered would hide a POU that no
+        // suite actually exercises.
+        [Fact]
+        public void Analyze_PouMentionedOnlyInABlockComment_IsNotCovered()
+        {
+            var coverage = Analyze(
+                Pou("FB_Counter"),
+                Suite("FB_WidgetTests", "(* uses FB_Counter internally *)\nVAR\nEND_VAR", ""));
+
+            var counter = Single(coverage, "FB_Counter");
+            Assert.Empty(counter.SuiteTypeNames);
+            Assert.False(counter.IsCovered);
+        }
+
+        // Same as above but a // line comment, and in the implementation
+        // text rather than the declaration.
+        [Fact]
+        public void Analyze_PouMentionedOnlyInALineComment_IsNotCovered()
+        {
+            var coverage = Analyze(
+                Pou("FB_Counter"),
+                Suite("FB_WidgetTests", "VAR\nEND_VAR", "// TODO: test FB_Counter\n"));
+
+            Assert.False(Single(coverage, "FB_Counter").IsCovered);
+        }
+
+        // Regression guard: a genuine VAR declaration reference must still
+        // count as covered even when the same suite ALSO mentions the type
+        // in a comment - the comment-stripping fix must not eat real code.
+        [Fact]
+        public void Analyze_PouReferencedInVarDeclAndMentionedInComment_IsStillCovered()
+        {
+            var coverage = Analyze(
+                Pou("FB_Counter"),
+                Suite(
+                    "FB_CounterTests",
+                    "(* FB_Counter is the type under test *)\nVAR\n\tcounter : FB_Counter;\nEND_VAR",
+                    "CounterStartsAtZero(); // exercises FB_Counter"));
+
+            var counter = Single(coverage, "FB_Counter");
+            Assert.Equal(new[] { "FB_CounterTests" }, counter.SuiteTypeNames.ToArray());
+            Assert.True(counter.IsCovered);
+        }
+
         // The suites are the test code, not the code under test - listing them
         // as uncovered POUs would make the work list mostly noise.
         [Fact]

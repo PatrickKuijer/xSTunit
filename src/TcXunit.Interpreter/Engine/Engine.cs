@@ -27,8 +27,14 @@ namespace TcXunit.Interpreter
         // native hosts read Clock.TotalMs whenever they're invoked.
         public Clock Clock { get; } = new Clock();
 
-        private static readonly HashSet<string> NativeTimerTypes = new HashSet<string> { "TON", "TOF", "FB_Pulse" };
-        private static readonly HashSet<string> NativeEdgeTriggerTypes = new HashSet<string> { "R_TRIG", "F_TRIG" };
+        // TcXunit-nch: IEC 61131-3 identifiers are case-insensitive (same
+        // decision as TcXunit-fzm's elementary-type lookups), so these two
+        // native-FB base-type sets are keyed with OrdinalIgnoreCase - a
+        // lowercase/mixed-case base type (e.g. 'EXTENDS ton') must still be
+        // recognized as a native timer/edge-trigger stub instead of falling
+        // through to NativeSuiteHost.
+        private static readonly HashSet<string> NativeTimerTypes = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "TON", "TOF", "FB_Pulse" };
+        private static readonly HashSet<string> NativeEdgeTriggerTypes = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "R_TRIG", "F_TRIG" };
 
         // Host-supplied stand-ins for compiled-only TwinCAT library functions
         // (TcXunit-6k2). Optional and consulted last (Engine.Invocation.cs), so
@@ -188,7 +194,7 @@ namespace TcXunit.Interpreter
                     instance.Fields["Q"] = new Cell { Value = false };
                     instance.Fields["ET"] = new Cell { Value = 0u };
                 }
-                else if (current == "Loopback")
+                else if (string.Equals(current, "Loopback", StringComparison.OrdinalIgnoreCase))
                 {
                     instance.NativeLoopbackHost = new LoopbackHost();
                     instance.Fields["LinkUp"] = new Cell { Value = true };
@@ -217,7 +223,7 @@ namespace TcXunit.Interpreter
                 // (TcXunit-0v1).
                 foreach (var decl in _registry.GetDecls(def.DeclarationText).Where(IsPersistedField))
                 {
-                    instance.Fields[decl.Name] = new Cell { Value = DefaultValue(decl, instance), DeclaredTypeName = decl.TypeName };
+                    instance.Fields[decl.Name] = CreateFieldCell(decl, instance);
                     instance.FieldTypeNames[decl.Name] = decl.TypeName;
                 }
             }
@@ -225,6 +231,30 @@ namespace TcXunit.Interpreter
             CallMethod(instance, "FB_init", Array.Empty<Expr>(), Array.Empty<NamedArg>(), null, null, optionalIfMissing: true);
 
             return instance;
+        }
+
+        // TcXunit-mxx: builds the Cell that backs one FbInstance field.
+        // Plain (non-FB) fields construct eagerly, same as before - they're
+        // O(1) with no further recursion. A field declared as another
+        // registry-known POU type (FB/PROGRAM) is wrapped in a LazyCell
+        // instead: its own DefaultValue would call NewInstance for that
+        // type, repeating this same field walk for ITS fields, transitively
+        // through however much of the type graph is reachable - regardless
+        // of whether the code that declared the outer instance ever reads
+        // this particular field. Deferring that inner construction until
+        // the field is actually dereferenced scopes the work (and any fault
+        // inside it, e.g. an unsupported construct several types away) to
+        // callers that actually touch the field. Native stub types (TON,
+        // Loopback, R_TRIG/F_TRIG, ...) aren't registry types - DefaultValue
+        // handles those via NativeTimerTypes/NativeEdgeTriggerTypes/
+        // "Loopback" and NewInstance's own nativeBoundaryHit branch above,
+        // neither of which recurses, so they stay eager too.
+        private Cell CreateFieldCell(VarDecl decl, FbInstance owningInstance)
+        {
+            if (_registry.Get(_registry.ResolveAlias(decl.TypeName)) != null)
+                return new LazyCell(() => DefaultValue(decl, owningInstance), decl.TypeName);
+
+            return new Cell { Value = DefaultValue(decl, owningInstance), DeclaredTypeName = decl.TypeName };
         }
 
         // Fields materialized at NewInstance() time (VAR_INPUT/VAR_OUTPUT/

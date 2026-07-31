@@ -23,8 +23,10 @@ namespace TcXunit.Interpreter
         private readonly Dictionary<string, Dictionary<string, Cell>> _globals = new Dictionary<string, Dictionary<string, Cell>>();
 
         // Shared process-wide simulated clock (TcXunit-w5x.15.7 / T3 design) -
-        // one Clock for the whole Engine, not per-instance; TON/TOF/FB_Pulse
-        // native hosts read Clock.TotalMs whenever they're invoked.
+        // one Clock for the whole Engine, not per-instance; the TON/TOF/TP and
+        // LTON/LTOF/LTP native hosts read Clock.TotalNs whenever they're
+        // invoked (TcXunit-x5pt made ns the clock's base unit so the LTIME
+        // trio can express a sub-millisecond PT).
         public Clock Clock { get; } = new Clock();
 
         // The native-FB base-type sets (NativeTimerTypes/

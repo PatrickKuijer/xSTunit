@@ -98,7 +98,10 @@ namespace TcXunit.Interpreter
                     {
                         case NativeHostKind.Timer:
                             BindTimerInputs(callee, positionalArgs, namedArgs, callerFrame);
-                            callee.NativeTimerHost.Update(callee, Clock.TotalMs);
+                            // Nanoseconds, not TotalMs: the LTIME timers
+                            // (LTON/LTOF/LTP) count in ns, and the host scales
+                            // back to its own PT/ET width (TcXunit-x5pt).
+                            callee.NativeTimerHost.Update(callee, Clock.TotalNs);
                             return null;
 
                         // Native R_TRIG/F_TRIG, e.g. fbTrig(CLK:=x) - same

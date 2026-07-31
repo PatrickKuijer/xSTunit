@@ -64,9 +64,10 @@ namespace TcXunit.Interpreter
         public TcUnitSuiteHost NativeSuiteHost =>
             NativeKind == NativeHostKind.Suite ? (TcUnitSuiteHost)NativeHost : null;
 
-        // Non-null when ActualTypeName is a native timer type (TON/TOF/
-        // FB_Pulse) - the native host backing this instance's IN/PT->Q/ET
-        // behavior (TcXunit-w5x.15.7's native-stub boundary).
+        // Non-null when ActualTypeName is a native timer type (TON/TOF/TP/
+        // FB_Pulse, or their LTIME siblings LTON/LTOF/LTP) - the native host
+        // backing this instance's IN/PT->Q/ET behavior (TcXunit-w5x.15.7's
+        // native-stub boundary, extended by TcXunit-x5pt).
         public TimerHost NativeTimerHost =>
             NativeKind == NativeHostKind.Timer ? (TimerHost)NativeHost : null;
 

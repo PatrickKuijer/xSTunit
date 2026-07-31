@@ -98,6 +98,29 @@ namespace TcXunit.Interpreter.Tests
             Assert.Null(fbTimer.NativeSuiteHost);
         }
 
+        // TcXunit-x5pt: the LTIME trio resolves through the same
+        // NativeTimerTypes lookup and the same TimerHost.Create switch, so it
+        // inherits both case-insensitivity layers - and seeds PT/ET at LTIME
+        // width (0ul), not TIME width (0u).
+        [Theory]
+        [InlineData("lton")]
+        [InlineData("LtOn")]
+        [InlineData("ltof")]
+        [InlineData("ltp")]
+        public void LowercaseOrMixedCaseLtimeTimer_InstantiatesAsNativeTimerHost(string typeName)
+        {
+            var engine = NewTimerWrapperEngine(typeName);
+            var instance = engine.NewInstance("FB_Wrapper");
+            var fbTimer = (FbInstance)instance.Fields["fbTimer"].Value;
+
+            Assert.NotNull(fbTimer.NativeTimerHost);
+            Assert.Null(fbTimer.NativeSuiteHost);
+            Assert.Equal(false, fbTimer.Fields["IN"].Value);
+            Assert.Equal(0ul, fbTimer.Fields["PT"].Value);
+            Assert.Equal(false, fbTimer.Fields["Q"].Value);
+            Assert.Equal(0ul, fbTimer.Fields["ET"].Value);
+        }
+
         [Theory]
         [InlineData("r_trig")]
         [InlineData("R_trig")]

@@ -12,7 +12,7 @@ ticket still open, API may shift.
 |---|---|---|
 | [01-test-suite-basics.md](01-test-suite-basics.md) | `EXTENDS TcUnit.FB_TestSuite`, `TEST()`/`TEST_FINISHED()`/`TEST_ORDERED()`/`TEST_FINISHED_NAMED()`/`IS_TEST_FINISHED()`/`Assert*` | built |
 | [02-step-cycles.md](02-step-cycles.md) | `FbInstance.StepCycles(n)` | built |
-| [03-simulated-clock-and-timers.md](03-simulated-clock-and-timers.md) | `Engine.Clock.Advance(dt)`, `TON`/`TOF`/`FB_Pulse` | built |
+| [03-simulated-clock-and-timers.md](03-simulated-clock-and-timers.md) | `Engine.Clock.Advance(dt)`/`AdvanceNs(dt)`, `TON`/`TOF`/`TP`, `LTON`/`LTOF`/`LTP` | built |
 | [04-loopback-and-faults.md](04-loopback-and-faults.md) | `Loopback` FB: `Transmit`, `Drop`/`Restore`/`Freeze`/`SetDelay`/`Duplicate`/`Corrupt`, `LinkUp`/`LastUpdateTime` | built |
 | [05-session-counter-reconnect.md](05-session-counter-reconnect.md) | Reconnect pattern via ordinary VAR counter + Drop/Restore | built (pattern only, no new primitive) |
 | [06-state-mirroring-assertions.md](06-state-mirroring-assertions.md) | `AssertConverges` / `AssertConvergesAndLatches` | built |
@@ -24,7 +24,7 @@ ticket still open, API may shift.
 
 - One shared `Engine` per test run; one shared `Engine.Clock` for the whole
   suite (not per-instance).
-- Every native primitive (`StepCycles`, `Loopback`, `TON`/`TOF`/`FB_Pulse`)
+- Every native primitive (`StepCycles`, `Loopback`, `TON`/`TOF`/`TP`, `LTON`/`LTOF`/`LTP`)
   is dispatched the same way: ordinary ST method-call syntax on a normal
   `VAR` field, intercepted by the engine's native-stub boundary
   (`NativeMethodBridge` / direct `Engine.CallMethod` dispatch) instead of

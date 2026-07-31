@@ -154,6 +154,32 @@ namespace TcXunit.Interpreter.Tests
             Assert.Equal(0u, instance.Fields["measuredEt"].Value);
         }
 
+        // TcXunit-x5pt moved the Clock's base unit to ns for LTON/LTOF/LTP.
+        // A TIME timer's ET is uint milliseconds and cannot represent the
+        // remainder, so it truncates: sub-ms advances are still accumulated in
+        // the clock (nothing is lost), they just don't surface in ET until a
+        // whole millisecond has gone by.
+        [Fact]
+        public void Ton_SubMillisecondAdvances_AccumulateButOnlySurfaceAsWholeMs()
+        {
+            var engine = NewWrapperEngine("TON");
+            var instance = engine.NewInstance("FB_Wrapper");
+            instance.Fields["inVar"].Value = true;
+            instance.Fields["ptVar"].Value = 1u;
+
+            Step(engine, instance);
+
+            engine.Clock.AdvanceNs(600_000);
+            Step(engine, instance);
+            Assert.Equal(false, instance.Fields["measuredQ"].Value);
+            Assert.Equal(0u, instance.Fields["measuredEt"].Value);
+
+            engine.Clock.AdvanceNs(400_000);
+            Step(engine, instance);
+            Assert.Equal(true, instance.Fields["measuredQ"].Value);
+            Assert.Equal(1u, instance.Fields["measuredEt"].Value);
+        }
+
         [Fact]
         public void Clock_MultiInstanceSteppingOrder_DoesNotStealElapsedTime()
         {

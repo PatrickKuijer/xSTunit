@@ -21,7 +21,12 @@ namespace TcXunit.Interpreter
         // the TypeRegistry, so no native stub stands behind it.
         None = 0,
 
-        // TON/TOF/FB_Pulse (TcXunit-w5x.15.7).
+        // TON/TOF/TP/FB_Pulse and their LTIME siblings LTON/LTOF/LTP
+        // (TcXunit-w5x.15.7, TcXunit-x5pt). One kind, not two: the LTIME trio
+        // is backed by the same TimerHost family with the same IN/PT->Q/ET
+        // contract and the same bare-invoke binding - only the PT/ET Cell
+        // encoding differs (ns vs ms), which the host itself owns. A second
+        // member would buy a duplicate dispatch case that behaves identically.
         Timer,
 
         // R_TRIG/F_TRIG (TcXunit-f6b).
@@ -52,7 +57,13 @@ namespace TcXunit.Interpreter
         // name instantiable at all" check reads the same two sets, so they
         // live with the classifier that owns their meaning rather than in
         // Engine.cs.
-        private static readonly HashSet<string> NativeTimerTypes = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "TON", "TOF", "TP", "FB_Pulse" };
+        // TcXunit-x5pt: the LTIME trio (LTON/LTOF/LTP) sits in the SAME set as
+        // the TIME timers rather than a parallel one - they classify as the
+        // same kind, resolve through the same TimerHost.Create, and bind the
+        // same IN/PT inputs. The one thing that differs, the width their PT/ET
+        // Cells are boxed at, is owned by the host (TimerHost.ZeroDuration),
+        // so no caller here has to know which name is which width.
+        private static readonly HashSet<string> NativeTimerTypes = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "TON", "TOF", "TP", "FB_Pulse", "LTON", "LTOF", "LTP" };
         private static readonly HashSet<string> NativeEdgeTriggerTypes = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "R_TRIG", "F_TRIG" };
         private static readonly HashSet<string> NativeBistableLatchTypes = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "RS", "SR" };
         private static readonly HashSet<string> NativeCounterTypes = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "CTU", "CTD", "CTUD" };
@@ -120,13 +131,22 @@ namespace TcXunit.Interpreter
                 return NativeHostBinding.NotNative;
 
             if (NativeTimerTypes.Contains(nativeBaseTypeName))
+            {
+                // PT/ET are seeded with the host's own zero (TcXunit-x5pt):
+                // 0u for a TIME timer, 0ul for an LTIME one. Same "one
+                // spelling, one owner" precedent as RS/SR's input names - the
+                // width belongs to the host that will read those Cells back,
+                // not to a literal here that would have to be kept in step
+                // with TimerHost.Create's type-name switch.
+                var timer = TimerHost.Create(nativeBaseTypeName);
                 return NativeHostBinding.Of(
                     NativeHostKind.Timer,
-                    TimerHost.Create(nativeBaseTypeName),
+                    timer,
                     Field("IN", false),
-                    Field("PT", 0u),
+                    Field("PT", timer.ZeroDuration),
                     Field("Q", false),
-                    Field("ET", 0u));
+                    Field("ET", timer.ZeroDuration));
+            }
 
             if (string.Equals(nativeBaseTypeName, NativeLoopbackType, StringComparison.OrdinalIgnoreCase))
                 return NativeHostBinding.Of(

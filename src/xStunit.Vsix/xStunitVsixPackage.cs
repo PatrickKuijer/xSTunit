@@ -7,11 +7,9 @@ using Task = System.Threading.Tasks.Task;
 
 namespace xStunit.Vsix
 {
-    /// <summary>
-    /// Hosts the "xStunit Results" tool window: registers the ToolWindowPane
-    /// and the menu command that shows it. Scaffolding mirrors
-    /// C:\Git\TcAgentPlugin\src\TcAgent\ChatToolWindowPackage.cs.
-    /// </summary>
+    // "#110" and "#112" are resource IDs into VSPackage.resx, resolved by VS at
+    // runtime; renaming or removing those entries shows up as a blank product name in
+    // the extension manager, not as a build error.
     [PackageRegistration(UseManagedResourcesOnly = true, AllowsBackgroundLoading = true)]
     [InstalledProductRegistration("#110", "#112", "0.1.0", IconResourceID = 400)]
     [ProvideMenuResource("Menus.ctmenu", 1)]

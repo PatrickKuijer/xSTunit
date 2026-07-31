@@ -4,24 +4,20 @@ using System.Text;
 namespace xStunit.Vsix.TestRunner
 {
     /// <summary>
-    /// Pure command-line construction for a `xstunit &lt;path-a&gt; [&lt;path-b&gt; ...]
-    /// --format json [--plugins &lt;dir&gt;] [--suite &lt;name&gt; ...]` invocation. Split out of
-    /// XstunitProcessRunner (TcXunit-1tt.8) so it can be unit tested under net8.0. At the
-    /// time this class was split out, XstunitProcessRunner.cs and XstunitConfig.cs both
-    /// used System.Web.Script.Serialization.JavaScriptSerializer (net472-only, no net8.0
-    /// package), which blocked source-linking either into tests/xStunit.Vsix.Tests --
-    /// TcXunit-cmp later swapped both to System.Text.Json, removing that blocker (see
-    /// XstunitConfig.cs, now linked into that test project too). This class still takes
-    /// plain strings/lists rather than a XstunitConfig instance regardless, since that
-    /// remains the simpler seam for pure argument-construction logic.
-    ///
-    /// suiteNames is TcXunit-1tt.8's "rerun failed" feature: the WPF host passes the last
-    /// run's failed suite names back in here, one repeated --suite &lt;name&gt; per name
-    /// (TcXunit-6fb.3's CLI flag), restricting the next run to just those suites. Null or
-    /// empty reproduces the exact argument string a normal run has always used.
+    /// Builds the command line for one `xstunit &lt;path-a&gt; [&lt;path-b&gt; ...]
+    /// --format json [--plugins &lt;dir&gt;] [--suite &lt;name&gt; ...]` invocation.
     /// </summary>
+    /// <remarks>
+    /// Carries no VS SDK dependency and takes plain strings rather than an
+    /// <see cref="XstunitConfig"/>, so it can be source-linked into
+    /// tests/xStunit.Vsix.Tests and unit tested under net8.0; the extension itself
+    /// only builds under net472.
+    /// </remarks>
     internal static class XstunitArgumentBuilder
     {
+        // Null or empty suiteNames runs every suite found under paths; a non-empty list
+        // restricts the run to those suites, one repeated --suite <name> each. That is
+        // what the tool window's "rerun failed" is built on.
         public static string BuildArguments(string cliPath, IEnumerable<string> paths, IReadOnlyList<string> suiteNames, string pluginsDirectory = null)
         {
             var arguments = new StringBuilder();
@@ -48,14 +44,12 @@ namespace xStunit.Vsix.TestRunner
             return arguments.ToString();
         }
 
-        // Win32/CommandLineToArgvW argument-quoting algorithm (the same one .NET Core's
-        // ProcessStartInfo.ArgumentList uses internally - not available on net472's
-        // Process, so it's reimplemented here). Naively wrapping a value in quotes breaks
-        // as soon as it ends in a backslash (e.g. a path like "C:\Foo\") because that
-        // backslash then escapes the closing quote instead of being a path separator; a
-        // value containing a literal '"' would break unquoted concatenation too. This
-        // always quotes and doubles any run of backslashes that's immediately followed by
-        // a quote (embedded or closing).
+        // Win32/CommandLineToArgvW argument quoting, reimplemented because net472's
+        // Process has no ArgumentList (.NET Core's does this internally). Naively
+        // wrapping a value in quotes breaks as soon as it ends in a backslash (a path
+        // like "C:\Foo\"), where that backslash escapes the closing quote instead of
+        // separating a path component; a value containing a literal '"' would break
+        // unquoted concatenation too.
         public static string EscapeArgument(string argument)
         {
             var result = new StringBuilder();

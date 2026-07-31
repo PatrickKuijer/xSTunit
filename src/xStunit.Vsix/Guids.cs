@@ -2,6 +2,11 @@ using System;
 
 namespace xStunit.Vsix
 {
+    // Every value below is duplicated in VSCommandTable.vsct (guidPackage,
+    // guidCommandSet, ShowResultsToolWindowCommandId). The two sides are matched by
+    // value when VS loads the compiled command table, not by the compiler, so a change
+    // here that isn't mirrored there makes the menu command silently stop appearing
+    // rather than fail the build.
     internal static class PackageGuids
     {
         public const string PackageGuidString = "78a251f2-b67d-4fa5-a694-47748a870679";

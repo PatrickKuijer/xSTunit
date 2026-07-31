@@ -7,20 +7,16 @@ using System.Text.Json;
 namespace xStunit.Vsix.TestRunner
 {
     /// <summary>
-    /// Reads the "xstunit.json" config placed next to the
-    /// open .plcproj/.sln (see ../xstunit.json.sample). Schema is a first
-    /// guess, not finalized - see README.md. Its only job is
-    /// to configure which POU directories `xstunit` should scan for this
-    /// project (xStunit.Cli.CliRunner takes N directory paths positionally,
-    /// there is no "project" concept on the CLI side).
+    /// The "xstunit.json" sitting next to the open .plcproj/.sln (see
+    /// ../xstunit.json.sample): which POU directories `xstunit` should scan, and
+    /// where to find the executable. The CLI takes directory paths positionally and
+    /// has no notion of a "project", so this file is the only place that mapping
+    /// exists.
     /// </summary>
     internal sealed class XstunitConfig
     {
-        // Matches JavaScriptSerializer's default case-insensitive member binding, which this
-        // class's deserialization relied on before the System.Text.Json swap (see
-        // TcXunit-cmp) -- xstunit.json's actual keys are already lowercase/camelCase and match
-        // RawConfig's fields exactly, but this keeps the contract from being case-sensitive by
-        // accident if either side's casing ever drifts.
+        // Case-insensitive so a casing drift between xstunit.json's keys and RawConfig's
+        // fields cannot silently deserialize to null.
         private static readonly JsonSerializerOptions SerializerOptions = new JsonSerializerOptions
         {
             PropertyNameCaseInsensitive = true,
@@ -30,6 +26,8 @@ namespace xStunit.Vsix.TestRunner
 
         public string CliPath { get; set; } = "xstunit";
 
+        // Optional directory of plugin assemblies, forwarded to the CLI as
+        // --plugins <dir>. Null when xstunit.json omits it.
         public string Plugins { get; set; }
 
         public static XstunitConfig Load(string directory)
@@ -50,8 +48,6 @@ namespace xStunit.Vsix.TestRunner
 
             var cliPath = string.IsNullOrEmpty(raw.cliPath) ? "xstunit" : raw.cliPath;
 
-            // plugins (TcXunit-qhc): optional directory of ITcXunitNativeFunction plugin
-            // assemblies, forwarded to the CLI as --plugins <dir> (TcXunit-6k2).
             var plugins = raw.plugins;
 
             return new XstunitConfig
@@ -62,13 +58,12 @@ namespace xStunit.Vsix.TestRunner
             };
         }
 
-        // If value looks like a path (relative or rooted) rather than a bare command
-        // name meant to be resolved via PATH, resolve it relative to the directory
-        // containing xstunit.json. This lets xstunit.json point directly at a file
-        // inside a repo (a built xstunit binary, a plugins folder) instead of depending
-        // on the IDE's working directory or PATH resolution, which is unreliable from a
-        // long-running host process (e.g. an IDE launched before PATH was updated for a
-        // newly installed tool).
+        // A value containing a separator is a path and is resolved against xstunit.json's
+        // own directory; a bare command name is left for PATH to resolve. This lets
+        // xstunit.json point straight at a file inside the repo (a built xstunit binary,
+        // a plugins folder) instead of depending on the IDE's working directory or on
+        // PATH, which is unreliable from a long-running host process - an IDE launched
+        // before PATH was updated for a newly installed tool never sees the change.
         private static string ResolveIfRelativePath(string value, string directory)
         {
             if (string.IsNullOrEmpty(value))
@@ -84,8 +79,8 @@ namespace xStunit.Vsix.TestRunner
             return value;
         }
 
-        // Field names match xstunit.json's camelCase keys (SerializerOptions above makes the
-        // match case-insensitive regardless).
+        // Field names deliberately mirror xstunit.json's own camelCase keys rather than
+        // C# convention (SerializerOptions above makes the match case-insensitive anyway).
         private sealed class RawConfig
         {
             public string[] paths { get; set; }

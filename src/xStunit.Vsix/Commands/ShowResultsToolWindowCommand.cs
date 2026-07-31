@@ -27,6 +27,8 @@ namespace xStunit.Vsix
             await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync(package.DisposalToken);
 
             var commandService = await package.GetServiceAsync(typeof(IMenuCommandService)) as OleMenuCommandService;
+            // Not stored anywhere: the MenuCommand the constructor hands to
+            // commandService closes over this instance and keeps it alive.
             new ShowResultsToolWindowCommand(package, commandService);
         }
 

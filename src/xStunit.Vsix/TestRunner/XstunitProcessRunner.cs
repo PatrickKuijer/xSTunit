@@ -10,10 +10,11 @@ using System.Threading.Tasks;
 namespace xStunit.Vsix.TestRunner
 {
     /// <summary>
-    /// Shells out to `xstunit &lt;path-a&gt; [&lt;path-b&gt; ...] --format json
-    /// [--suite &lt;name&gt; ...]` (chosen over referencing xStunit's libraries
-    /// in-process - see TcXunit-6nt) and parses the resulting JSON.
-    /// Proves out whether Process.Start works unrestricted from inside XAE Shell.
+    /// The extension's whole test-execution path, and it is entirely out of process:
+    /// <see cref="XstunitArgumentBuilder"/> builds an `xstunit ... --format json`
+    /// command line, this class runs it and deserializes its stdout into
+    /// <see cref="XstunitRunResult"/>. The extension holds no reference to any xStunit
+    /// library and never hosts the interpreter itself.
     /// </summary>
     internal sealed class XstunitProcessRunner
     {
@@ -25,21 +26,16 @@ namespace xStunit.Vsix.TestRunner
         };
 
         /// <summary>
-        /// Async, cancellable version of the (former) synchronous Run(...) --
-        /// added by TcXunit-1tt.3 so ResultsToolWindowControl's UI thread isn't
-        /// blocked for the duration of a run (WaitForExit() used to run right on
-        /// the WPF Button_Click handler) and so a Stop click has something to
-        /// cancel. Cancelling kills the in-flight xstunit process tree and the
-        /// returned Task ends in the canceled state (OperationCanceledException),
-        /// which the caller distinguishes from a genuine run failure -- "stopped
-        /// on purpose" vs. "errored".
-        ///
-        /// suiteNames (TcXunit-1tt.8) is optional: null/empty runs every suite under
-        /// config.Paths exactly as before, while a non-empty list restricts the run to
-        /// just those suites via a repeated --suite &lt;name&gt; (TcXunit-6fb.3) -- what
-        /// "rerun failed" uses to re-invoke xstunit scoped to only the suites that just
-        /// failed.
+        /// Runs one `xstunit` invocation to completion. Cancelling kills the in-flight
+        /// process tree and ends the returned task in the canceled state, so the caller
+        /// can tell "stopped on purpose" apart from "the run failed".
         /// </summary>
+        /// <remarks>
+        /// Null or empty <paramref name="suiteNames"/> runs every suite under
+        /// config.Paths; a non-empty list restricts the run to those suites via a
+        /// repeated --suite &lt;name&gt;, which is what the tool window's "rerun failed"
+        /// is built on.
+        /// </remarks>
         public async Task<XstunitRunResult> RunAsync(XstunitConfig config, string workingDirectory, CancellationToken cancellationToken, IReadOnlyList<string> suiteNames = null)
         {
             var startInfo = BuildStartInfo(config, workingDirectory, suiteNames);
@@ -49,11 +45,9 @@ namespace xStunit.Vsix.TestRunner
 
             using (var process = new Process { StartInfo = startInfo, EnableRaisingEvents = true })
             {
-                // TaskCompletionSource bridges Process.Exited (an event) to something
-                // awaitable -- net472 (this project's TFM) predates
-                // Process.WaitForExitAsync (added in .NET 5). RunContinuationsAsynchronously
-                // keeps the Exited event's raising thread from being blocked running our
-                // continuation synchronously.
+                // Bridges Process.Exited to something awaitable: net472 predates
+                // Process.WaitForExitAsync (.NET 5+). RunContinuationsAsynchronously keeps
+                // the continuation off the thread raising the Exited event.
                 var exitedTcs = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
                 process.Exited += (s, e) => exitedTcs.TrySetResult(process.ExitCode);
                 process.OutputDataReceived += (s, e) => { if (e.Data != null) stdout.AppendLine(e.Data); };
@@ -68,10 +62,9 @@ namespace xStunit.Vsix.TestRunner
                     await exitedTcs.Task.ConfigureAwait(false);
                 }
 
-                // Cancellation races the process's own natural exit (it may finish a
-                // moment before Stop's kill lands) -- check the token explicitly
-                // rather than inferring "was it killed" from the exit code, which
-                // varies by how it died.
+                // Cancellation races the process's own natural exit - it may finish a
+                // moment before Stop's kill lands - so ask the token rather than infer
+                // "was it killed" from an exit code that varies by how it died.
                 cancellationToken.ThrowIfCancellationRequested();
 
                 if (stdout.Length == 0)
@@ -86,9 +79,8 @@ namespace xStunit.Vsix.TestRunner
                 var stdoutText = stdout.ToString();
                 var result = JsonSerializer.Deserialize<XstunitRunResult>(stdoutText, SerializerOptions);
                 result.ExitCode = process.ExitCode;
-                // Keep the CLI's own JSON text around (see XstunitRunResult.RawJson)
-                // so the WebView2 host can forward it verbatim rather than
-                // re-serializing this object -- see TcXunit-1tt.2.
+                // Kept verbatim so the WebView2 host can forward the CLI's own JSON
+                // rather than re-serializing this object (see XstunitRunResult.RawJson).
                 result.RawJson = stdoutText;
                 return result;
             }
@@ -96,27 +88,20 @@ namespace xStunit.Vsix.TestRunner
 
         private static ProcessStartInfo BuildStartInfo(XstunitConfig config, string workingDirectory, IReadOnlyList<string> suiteNames)
         {
-            // Argument construction (including --plugins <dir> per config.Plugins,
-            // --suite <name> per suiteNames, and the Win32-style quoting each token
-            // needs) lives in XstunitArgumentBuilder -- pulled out to a class with no VS
-            // SDK dependency so it can be unit tested under net8.0 (see that file's own
-            // comment and tests/xStunit.Vsix.Tests).
             var arguments = XstunitArgumentBuilder.BuildArguments(config.CliPath, config.Paths, suiteNames, config.Plugins);
 
-            // Run via "cmd.exe /c" rather than invoking config.CliPath directly.
-            // Process.Start with UseShellExecute=false calls CreateProcess directly,
-            // which does NOT do the PATHEXT-based resolution (.exe/.cmd/.bat) or PATH
-            // search that a real shell does - so a PATH-based launcher/shim (e.g. a
-            // dotnet global tool's .cmd shim) that runs fine from a terminal can throw
-            // "The system cannot find the file specified" here even though it's on
-            // PATH. cmd.exe /c replicates the normal shell resolution behavior.
-            // cmd.exe's "/c" parsing only strips the first and last quote character
-            // of the whole command line (rather than respecting each argument's own
-            // quoting), so a command line with multiple quoted tokens - e.g.
-            // "...\xstunit.exe" "path with spaces" --format json - gets mangled into
-            // a single bogus command (`xstunit.exe" "path...` is not recognized).
-            // Wrapping the entire thing in one extra pair of quotes makes cmd strip
-            // only that outer pair, leaving the inner per-argument quoting intact.
+            // Run via "cmd.exe /c" rather than invoking config.CliPath directly:
+            // Process.Start with UseShellExecute=false calls CreateProcess, which does
+            // NOT do the PATHEXT (.exe/.cmd/.bat) or PATH resolution a real shell does,
+            // so a PATH-based launcher or shim (a dotnet global tool's .cmd, say) that
+            // runs fine from a terminal throws "The system cannot find the file
+            // specified" here despite being on PATH.
+            //
+            // cmd's "/c" parsing then strips only the first and last quote of the whole
+            // command line instead of respecting each argument's own quoting, mangling a
+            // line with several quoted tokens into one bogus command. The extra outer
+            // pair of quotes below is what cmd consumes, leaving the per-argument
+            // quoting intact.
             return new ProcessStartInfo
             {
                 FileName = "cmd.exe",
@@ -129,17 +114,13 @@ namespace xStunit.Vsix.TestRunner
             };
         }
 
-        // Process.Kill() on net472 (no Kill(entireProcessTree: true) overload -- that's
-        // .NET 5+) only terminates the exact process we started, which is cmd.exe, not
-        // the xstunit.exe it launched as a child ("cmd.exe /c ..." per BuildStartInfo
-        // above) -- a plain Kill() here would leave the actual xstunit run still
-        // executing in the background after Stop supposedly stopped it. taskkill /T
-        // recurses the whole process tree rooted at cmd.exe's PID, which is what
-        // Stop's acceptance criteria ("kills the running xstunit child process")
-        // actually requires. Best-effort: if taskkill itself can't run (missing from
-        // PATH, process already gone), fall back to a plain Kill so at least the
-        // direct child is reaped rather than throwing out of a CancellationToken
-        // callback.
+        // net472's Process.Kill() has no entireProcessTree overload (.NET 5+) and so
+        // terminates only the process we started - which is cmd.exe, not the xstunit.exe
+        // it launched - leaving the actual run executing in the background after Stop
+        // supposedly stopped it. taskkill /T recurses the whole tree instead.
+        // Best-effort: if taskkill itself can't run, fall back to a plain Kill so at
+        // least the direct child is reaped rather than throwing out of a
+        // CancellationToken callback.
         private static void KillProcessTree(Process process)
         {
             try
@@ -173,10 +154,9 @@ namespace xStunit.Vsix.TestRunner
                 }
                 catch (Exception)
                 {
-                    // Nothing more we can do -- the CancellationToken.Register callback
-                    // must not throw, and exitedTcs.Task will still complete once the
-                    // process exits on its own (or never, which Stop can't fully
-                    // guarantee against on a process that ignores termination signals).
+                    // A CancellationToken.Register callback must not throw. exitedTcs
+                    // still completes if the process ever exits on its own - which Stop
+                    // cannot guarantee against a process that ignores termination.
                 }
             }
         }

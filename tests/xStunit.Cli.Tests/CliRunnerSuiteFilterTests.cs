@@ -6,10 +6,9 @@ using Xunit;
 
 namespace xStunit.Cli.Tests
 {
-    // --suite <name> (TcXunit-6fb.3): repeatable flag restricting `tcxunit run`
-    // to named suite(s), e.g. so a VSIX "rerun failed" action can re-run only
-    // the suites it cares about instead of everything discovered under the
-    // given path(s).
+    // --suite is repeatable, not single-valued: a second occurrence widens the
+    // filter rather than replacing the first, which is what lets a caller
+    // re-run an arbitrary subset of what it discovered.
     public class CliRunnerSuiteFilterTests : IDisposable
     {
         private readonly string _tempDir;

@@ -8,15 +8,13 @@ using Xunit;
 
 namespace xStunit.Cli.Tests
 {
-    // TcXunit-ce1: --stream, an opt-in NDJSON progress mode for large suite
-    // counts. Every event is one line of JSON on its own - a "discovery"
-    // line up front listing every suite about to run, a "suite-start"/
-    // "suite-result" pair per suite as it executes, and a final "summary"
-    // line carrying the same aggregate data --format json already reports
-    // in one blob. The property that matters most here (and gets its own
-    // dedicated test) is that omitting the flag is byte-for-byte the same
-    // as before this feature existed - --stream must never be able to
-    // change what an existing caller (the VSIX, which never passes it) sees.
+    // --stream is an opt-in NDJSON progress mode, so stdout must stay exactly
+    // one JSON object per line: any stray text, or one event spread over two
+    // lines, breaks every machine consumer reading it incrementally.
+    //
+    // The other half of the contract is that omitting the flag changes nothing
+    // at all - callers that never pass --stream must see the byte-for-byte
+    // output they always did.
     public class CliRunnerStreamTests : IDisposable
     {
         private readonly string _tempDir;
@@ -39,8 +37,6 @@ namespace xStunit.Cli.Tests
             Assert.Equal(0, exitCode);
             var lines = ParseLines(output.ToString());
 
-            // Every line must be valid, independently parseable JSON - the
-            // core NDJSON contract.
             Assert.True(lines.Count >= 4);
 
             var discovery = lines[0];
@@ -71,10 +67,9 @@ namespace xStunit.Cli.Tests
         [Fact]
         public void Run_Stream_EachLineIsCompactSingleLineJson()
         {
-            // NDJSON's defining property: exactly one JSON value per line.
-            // JsonOptions (used by --format json) writes indented,
-            // multi-line JSON - if --stream reused it by mistake, this
-            // would fail because a single event would span several lines.
+            // The serializer options --format json uses write indented,
+            // multi-line JSON; reusing them here would spread one event over
+            // several lines and quietly break the NDJSON contract.
             var output = new StringWriter();
 
             CliRunner.Run(new[] { TestFixtures.FbCounterFixtureDir(), "--stream" }, output);
@@ -85,9 +80,6 @@ namespace xStunit.Cli.Tests
             {
                 var trimmed = rawLine.TrimEnd('\r');
                 Assert.False(string.IsNullOrWhiteSpace(trimmed));
-                // Each raw line must parse as a complete, standalone JSON
-                // object by itself - proof no event's JSON was split (or
-                // merged with another's) across lines.
                 using var document = JsonDocument.Parse(trimmed);
                 Assert.Equal(JsonValueKind.Object, document.RootElement.ValueKind);
             }
@@ -96,11 +88,9 @@ namespace xStunit.Cli.Tests
         [Fact]
         public void Run_Stream_LoadErrorSuite_ReportsFailOutcomeWithoutAbortingStream()
         {
-            // Mirrors CliRunnerSuiteExceptionTests: one suite that throws
-            // before RunSuite's stopwatch ever completes a run, alongside a
-            // clean suite that passes - the throwing suite must not take the
-            // rest of the stream down with it, and must still produce
-            // exactly one suite-start/suite-result pair of its own.
+            // A throwing suite still owes the stream its own
+            // suite-start/suite-result pair; skipping either would leave a
+            // consumer waiting on an event that never arrives.
             File.WriteAllText(Path.Combine(_tempDir, "FB_ThrowingSuiteTests.TcPOU"), ThrowingSuiteXml);
             File.WriteAllText(Path.Combine(_tempDir, "FB_CleanSuiteTests.TcPOU"), CleanSuiteXml);
 
@@ -137,10 +127,9 @@ namespace xStunit.Cli.Tests
         [Fact]
         public void Run_Stream_MissingPath_EmitsSingleErrorEventAndReturnsTwo()
         {
-            // WriteError's streaming branch: no discovery/suite events at
-            // all when the run never gets that far (TcXunit-ce1) - just one
-            // NDJSON "error" line, same as --format json's ErrorReport plus
-            // the event tag. Exit code contract is unchanged (2).
+            // A run that never gets as far as discovery emits no suite events
+            // at all - one "error" line, and the usual exit 2 for a usage
+            // error.
             var output = new StringWriter();
 
             var exitCode = CliRunner.Run(new[] { @"C:\this\path\does\not\exist", "--stream" }, output);
@@ -155,13 +144,10 @@ namespace xStunit.Cli.Tests
         [Fact]
         public void Run_WithoutStreamFlag_OutputIsByteForByteUnchanged()
         {
-            // The single most important property of this feature: a caller
-            // that never passes --stream (every existing caller, including
-            // the VSIX) must see exactly the same stdout it always did.
-            // Locked in against a literal expected string rather than a
-            // loose Contains/Count check, so any accidental leak of new
-            // --stream code into the default path (a stray WriteLine, a
-            // changed branch condition) fails this test.
+            // Asserted against exact line counts and a literal last line rather
+            // than a loose Contains, so any leak of streaming output into the
+            // default path - one stray WriteLine, one inverted branch - fails
+            // here.
             var output = new StringWriter();
 
             var exitCode = CliRunner.Run(new[] { TestFixtures.FbCounterFixtureDir() }, output);
@@ -181,14 +167,10 @@ namespace xStunit.Cli.Tests
                 .Select(l => JsonDocument.Parse(l).RootElement.Clone())
                 .ToList();
 
-        // Unqualified call directly in the suite's top-level Implementation
-        // body, outside any TEST()/TEST_FINISHED() pair (same shape as
-        // CliRunnerFailureKindTests' UnqualifiedTypoSuiteXml) - this fails
-        // before the suite ever starts a test, so RunSuite itself throws and
-        // CliRunner's catch(Exception ex) around it fires, producing a
-        // genuine suite-level `error` (not a per-test failure entry, which
-        // is what a call failing inside a TEST()-wrapped METHOD would
-        // produce instead).
+        // The failing call sits in the suite's top-level body, outside any
+        // TEST()/TEST_FINISHED() pair, so it faults before any test opens and
+        // produces a genuine suite-level `error` - the same call inside a
+        // TEST()-wrapped METHOD would be charged to that test instead.
         private const string ThrowingSuiteXml = @"<?xml version=""1.0"" encoding=""utf-8""?>
 <TcPlcObject Version=""1.1.0.1"">
   <POU Name=""FB_ThrowingSuiteTests"" Id=""{00000000-0000-0000-0000-0000000000ac}"" SpecialFunc=""None"">

@@ -5,16 +5,11 @@ using Xunit;
 
 namespace xStunit.Cli.Tests
 {
-    // TcXunit-8po end-to-end: Tc2_Standard's DELETE/FIND/INSERT/LEFT/LEN/MID/
-    // REPLACE/RIGHT are compiled-only, like every TwinCAT library, and
-    // resolve only through the native-function plugin/registry path
-    // (TcXunit-6k2) - never a built-in intrinsic. Mirrors
-    // CliRunnerNativeFunctionPluginTests, loading the real plugin DLL through
-    // the CLI's --plugins loader rather than an in-process registration.
-    //
-    // CONCAT is out of scope here: TcXunit-8po.1 was closed as already
-    // resolved by TcXunit-3lt's interpreter intrinsic (see the fixture POU's
-    // header comment).
+    // The standard string functions (DELETE/FIND/INSERT/LEFT/LEN/MID/REPLACE/
+    // RIGHT) are compiled-only, like every TwinCAT library, so they resolve
+    // through the plugin path and never as a built-in intrinsic. Loads the real
+    // DLL through the CLI's --plugins loader rather than registering in
+    // process.
     public class CliRunnerTc2StandardPluginTests : IDisposable
     {
         private readonly string _pluginDir;
@@ -51,13 +46,11 @@ namespace xStunit.Cli.Tests
             Assert.Equal(1, exitCode);
             Assert.DoesNotContain("Object reference not set", text);
             Assert.Contains("DELETE", text);
-            // Unlike F_CheckSum16 (mixed-case), an ALL-CAPS unresolved call
-            // from inside a suite is classified as "looks like an IEC
-            // standard-library call" (NativeMethodBridge.LooksLikeTcUnitApiName,
-            // TcXunit-w5x.12/TcXunit-2o9.1) once the native-function registry
-            // has already had - and missed - its chance to resolve it, so the
-            // diagnostic here is the grow-on-demand message, not "native
-            // function".
+            // An ALL-CAPS unresolved call from inside a suite reads as an IEC
+            // standard-library name once the native-function registry has had -
+            // and missed - its chance at it, so the diagnostic is the
+            // grow-on-demand one rather than the "native function" wording a
+            // mixed-case name gets.
             Assert.Contains("isn't supported yet (grow-on-demand", text);
         }
 
@@ -71,9 +64,9 @@ namespace xStunit.Cli.Tests
             var text = output.ToString();
             Assert.Equal(0, exitCode);
             Assert.Contains("13 passed, 0 failed", text);
-            // 8 narrow-STRING functions (TcXunit-8po) + 9 WSTRING
-            // counterparts (TcXunit-93l9, exercised by
-            // CliRunnerWideStringPluginTests) in the one plugin assembly.
+            // 17 = 8 narrow-STRING functions plus the 9 WSTRING counterparts
+            // CliRunnerWideStringPluginTests exercises; both live in this one
+            // assembly.
             Assert.Contains("plugin: xStunit.StandardStringPlugins.dll (17 function(s))", text);
         }
 

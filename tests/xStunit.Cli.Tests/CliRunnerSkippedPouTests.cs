@@ -7,11 +7,11 @@ using Xunit;
 
 namespace xStunit.Cli.Tests
 {
-    // TcXunit-iyd.7: a POU outside the v1 parse subset (or a structurally
-    // unexpected file) must be skipped and reported individually instead of
-    // aborting the whole run. Isolated temp-directory fixture so the
-    // deliberately-unsupported POUs don't pollute the shared FB_Counter
-    // fixture's all-green state.
+    // A POU outside the parse subset, or a structurally unexpected file, is
+    // skipped and reported individually instead of aborting the run: one bad
+    // file must never cost a project the results of every good one. Isolated
+    // temp-directory fixture so these deliberately-unsupported POUs don't
+    // pollute the shared FB_Counter fixture's all-green state.
     public class CliRunnerSkippedPouTests : IDisposable
     {
         private readonly string _tempDir;
@@ -57,18 +57,11 @@ namespace xStunit.Cli.Tests
             Assert.Contains("FB_Malformed.TcPOU", text);
         }
 
-        // TcXunit-jql: the end-to-end regression for the investigation ticket.
-        // A file that can't even be READ (as opposed to malformed XML, which
-        // is already covered above) used to throw an exception type
-        // (IOException/UnauthorizedAccessException) that StructuralParseGuard's
-        // old XmlException/NullReferenceException-only filter didn't
-        // recognize - it escaped uncaught, aborting CliRunner.Run's whole
-        // foreach over MultiDirectoryPouLoader.FindPouFiles and silently
-        // dropping every file the loop hadn't reached yet, sibling suites
-        // included. Skipped (soft, not a hard test failure) when running as
-        // root, where chmod 0 still leaves the file readable, since the
-        // scenario this test depends on - "this file cannot be read" -
-        // can't be constructed in that environment.
+        // A file that can't even be READ - as opposed to the malformed XML
+        // above - throws IOException/UnauthorizedAccessException rather than a
+        // parse error. If the scan's guard doesn't catch those too, the whole
+        // enumeration aborts and every file it hadn't reached yet, sibling
+        // suites included, disappears from the run without a word.
         [Fact]
         public void Run_UnreadablePouAlongsideSuite_StillRunsSuiteAndReportsSkip()
         {
@@ -85,10 +78,9 @@ namespace xStunit.Cli.Tests
             {
                 if (CanStillRead(unreadablePath))
                 {
-                    // Running as root (or some other context where file
-                    // permissions aren't enforced) - there is no way to
-                    // construct "unreadable file" here, so there is nothing
-                    // this test can check. Not a failure of the fix.
+                    // Running as root, or anywhere else permissions aren't
+                    // enforced: the premise "this file cannot be read" cannot be
+                    // constructed, so there is nothing left to check.
                     return;
                 }
 
@@ -97,17 +89,13 @@ namespace xStunit.Cli.Tests
                 var exitCode = CliRunner.Run(new[] { _tempDir }, output);
 
                 var text = output.ToString();
-                // The suite alongside the unreadable file must still run
-                // (this is the actual regression: before the fix, the whole
-                // scan aborted and FB_PassingTests never even got attempted).
                 Assert.Equal(0, exitCode);
                 Assert.Contains("1 passed, 0 failed, 2 skipped", text);
                 Assert.Contains("FB_Unreadable.TcPOU", text);
             }
             finally
             {
-                // Restore permissions so temp-dir cleanup (Dispose above) can
-                // delete the file.
+                // Dispose cannot delete the temp directory otherwise.
                 File.SetUnixFileMode(unreadablePath, UnixFileMode.UserRead | UnixFileMode.UserWrite);
             }
         }
@@ -158,9 +146,9 @@ namespace xStunit.Cli.Tests
             Assert.Equal(0, doc.RootElement.GetProperty("skipped").GetArrayLength());
         }
 
-        // Every candidate POU unsupported: still a discovery error (exit 2,
-        // nothing ran), but the reason each file was dropped has to be visible
-        // rather than just "no suites found".
+        // With every candidate POU unsupported the run is a genuine discovery
+        // error, but "no suites found" on its own hides the reason - each
+        // dropped file still has to be named.
         [Fact]
         public void Run_OnlyUnsupportedPous_ReturnsTwoAndReportsEachSkip()
         {
@@ -194,9 +182,8 @@ namespace xStunit.Cli.Tests
             Assert.Equal(1, root.GetProperty("skipped").GetArrayLength());
         }
 
-        // Production-shaped POU that TcPouParser rejects outright
-        // (Tc2_System call in the body), the exact shape that used to abort the
-        // whole run.
+        // Production-shaped POU the parser rejects outright, on account of the
+        // library call in its body.
         private const string UnsupportedPouXml = @"<?xml version=""1.0"" encoding=""utf-8""?>
 <TcPlcObject Version=""1.1.0.1"">
   <POU Name=""FB_UsesTc2System"" Id=""{00000000-0000-0000-0000-0000000000b0}"" SpecialFunc=""None"">

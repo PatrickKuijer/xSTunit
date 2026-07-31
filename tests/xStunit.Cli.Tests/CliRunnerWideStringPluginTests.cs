@@ -5,18 +5,10 @@ using Xunit;
 
 namespace xStunit.Cli.Tests
 {
-    // TcXunit-93l9 end-to-end: Tc2_Standard's WSTRING function set
-    // (WCONCAT/WDELETE/WFIND/WINSERT/WLEFT/WLEN/WMID/WREPLACE/WRIGHT) is
-    // compiled-only, like every TwinCAT library, and resolves only through the
-    // native-function plugin/registry path (TcXunit-6k2). Same shape as
-    // CliRunnerTc2StandardPluginTests (the narrow-STRING half, TcXunit-8po):
-    // the real plugin DLL is loaded through the CLI's --plugins loader rather
-    // than registered in process.
-    //
-    // WCONCAT *is* covered here, unlike CONCAT in the narrow suite: the
-    // interpreter's CONCAT intrinsic is dispatched by exact ordinal name match
-    // (Engine.Expressions.cs `call.MethodName == "CONCAT"`), which "WCONCAT"
-    // never hits, so a plugin WCONCAT is reachable rather than dead code.
+    // The WSTRING function set (WCONCAT/WDELETE/WFIND/WINSERT/WLEFT/WLEN/WMID/
+    // WREPLACE/WRIGHT) is compiled-only, like every TwinCAT library, so it
+    // resolves only through the plugin path - the wide half of what
+    // CliRunnerTc2StandardPluginTests covers for narrow STRING.
     public class CliRunnerWideStringPluginTests : IDisposable
     {
         private readonly string _pluginDir;
@@ -54,19 +46,16 @@ namespace xStunit.Cli.Tests
             Assert.DoesNotContain("Object reference not set", text);
             Assert.Contains("WLEN", text);
             // Same classification as the narrow suite's DELETE: an ALL-CAPS
-            // unresolved call from inside a suite reads as "looks like an IEC
-            // standard-library call" once the native-function registry has had
-            // - and missed - its chance to resolve it.
+            // unresolved call reads as an IEC standard-library name once the
+            // native-function registry has had - and missed - its chance at it.
             Assert.Contains("isn't supported yet (grow-on-demand", text);
         }
 
-        // The evidence behind implementing WCONCAT as a plugin function rather
-        // than closing it as already-resolved the way CONCAT was
-        // (TcXunit-8po.1): with no plugin loaded, a WCONCAT call reaches the
-        // *unresolved* path. Were an intrinsic handling it, this would have
-        // concatenated and passed instead. Locks in the reachability the
-        // plugin implementation depends on, so a future intrinsic named
-        // WCONCAT can't silently turn WConcatFunction into dead code.
+        // The interpreter's CONCAT intrinsic is dispatched on an exact name
+        // match, which "WCONCAT" never hits - so the plugin's WCONCAT is the
+        // only thing that can resolve it. Were an intrinsic to start shadowing
+        // that name, this call would quietly succeed here and the plugin
+        // function would become dead code.
         [Fact]
         public void Run_WithoutPlugins_LeavesWConcatUnresolvedRatherThanIntrinsicShadowed()
         {

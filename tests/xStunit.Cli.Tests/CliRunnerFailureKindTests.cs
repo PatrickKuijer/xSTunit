@@ -8,17 +8,15 @@ using Xunit;
 
 namespace xStunit.Cli.Tests
 {
-    // TcXunit-3tx.1: every failure class used to land in the same untyped
-    // `error` string, so a consuming agent could not tell "your PLC code is
-    // wrong" from "the interpreter is behind". The two cases demand opposite
-    // responses - rewrite the POU vs. stop and escalate - so the JSON now
-    // carries a machine-readable discriminator alongside the (unchanged)
-    // single-line error text.
+    // `kind` is the machine-readable discriminator that lets a consumer tell
+    // "your PLC code is wrong" from "the interpreter is behind" - two cases
+    // demanding opposite responses (rewrite the POU vs. stop and escalate) that
+    // are indistinguishable in the prose error string alone.
     //
-    // The fixtures here fault OUTSIDE any TEST()/TEST_FINISHED() bracket, which
-    // is what keeps a failure at suite level at all: a fault inside a bracket
-    // is charged to that test instead (TcXunit-3tx.3), and carries the same
-    // vocabulary on the failure - see CliRunnerTestBlastRadiusTests.
+    // Except where noted, the fixtures here fault OUTSIDE any
+    // TEST()/TEST_FINISHED() bracket, which is what keeps the failure at suite
+    // level: a fault inside a bracket is charged to that test instead, and
+    // carries the same vocabulary - see CliRunnerTestBlastRadiusTests.
     public class CliRunnerFailureKindTests : IDisposable
     {
         private readonly string _tempDir;
@@ -31,9 +29,9 @@ namespace xStunit.Cli.Tests
 
         public void Dispose() => Directory.Delete(_tempDir, recursive: true);
 
-        // The acceptance repro: 'SEL(TRUE, 1, 3)' is valid IEC 61131-3 and
-        // compiles in TwinCAT - the interpreter simply doesn't implement it
-        // yet, which must never be reported as a defect in the code under test.
+        // 'SEL(TRUE, 1, 3)' is valid IEC 61131-3 that the interpreter simply
+        // doesn't implement yet, which must never be reported as a defect in
+        // the code under test.
         [Fact]
         public void Run_UnsupportedNativeCall_ReportsUnsupportedConstructKindAndNamesTheConstruct()
         {
@@ -47,10 +45,8 @@ namespace xStunit.Cli.Tests
             Assert.Equal("SEL", suite.GetProperty("construct").GetString());
         }
 
-        // TcXunit-229.15 (BREAKING): suites[] used to spell these two
-        // `errorKind`/`errorConstruct` while the top-level error and every
-        // per-test failure spelled them `kind`/`construct`. One vocabulary, one
-        // pair of keys, at every level - the old keys are gone, not aliased.
+        // One pair of keys at every level: the earlier suite-only
+        // `errorKind`/`errorConstruct` spellings are gone, not aliased.
         [Fact]
         public void Run_SuiteError_UsesTheSameKindAndConstructKeysAsEveryOtherLevel()
         {
@@ -64,11 +60,10 @@ namespace xStunit.Cli.Tests
             Assert.False(suite.TryGetProperty("errorConstruct", out _));
         }
 
-        // TcXunit-229.15: the message is the whole brief. TcXunit's consumer is
-        // usually a model choosing its next edit from one JSON object, and
-        // "TcUnit native call 'SEL' isn't supported yet" states a fact without
-        // answering the only question that matters - which for THIS kind is the
-        // one an agent gets catastrophically wrong by default.
+        // The consumer is usually a model choosing its next edit from this one
+        // object, and its default move on any failure is to rewrite the POU -
+        // exactly the wrong response to an interpreter gap, so the message has
+        // to say so outright.
         [Fact]
         public void Run_UnsupportedNativeCall_ErrorMessageCarriesTheStopAndEscalateGuidance()
         {
@@ -82,8 +77,8 @@ namespace xStunit.Cli.Tests
             Assert.Contains("Never rewrite the POU", error);
         }
 
-        // Same run, opposite conclusion: the error string existing consumers
-        // (the VSIX results tree) read is untouched by the new fields.
+        // The structured fields are additive: the error string existing
+        // consumers render (the VSIX results tree) is untouched by them.
         [Fact]
         public void Run_UnsupportedNativeCall_PreservesSingleLineErrorText()
         {
@@ -96,9 +91,6 @@ namespace xStunit.Cli.Tests
             Assert.Contains("TcUnit native call 'SEL' isn't supported yet", error);
         }
 
-        // The other acceptance repro: a call to a method that genuinely does
-        // not exist is a real defect in the PLC code, and stays distinguishable
-        // from the unsupported-construct case above.
         [Fact]
         public void Run_MethodNotFound_ReportsPlcFaultKind()
         {
@@ -113,11 +105,10 @@ namespace xStunit.Cli.Tests
             Assert.Equal(JsonValueKind.Null, suite.GetProperty("construct").ValueKind);
         }
 
-        // TcXunit-2o9.1: the bug this ticket fixes. An unqualified call from a
-        // suite body used to be classified as unsupported-construct
-        // unconditionally - even a plain typo of one of the suite's own
-        // methods, which is a real, fixable defect and must classify the same
-        // as the qualified-call case above (plc-fault), not "STOP, escalate".
+        // An unresolved unqualified call from a suite body is reported as an
+        // unwired TcUnit API, but a plain typo of one of the suite's own
+        // methods is a real, fixable defect - so it has to classify like the
+        // qualified case above, not as "STOP, escalate".
         [Fact]
         public void Run_MisspelledUnqualifiedSuiteCall_ReportsPlcFaultKind()
         {
@@ -131,12 +122,10 @@ namespace xStunit.Cli.Tests
             Assert.Equal(JsonValueKind.Null, suite.GetProperty("construct").ValueKind);
         }
 
-        // The inverted failure mode, and the one that matters most: a run-time
-        // type error in the code under test is thrown as a plain
-        // NotSupportedException, the same base type the interpreter's own
+        // A run-time type error in the code under test is thrown as a plain
+        // NotSupportedException - the same base type the interpreter's own
         // grow-on-demand gaps use. Classifying on that base type would tell an
-        // agent to stop and escalate over its own bug, which is exactly as
-        // useless as not discriminating at all.
+        // agent to stop and escalate over its own bug.
         [Fact]
         public void Run_OperandTypeErrorInTheCodeUnderTest_IsPlcFaultNotUnsupportedConstruct()
         {
@@ -150,8 +139,6 @@ namespace xStunit.Cli.Tests
             Assert.Equal("plc-fault", suite.GetProperty("kind").GetString());
         }
 
-        // A passing suite carries no kind at all, rather than a sentinel a
-        // consumer would have to special-case.
         [Fact]
         public void Run_PassingSuite_HasNoErrorKind()
         {
@@ -163,9 +150,6 @@ namespace xStunit.Cli.Tests
             Assert.Equal(JsonValueKind.Null, suite.GetProperty("kind").ValueKind);
         }
 
-        // Run-level discovery failures use the same vocabulary, so a consumer
-        // reads `kind` the same way whether the run died before any suite ran
-        // or one suite failed inside it.
         [Fact]
         public void Run_NoSuitesFound_ReportsLoadErrorKindOnTheRunLevelError()
         {
@@ -178,12 +162,10 @@ namespace xStunit.Cli.Tests
             Assert.Equal("load-error", document.RootElement.GetProperty("kind").GetString());
         }
 
-        // TcXunit-229.15: the fifth kind. ST the front end can't read used to
-        // classify as plc-fault or load-error depending on nothing more than
-        // whether an ExecuteBody frame happened to stamp a location on the way
-        // out - and both answers were wrong. plc-fault says "your code is
-        // broken", which TcXunit does not know; load-error says "nothing ran",
-        // which is the container's story, not this body's.
+        // ST the front end can't read is neither of the two neighbouring kinds:
+        // plc-fault says "your code is broken", which we do not know, and
+        // load-error says "nothing ran", which is the container's story rather
+        // than this body's.
         [Fact]
         public void Run_UnreadableSt_ReportsParseErrorKind()
         {
@@ -197,9 +179,6 @@ namespace xStunit.Cli.Tests
             Assert.Equal("parse-error", suite.GetProperty("kind").GetString());
         }
 
-        // The offending token rides in `construct` - the field
-        // unsupported-construct already uses - so a consumer reads one pair of
-        // keys for every kind rather than learning a parse-error-only field.
         [Fact]
         public void Run_UnreadableSt_NamesTheOffendingTokenInTheSharedConstructField()
         {
@@ -211,9 +190,9 @@ namespace xStunit.Cli.Tests
             Assert.Equal("@", FirstSuite(output.ToString()).GetProperty("construct").GetString());
         }
 
-        // The message form TcXunit-229.9 settled on: say the body could not be
-        // READ, cite the line, and name BOTH possible causes rather than
-        // asserting one TcXunit cannot actually distinguish.
+        // Both possible causes have to be named: whether the body is beyond the
+        // supported subset or simply invalid ST is something we cannot
+        // distinguish, so the message must not assert either one.
         [Fact]
         public void Run_UnreadableSt_ErrorMessageCitesTheLineAndBothPossibleCauses()
         {
@@ -228,12 +207,9 @@ namespace xStunit.Cli.Tests
             Assert.Contains("STOP and escalate", error);
         }
 
-        // The acceptance criterion for the kind's own boundary: a parse-error
-        // is a failure of ONE BODY inside a suite that loaded, not a failure of
-        // the container - so its blast radius is the test that body was serving
-        // and the suite's other tests still report their own verdicts. This is
-        // exactly why it cannot be a load-error, whose contract is "nothing
-        // ran".
+        // A parse-error is a failure of ONE BODY inside a suite that loaded, so
+        // its blast radius is the test that body was serving - which is exactly
+        // why it cannot be a load-error, whose contract is "nothing ran".
         [Fact]
         public void Run_UnreadableStInOneTest_SiblingTestsInTheSameSuiteStillReportTheirVerdicts()
         {
@@ -264,23 +240,19 @@ namespace xStunit.Cli.Tests
             Assert.Equal("parse-error", failure.GetProperty("kind").GetString());
             Assert.Equal("@", failure.GetProperty("construct").GetString());
 
-            // The offending line, in the field an agent opens the source with -
-            // reusing bodyLine rather than adding a parse-error-only position
-            // field (TcXunit-229.15).
             Assert.Equal(2, failure.GetProperty("bodyLine").GetInt32());
         }
 
-        // TcXunit-4iop: the guidance carve-out used to be keyed on the KIND
-        // (`kind == FailureKind.Assertion`), which exempted every
-        // assertion-kind failure and made FailureKind.Guidance(Assertion) dead
-        // code. Only FB_TestSuite.Fail() has a verbatim contract, and it is the
-        // only path that fills expected/actual - a convergence failure fills
-        // neither, so it gets its kind's guidance like the other four.
+        // Only FB_TestSuite.Fail() has a verbatim-message contract that exempts
+        // it from carrying guidance, and it is the only path filling
+        // expected/actual. Keying that carve-out on the assertion KIND instead
+        // would exempt every assertion failure and make the assertion guidance
+        // dead code - a convergence failure compares nothing, so it must still
+        // carry it.
         //
-        // Unlike the other fixtures here, this one faults INSIDE a
-        // TEST()/TEST_FINISHED() bracket: that is what charges the fault to the
-        // test (TcXunit-3tx.3) and routes it through ToTestFailure, which is
-        // the exact path the old guard swallowed.
+        // This fixture faults INSIDE a TEST()/TEST_FINISHED() bracket, which is
+        // what routes it through the per-test failure path rather than the
+        // suite-level one the rest of this class uses.
         [Fact]
         public void Run_ConvergenceAssertion_CarriesTheAssertionGuidanceEvenThoughItsKindIsAssertion()
         {
@@ -327,11 +299,10 @@ END_VAR]]></Declaration>
   </POU>
 </TcPlcObject>";
 
-        // Called on a helper FB rather than bare: an UNQUALIFIED call a suite
-        // fails to resolve is deliberately reported as an unwired TcUnit API
-        // (TcXunit-6k2), so it would classify as unsupported-construct. A
-        // qualified call to a method a real POU genuinely doesn't have is the
-        // unambiguous plc-fault.
+        // Qualified on a helper FB rather than bare: an unqualified call is
+        // reported as an unwired TcUnit API and would classify as
+        // unsupported-construct, whereas a qualified call to a method a real
+        // POU genuinely lacks is the unambiguous plc-fault.
         private const string MethodNotFoundSuiteXml = @"<?xml version=""1.0"" encoding=""utf-8""?>
 <TcPlcObject Version=""1.1.0.1"">
   <POU Name=""FB_MissingMethodTests"" Id=""{00000000-0000-0000-0000-0000000000b2}"" SpecialFunc=""None"">
@@ -362,10 +333,9 @@ END_VAR]]></Declaration>
   </POU>
 </TcPlcObject>";
 
-        // Bare/unqualified (unlike MethodNotFoundSuiteXml's qualified
-        // 'helper.NoSuchMethod()'): names nothing the ancestry walk, the
-        // TcUnit stub (Assert*/TEST*/IS_TEST*), a POU or a native function
-        // resolves - a plain typo, not an unwired TcUnit API (TcXunit-2o9.1).
+        // Bare/unqualified, and names nothing the ancestry walk, the TcUnit stub
+        // (Assert*/TEST*/IS_TEST*), a POU or a native function resolves - a
+        // plain typo rather than an unwired TcUnit API.
         private const string UnqualifiedTypoSuiteXml = @"<?xml version=""1.0"" encoding=""utf-8""?>
 <TcPlcObject Version=""1.1.0.1"">
   <POU Name=""FB_TypoSuiteTests"" Id=""{00000000-0000-0000-0000-0000000000b5}"" SpecialFunc=""None"">
@@ -395,9 +365,9 @@ n := @ 2;]]></ST>
 </TcPlcObject>";
 
         // The unreadable body sits one call BELOW the TEST()/TEST_FINISHED()
-        // bracket, which is what leaves a test open to charge the fault to -
-        // the same containment TcXunit-3tx.3 built, reached by a parse failure
-        // instead of a run-time one.
+        // bracket, which is what leaves a test open for the fault to be charged
+        // to - the containment path a run-time fault takes, reached by a parse
+        // failure instead.
         private const string ParseErrorIsolationSuiteXml = @"<?xml version=""1.0"" encoding=""utf-8""?>
 <TcPlcObject Version=""1.1.0.1"">
   <POU Name=""FB_ParseIsolationTests"" Id=""{00000000-0000-0000-0000-0000000000b7}"" SpecialFunc=""None"">
@@ -436,9 +406,8 @@ TEST_FINISHED();]]></ST>
 </TcPlcObject>";
 
         // The master holds a value the ramping proxy never reaches within the
-        // cycle budget, so AssertConverges throws
-        // ConvergenceAssertionException - classified `assertion`
-        // (FailureClassifier) but raised nowhere near FB_TestSuite.Fail().
+        // cycle budget, so AssertConverges throws - an `assertion`-kind failure
+        // raised nowhere near FB_TestSuite.Fail().
         private const string ConvergenceSuiteXml = @"<?xml version=""1.0"" encoding=""utf-8""?>
 <TcPlcObject Version=""1.1.0.1"">
   <POU Name=""FB_ConvergenceTests"" Id=""{00000000-0000-0000-0000-0000000000c0}"" SpecialFunc=""None"">

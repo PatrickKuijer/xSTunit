@@ -6,8 +6,9 @@ using Xunit;
 
 namespace xStunit.Cli.Tests
 {
-    // --format json (prototype spike for a future VSIX/TcAgent tool window
-    // consuming structured results instead of parsing plain-text lines).
+    // The key names asserted here are a consumed wire contract - renaming one
+    // is invisible to the compiler and silently breaks every machine consumer
+    // reading structured results instead of the plain-text lines.
     public class CliRunnerJsonFormatTests : IDisposable
     {
         private readonly string _tempDir;
@@ -112,9 +113,9 @@ namespace xStunit.Cli.Tests
             var test = suite.GetProperty("tests")[0];
             Assert.False(test.GetProperty("passed").GetBoolean());
 
-            // The suite ran to completion (only the individual TEST() assertion
-            // failed), so it still reports a duration - distinct from the
-            // suite-load-failure path below, which never ran at all.
+            // The suite ran to completion - only the assertion inside it failed
+            // - so a duration is still meaningful, unlike the load-failure path
+            // below where nothing ran.
             var durationMs = suite.GetProperty("durationMs");
             Assert.Equal(JsonValueKind.Number, durationMs.ValueKind);
             Assert.True(durationMs.GetInt64() >= 0);
@@ -127,10 +128,6 @@ namespace xStunit.Cli.Tests
             Directory.CreateDirectory(brokenDir);
             try
             {
-                // Extends TcUnit.FB_TestSuite but references an unresolvable type in
-                // its default-value construction, so Engine's suite instantiation
-                // throws before RunSuite's stopwatch ever completes a suite run -
-                // exercising CliRunner.Run's suite-load-failure catch block.
                 File.WriteAllText(Path.Combine(brokenDir, "FB_BrokenSuiteTests.TcPOU"), BrokenSuiteXml);
 
                 var output = new StringWriter();
@@ -177,13 +174,10 @@ namespace xStunit.Cli.Tests
             Assert.Contains("unknown --format value", output.ToString());
         }
 
-        // Extends TcUnit.FB_TestSuite (so SuiteDiscovery picks it up) but its
-        // Implementation calls a method that doesn't exist anywhere in the
-        // suite's EXTENDS chain, which Engine.Invocation's method-resolution
-        // throws InvalidOperationException for (see "not found starting from
-        // type" in Engine.Invocation.cs) before RunSuite's stopwatch ever
-        // finishes a suite run - exercising CliRunner.Run's suite-load-failure
-        // catch block, distinct from a suite that ran but had a failing TEST().
+        // Discoverable as a suite, but its body calls a method that exists
+        // nowhere in the EXTENDS chain, so the run throws before any suite
+        // completes - the load-failure path, distinct from a suite that ran and
+        // had a failing TEST().
         private const string BrokenSuiteXml = @"<?xml version=""1.0"" encoding=""utf-8""?>
 <TcPlcObject Version=""1.1.0.1"">
   <POU Name=""FB_BrokenSuiteTests"" Id=""{00000000-0000-0000-0000-0000000000dd}"" SpecialFunc=""None"">

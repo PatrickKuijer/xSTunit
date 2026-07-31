@@ -78,9 +78,8 @@ namespace xStunit.Cli.Tests
         [Fact]
         public void Run_HelpImmediatelyAfterValueConsumingFlag_StillShowsHelp()
         {
-            // --plugins (like --format/--suite) otherwise consumes the very
-            // next token as its value - --help must still win here rather
-            // than being swallowed as a directory name.
+            // --plugins (like --format/--suite) consumes the very next token
+            // as its value, so --help has to be recognised before that.
             var output = new StringWriter();
 
             var exitCode = CliRunner.Run(new[] { "--plugins", "--help" }, output);
@@ -143,13 +142,9 @@ namespace xStunit.Cli.Tests
         [Fact]
         public void Run_LaterArgMissingPath_ReturnsTwoAndNamesThatPath()
         {
-            // The path-existence loop in CliRunner.Run walks all of args, not
-            // just args[0] (b22ecd27). A single-missing-path test can't tell
-            // a "check args[0] only" regression from a "check every arg"
-            // implementation, since both behave identically when args has
-            // one element. This exercises a valid first directory alongside
-            // an invalid second one, and asserts the second (missing) path
-            // is the one named in the error.
+            // Every input path is checked, not just the first: with one
+            // argument a "check args[0] only" implementation is
+            // indistinguishable from a correct one.
             var missingPath = Path.Combine(Path.GetTempPath(), "tcxunit-cli-missing-" + Guid.NewGuid());
 
             var output = new StringWriter();
@@ -165,16 +160,10 @@ namespace xStunit.Cli.Tests
         [Fact]
         public void Run_SameDirectoryPassedTwice_DeduplicatesAndPassesAllFour()
         {
-            // Locks in current behavior (coverage-only, TcXunit-drc): passing
-            // the same directory twice does NOT double-parse its files and
-            // does NOT trip DuplicatePouTypeException. MultiDirectoryPouLoader
-            // normalizes/de-duplicates the resolved file paths
-            // (DeduplicatePaths, 70f3196) before parsing, so repeating an
-            // input directory is a no-op union with itself, identical to
-            // passing it once. If a future change reintroduces per-file
-            // duplication for repeated input directories, this test should
-            // start failing (or start reporting duplicate-type errors)
-            // instead of silently passing.
+            // Repeating an input directory is a union with itself: the loader
+            // de-duplicates resolved paths before parsing, so the same file
+            // reached twice must not trip the duplicate-type error that a
+            // genuine name clash across directories does.
             var output = new StringWriter();
 
             var exitCode = CliRunner.Run(new[] { FixturePouDir, FixturePouDir }, output);
@@ -188,12 +177,9 @@ namespace xStunit.Cli.Tests
         [Fact]
         public void Run_SuiteDependsOnStructTypeFromTcDutFile_ResolvesAndPasses()
         {
-            // TcXunit-9li: `tcxunit run` previously built its TypeRegistry with
-            // no struct types at all (unlike SuiteCaseRunner.BuildRegistry),
-            // so any suite/FB depending on a STRUCT declared in a .TcDUT file
-            // failed to resolve via the CLI even though Test Explorer
-            // discovery worked. A suite referencing ST_Msg here must run and
-            // pass through the CLI entry point.
+            // The CLI builds its own TypeRegistry; if that registry omits
+            // STRUCTs declared in .TcDUT files, a suite depending on one fails
+            // to resolve here while Test Explorer discovery still works.
             var dir = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "tcxunit-cli-struct-" + Guid.NewGuid()));
             try
             {

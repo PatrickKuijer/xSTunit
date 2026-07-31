@@ -7,10 +7,9 @@ using Xunit;
 
 namespace xStunit.Cli.Tests
 {
-    // TcXunit-3tx.4: the CLI surface for the coverage work list. The vendored
-    // FbCounterFixture is the natural subject - FB_CounterTests exercises both
-    // FB_Counter and FB_ClampedCounter, so an uncovered POU has to be added to
-    // see the other half.
+    // FB_CounterTests already exercises every POU in the shared fixture, so an
+    // uncovered POU is added here to have both halves of the report to assert
+    // on.
     public class CliRunnerCoverageTests : IDisposable
     {
         private readonly string _tempDir;
@@ -36,7 +35,6 @@ namespace xStunit.Cli.Tests
             Assert.Equal(new[] { "FB_CounterTests" }, covered.GetProperty("suites").EnumerateArray().Select(s => s.GetString()));
         }
 
-        // The line that is the point: directly usable as an agent prompt.
         [Fact]
         public void Run_WithCoverage_JsonReportsAPouNoSuiteMentionsAsUncovered()
         {
@@ -72,8 +70,7 @@ namespace xStunit.Cli.Tests
             Assert.Contains("suites: (none)", text);
         }
 
-        // Coverage is a report, not a gate: an all-passing run with an
-        // uncovered POU still exits 0.
+        // Coverage is a report, not a gate.
         [Fact]
         public void Run_WithCoverage_UncoveredPouDoesNotChangeTheExitCode()
         {
@@ -84,7 +81,6 @@ namespace xStunit.Cli.Tests
             Assert.Equal(0, exitCode);
         }
 
-        // Opt-in: a run without the flag emits nothing extra, in either format.
         [Fact]
         public void Run_WithoutCoverage_EmitsNoCoverageSection()
         {
@@ -106,9 +102,9 @@ namespace xStunit.Cli.Tests
             Assert.DoesNotContain("suites:", output.ToString());
         }
 
-        // A tree with no suites is a usage error for a RUN, but for a work list
-        // it is the most informative answer there is: every POU in it is
-        // uncovered. Reporting nothing there would be exactly backwards.
+        // A tree with no suites is exit 2 for a run, but it is also the most
+        // informative coverage answer there is - every POU in it is uncovered -
+        // so the report still has to be emitted alongside the error.
         [Fact]
         public void Run_WithCoverage_TreeWithNoSuitesStillReportsEveryPouAsUncovered()
         {

@@ -5,9 +5,8 @@ using Xunit;
 
 namespace xStunit.Cli.Tests
 {
-    // Isolated temp-directory fixture (not the shared FB_Counter fixture,
-    // TcXunit-w5x.8) so a deliberately-failing suite doesn't pollute the
-    // real project's all-green state.
+    // Isolated temp-directory fixture rather than the shared FB_Counter one, so
+    // a deliberately-failing suite doesn't pollute its all-green state.
     public class CliRunnerFailureTests : IDisposable
     {
         private readonly string _tempDir;

@@ -7,10 +7,14 @@ using Xunit;
 
 namespace xStunit.Cli.Tests
 {
-    // TcXunit-3tx.3: a fault inside ONE test method used to abandon the entire
-    // suite - the remaining tests never ran and were not reported at all, so a
-    // consuming agent read passed:0 and concluded its change broke everything.
-    // Blast radius belongs to the test, not the suite.
+    // The blast radius of a fault is the test that was open when it happened,
+    // never the suite around it. If a faulting test could abandon its siblings,
+    // they would vanish from the report rather than fail in it - and a consumer
+    // reading passed:0 concludes its change broke everything, when in fact one
+    // test broke and the rest never ran.
+    //
+    // The boundary is the TEST()/TEST_FINISHED() bracket: with no test open
+    // there is nothing to charge the fault to, so it stays a suite-level error.
     public class CliRunnerTestBlastRadiusTests : IDisposable
     {
         private readonly string _tempDir;
@@ -23,8 +27,8 @@ namespace xStunit.Cli.Tests
 
         public void Dispose() => Directory.Delete(_tempDir, recursive: true);
 
-        // The acceptance repro, in the shape real TcUnit suites take: one
-        // METHOD per test, all called from the suite body.
+        // The shape real suites take: one METHOD per test, all called from the
+        // suite body.
         [Fact]
         public void Run_OneTestMethodFaults_OtherTestsInTheSameSuiteStillRunAndReport()
         {
@@ -40,8 +44,8 @@ namespace xStunit.Cli.Tests
             Assert.Equal(1, root.GetProperty("failed").GetInt32());
         }
 
-        // Every test is present in the report, including the faulted one -
-        // a test that vanishes is worse than a test that fails.
+        // A test that vanishes from the report is worse than a test that fails
+        // in it, so the faulted one has to appear too.
         [Fact]
         public void Run_OneTestMethodFaults_AllFourTestsAppearInTheReport()
         {
@@ -56,9 +60,8 @@ namespace xStunit.Cli.Tests
             Assert.Equal("Faults", faulted.GetProperty("name").GetString());
         }
 
-        // A fault absorbed into a test must NOT also be reported as a suite
-        // error - the suite ran to completion, so `error` stays null and the
-        // per-suite duration is real.
+        // Charging the fault twice - once to the test, once to the suite - would
+        // make one failure look like two; the suite did run to completion.
         [Fact]
         public void Run_OneTestMethodFaults_SuiteItselfReportsNoError()
         {
@@ -72,8 +75,6 @@ namespace xStunit.Cli.Tests
             Assert.NotEqual(JsonValueKind.Null, suite.GetProperty("durationMs").ValueKind);
         }
 
-        // A fault outside any TEST()/TEST_FINISHED() bracket has no test to
-        // charge it to, so it stays a suite-level error exactly as before.
         [Fact]
         public void Run_FaultOutsideAnyTestBracket_StaysASuiteLevelError()
         {
@@ -88,10 +89,11 @@ namespace xStunit.Cli.Tests
             Assert.Equal(0, suite.GetProperty("tests").GetArrayLength());
         }
 
-        // The other suite shape: TEST()/TEST_FINISHED() brackets written inline
-        // in the suite body. The statements still belonging to the faulted test
-        // must be abandoned - not run against a closed bracket - and the next
-        // TEST() must pick up cleanly.
+        // The other suite shape: brackets written inline in the suite body
+        // rather than one method per test. Here the statements after the fault
+        // are still textually in the same body, so they have to be abandoned
+        // with the test they belong to rather than run against a closed
+        // bracket.
         [Fact]
         public void Run_InlineBracketsInSuiteBody_FaultedTestFailsAndLaterBracketsStillRun()
         {
@@ -107,9 +109,9 @@ namespace xStunit.Cli.Tests
             Assert.Equal(JsonValueKind.Null, root.GetProperty("suites")[0].GetProperty("error").ValueKind);
         }
 
-        // The failure charged to the faulted test carries the same kind
-        // vocabulary as a suite-level error (TcXunit-3tx.1), so "the
-        // interpreter is behind" stays distinguishable wherever it surfaces.
+        // Containment must not cost the failure its classification: "the
+        // interpreter is behind" stays distinguishable from "your PLC code is
+        // wrong" whether it surfaces on a test or on a suite.
         [Fact]
         public void Run_UnsupportedConstructInsideOneTest_ChargesAnUnsupportedConstructFailureToThatTest()
         {

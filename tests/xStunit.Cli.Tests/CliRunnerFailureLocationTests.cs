@@ -6,10 +6,9 @@ using Xunit;
 
 namespace xStunit.Cli.Tests
 {
-    // TcXunit-p3t.1: a suite that throws used to log only its own name plus the
-    // raw exception message - nothing said which PLC POU/method was executing.
-    // The failure line (and the JSON suites[].error string, whose shape is
-    // unchanged) now names the innermost POU + method.
+    // A fault several frames deep must name the innermost PLC POU + method that
+    // was executing; the suite name and the raw exception message alone do not
+    // tell a reader which file to open.
     public class CliRunnerFailureLocationTests : IDisposable
     {
         private readonly string _tempDir;
@@ -33,13 +32,11 @@ namespace xStunit.Cli.Tests
             var text = output.ToString();
 
             Assert.Equal(1, exitCode);
-            // The "(" is where TcXunit-p3t.4's file line lands; this test still
-            // only pins the POU + method half of the location (the line itself
-            // is CliRunnerFailureLineTests' subject). TcXunit-3tx.3: the fault
-            // is inside an open TEST() bracket, so the FAIL line is that test's
-            // rather than the suite's - the location it carries is unchanged.
+            // The trailing "(" is where the line number lands; only the POU +
+            // method half is pinned here, the number itself being
+            // CliRunnerFailureLineTests' subject.
             Assert.Contains("ThisThrows: FAIL (FB_DeepHelper.Level3(", text);
-            // The original message is preserved verbatim after the location.
+            // The original message survives verbatim after the location.
             Assert.Contains("Method 'ThisMethodDoesNotExist' not found", text);
         }
 
@@ -55,9 +52,6 @@ namespace xStunit.Cli.Tests
             var suite = doc.RootElement.GetProperty("suites")[0];
             Assert.Equal("FB_NestedThrowTests", suite.GetProperty("name").GetString());
 
-            // TcXunit-3tx.3: contained into the open test, so the located
-            // message is failures[].message rather than suites[].error - still a
-            // plain string, still the same text.
             var message = suite.GetProperty("tests")[0].GetProperty("failures")[0].GetProperty("message");
             Assert.Equal(JsonValueKind.String, message.ValueKind);
             Assert.StartsWith("FB_DeepHelper.Level3(", message.GetString());

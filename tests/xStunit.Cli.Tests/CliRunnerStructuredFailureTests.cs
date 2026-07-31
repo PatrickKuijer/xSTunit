@@ -7,10 +7,10 @@ using Xunit;
 
 namespace xStunit.Cli.Tests
 {
-    // TcXunit-3tx.2: a per-test failure used to be a bare prose string, so
-    // everything a consumer needed had to be regexed back out of it - and the
-    // location wasn't in there to recover at all. With three asserts in one
-    // method there was no way to tell which one failed.
+    // A per-test failure carries its parts as fields, not just as prose a
+    // consumer would have to regex back apart - and the location is one of
+    // them, since prose alone cannot say which of three asserts in a method
+    // failed.
     public class CliRunnerStructuredFailureTests : IDisposable
     {
         private readonly string _tempDir;
@@ -36,9 +36,6 @@ namespace xStunit.Cli.Tests
             Assert.Equal("second assert", failure.GetProperty("assertMessage").GetString());
         }
 
-        // The point of the location: the suite method holds three asserts and
-        // only the middle one fails, so the reported line has to identify it
-        // rather than the method as a whole.
         [Fact]
         public void Run_SecondOfThreeAssertsFails_LocatesThatAssertNotTheMethod()
         {
@@ -49,8 +46,8 @@ namespace xStunit.Cli.Tests
             Assert.Equal(4, failure.GetProperty("bodyLine").GetInt32());
         }
 
-        // The raw .TcPOU XML line, for a consumer that opens the file directly
-        // rather than through the XAE editor - the same pairing suites[] has.
+        // The raw .TcPOU XML line, for a consumer opening the file directly
+        // rather than through the XAE editor.
         [Fact]
         public void Run_FailedAssert_AlsoReportsTheRawFileLine()
         {
@@ -59,8 +56,8 @@ namespace xStunit.Cli.Tests
             Assert.True(failure.GetProperty("line").GetInt32() > failure.GetProperty("bodyLine").GetInt32());
         }
 
-        // The formatted line survives verbatim: it is what text output prints
-        // and what the VSIX results tree renders.
+        // The formatted line is rendered verbatim by text output and by the
+        // VSIX results tree, so its wording is a contract rather than a detail.
         [Fact]
         public void Run_FailedAssert_StillCarriesTheFormattedMessageLine()
         {
@@ -71,7 +68,6 @@ namespace xStunit.Cli.Tests
                 failure.GetProperty("message").GetString());
         }
 
-        // Text output is driven by that same string, so it is unchanged.
         [Fact]
         public void Run_FailedAssert_TextOutputIsUnchanged()
         {
@@ -97,8 +93,9 @@ namespace xStunit.Cli.Tests
                 .Clone();
         }
 
-        // ThreeAsserts' body: TEST is body line 1, the first assert line 2, the
-        // failing one line 4.
+        // Body lines are what the bodyLine assertion above counts: TEST is 1,
+        // the first assert 2, and the deliberately-failing middle one 4 - so
+        // the blank lines in this fixture are load-bearing.
         private const string ThreeAssertSuiteXml = @"<?xml version=""1.0"" encoding=""utf-8""?>
 <TcPlcObject Version=""1.1.0.1"">
   <POU Name=""FB_ThreeAssertTests"" Id=""{00000000-0000-0000-0000-0000000000d0}"" SpecialFunc=""None"">

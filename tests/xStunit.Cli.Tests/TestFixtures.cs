@@ -3,16 +3,14 @@ using System.Runtime.CompilerServices;
 
 namespace xStunit.Cli.Tests
 {
-    // Resolves vendored fixture POUs (tests/Fixtures/...) relative to the
-    // calling test file instead of a machine-local external repo path
-    // (TcXunit-1ys).
     internal static class TestFixtures
     {
         public static string FbCounterFixtureDir([CallerFilePath] string callerFile = "") =>
             FixtureDir("FbCounterFixture", callerFile);
 
-        // Suite + helper POU that fault on a known, not-first body line
-        // (TcXunit-p3t.4).
+        // The fault sits on a deliberately not-first body line, so the
+        // line-number assertions that consume this fixture would pass
+        // vacuously if the reported line ever collapsed to 1.
         public static string FailingLineFixtureDir([CallerFilePath] string callerFile = "") =>
             FixtureDir("FailingLineFixture", callerFile);
 

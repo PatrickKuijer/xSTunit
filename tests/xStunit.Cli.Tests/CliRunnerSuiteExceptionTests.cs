@@ -5,9 +5,9 @@ using Xunit;
 
 namespace xStunit.Cli.Tests
 {
-    // TcXunit-mym.1: a suite that throws mid-run (unsupported ST construct)
-    // must not take the whole process down with it — other suites still
-    // report, and the throwing suite shows up as one readable FAIL line.
+    // A suite that throws mid-run must not take the process down with it: the
+    // other suites still report, and the throwing one shows up as a readable
+    // FAIL line rather than a crash.
     public class CliRunnerSuiteExceptionTests : IDisposable
     {
         private readonly string _tempDir;

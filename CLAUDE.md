@@ -155,8 +155,8 @@ broken if the test went red — not what the arrange/act/assert lines do. A
 regression test whose reason for existing is written down survives the refactor
 that would otherwise delete it as redundant.
 
-## Naming Constraints (rename in progress)
+## Naming Constraints
 
-Product name is `xStunit`; repo/package identity is renaming away from TwinCAT/Beckhoff-adjacent naming to avoid trademark confusion (epic TcXunit-tbih). `src/` namespaces, project names, and the solution file (`xStunit.sln`) are already renamed. Still open: `samples/` projects (TcXunit-tbih.6), a naming decision for our own classes that mirror Beckhoff file-format names like `TcPouParser` (TcXunit-tbih.3), and the repo directory/GitHub repo rename itself, done last (TcXunit-tbih.10).
+The product is named `xStunit`, deliberately distinct from TwinCAT/Beckhoff-adjacent naming to avoid trademark confusion.
 
 Do NOT reuse the `Tc`/`TC` namespace or Beckhoff's own naming conventions (`Tc2_*`, `TcPOU`, `Tc*` prefixes, etc.) in any NEW identifier — namespaces, project names, class names, file names, CLI flags, config keys. If a new type needs to reference a TwinCAT/Beckhoff concept, name it after the IEC 61131-3 or domain concept instead (e.g. `BistableLatchHost`, not `TcBistableHost`).

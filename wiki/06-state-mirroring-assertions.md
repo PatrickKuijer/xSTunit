@@ -1,7 +1,7 @@
 # State-mirroring assertions: AssertConverges / AssertConvergesAndLatches
 
 Status: **built**. Source: `Engine.AssertConverges`/`AssertConvergesAndLatches`
-in `src/TcXunit.Interpreter/Engine.cs`, dispatched as a native call
+in `src/xStunit.Interpreter/Engine.cs`, dispatched as a native call
 (same boundary as `StepCycles`) when a suite/fixture calls either name
 with 4 positional args. Landed `TcXunit-w5x.15.9`.
 

@@ -2,8 +2,8 @@
 
 Status: **built**. Tickets: `TcXunit-w5x.15.5` (Loopback/Transmit),
 `TcXunit-w5x.15.8` (fault vocabulary). Source:
-`src/TcXunit.Interpreter/LoopbackHost.cs`. Tests:
-`tests/TcXunit.Interpreter.Tests/LoopbackFaultTests.cs`,
+`src/xStunit.Interpreter/LoopbackHost.cs`. Tests:
+`tests/xStunit.Interpreter.Tests/LoopbackFaultTests.cs`,
 `LoopbackTests.cs`.
 
 ## Shape

@@ -20,17 +20,17 @@
 ## Verdict in one paragraph
 
 Statement coverage is nearly free — a per-statement execution hook already
-exists at `src/TcXunit.Interpreter/Engine/Engine.Statements.cs:26`, firing
+exists at `src/xStunit.Interpreter/Engine/Engine.Statements.cs:26`, firing
 exactly once per executed statement in every body. Branch coverage is cheap:
 three or four local edits at sites that already exist. MC-DC is not the next
 notch on the same dial — it needs a stable per-condition **identity scheme**
 that does not exist anywhere in the codebase today, because `Expr.Line` is the
 line of the token that *starts* an expression and every condition in
 `IF a AND b OR c THEN` therefore shares one line
-(`src/TcXunit.Interpreter/Parsing/Expr.cs:6-12`). Separately: **the hard part of
+(`src/xStunit.Interpreter/Parsing/Expr.cs:6-12`). Separately: **the hard part of
 any coverage level is the denominator, not the numerator** — bodies are parsed
 lazily and cached by body *text*
-(`src/TcXunit.Interpreter/Types/TypeRegistry.cs:41,123-131`), so an
+(`src/xStunit.Interpreter/Types/TypeRegistry.cs:41,123-131`), so an
 un-executed body is never parsed and its statement count is unknown at end of
 run. On the commercial question, the recommendation is **no**: the
 safety-evidence thesis does not survive its own bear case while
@@ -38,7 +38,7 @@ safety-evidence thesis does not survive its own bear case while
 because the fidelity claim it rests on is currently unbacked by any evidence at
 all. The wedge that does survive is the one the code already states in its own
 comments: coverage as the **agent's work list and self-check** inside the
-edit/run/iterate loop (`src/TcXunit.Interpreter/Discovery/SuiteCoverage.cs:12-15`).
+edit/run/iterate loop (`src/xStunit.Interpreter/Discovery/SuiteCoverage.cs:12-15`).
 
 ---
 
@@ -61,7 +61,7 @@ itself. The rest of §A is organized around that.
 statement passes, and it already writes a per-statement marker:
 
 ```csharp
-// src/TcXunit.Interpreter/Engine/Engine.Statements.cs:16-26
+// src/xStunit.Interpreter/Engine/Engine.Statements.cs:16-26
 private void ExecuteStatement(Stmt stmt, Frame frame)
 {
     // TcXunit-p3t.4: the frame's "you are here" marker, at statement
@@ -121,7 +121,7 @@ cannot produce it, for three compounding reasons.
 2. **Eagerly parsing every loaded body — the obvious fix — will throw on the
    POUs today's laziness never touches.** The grammar is grow-on-demand by
    policy (`CLAUDE.md`, `README.md:11`), and the front end raises
-   `FormatException` from at least 15 sites in `src/TcXunit.Interpreter/Parsing/Parser.cs`
+   `FormatException` from at least 15 sites in `src/xStunit.Interpreter/Parsing/Parser.cs`
    (`:48,151,170,178,201,218,233,245,251,264,270,283,288,301,323`). Post-
    `TcXunit-229.9` those are nameable as `parse-error`; that does not make them
    parseable. So an eager denominator pass converts a currently-silent condition
@@ -131,7 +131,7 @@ cannot produce it, for three compounding reasons.
 
 3. **Whole files are already dropped before parsing ever starts.**
    `CliRunner` parses each `*.TcPOU` individually and skips unloadable ones
-   rather than aborting (`src/TcXunit.Cli/CliRunner.cs:209-226`; rationale at
+   rather than aborting (`src/xStunit.Cli/CliRunner.cs:209-226`; rationale at
    `:197-207`; `README.md:45`). A skipped file contributes nothing to either
    numerator or denominator and *is not visible in a percentage at all*.
 
@@ -239,7 +239,7 @@ descending order of how badly they hurt:
 ### A5. What happens to the existing `--coverage` flag
 
 Today `--coverage` is a **reference** list, not execution coverage:
-`SuiteCoverage.Analyze` (`src/TcXunit.Interpreter/Discovery/SuiteCoverage.cs:27-52`)
+`SuiteCoverage.Analyze` (`src/xStunit.Interpreter/Discovery/SuiteCoverage.cs:27-52`)
 matches each non-suite POU's type name, whole-word and case-insensitively,
 against each suite's comment-stripped concatenated text
 (`:41-44,69-70`). It emits one entry per non-suite POU with the suites that
@@ -250,7 +250,7 @@ and it deliberately never affects the exit code (`CliRunner.cs:56-59`,
 no suites is the tree where everything is uncovered (`CliRunner.cs:308-316`).
 
 The code already anticipates this ticket: *"Real line/branch coverage through
-the interpreter is a later and much larger step (unusually cheap for TcXunit
+the interpreter is a later and much larger step (unusually cheap for xStunit
 compared with any on-target tool, since the engine already walks every
 statement), and would replace this rule without changing its shape"*
 (`SuiteCoverage.cs:19-21`).
@@ -272,7 +272,7 @@ Reasoning:
 - The wire format should grow additively:
   `{pou, suites[], statements: {covered, total} | null, instrumentable: bool}`.
   `pou` and `suites` keep their exact current shape. **This is safe for the
-  VSIX**: `src/TcXunit.Vsix/TcXunit.Vsix.csproj` has no `ProjectReference` at
+  VSIX**: `src/xStunit.Vsix/xStunit.Vsix.csproj` has no `ProjectReference` at
   all and targets `v4.7.2` (`:35`) — it consumes the CLI's JSON out-of-process
   via `TcxunitArgumentBuilder`/`TcxunitProcessRunner`/`TcxunitModels`, and
   `TcxunitModels.cs` models no coverage type whatsoever (nor, incidentally,
@@ -376,7 +376,7 @@ safety-evidence tooling is a machine builder or component maker inside a
 functional-safety programme, and such a programme names its toolchain in its
 safety plan and agrees it with its assessor. Introducing a new, unqualified
 tool costs that buyer an assessment conversation — a cost they will not pay to
-save minutes. Meanwhile the user who feels TcXunit's actual pain is the one
+save minutes. Meanwhile the user who feels xStunit's actual pain is the one
 described in `README.md:7`: a PLC codebase with *no automated test harness at
 all*, validated by hand-built loopback FBs and commissioning. By construction,
 that user has no functional-safety programme to sell evidence into.
@@ -477,7 +477,7 @@ follow. None of these is decided.
    grammar gets worse.
 5. **Subsume the existing `--coverage` by adding fields, keeping `pou` and
    `suites` byte-identical, with no second flag?** — *Recommend yes.* The VSIX
-   parses this JSON out-of-process (`TcXunit.Vsix.csproj:35`, no
+   parses this JSON out-of-process (`xStunit.Vsix.csproj:35`, no
    `ProjectReference`), so additive is free and renames are not; and the two
    signals are only useful together.
 6. **Keep "coverage never affects the exit code"?** — *Recommend yes.* Gating is
@@ -506,7 +506,7 @@ Continues the `TcXunit-229` thread. `docs/research/tf1140-audit.md` and
 decision that feeds `229.6`'s parse-superset/execute-time split — which is what
 makes `parse-error` a nameable kind and therefore what makes
 `instrumentable: false` reportable with a reason instead of a shrug. The
-STruC++ audit's finding that TcXunit's control-flow statement set already
+STruC++ audit's finding that xStunit's control-flow statement set already
 matches a serious independent ST implementation almost exactly
 (`struccpp-notes.md:37-45`) is the reason statement and branch coverage are
 cheap here: the statement surface is not the gap. Companion draft:

@@ -1,7 +1,7 @@
 # Test suite basics
 
-Status: **built**. Source: `src/TcXunit.Runner/TcUnitStub/FB_TestSuite.cs`,
-`src/TcXunit.Interpreter/TcUnitSuiteHost.cs`. Working example:
+Status: **built**. Source: `src/xStunit.Runner/TcUnitStub/FB_TestSuite.cs`,
+`src/xStunit.Interpreter/Hosts/SuiteHost.cs`. Working example:
 `tests/Fixtures/FbCounterFixture/FB_CounterTests.TcPOU`.
 
 ## Shape
@@ -51,7 +51,7 @@ TEST_FINISHED();
 - Assertions available today: `AssertTrue`, `AssertFalse`,
   `AssertEquals_INT`, `AssertEquals_BOOL`, `AssertEquals_STRING`,
   `AssertEquals_REAL(Expected, Actual, Delta, Message)` (see
-  `FB_TestSuite.cs`/`TcUnitSuiteHost.cs` for the full native-stub surface).
+  `FB_TestSuite.cs`/`SuiteHost.cs` for the full native-stub surface).
   `AssertEquals_INT` compares as signed 16-bit (matching IEC 61131-3
   `INT`); `AssertTrue`/`AssertFalse` delegate to `AssertEquals_BOOL`
   internally, so their failure message carries the same EXP/ACT detail.
@@ -97,7 +97,7 @@ END_IF
 ## CLI
 
 ```bash
-dotnet run --project src/TcXunit.Cli -- run <path-to-POUs-directory>
+dotnet run --project src/xStunit.Cli -- run <path-to-POUs-directory>
 ```
 
 Exit codes: `0` all pass, `1` any fail, `2` usage/discovery error.

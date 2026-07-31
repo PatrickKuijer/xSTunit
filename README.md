@@ -1,10 +1,10 @@
-# TcXunit
+# xStunit
 
 xUnit-style test runner for TwinCAT/IEC 61131-3 PLC code, inspired by TcUnit. Discovers `TcUnit.FB_TestSuite`-derived function blocks in a folder of `.TcPOU` files, interprets their structured-text bodies, and reports pass/fail — no TwinCAT runtime required.
 
 ## Why
 
-PLC/TwinCAT codebases typically have no automated test harness: everything is validated by hand-built loopback simulation FBs or by commissioning on real controllers. TcXunit closes that gap by parsing and executing ST directly, so scan-cycle-based state machines can be tested deterministically (no wall-clock waits, no hardware).
+PLC/TwinCAT codebases typically have no automated test harness: everything is validated by hand-built loopback simulation FBs or by commissioning on real controllers. xStunit closes that gap by parsing and executing ST directly, so scan-cycle-based state machines can be tested deterministically (no wall-clock waits, no hardware).
 
 ## Status
 
@@ -14,12 +14,12 @@ Early / grow-on-demand. The parser and interpreter cover only the constructs exe
 
 ```
 src/
-  TcXunit.Parser        Parses .TcPOU XML files into a POU/method AST (TcPouParser)
-  TcXunit.Interpreter    Lexer/Parser/Engine that executes ST statement bodies over
+  xStunit.Parser        Parses .TcPOU XML files into a POU/method AST (TcPouParser)
+  xStunit.Interpreter    Lexer/Parser/Engine that executes ST statement bodies over
                          a Cell-based value model; TypeRegistry + SuiteDiscovery find
                          suites by walking EXTENDS ancestry to TcUnit.FB_TestSuite
-  TcXunit.Runner         TcUnit native-method stub boundary (assertions, suite host)
-  TcXunit.Cli            `tcxunit <path>` entry point (CliRunner is the testable core)
+  xStunit.Runner         TcUnit native-method stub boundary (assertions, suite host)
+  xStunit.Cli            `xstunit <path>` entry point (CliRunner is the testable core)
 tests/                  xUnit tests per project, mirroring src/
 ```
 
@@ -30,19 +30,19 @@ Design convention (see comments in `Engine.cs`/`Lexer.cs`): the interpreter is h
 Requires the .NET SDK (targets `net8.0` for the CLI, `netstandard2.0` for the interpreter/runner/parser libraries).
 
 ```bash
-dotnet build TcXunit.sln
-dotnet test TcXunit.sln
+dotnet build xStunit.sln
+dotnet test xStunit.sln
 ```
 
 ## Usage
 
 ```bash
-dotnet run --project src/TcXunit.Cli -- <path-to-POUs-directory>
+dotnet run --project src/xStunit.Cli -- <path-to-POUs-directory>
 ```
 
-Scans `<path>` recursively for `*.TcPOU` files, finds any FB type that extends `TcUnit.FB_TestSuite` (directly or transitively), and runs its test methods. Exit code is `0` if all tests pass, `1` if any fail, `2` on usage/discovery errors. Multiple directory args are supported: TcXunit unions the POU sets from each, and errors out if duplicate type names collide across directories.
+Scans `<path>` recursively for `*.TcPOU` files, finds any FB type that extends `TcUnit.FB_TestSuite` (directly or transitively), and runs its test methods. Exit code is `0` if all tests pass, `1` if any fail, `2` on usage/discovery errors. Multiple directory args are supported: xStunit unions the POU sets from each, and errors out if duplicate type names collide across directories.
 
-Files TcXunit can't load — POUs outside the v1 parse subset (`Tc2_System`, `__NEW`, …), malformed XML, unsupported DUT/GVL shapes — are **skipped and reported individually** (`skipped: <path> (<reason>)`, plus a skip count in the summary line) rather than aborting the run, so a real production tree still runs every suite it can. Skips don't change the exit code: a run that completed with skips is still `0`/`1` by test outcome, distinct from the `2` reserved for usage/discovery errors that produced no results at all.
+Files xStunit can't load — POUs outside the v1 parse subset (`Tc2_System`, `__NEW`, …), malformed XML, unsupported DUT/GVL shapes — are **skipped and reported individually** (`skipped: <path> (<reason>)`, plus a skip count in the summary line) rather than aborting the run, so a real production tree still runs every suite it can. Skips don't change the exit code: a run that completed with skips is still `0`/`1` by test outcome, distinct from the `2` reserved for usage/discovery errors that produced no results at all.
 
 A fault inside a test — an unsupported construct, a call to a method that doesn't exist — **fails that test and lets the rest of the suite run**. Only a fault outside any `TEST()`/`TEST_FINISHED()` bracket fails the suite as a whole.
 
@@ -54,8 +54,8 @@ Every failure carries a machine-readable `kind`, so a consumer can tell the case
 | --- | --- | --- |
 | `assertion` | An assert compared values and they differed | Fix the code under test, or the expectation |
 | `plc-fault` | Interpreted ST faulted at run time | Fix the code under test |
-| `unsupported-construct` | Valid IEC 61131-3 that TwinCAT compiles and TcXunit doesn't implement yet, named by the throw site | **Stop** — escalate; never rewrite the POU to make this pass |
-| `parse-error` | The lexer/parser couldn't read a body at all — either ST beyond TcXunit's subset, or invalid ST | Open the cited line; fix it if genuinely malformed, **stop** and escalate if it looks like valid ST |
+| `unsupported-construct` | Valid IEC 61131-3 that TwinCAT compiles and xStunit doesn't implement yet, named by the throw site | **Stop** — escalate; never rewrite the POU to make this pass |
+| `parse-error` | The lexer/parser couldn't read a body at all — either ST beyond xStunit's subset, or invalid ST | Open the cited line; fix it if genuinely malformed, **stop** and escalate if it looks like valid ST |
 | `load-error` | The container failed — file/XML unreadable, no suites discovered, instantiation failed; nothing ran | Fix the invocation or the tree |
 
 That distinction is the point: without it, an agent seeing a non-empty error deletes a correct `SEL()` call to make a test "pass" and reports success. **`kind` and `construct` are the same two keys at every level** — the top-level error, each suite-level error, and each per-test failure. Per-test failures additionally carry the structured detail behind the message — `assert`, `expected`, `actual`, `assertMessage`, and the location (`pou`, `method`, `bodyLine`, `line`), so which of several asserts in a method failed is unambiguous. `construct` names the unimplemented construct for an `unsupported-construct` (e.g. `SEL`) and the offending token for a `parse-error`; a `parse-error`'s position reuses `bodyLine`/`line` rather than adding a field.
@@ -72,12 +72,12 @@ Pass `--coverage` to additionally list every non-suite POU with the suites exerc
 
 TwinCAT library functions (`Tc2_Utilities.F_CheckSum16`, `Tc2_Standard.F_ToUpper`, …) ship compiled-only — no `.TcPOU` to parse, so a suite that calls one can't resolve it from source. A native-function plugin supplies the behavior from outside the interpreter, so vendor/in-house library implementations don't have to live in this repo.
 
-Implement `ITcXunitNativeFunction` (`src/TcXunit.Interpreter/Extensibility/ITcXunitNativeFunction.cs`) against `TcXunit.Interpreter` referenced with `Private="false"`:
+Implement `IXstunitNativeFunction` (`src/xStunit.Interpreter/Extensibility/IXstunitNativeFunction.cs`) against `xStunit.Interpreter` referenced with `Private="false"`:
 
 ```csharp
-using TcXunit.Interpreter.Extensibility;
+using xStunit.Interpreter.Extensibility;
 
-public sealed class CheckSum16Function : ITcXunitNativeFunction
+public sealed class CheckSum16Function : IXstunitNativeFunction
 {
     public string Name => "F_CheckSum16";   // matched case-insensitively
 
@@ -100,10 +100,10 @@ Build the plugin project and point the CLI at its output directory:
 
 ```bash
 dotnet build samples/TcXunit.SamplePlugins -c Release
-tcxunit run <path-to-POUs> --plugins samples/TcXunit.SamplePlugins/bin/Release/netstandard2.0
+xstunit run <path-to-POUs> --plugins samples/TcXunit.SamplePlugins/bin/Release/netstandard2.0
 ```
 
-Every `*.dll` in the directory is scanned for `ITcXunitNativeFunction` implementations with a public parameterless constructor; a DLL that isn't managed, fails type load, or collides on a function name already registered is skipped and reported — never fatal. Registered functions are consulted last (after intrinsics, methods, and real `FUNCTION` POUs), so a plugin only fills a hole that would otherwise be an error — it can never shadow real source. The VSIX forwards a `plugins` directory from `tcxunit.json` the same way.
+Every `*.dll` in the directory is scanned for `IXstunitNativeFunction` implementations with a public parameterless constructor; a DLL that isn't managed, fails type load, or collides on a function name already registered is skipped and reported — never fatal. Registered functions are consulted last (after intrinsics, methods, and real `FUNCTION` POUs), so a plugin only fills a hole that would otherwise be an error — it can never shadow real source. The VSIX forwards a `plugins` directory from `xstunit.json` the same way.
 
 Full worked example, argument/return type table, and guarantees: [`samples/TcXunit.SamplePlugins/README.md`](samples/TcXunit.SamplePlugins/README.md) (epic TcXunit-rl4).
 

@@ -1,8 +1,8 @@
 # Scan-cycle stepping: StepCycles
 
 Status: **built**. Ticket: `TcXunit-w5x.15.4`. Source:
-`src/TcXunit.Interpreter/Engine.cs` (`StepCycles` case in the method-call
-dispatch), `FbInstance.cs`. Tests: `tests/TcXunit.Interpreter.Tests/StepCyclesTests.cs`.
+`src/xStunit.Interpreter/Engine.cs` (`StepCycles` case in the method-call
+dispatch), `FbInstance.cs`. Tests: `tests/xStunit.Interpreter.Tests/StepCyclesTests.cs`.
 
 ## What it does
 

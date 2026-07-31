@@ -3,7 +3,7 @@
 Status: **built**. Source: `Engine.cs` (`EvaluateBinary`/
 `EvaluatePointerArithmetic`, `MemCopy`/`MemSet`, index-expression
 handling), `ArrayIndexingTests.cs`, `PointerArithmeticTests.cs` in
-`tests/TcXunit.Interpreter.Tests`. Landed as one arc: array indexing
+`tests/xStunit.Interpreter.Tests`. Landed as one arc: array indexing
 (`TcXunit-sej.1`) -> pointer arithmetic (`TcXunit-sej.2`) ->
 MEMCPY/MEMSET/MEMMOVE (`TcXunit-sej.3`), each a prerequisite for the
 next.

@@ -4,7 +4,7 @@ Status: **built**. `TcXunit-w5x.15.6` (STRUCT/ARRAY type) and
 `TcXunit-w5x.15.10` (boundary builder + `Transmit` struct clone) both
 landed. Source: `StructDeclParser.cs`, `ArrayTypeInfo.cs`,
 `StructBoundaryBuilder.cs`, `IecNumericType.cs`, `StringTypeInfo.cs`,
-`CellCloner.cs` in `src/TcXunit.Interpreter`.
+`CellCloner.cs` in `src/xStunit.Interpreter`.
 
 ## STRUCT/ARRAY (15.6)
 

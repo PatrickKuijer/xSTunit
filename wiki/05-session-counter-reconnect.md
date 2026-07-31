@@ -1,7 +1,7 @@
 # Session/generation-counter reconnect simulation
 
 Status: **built as a pattern** — demonstrated in
-`tests/TcXunit.Interpreter.Tests/LoopbackReconnectSessionTests.cs`
+`tests/xStunit.Interpreter.Tests/LoopbackReconnectSessionTests.cs`
 (ticket `TcXunit-w5x.15.11`). No new API is needed; it composes
 [Loopback](04-loopback-and-faults.md)'s `Drop`/`Restore` with an ordinary
 `VAR` field on the FB under test.

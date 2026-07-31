@@ -1,4 +1,4 @@
-# TF1140 (Beckhoff TC3 Unit Test) sample audit vs TcXunit parser/discovery
+# TF1140 (Beckhoff TC3 Unit Test) sample audit vs xStunit parser/discovery
 
 - Issue: `TcXunit-229.2` (part of epic `TcXunit-229`, feeds `TcXunit-229.7` and `TcXunit-229.8`).
 - Source audited: `https://github.com/Beckhoff/TF1140_Sample.git`, cloned shallow
@@ -10,12 +10,12 @@
 
 ## Verdict: **mismatch** (not a partial-compat case — structural, at three independent layers)
 
-TF1140's official sample authors test POUs in a shape TcXunit's current
+TF1140's official sample authors test POUs in a shape xStunit's current
 parser + discovery pipeline cannot recognize as tests at all, let alone run.
 Given an unmodified TF1140 `UnitTest` folder, `tcxunit run <path>` would parse
 every `.TcPOU` successfully (nothing trips `TcPouParser`'s rejected-construct
 list) but **discovery would find zero suites** and the CLI would exit `2`
-with `no TcUnit suites found under <path>` (`src/TcXunit.Cli/CliRunner.cs:270`).
+with `no TcUnit suites found under <path>` (`src/xStunit.Cli/CliRunner.cs:270`).
 This isn't a naming quirk fixable by a regex tweak — it's three compounding
 divergences from what `TcXunit-w5x.7`'s discovery convention (walking
 `EXTENDS` ancestry to the literal string `TcUnit.FB_TestSuite`) assumes:
@@ -31,14 +31,14 @@ divergences from what `TcXunit-w5x.7`'s discovery convention (walking
    methods.** Each TF1140 `FB_Test*` is one scenario with its logic inline in
    the FB's own top-level body (no methods except a `CleanUp` lifecycle hook)
    — there is no `TEST('name')` / `TEST_FINISHED()` bracketing convention at
-   all. TcXunit's model is one suite FB containing N test methods, each
+   all. xStunit's model is one suite FB containing N test methods, each
    opening/closing a `TEST()` bracket.
 3. **A different, and not textually compatible, assertion/registration
    surface.** TF1140 calls bare `AssertEqual(expected:=.., actual:=..,
-   message:=..)` and `Succeeded()`; TcXunit's native-call dispatch table only
+   message:=..)` and `Succeeded()`; xStunit's native-call dispatch table only
    recognizes `AssertEquals` (with a trailing "s") / `AssertEquals_<TYPE>` /
    `AssertTrue` / `AssertFalse` / the `TEST*` family
-   (`src/TcXunit.Interpreter/Hosts/NativeMethodBridge.cs:57-58`). `AssertEqual`
+   (`src/xStunit.Interpreter/Hosts/NativeMethodBridge.cs:57-58`). `AssertEqual`
    and `Succeeded` are not in that table, so even if discovery were somehow
    patched to treat `FB_TestCaseBase` as a suite root, the interpreter would
    still fail to resolve those calls as anything but ordinary (missing)
@@ -47,7 +47,7 @@ divergences from what `TcXunit-w5x.7`'s discovery convention (walking
    `VAR` in a `PROGRAM MAIN` and run via a single call to
    `Tc3_PlcTestFramework.TestController.TestCtrl()`, which is presumably a
    compiled reflection/registration mechanism internal to the (closed-source)
-   framework, not something expressible as ST source TcXunit could interpret.
+   framework, not something expressible as ST source xStunit could interpret.
 
 None of this means TF1140-shaped tests are unrunnable in principle — it means
 supporting them is a second, separate discovery+dispatch convention, not a
@@ -88,15 +88,15 @@ returns exactly 9 files — 5 non-test FBs in `MyLib`/`SampleLib`, `MAIN.TcPOU`,
 and the 4 `FB_Test*` cases; no `FB_TestCaseBase.TcPOU` or
 `TestController.TcPOU`). The base type is a compiled/binary library
 dependency, resolved only inside real TwinCAT — exactly analogous to how
-TcXunit treats `TcUnit.FB_TestSuite` as a "native stub boundary" it never
+xStunit treats `TcUnit.FB_TestSuite` as a "native stub boundary" it never
 expects to parse (comment at
-`src/TcXunit.Interpreter/Types/TypeRegistry.cs:6-8`), just under a different
+`src/xStunit.Interpreter/Types/TypeRegistry.cs:6-8`), just under a different
 qualified name and shape.
 
-**TcXunit side** — the parser extracts the base type name via regex:
+**xStunit side** — the parser extracts the base type name via regex:
 
 ```csharp
-// src/TcXunit.Parser/Loaders/TcPouParser.cs:11-13
+// src/xStunit.Parser/Loaders/TcPouParser.cs:11-13
 private static readonly Regex ExtendsPattern = new Regex(
     @"FUNCTION_BLOCK(?:\s+(?:ABSTRACT|FINAL))*\s+\S+\s+EXTENDS\s+(?<baseType>[\w.]+)",
     RegexOptions.Compiled);
@@ -111,7 +111,7 @@ Discovery is where it breaks. `SuiteDiscovery.IsSuiteType` walks the ancestry
 chain looking for the literal string `TcUnit.FB_TestSuite`:
 
 ```csharp
-// src/TcXunit.Interpreter/Discovery/SuiteDiscovery.cs:11,16-32
+// src/xStunit.Interpreter/Discovery/SuiteDiscovery.cs:11,16-32
 private const string TestSuiteBaseType = "TcUnit.FB_TestSuite";
 ...
 public static bool IsSuiteType(TypeRegistry registry, string typeName)
@@ -177,7 +177,7 @@ its body is a single call: `Tc3_PlcTestFramework.TestController.TestCtrl();`
 — an opaque, compiled entry point, not ST source describing how the 4
 instances get run/aggregated.
 
-**TcXunit side** — per `wiki/01-test-suite-basics.md:9-11` and the working
+**xStunit side** — per `wiki/01-test-suite-basics.md:9-11` and the working
 fixture `tests/Fixtures/FbCounterFixture/FB_CounterTests.TcPOU`, one suite FB
 contains N test *methods*, and the suite's own top-level body explicitly
 calls each in order:
@@ -198,7 +198,7 @@ for `CounterStartsAtZero`). There is no analog to `MAIN` + `TestController` —
 discovery is purely structural (ancestry), and running is purely "call the
 suite FB's `Body()`", per `TcUnitSuiteHost.Body()` being a deliberate no-op
 that the interpreter drives directly
-(`src/TcXunit.Interpreter/Hosts/TcUnitSuiteHost.cs:12-16`).
+(`src/xStunit.Interpreter/Hosts/TcUnitSuiteHost.cs:12-16`).
 
 Net effect: even a hypothetical patch that recognized `FB_TestCaseBase` as a
 suite root would still need to reinterpret "1 FB with a bare top-level body"
@@ -216,10 +216,10 @@ names, no trailing "s" on the call name), followed by an explicit
 `TestController` (not visible in source) to know when fast-mode teardown is
 done.
 
-**TcXunit side** — `NativeMethodBridge`'s recognized-name table:
+**xStunit side** — `NativeMethodBridge`'s recognized-name table:
 
 ```csharp
-// src/TcXunit.Interpreter/Hosts/NativeMethodBridge.cs:57-58
+// src/xStunit.Interpreter/Hosts/NativeMethodBridge.cs:57-58
 "TEST", "TEST_ORDERED", "TEST_FINISHED", "TEST_FINISHED_NAMED", "IS_TEST_FINISHED",
 "AssertTrue", "AssertFalse", "AssertEquals",
 ```
@@ -230,21 +230,21 @@ plus prefix-matched families `AssertEquals_<TYPE>` (line 48),
 and `Succeeded` are absent from every list — they would resolve as ordinary
 (and, since undefined anywhere in the tree, unresolvable) user method calls,
 not native assertion calls. There's also no lifecycle hook analogous to
-`CleanUp` in `src/TcXunit.Runner/TcUnitStub/FB_TestSuite.cs` (only
+`CleanUp` in `src/xStunit.Runner/TcUnitStub/FB_TestSuite.cs` (only
 `Test`/`TestOrdered`/`TestFinished`/`TestFinishedNamed`/`IsTestFinished`/
 `AssertTrue`/`AssertFalse`/`AssertEqualsScalar`/`AssertEqualsAny`/
 `AssertArrayEquals`/`HasOpenTestCase`/`AbortCurrentTestCase`/`EnterNativeCall`
-per `src/TcXunit.Interpreter/Hosts/TcUnitSuiteHost.cs:18-94`).
+per `src/xStunit.Interpreter/Hosts/TcUnitSuiteHost.cs:18-94`).
 
 ### Pragma attributes (`'Name'`, `'Timeout'`, `'Owner'`) — not consumed either way
 
 TF1140 test cases carry TwinCAT `{ attribute '...' := '...' }` pragmas above
 the `FUNCTION_BLOCK` line (test display name, execution timeout, owner
 metadata) — presumably read by the closed-source `Tc3_PlcTestFramework`/Test
-Explorer integration. `TcPouParser.Parse` (`src/TcXunit.Parser/Loaders/TcPouParser.cs:23-43`)
+Explorer integration. `TcPouParser.Parse` (`src/xStunit.Parser/Loaders/TcPouParser.cs:23-43`)
 never reads pragma/attribute text at all — it only extracts `Name`,
 `Declaration`, `Implementation/ST`, `Method`s, and `Property`s from the XML.
-This is a non-blocking gap (TcXunit doesn't need `Timeout`/`Owner` today) but
+This is a non-blocking gap (xStunit doesn't need `Timeout`/`Owner` today) but
 would matter if any dual-compat design wanted to surface TF1140's metadata.
 
 ## Open questions for TcXunit-229.7 (single vs dual compatibility target)
@@ -266,7 +266,7 @@ would matter if any dual-compat design wanted to surface TF1140's metadata.
    (`AssertEqual` → same code path as `AssertEquals`) or a distinct
    `Tc3_PlcTestFramework`-flavored stub family, given the parameter list
    shape (`expected`/`actual`/`message`, ANY-typed) is already close to
-   TcXunit's existing `AssertEqualsAny` (`src/TcXunit.Interpreter/Hosts/TcUnitSuiteHost.cs:48-52`)?
+   xStunit's existing `AssertEqualsAny` (`src/xStunit.Interpreter/Hosts/TcUnitSuiteHost.cs:48-52`)?
 4. The pragma attributes (`Name`/`Timeout`/`Owner`) are presently discarded
    entirely by `TcPouParser`. Does `TcXunit-229.8`'s coverage/MC-DC thesis
    want any of that metadata (e.g. per-test timeout enforcement) surfaced,
@@ -289,6 +289,6 @@ contributes a third distinct ST-test-DSL shape (a standalone `SETUP`/
 `TEARDOWN`/`TEST` file format, parsed with its own test-only token set,
 entirely unrelated to both TcUnit's suite-FB convention and TF1140's
 one-FB-per-case convention) plus a concrete grammar-coverage gap check
-(TcXunit has no `SHL`/`SHR`/`ROL`/`ROR` support at all) relevant to
+(xStunit has no `SHL`/`SHR`/`ROL`/`ROR` support at all) relevant to
 `TcXunit-229.7`'s compatibility-target-shape question and `TcXunit-229.8`'s
 coverage-evidence scope statement. See that file for details.

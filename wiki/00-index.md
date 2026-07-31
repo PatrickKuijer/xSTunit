@@ -1,7 +1,7 @@
-# TcXunit ST Fixture Wiki
+# xStunit ST Fixture Wiki
 
-How to write `.TcPOU` test fixtures against TcXunit's simulated-PLC-testing
-primitives. Grounded in `src/TcXunit.Interpreter` and the existing xUnit
+How to write `.TcPOU` test fixtures against xStunit's simulated-PLC-testing
+primitives. Grounded in `src/xStunit.Interpreter` and the existing xUnit
 tests/fixtures as of 2026-07-22 (epics `TcXunit-w5x.15`, `TcXunit-sej`,
 `TcXunit-k28`).
 

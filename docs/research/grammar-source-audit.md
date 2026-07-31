@@ -15,17 +15,17 @@ Neither candidate offers what would actually move `TcXunit-229.6` forward.
 `iec61131` (the crate) has no standalone grammar artifact to port at all —
 its EBNF source is an external, unlinked input to a private generator, not
 something in the repo to read. RuSTy has no grammar artifact either — it is
-explicitly hand-rolled recursive descent, the same architecture TcXunit
+explicitly hand-rolled recursive descent, the same architecture xStunit
 already uses, so "borrowing" it would mean porting Rust parsing *logic*
 rather than referencing a grammar, and its parsing code is LGPL/GPL-licensed,
 which is a genuine contamination risk for a permissively-licensed .NET
 project if copied rather than merely read for inspiration. Both projects are
 solving a different-shaped problem — full IEC 61131-3 compilation across all
-five languages or heavy static analysis — while TcXunit interprets ST bodies
+five languages or heavy static analysis — while xStunit interprets ST bodies
 of TcUnit-style suite POUs for assertion execution and grows its grammar
 incrementally per fixture need (`CLAUDE.md`). There is no grammar-portability
 shortcut available here; the fastest path to `229.6`'s parse-superset /
-execute-time-classification split is still to keep extending TcXunit's own
+execute-time-classification split is still to keep extending xStunit's own
 recursive-descent grammar against real fixture gaps (per the STruC++
 audit in `docs/research/struccpp-notes.md`, e.g. the confirmed `SHL`/`SHR`/
 `ROL`/`ROR` gap), not to import either candidate.
@@ -88,7 +88,7 @@ audit in `docs/research/struccpp-notes.md`, e.g. the confirmed `SHL`/`SHR`/
 - **Grammar artifact**: none. No `.pest`/`.lalrpop`/`.g4`/`.ebnf`/`.bnf`
   file exists anywhere in the repo tree (checked via the GitHub git-trees
   API over the full recursive tree). This is architecturally the *same*
-  choice TcXunit already made — hand-rolled recursive descent, no formal
+  choice xStunit already made — hand-rolled recursive descent, no formal
   grammar artifact to read or port — so there is nothing grammar-shaped to
   borrow here; the only thing "borrowable" would be Rust parsing *code*,
   which is a license and language-porting problem, not a grammar-reference
@@ -98,14 +98,14 @@ audit in `docs/research/struccpp-notes.md`, e.g. the confirmed `SHL`/`SHR`/
   [`api.github.com/repos/PLC-lang/rusty`](https://api.github.com/repos/PLC-lang/rusty)).
   No evidence found of LD/FBD/SFC/IL support; RuSTy is a full ST-to-native
   compiler (via LLVM/`inkwell`, confirmed in `Cargo.toml` dependencies),
-  materially larger in scope than TcXunit needs (OOP surface, full codegen
+  materially larger in scope than xStunit needs (OOP surface, full codegen
   pipeline, standard library in `libs/stdlib`).
 - **License**: dual LGPL-3.0/GPL-3.0, confirmed via the GitHub API
   (`license.spdx_id: "LGPL-3.0"`) and via the repo's own `COPYING` (GPL-3.0)
   and `COPYING.LESSER` (LGPL-3.0) files, both listed in the top-level repo
   tree. This is the material licensing distinction from `iec61131`: LGPL/GPL
   are copyleft. Reading RuSTy's source for architectural inspiration is
-  fine, but **copying or closely porting its parser code** into TcXunit
+  fine, but **copying or closely porting its parser code** into xStunit
   would pull copyleft obligations into a project that currently carries no
   such constraint — a real compatibility problem worth flagging even though
   it's moot here, since there is no grammar artifact (as opposed to code) to
@@ -123,12 +123,12 @@ audit in `docs/research/struccpp-notes.md`, e.g. the confirmed `SHL`/`SHR`/
   compiler project (part of the `PLC-lang` org, documented at
   [plc-lang.github.io/rusty](https://plc-lang.github.io/rusty/)) — far more
   mature than `iec61131`, but its maturity doesn't translate into anything
-  TcXunit can use here, precisely because there's no grammar artifact and
+  xStunit can use here, precisely because there's no grammar artifact and
   the code is copyleft.
 
-## Reasoning against what TcXunit actually needs
+## Reasoning against what xStunit actually needs
 
-TcXunit is not building an IEC 61131-3 compiler — it interprets ST bodies of
+xStunit is not building an IEC 61131-3 compiler — it interprets ST bodies of
 TcUnit-shaped test-suite POUs to run assertions, and per `CLAUDE.md` it grows
 its interpreter "incrementally per fixture need... not built to full spec up
 front." Against that mission:
@@ -138,22 +138,22 @@ front." Against that mission:
    independent of the host language's implementation. Neither candidate has
    one: `iec61131`'s EBNF source is an external, unlinked/paywalled
    standard-document input to a private generator tool, and RuSTy has no
-   grammar file at all because it's hand-rolled — same as TcXunit already
+   grammar file at all because it's hand-rolled — same as xStunit already
    is. The premise behind option 2 in the issue title ("iec61131/RuSTy
    EBNF") doesn't hold up under inspection of either repo: neither ships an
    EBNF artifact in-repo.
 2. **iec61131's only usable asset is MIT-licensed generated Rust source**,
    which is a different language, a nine-months-old project with a tiny
    download/star footprint, and (per its own README) still missing 4 of 5
-   IEC 61131-3 languages — though TcXunit only needs ST anyway, so that gap
+   IEC 61131-3 languages — though xStunit only needs ST anyway, so that gap
    is irrelevant. Its "production ready" self-description has no
    independent corroboration found in this pass. Low risk to reference for
    ideas (permissive license), but also low payoff — a brand-new project run
    by presumably one or a small group of maintainers, with no evidence its
-   ST coverage is broader or more battle-tested than TcXunit's own
+   ST coverage is broader or more battle-tested than xStunit's own
    fixture-driven grammar.
 3. **RuSTy's only usable asset is LGPL/GPL-licensed Rust source implementing
-   the exact same architecture TcXunit already has** (hand-rolled recursive
+   the exact same architecture xStunit already has** (hand-rolled recursive
    descent over a token stream) — reading it for inspiration on specific
    rules (e.g. how it structures `CASE` or handles operator precedence) is
    plausible and safe if done as "read then reimplement independently in
@@ -162,10 +162,10 @@ front." Against that mission:
    OOP, LLVM codegen, standard library) is also a compiler for real
    production PLC codebases, not a narrow test-fixture interpreter — most of
    what makes RuSTy "mature" (codegen, LLVM integration, stdlib) is
-   irrelevant surface area for TcXunit's mission.
-4. **TcXunit's existing incremental strategy already produces evidence this
+   irrelevant surface area for xStunit's mission.
+4. **xStunit's existing incremental strategy already produces evidence this
    works**: the STruC++ audit (`docs/research/struccpp-notes.md`) found
-   TcXunit's current statement/control-flow surface (`IF/ELSIF/ELSE`,
+   xStunit's current statement/control-flow surface (`IF/ELSIF/ELSE`,
    `CASE`, `FOR/WHILE/REPEAT`, `EXIT`) already matches what a much larger,
    independently-built ST implementation considers its core statement set,
    with the only confirmed gap being expression-level bitwise-shift
@@ -174,12 +174,12 @@ front." Against that mission:
    or needs a wholesale grammar replacement.
 
 **Recommendation for `TcXunit-229.6`**: proceed with splitting parse-superset
-from execute-time classification directly against TcXunit's own hand-rolled
+from execute-time classification directly against xStunit's own hand-rolled
 grammar. Treat both candidates as optional secondary reading (RuSTy's
 `book/src/arch/parser.md` and AST-design rationale in particular, since it
-argues for the same typed-node, hand-rolled approach TcXunit already uses)
+argues for the same typed-node, hand-rolled approach xStunit already uses)
 rather than as a grammar or code source to import. If a future fixture needs
-an IEC 61131-3 construct TcXunit doesn't yet parse, resolve it the way the
+an IEC 61131-3 construct xStunit doesn't yet parse, resolve it the way the
 STruC++ gap was resolved — name the specific missing token/rule and add it
 directly — rather than reaching for either candidate's grammar.
 

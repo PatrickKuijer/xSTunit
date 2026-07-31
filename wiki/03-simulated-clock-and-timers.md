@@ -1,8 +1,8 @@
 # Simulated clock, TON/TOF/TP and LTON/LTOF/LTP
 
 Status: **built**. Tickets: `TcXunit-w5x.15.7` (TIME timers), `TcXunit-x5pt`
-(LTIME timers). Source: `src/TcXunit.Interpreter/Hosts/Clock.cs`,
-`TimerHost.cs`. Tests: `tests/TcXunit.Interpreter.Tests/Hosts/ClockTests.cs`,
+(LTIME timers). Source: `src/xStunit.Interpreter/Hosts/Clock.cs`,
+`TimerHost.cs`. Tests: `tests/xStunit.Interpreter.Tests/Hosts/ClockTests.cs`,
 `TimerFbTests.cs`, `LongTimerFbTests.cs`.
 
 ## The clock

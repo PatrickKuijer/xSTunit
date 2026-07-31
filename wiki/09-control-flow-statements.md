@@ -4,7 +4,7 @@ Status: **built**. Source: `Stmt.cs` (`ForStmt`/`WhileStmt`/`RepeatStmt`/
 `CaseStmt`/`CaseArm`/`CaseLabel`/`ExitStmt`), `Parser.cs` (`ParseFor`/
 `ParseWhile`/`ParseRepeat`/`ParseCase`), `Engine.cs` (`ExecuteFor`/
 `ExecuteWhile`/`ExecuteRepeat`/`ExecuteCase`, `LoopExitSignal`),
-`ControlFlowStatementTests.cs` in `tests/TcXunit.Interpreter.Tests`.
+`ControlFlowStatementTests.cs` in `tests/xStunit.Interpreter.Tests`.
 Landed as `TcXunit-mym.3`.
 
 Also added as a prerequisite: unary minus (`-x`) — needed for negative FOR

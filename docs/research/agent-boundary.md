@@ -19,8 +19,8 @@
   five `FailureKind`s including `parse-error`, and one vocabulary `kind` /
   `construct` at every JSON level. At the time of writing this worktree still
   carries the pre-change shape (four kinds in
-  `src/TcXunit.Runner/FailureKind.cs:20-48`; suite-level `errorKind` /
-  `errorConstruct` at `src/TcXunit.Cli/CliRunner.cs:896,902`). That rename is
+  `src/xStunit.Runner/FailureKind.cs:20-48`; suite-level `errorKind` /
+  `errorConstruct` at `src/xStunit.Cli/CliRunner.cs:896,902`). That rename is
   landing concurrently and is treated here as done. Line citations to
   `CliRunner.cs` are to the pre-rename file; the field *names* below are
   post-rename.
@@ -40,7 +40,7 @@ that every other kind's wrong fix leaves a *failing* test, while this kind's
 wrong fix leaves a *passing* one, and the evidence of what was deleted is the
 thing that was deleted. But `kind` alone is not a sufficient stop rule, because
 the classifier deliberately under-claims `unsupported-construct`
-(`src/TcXunit.Interpreter/Engine/FailureClassifier.cs:15-24`; `README.md:62`),
+(`src/xStunit.Interpreter/Engine/FailureClassifier.cs:15-24`; `README.md:62`),
 so real interpreter gaps are known to be sitting inside the `plc-fault` bucket.
 The boundary therefore needs a second, kind-independent net: no-progress
 detection plus two zero-cost invariants (total test count must not fall; never
@@ -114,7 +114,7 @@ Order: `exitCode == 2` → the invocation or the tree is wrong, nothing ran.
 ### 3.1 `assertion` — iterate freely
 
 An assert compared two values and they differed
-(`src/TcXunit.Runner/FailureKind.cs:22-26`). This is the safest kind, and the
+(`src/xStunit.Runner/FailureKind.cs:22-26`). This is the safest kind, and the
 reason is not "assertions are usually simple" — it is that **the failure is
 fully described and entirely inside the agent's editing territory**. The report
 carries the assert that failed, both formatted values, the author's own
@@ -140,7 +140,7 @@ that execution really entered ST.
 **The caveat, and it is load-bearing:** `unsupported-construct` is claimed
 *only* by explicit opt-in at the throw site, never inferred from a base type
 (`FailureClassifier.cs:15-24`;
-`src/TcXunit.Runner/UnsupportedConstructException.cs:9-22`). That choice is
+`src/xStunit.Runner/UnsupportedConstructException.cs:9-22`). That choice is
 correct — the engine throws plain `NotSupportedException` for genuine defects
 in the code under test too (`Operator '<' is not supported between Int32 and
 String`, `Engine.Expressions.cs:221-224`) and classifying on the base type
@@ -169,7 +169,7 @@ One case deserves a named rule. If a `load-error` reading
 agent edited a suite, it is a self-inflicted regression: `SuiteDiscovery`
 identifies suites purely by walking `EXTENDS` ancestry to the literal
 `TcUnit.FB_TestSuite`
-(`src/TcXunit.Interpreter/Discovery/SuiteDiscovery.cs:11,16-32`), so touching a
+(`src/xStunit.Interpreter/Discovery/SuiteDiscovery.cs:11,16-32`), so touching a
 suite's `EXTENDS` line makes it vanish from discovery entirely. **The correct
 response is revert, not repair** — and see §5c, because "suites vanish" is the
 most rewarding wrong move available to a loop optimizing for "no failures".
@@ -321,7 +321,7 @@ claim credible rather than glib.
 
 **5a. Timing and cycle-time behaviour.** The clock is simulated: a
 process-wide monotonic counter advanced only by explicit calls
-(`src/TcXunit.Interpreter/Hosts/Clock.cs:9-14`), read by the TON/TOF/pulse
+(`src/xStunit.Interpreter/Hosts/Clock.cs:9-14`), read by the TON/TOF/pulse
 hosts when invoked (`Engine.cs:26-28`, `Engine.Invocation.cs:88-90`).
 `StepCycles(n)` is a `for` loop re-invoking a body — *"No dt/scheduler: caller
 controls ordering across multiple instances by choosing call order"*
@@ -402,7 +402,7 @@ dangerous quiet failure, because it produces exit `0`. Today's `--coverage`
 does not catch it: association is by *textual* reference — a whole-word,
 case-insensitive regex of the POU type name against the suite's
 comment-stripped text
-(`src/TcXunit.Interpreter/Discovery/SuiteCoverage.cs:41-51,69-70`). A suite
+(`src/xStunit.Interpreter/Discovery/SuiteCoverage.cs:41-51,69-70`). A suite
 that declares `VAR fb : FB_X;` and never calls it reads as covered. **There is
 no cheap interim detection**, and pretending otherwise would be worse than
 admitting it.

@@ -457,12 +457,12 @@ pre.code .p{ color:var(--doc-accent); }
     <p class="mast-lede">
       One visual language for every WebView2-hosted tool window docked in TwinCAT XAE Shell.
       The tokens are lifted verbatim from the shipping TcAgent chat panel — this document
-      codifies them and adds the result-tree layer that TcXunit needs, so both panels read as
+      codifies them and adds the result-tree layer that xStunit needs, so both panels read as
       one product sitting in the same sidebar.
     </p>
     <div class="mast-meta">
       <span><b>Source of truth</b> src/TcAgent/Resources/chat.css</span>
-      <span><b>Consumers</b> TcAgent &middot; TcXunit results</span>
+      <span><b>Consumers</b> TcAgent &middot; xStunit results</span>
       <span><b>Host</b> WebView2 in a VS UserControl</span>
     </div>
   </header>
@@ -582,7 +582,7 @@ pre.code .p{ color:var(--doc-accent); }
     <div class="sub">
       <h3>Extension: result status</h3>
       <p>
-        TcXunit needs a pass/fail/skip vocabulary. Rather than introduce hues, it aliases the ones
+        xStunit needs a pass/fail/skip vocabulary. Rather than introduce hues, it aliases the ones
         already in the system — so a green check in the test tree is literally the same green as the
         "Local" segment in TcAgent. Aliasing, not addition, is how this system grows.
       </p>
@@ -821,7 +821,7 @@ pre.code .p{ color:var(--doc-accent); }
       <div class="sec-num">Components — Results layer</div>
       <h2>The test tree</h2>
       <p>
-        New components, built only from tokens above. The tree is the whole product for TcXunit, so it
+        New components, built only from tokens above. The tree is the whole product for xStunit, so it
         gets the density budget: status is encoded in glyph <em>and</em> color, the source file rides
         along at 10.5px mono because double-click opens it, and duration right-aligns in tabular
         figures so slow tests are findable by scanning one column.
@@ -1010,13 +1010,13 @@ pre.code .p{ color:var(--doc-accent); }
       <h2>Sharing the sheet between panels</h2>
       <p>
         The tokens and core components want to live in one file both VSIX projects embed; each panel
-        adds only its own layer. TcXunit's layer is the results tree — nothing else.
+        adds only its own layer. xStunit's layer is the results tree — nothing else.
       </p>
     </div>
     <pre class="code"><span class="c">Resources/</span>
   <span class="p">vsix-tokens.css</span>     <span class="c">:root + body[data-theme="light"] — shared, never forked</span>
   <span class="p">vsix-shell.css</span>      <span class="c">tabs, buttons, seg, field, chip, picker, statusbar</span>
-  <span class="p">results.css</span>         <span class="c">TcXunit only: .toolbar .tree .node .assert .banner .count</span>
+  <span class="p">results.css</span>         <span class="c">xStunit only: .toolbar .tree .node .assert .banner .count</span>
   <span class="p">chat.css</span>            <span class="c">TcAgent only: .msg-* .md-content .tw-inputbox</span>
 
 <span class="c">// theme follows the shell, set once from the host</span>

@@ -6,7 +6,7 @@ using Xunit;
 namespace xStunit.Interpreter.Tests
 {
     // TcXunit-k28.7: TEST_ORDERED/TEST_FINISHED_NAMED/IS_TEST_FINISHED had no
-    // NativeMethodBridge case or TcUnitSuiteHost wrapper - wires them up and
+    // NativeMethodBridge case or SuiteHost wrapper - wires them up and
     // proves they're reachable through the interpreter, including as boolean
     // expressions inside IF (TEST_ORDERED/IS_TEST_FINISHED return BOOL).
     public class NativeMethodBridgeOrderedTests

@@ -59,7 +59,7 @@ namespace xStunit.Interpreter.Tests
             // And confirm from the other side that Invoke really does claim it:
             // called with no arguments it will fault in some way, but never
             // with the specific "isn't supported yet" rejection.
-            var host = new TcUnitSuiteHost();
+            var host = new SuiteHost();
             var ex = Record.Exception(() => NativeMethodBridge.Invoke(
                 host, methodName, Array.Empty<object>(), new Dictionary<string, object>()));
 
@@ -79,7 +79,7 @@ namespace xStunit.Interpreter.Tests
             Assert.False(NativeMethodBridge.CanInvoke(methodName));
 
             var ex = Assert.ThrowsAny<Exception>(() => NativeMethodBridge.Invoke(
-                new TcUnitSuiteHost(), methodName, Array.Empty<object>(), new Dictionary<string, object>()));
+                new SuiteHost(), methodName, Array.Empty<object>(), new Dictionary<string, object>()));
             Assert.Contains("isn't supported yet", ex.Message);
         }
 

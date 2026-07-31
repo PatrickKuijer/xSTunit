@@ -12,7 +12,7 @@ namespace TcXunit.SamplePlugins
     // about how any particular Beckhoff library function behaves. Compare
     // CheckSum16Function, which borrows a real name and therefore carries a
     // prominent warning that its algorithm is a stand-in.
-    public sealed class DemoUpperCaseFunction : ITcXunitNativeFunction
+    public sealed class DemoUpperCaseFunction : IXstunitNativeFunction
     {
         public string Name => "F_DemoUpperCase";
 

@@ -15,14 +15,14 @@ namespace xStunit.Interpreter.Tests
     // calls. The bug lived one layer over, in
     // NativeCallContext.TryGetArg (Extensibility/NativeCallContext.cs): a
     // native-function plugin's `position` argument is always the parameter's
-    // declared index in the signature (see every ITcXunitNativeFunction
+    // declared index in the signature (see every IXstunitNativeFunction
     // under samples/), but TryGetArg indexed straight into PositionalArgs by
     // that raw declared index - so once a named argument occupied an earlier
     // declared position, every later positional lookup missed by exactly the
     // number of named arguments that preceded it.
     public class MixedNamedPositionalArgTests
     {
-        private sealed class StubFunction : ITcXunitNativeFunction
+        private sealed class StubFunction : IXstunitNativeFunction
         {
             private readonly System.Func<NativeCallContext, object> _body;
             public StubFunction(string name, System.Func<NativeCallContext, object> body) { Name = name; _body = body; }
@@ -30,7 +30,7 @@ namespace xStunit.Interpreter.Tests
             public object Invoke(NativeCallContext context) => _body(context);
         }
 
-        private static NativeFunctionRegistry RegistryWith(params ITcXunitNativeFunction[] functions)
+        private static NativeFunctionRegistry RegistryWith(params IXstunitNativeFunction[] functions)
         {
             var registry = new NativeFunctionRegistry();
             registry.RegisterAll(functions);

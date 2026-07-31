@@ -6,7 +6,7 @@ namespace xStunit.Runner.TcUnitStub
     // Table-driven registry backing FB_TestSuite.AssertEqualsScalar's
     // per-type dispatch (TcXunit-gd2.11). Before this, each scalar type
     // (INT/BOOL/STRING/REAL) needed its own hand-written AssertEquals_<TYPE>
-    // method repeated across FB_TestSuite, TcUnitSuiteHost and
+    // method repeated across FB_TestSuite, SuiteHost and
     // NativeMethodBridge - adding the ~17 remaining IEC scalar types the old
     // way would mean ~51 new methods. Each entry here captures what used to
     // be one hand-written method's behavior: how to compare (with any

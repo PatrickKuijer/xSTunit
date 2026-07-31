@@ -24,12 +24,12 @@ whoever owns the requirement, not to this repo:
 ## Writing one
 
 Reference `TcXunit.Interpreter` with `Private="false"` (see this project's
-`.csproj` for why that matters) and implement `ITcXunitNativeFunction`:
+`.csproj` for why that matters) and implement `IXstunitNativeFunction`:
 
 ```csharp
 using TcXunit.Interpreter.Extensibility;
 
-public sealed class CheckSum16Function : ITcXunitNativeFunction
+public sealed class CheckSum16Function : IXstunitNativeFunction
 {
     public string Name => "F_CheckSum16";   // matched case-insensitively
 
@@ -66,7 +66,7 @@ dotnet build samples/TcXunit.SamplePlugins -c Release
 tcxunit run <path-to-POUs> --plugins samples/TcXunit.SamplePlugins/bin/Release/netstandard2.0
 ```
 
-Every `*.dll` in the directory is scanned for `ITcXunitNativeFunction`
+Every `*.dll` in the directory is scanned for `IXstunitNativeFunction`
 implementations with a public parameterless constructor. A DLL that isn't a
 managed assembly, fails type load, or collides on a function name already
 registered is **skipped and reported** — never fatal, matching how unloadable

@@ -8,7 +8,7 @@ namespace xStunit.Interpreter.Tests
 {
     // TcXunit-k28.6: AssertFalse/AssertEquals_BOOL/AssertEquals_STRING/
     // AssertEquals_REAL were already implemented on FB_TestSuite but had no
-    // NativeMethodBridge case or TcUnitSuiteHost wrapper, so an interpreted
+    // NativeMethodBridge case or SuiteHost wrapper, so an interpreted
     // suite calling them threw "not supported" - wires them up.
     public class NativeMethodBridgeAssertTests
     {

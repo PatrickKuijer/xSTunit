@@ -6,7 +6,7 @@ using xStunit.Runner.TcUnitStub;
 namespace xStunit.Interpreter
 {
     // Maps calls that fall through to the TcUnit.FB_TestSuite native-stub
-    // boundary onto TcUnitSuiteHost. Grow-on-demand: only the surface the
+    // boundary onto SuiteHost. Grow-on-demand: only the surface the
     // FB_CounterTests fixture exercises (TcXunit-w5x.7/.8).
     public static class NativeMethodBridge
     {
@@ -135,7 +135,7 @@ namespace xStunit.Interpreter
         }
 
         public static object Invoke(
-            TcUnitSuiteHost host,
+            SuiteHost host,
             string methodName,
             IReadOnlyList<object> positional,
             IReadOnlyDictionary<string, object> named,

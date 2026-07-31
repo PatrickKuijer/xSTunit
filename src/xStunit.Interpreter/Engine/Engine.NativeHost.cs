@@ -198,7 +198,7 @@ namespace xStunit.Interpreter
                 return NativeHostBinding.Of(NativeHostKind.Counter, counter, counterFields.ToArray());
             }
 
-            return NativeHostBinding.Of(NativeHostKind.Suite, new TcUnitSuiteHost());
+            return NativeHostBinding.Of(NativeHostKind.Suite, new SuiteHost());
         }
 
         // Whether typeName names one of the native FB stubs this engine can

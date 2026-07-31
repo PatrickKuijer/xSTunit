@@ -4,7 +4,7 @@ using System.Linq;
 
 namespace xStunit.Interpreter.Extensibility
 {
-    // Name -> ITcXunitNativeFunction lookup the Engine consults as its last
+    // Name -> IXstunitNativeFunction lookup the Engine consults as its last
     // resort before reporting a call unresolved (TcXunit-6k2).
     //
     // Owned by the host, not the Engine: an Engine built without one behaves
@@ -20,8 +20,8 @@ namespace xStunit.Interpreter.Extensibility
         // rather than something this type should quietly diverge on, but a
         // case-sensitive plugin lookup would fail in a way the user cannot
         // debug from the error message alone, so the forgiving rule wins here.)
-        private readonly Dictionary<string, ITcXunitNativeFunction> _functions =
-            new Dictionary<string, ITcXunitNativeFunction>(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, IXstunitNativeFunction> _functions =
+            new Dictionary<string, IXstunitNativeFunction>(StringComparer.OrdinalIgnoreCase);
 
         // Where each name came from, for the duplicate-registration message -
         // with plugins loaded from a folder, "which DLL already claimed this?"
@@ -39,7 +39,7 @@ namespace xStunit.Interpreter.Extensibility
         // number in a passing test, which is far worse than a startup failure.
         // The host decides how loud to be - the CLI turns this into a skip
         // line for the offending DLL instead of aborting the run.
-        public void Register(ITcXunitNativeFunction function, string source = null)
+        public void Register(IXstunitNativeFunction function, string source = null)
         {
             if (function == null)
                 throw new ArgumentNullException(nameof(function));
@@ -59,13 +59,13 @@ namespace xStunit.Interpreter.Extensibility
             _sources[function.Name] = source ?? function.GetType().FullName;
         }
 
-        public void RegisterAll(IEnumerable<ITcXunitNativeFunction> functions, string source = null)
+        public void RegisterAll(IEnumerable<IXstunitNativeFunction> functions, string source = null)
         {
-            foreach (var function in functions ?? Enumerable.Empty<ITcXunitNativeFunction>())
+            foreach (var function in functions ?? Enumerable.Empty<IXstunitNativeFunction>())
                 Register(function, source);
         }
 
-        public bool TryGet(string name, out ITcXunitNativeFunction function)
+        public bool TryGet(string name, out IXstunitNativeFunction function)
         {
             if (name == null)
             {

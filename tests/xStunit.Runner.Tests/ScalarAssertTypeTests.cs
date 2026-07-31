@@ -4,7 +4,7 @@ using Xunit;
 namespace xStunit.Runner.Tests
 {
     // Direct coverage for the ScalarAssertType registry (TcXunit-gd2.11):
-    // FB_TestSuite/TcUnitSuiteHost/NativeMethodBridge all just forward into
+    // FB_TestSuite/SuiteHost/NativeMethodBridge all just forward into
     // this table now, so its compare/format behavior for each existing
     // entry (INT/BOOL/STRING/REAL) needs its own tests independent of the
     // interpreter/suite-host plumbing.

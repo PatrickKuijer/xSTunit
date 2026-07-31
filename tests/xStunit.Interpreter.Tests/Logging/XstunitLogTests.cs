@@ -6,7 +6,7 @@ using Xunit;
 
 namespace xStunit.Interpreter.Tests.Logging
 {
-    public class TcXunitLogTests
+    public class XstunitLogTests
     {
         [Theory]
         [InlineData(null, false)]
@@ -19,7 +19,7 @@ namespace xStunit.Interpreter.Tests.Logging
         [InlineData("yes", true)]
         public void IsTruthy_RecognizesExpectedVerboseValues(string value, bool expected)
         {
-            Assert.Equal(expected, TcXunitLog.IsTruthy(value));
+            Assert.Equal(expected, XstunitLog.IsTruthy(value));
         }
 
         [Theory]
@@ -29,13 +29,13 @@ namespace xStunit.Interpreter.Tests.Logging
         [InlineData("true", LogEventLevel.Debug)]
         public void ResolveMinimumLevel_TogglesOnVerboseEnvVar(string verboseEnvValue, LogEventLevel expected)
         {
-            Assert.Equal(expected, TcXunitLog.ResolveMinimumLevel(verboseEnvValue));
+            Assert.Equal(expected, XstunitLog.ResolveMinimumLevel(verboseEnvValue));
         }
 
         [Fact]
         public void ResolveLogDirectory_DefaultsUnderTempWhenUnset()
         {
-            var resolved = TcXunitLog.ResolveLogDirectory(null);
+            var resolved = XstunitLog.ResolveLogDirectory(null);
 
             Assert.Equal(Path.Combine(Path.GetTempPath(), "TcXunit", "logs"), resolved);
         }
@@ -43,7 +43,7 @@ namespace xStunit.Interpreter.Tests.Logging
         [Fact]
         public void ResolveLogDirectory_HonorsOverride()
         {
-            var resolved = TcXunitLog.ResolveLogDirectory(@"C:\somewhere\logs");
+            var resolved = XstunitLog.ResolveLogDirectory(@"C:\somewhere\logs");
 
             Assert.Equal(@"C:\somewhere\logs", resolved);
         }
@@ -54,7 +54,7 @@ namespace xStunit.Interpreter.Tests.Logging
             var logDir = Path.Combine(Path.GetTempPath(), "TcXunitTests", Guid.NewGuid().ToString("N"));
             Environment.SetEnvironmentVariable("TCXUNIT_LOG_DIR", logDir);
             Environment.SetEnvironmentVariable("TCXUNIT_VERBOSE", "1");
-            TcXunitLog.ResetForTests();
+            XstunitLog.ResetForTests();
             try
             {
                 Exception thrown;
@@ -67,11 +67,11 @@ namespace xStunit.Interpreter.Tests.Logging
                     thrown = ex;
                 }
 
-                TcXunitLog.LogException("unit test context", thrown);
+                XstunitLog.LogException("unit test context", thrown);
                 // Dispose the logger (closing its file sink) before reading the file back -
                 // Serilog's file sink keeps its own handle open between writes, so reading
                 // through a separate handle immediately after LogException can race it.
-                TcXunitLog.ResetForTests();
+                XstunitLog.ResetForTests();
 
                 var logFile = Assert.Single(Directory.GetFiles(logDir, "tcxunit-*.log"));
                 var contents = File.ReadAllText(logFile);
@@ -86,7 +86,7 @@ namespace xStunit.Interpreter.Tests.Logging
             {
                 Environment.SetEnvironmentVariable("TCXUNIT_LOG_DIR", null);
                 Environment.SetEnvironmentVariable("TCXUNIT_VERBOSE", null);
-                TcXunitLog.ResetForTests();
+                XstunitLog.ResetForTests();
                 if (Directory.Exists(logDir))
                     Directory.Delete(logDir, recursive: true);
             }
@@ -96,7 +96,7 @@ namespace xStunit.Interpreter.Tests.Logging
         public void LogException_IgnoresNullException()
         {
             // Must not throw - call sites pass whatever they caught.
-            TcXunitLog.LogException("context", null);
+            XstunitLog.LogException("context", null);
         }
     }
 }

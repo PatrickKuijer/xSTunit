@@ -6,7 +6,7 @@ using Serilog.Events;
 namespace xStunit.Interpreter.Logging
 {
     /// <summary>
-    /// Process-wide structured logging for TcXunit's catch-and-summarize paths (TcXunit-2v8).
+    /// Process-wide structured logging for xStunit's catch-and-summarize paths (TcXunit-2v8).
     /// CliRunner collapses exceptions down to ex.Message for the concise failure
     /// surfaced in its console/JSON output; this additionally logs the full ex.ToString() (message +
     /// stack trace + inner exceptions) to a rolling log file, so a failing suite's actual call
@@ -24,7 +24,7 @@ namespace xStunit.Interpreter.Logging
     /// Serilog.Extensions.Logging would pull in. TcXunit is plain SDK-style/PackageReference with
     /// no such constraint, so callers use this type directly instead of an ILogger abstraction.
     /// </summary>
-    public static class TcXunitLog
+    public static class XstunitLog
     {
         private const string VerboseEnvVar = "TCXUNIT_VERBOSE";
         private const string LogDirEnvVar = "TCXUNIT_LOG_DIR";

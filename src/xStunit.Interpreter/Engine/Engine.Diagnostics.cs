@@ -64,7 +64,7 @@ namespace xStunit.Interpreter
         // A fault with no open bracket has no test to charge and still takes
         // the suite down, unchanged: it happened in setup or between tests, so
         // nothing after it can be trusted anyway.
-        private void ExecuteSuiteBody(Func<IReadOnlyList<Stmt>> statementsFactory, Frame frame, TcUnitSuiteHost host)
+        private void ExecuteSuiteBody(Func<IReadOnlyList<Stmt>> statementsFactory, Frame frame, SuiteHost host)
         {
             IReadOnlyList<Stmt> statements;
             try

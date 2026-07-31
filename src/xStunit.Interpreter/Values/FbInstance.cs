@@ -33,7 +33,7 @@ namespace xStunit.Interpreter
 
         // Read-only typed views over that pair, for the callers that actually
         // work the host's own API (TimerHost.Update, LoopbackHost.Transmit,
-        // TcUnitSuiteHost.Collect/EnterNativeCall) and would otherwise cast
+        // SuiteHost.Collect/EnterNativeCall) and would otherwise cast
         // NativeHost by hand. Each yields its host only when NativeKind
         // agrees, so a caller that reaches for the wrong one gets null rather
         // than an InvalidCastException.
@@ -61,8 +61,8 @@ namespace xStunit.Interpreter
         // Non-null when ActualTypeName's ancestry reaches TcUnit.FB_TestSuite -
         // the native C# stub instance backing TEST()/AssertEquals_INT()/etc for
         // this instance (TcXunit-w5x.7's native-stub boundary).
-        public TcUnitSuiteHost NativeSuiteHost =>
-            NativeKind == NativeHostKind.Suite ? (TcUnitSuiteHost)NativeHost : null;
+        public SuiteHost NativeSuiteHost =>
+            NativeKind == NativeHostKind.Suite ? (SuiteHost)NativeHost : null;
 
         // Non-null when ActualTypeName is a native timer type (TON/TOF/TP/
         // FB_Pulse, or their LTIME siblings LTON/LTOF/LTP) - the native host

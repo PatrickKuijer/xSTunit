@@ -9,7 +9,7 @@ namespace xStunit.Interpreter
     // AssertEquals_INT()/etc itself as it executes the suite's interpreted
     // statements, instead of Body() being a compiled override - Body() is a
     // no-op here on purpose.
-    public sealed class TcUnitSuiteHost : FB_TestSuite
+    public sealed class SuiteHost : FB_TestSuite
     {
         protected override void Body()
         {

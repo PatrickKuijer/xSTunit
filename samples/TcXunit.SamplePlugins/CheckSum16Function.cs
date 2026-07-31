@@ -24,7 +24,7 @@ namespace TcXunit.SamplePlugins
     //
     // Signature mirrored from the real one, as called from ST:
     //   F_CheckSum16(pData : POINTER TO BYTE, nSize : UDINT, nSeed : WORD) : WORD
-    public sealed class CheckSum16Function : ITcXunitNativeFunction
+    public sealed class CheckSum16Function : IXstunitNativeFunction
     {
         public string Name => "F_CheckSum16";
 
@@ -45,7 +45,7 @@ namespace TcXunit.SamplePlugins
                 sum += b;
 
             // WORD is represented as int in the interpreter's value model (see
-            // ITcXunitNativeFunction.Invoke's type table), masked to 16 bits
+            // IXstunitNativeFunction.Invoke's type table), masked to 16 bits
             // the way the declared return type would be on a real PLC.
             return sum & 0xFFFF;
         }

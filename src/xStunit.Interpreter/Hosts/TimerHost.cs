@@ -4,7 +4,7 @@ namespace xStunit.Interpreter
 {
     // Native-stub boundary for TON/TOF/TP (FB_Pulse) and their 64-bit LTIME
     // siblings LTON/LTOF/LTP (TcXunit-w5x.15.7 / T3 design, extended by
-    // TcXunit-x5pt): same precedent as TcUnitSuiteHost, but Q/ET publish into
+    // TcXunit-x5pt): same precedent as SuiteHost, but Q/ET publish into
     // the instance's own IN/PT/Q/ET Cell fields (set up in Engine.NewInstance)
     // instead of being collected once - the host itself only holds internal
     // bookkeeping (last-observed clock total, edge-detect state) that ST code

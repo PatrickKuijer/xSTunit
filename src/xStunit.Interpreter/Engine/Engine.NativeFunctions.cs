@@ -20,7 +20,7 @@ namespace xStunit.Interpreter
         // checksum/CRC/serializer shape of library function actually needs and
         // it is not reimplementable outside the engine.
         private object InvokeNativeFunction(
-            ITcXunitNativeFunction function,
+            IXstunitNativeFunction function,
             string methodName,
             IReadOnlyList<Expr> positionalArgs,
             IReadOnlyList<NamedArg> namedArgs,

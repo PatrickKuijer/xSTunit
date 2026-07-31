@@ -9,7 +9,7 @@ using xStunit.Parser;
 
 namespace xStunit.Cli.Plugins
 {
-    // Loads ITcXunitNativeFunction implementations from a directory of plugin
+    // Loads IXstunitNativeFunction implementations from a directory of plugin
     // assemblies (TcXunit-6k2).
     //
     // Lives in the CLI rather than the interpreter for a hard reason, not a
@@ -29,7 +29,7 @@ namespace xStunit.Cli.Plugins
         // Assemblies that must never be loaded *as plugins* even if a build
         // drops copies of them next to one. Loading a second copy of
         // xStunit.Interpreter into the plugin context would create a second,
-        // non-identical ITcXunitNativeFunction type, and every plugin in that
+        // non-identical IXstunitNativeFunction type, and every plugin in that
         // DLL would then silently fail the interface check with no obvious
         // reason. PluginLoadContext already redirects these to the host (see
         // Load below); skipping them here as well means the failure never even
@@ -108,7 +108,7 @@ namespace xStunit.Cli.Plugins
             var assembly = context.LoadFromAssemblyPath(Path.GetFullPath(dll));
 
             var pluginTypes = assembly.GetExportedTypes()
-                .Where(t => typeof(ITcXunitNativeFunction).IsAssignableFrom(t))
+                .Where(t => typeof(IXstunitNativeFunction).IsAssignableFrom(t))
                 .Where(t => !t.IsAbstract && !t.IsInterface)
                 .Where(t => t.GetConstructor(Type.EmptyTypes) != null)
                 .OrderBy(t => t.FullName, StringComparer.Ordinal)
@@ -117,7 +117,7 @@ namespace xStunit.Cli.Plugins
             var count = 0;
             foreach (var type in pluginTypes)
             {
-                var function = (ITcXunitNativeFunction)Activator.CreateInstance(type);
+                var function = (IXstunitNativeFunction)Activator.CreateInstance(type);
                 registry.Register(function, $"{Path.GetFileName(dll)}!{type.FullName}");
                 count++;
             }
@@ -150,9 +150,9 @@ namespace xStunit.Cli.Plugins
                 //
                 // Returning null defers to the default context. If instead this
                 // loaded a private copy of xStunit.Interpreter, the plugin's
-                // ITcXunitNativeFunction would be a *different type* from the
+                // IXstunitNativeFunction would be a *different type* from the
                 // host's despite the identical name, so
-                // `typeof(ITcXunitNativeFunction).IsAssignableFrom(pluginType)`
+                // `typeof(IXstunitNativeFunction).IsAssignableFrom(pluginType)`
                 // would be false and the plugin would be silently ignored -
                 // the single most confusing failure mode this design has.
                 if (Default.Assemblies.Any(a => string.Equals(

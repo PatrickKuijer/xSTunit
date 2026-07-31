@@ -4,7 +4,7 @@ using System.Linq;
 
 namespace xStunit.Interpreter.Extensibility
 {
-    // Everything an ITcXunitNativeFunction is allowed to see about the call
+    // Everything an IXstunitNativeFunction is allowed to see about the call
     // being made (TcXunit-6k2): the function's name, its already-evaluated
     // arguments, and a way to read bytes behind a POINTER argument.
     //
@@ -32,7 +32,7 @@ namespace xStunit.Interpreter.Extensibility
         }
 
         // The ST identifier as the caller wrote it, which may differ in casing
-        // from ITcXunitNativeFunction.Name (lookup is case-insensitive). Useful
+        // from IXstunitNativeFunction.Name (lookup is case-insensitive). Useful
         // for error messages that should echo the source text.
         public string FunctionName { get; }
 
@@ -46,7 +46,7 @@ namespace xStunit.Interpreter.Extensibility
         // TcXunit-kuc: positions this call has confirmed are filled by a named
         // argument, discovered as the plugin queries them (a plugin's `position`
         // argument is always the parameter's declared index in the signature -
-        // see every ITcXunitNativeFunction under samples/ - never a running
+        // see every IXstunitNativeFunction under samples/ - never a running
         // "slot within PositionalArgs" counter, since a plugin has no way to
         // know at compile time which of its parameters a given call will name).
         // Needed because a named argument can occupy any declared position, so
@@ -66,7 +66,7 @@ namespace xStunit.Interpreter.Extensibility
         // matching its own declared index.
         //
         // `position` is always the parameter's 0-based declared index in the
-        // signature (matching every ITcXunitNativeFunction under samples/,
+        // signature (matching every IXstunitNativeFunction under samples/,
         // which query params left-to-right by that index). The declared index
         // and the PositionalArgs slot coincide only once every parameter
         // before this one has also been resolved positionally; the moment one

@@ -22,7 +22,7 @@ namespace xStunit.Interpreter.Extensibility
     // hosts, and real global FUNCTION POUs. A plugin therefore can never shadow
     // interpreted source that actually exists: it only fills a hole that would
     // otherwise have been a "not found" error.
-    public interface ITcXunitNativeFunction
+    public interface IXstunitNativeFunction
     {
         // The ST identifier this implements, as written in PLC source (e.g.
         // "F_CheckSum16"). Matched case-insensitively, since IEC 61131-3

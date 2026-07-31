@@ -20,7 +20,7 @@ namespace TcXunit.Tc2StandardPlugins
     // (Cli/Plugins/NativeFunctionPluginLoader.cs), so the concrete
     // registrations below are what it picks up, and this base type is not
     // mistaken for a function of its own.
-    public abstract class StringFunction : ITcXunitNativeFunction
+    public abstract class StringFunction : IXstunitNativeFunction
     {
         private readonly StringOperation _operation;
         private readonly CharacterMeasure _measure;

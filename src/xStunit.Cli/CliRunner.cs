@@ -45,7 +45,7 @@ namespace xStunit.Cli
             // and "--suite=x"), interleaved freely with paths/--format.
             var suiteFilters = new List<string>();
             // --plugins <dir> (TcXunit-6k2): directory of assemblies supplying
-            // ITcXunitNativeFunction stand-ins for compiled-only TwinCAT
+            // IXstunitNativeFunction stand-ins for compiled-only TwinCAT
             // library functions (Tc2_Utilities' F_CheckSum16 and friends),
             // which have no .TcPOU source anywhere to parse. Parsed like
             // --format/--suite; omitted means no plugins, i.e. exactly the
@@ -378,7 +378,7 @@ namespace xStunit.Cli
                     // "FAIL (...)" line/SuiteReport.Error only carries ex.Message, the full
                     // ex.ToString() (stack trace + inner exceptions) goes to the TcXunit log
                     // file so this doesn't need re-instrumenting to diagnose.
-                    TcXunitLog.LogException($"CliRunner.Run: suite '{suiteName}' failed to run", ex);
+                    XstunitLog.LogException($"CliRunner.Run: suite '{suiteName}' failed to run", ex);
                     // TcXunit-p3t.1: name the PLC POU + method that was
                     // executing when it threw, not just the suite. Engine
                     // only produces a PlcSourceLocationException when an
@@ -706,7 +706,7 @@ Options:
   --suite <name>        Restrict the run to one suite (repeatable). Only
                         the named suite type(s) run.
   --plugins <dir>       Directory of assemblies implementing
-                        ITcXunitNativeFunction, for compiled-only TwinCAT
+                        IXstunitNativeFunction, for compiled-only TwinCAT
                         library functions with no .TcPOU source (e.g.
                         Tc2_Utilities.F_CheckSum16).
   --coverage            Additionally report which non-suite POUs are

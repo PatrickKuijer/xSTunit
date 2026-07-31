@@ -242,7 +242,7 @@ namespace xStunit.Runner.TcUnitStub
 
         // TcXunit-3tx.2: the name and source location of the assert currently
         // being evaluated, announced by the interpreter immediately before it
-        // dispatches the call (see TcUnitSuiteHost/Engine.Invocation). They are
+        // dispatches the call (see SuiteHost/Engine.Invocation). They are
         // set on this object rather than threaded through every assert
         // signature because each of the ~40 AssertEquals_<TYPE> entry points
         // would otherwise have to carry - and forward - four more parameters
@@ -348,7 +348,7 @@ namespace xStunit.Runner.TcUnitStub
         // the ScalarAssertType registry instead of a bespoke per-type
         // method. This project doesn't reference xStunit.Interpreter (the
         // reference points the other way, Interpreter -> Runner, so there's
-        // no ArrayValue type here) - the caller (TcUnitSuiteHost) flattens
+        // no ArrayValue type here) - the caller (SuiteHost) flattens
         // an ArrayValue into element/size/lower-bound primitives first.
         //
         // Mirrors upstream AssertArrayEquals_<TYPE> (FB_TestSuite.TcPOU): a

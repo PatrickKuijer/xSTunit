@@ -15,7 +15,7 @@ namespace xStunit.Interpreter.Tests
     public class NativeFunctionRegistryTests
     {
         // Minimal test double: named function, computed from its args.
-        private sealed class StubFunction : ITcXunitNativeFunction
+        private sealed class StubFunction : IXstunitNativeFunction
         {
             private readonly Func<NativeCallContext, object> _body;
 
@@ -30,7 +30,7 @@ namespace xStunit.Interpreter.Tests
             public object Invoke(NativeCallContext context) => _body(context);
         }
 
-        private static NativeFunctionRegistry RegistryWith(params ITcXunitNativeFunction[] functions)
+        private static NativeFunctionRegistry RegistryWith(params IXstunitNativeFunction[] functions)
         {
             var registry = new NativeFunctionRegistry();
             registry.RegisterAll(functions);

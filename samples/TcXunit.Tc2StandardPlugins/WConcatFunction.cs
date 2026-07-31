@@ -15,7 +15,7 @@ namespace TcXunit.Tc2StandardPlugins
     // "CONCAT", which "WCONCAT" does not hit, and no other intrinsic mentions
     // WCONCAT - so a WCONCAT call falls all the way through to the
     // native-function registry and lands here.
-    public sealed class WConcatFunction : ITcXunitNativeFunction
+    public sealed class WConcatFunction : IXstunitNativeFunction
     {
         // Declared parameter names in IEC order, so a caller may supply them
         // positionally or as `STRn := ...` and still get them appended in

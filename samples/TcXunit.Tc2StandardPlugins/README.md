@@ -44,8 +44,9 @@ ticket's acceptance criteria (TcXunit-8po.2 through TcXunit-8po.9).
 ## WSTRING counterparts (TcXunit-93l9)
 
 The wide-character half of the same set. Identical semantics - 1-based
-indexing, clamp rather than throw - so each is the narrow implementation over
-a `WSTRING` operand.
+indexing, clamp rather than throw - so narrow and wide are two registrations
+over one shared body (`StringOperations.cs`), differing only in the function
+name and the `CharacterMeasure` the body counts with (TcXunit-p4qb).
 
 | Function   | Signature                     | Behavior |
 |------------|-------------------------------|----------|
@@ -68,8 +69,16 @@ pins this down by asserting that, with no plugin loaded, `WCONCAT` reports as
 *unresolved* rather than quietly concatenating.
 
 **One "character" is one UTF-16 code unit**, matching what TwinCAT's `WSTRING`
-stores and what .NET's `string.Length`/`Substring` operate on - so the narrow
-index arithmetic carries over unchanged and no surrogate-aware handling is
-added. A non-BMP character (a surrogate pair) therefore counts as 2, in both
-TwinCAT and here; counting Unicode scalar values instead would make these
-functions disagree with the PLC they are standing in for.
+stores and what .NET's `string.Length`/`Substring` operate on - so no
+surrogate-aware handling is added. A non-BMP character (a surrogate pair)
+therefore counts as 2, in both TwinCAT and here; counting Unicode scalar
+values instead would make these functions disagree with the PLC they are
+standing in for.
+
+That makes `CharacterMeasure.Wide` exact. `CharacterMeasure.Narrow` is the
+same code-unit measure today but is only an approximation: TwinCAT counts a
+narrow `STRING` in bytes, so the narrow half disagrees with the PLC on any
+input above U+007F. That is tracked separately (TcXunit-ielv) and is why the
+shared body takes its arithmetic from a measure rather than calling
+`string.Length`/`Substring` directly - fixing it should be a change to one
+field, not an unpicking of the shared body.

@@ -415,7 +415,7 @@ namespace xStunit.Runner.TcUnitStub
             if (!ScalarAssertType.Registry.ContainsKey(expectedTypeName ?? string.Empty))
                 throw new UnsupportedConstructException(
                     expectedTypeName,
-                    $"AssertEquals(ANY) doesn't support type '{expectedTypeName}' yet (grow-on-demand, TcXunit-gd2.5).");
+                    $"AssertEquals(ANY) doesn't support type '{expectedTypeName}' yet (grow-on-demand).");
 
             AssertEqualsScalar(expectedTypeName, expectedValue, actualValue, 0.0, message);
         }

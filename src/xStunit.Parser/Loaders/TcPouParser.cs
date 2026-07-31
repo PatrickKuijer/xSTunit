@@ -99,7 +99,7 @@ namespace xStunit.Parser
                 if (pattern.IsMatch(implementationText))
                 {
                     throw new TcPouRejectedException(
-                        $"'{scopeName}' uses '{constructName}', which is outside the v1 parse subset (TcXunit-w5x.6/.10).");
+                        $"'{scopeName}' uses '{constructName}', which is outside the v1 parse subset (not yet implemented).");
                 }
             }
         }

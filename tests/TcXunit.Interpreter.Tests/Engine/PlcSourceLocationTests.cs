@@ -166,7 +166,7 @@ namespace TcXunit.Interpreter.Tests
                 {
                     // '?' isn't a recognized character anywhere in the v1
                     // lexer (see Lexer.Tokenize's default switch case), so
-                    // Lexer.Tokenize throws ParseFailure the first time
+                    // Lexer.Tokenize throws ParseException the first time
                     // this method's body is lazily parsed via GetStatements.
                     new MethodAst("M_Check", "METHOD PUBLIC M_Check", "x := 1 ? 2;"),
                 });
@@ -185,7 +185,7 @@ namespace TcXunit.Interpreter.Tests
             Assert.Equal("FB_Widget", ex.PouTypeName);
             Assert.Equal("M_Check", ex.MethodName);
             Assert.Equal("FB_Widget.M_Check", ex.Location);
-            Assert.IsType<ParseFailure>(ex.InnerException);
+            Assert.IsType<ParseException>(ex.InnerException);
         }
 
         // TcXunit-3d1: BindParams computes a callee's own local VAR default

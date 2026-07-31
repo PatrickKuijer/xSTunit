@@ -340,7 +340,7 @@ namespace TcXunit.Interpreter
                     case '[': tokens.Add(new Token(TokenType.LBracket, "[", tokenLine)); i++; continue;
                     case ']': tokens.Add(new Token(TokenType.RBracket, "]", tokenLine)); i++; continue;
                     default:
-                        throw new ParseFailure($"Unexpected character '{c}' at position {i} in: {text}");
+                        throw new ParseException($"Unexpected character '{c}' at position {i} in: {text}");
                 }
             }
 
@@ -425,10 +425,10 @@ namespace TcXunit.Interpreter
         private static long ParseBasedLiteral(string digits, int numberBase, string text, int position)
         {
             if (numberBase != 2 && numberBase != 8 && numberBase != 16)
-                throw new ParseFailure($"Unsupported based-literal base '{numberBase}#' at position {position} in: {text}");
+                throw new ParseException($"Unsupported based-literal base '{numberBase}#' at position {position} in: {text}");
 
             if (digits.Length == 0)
-                throw new ParseFailure($"Based literal has no digits after '#' at position {position} in: {text}");
+                throw new ParseException($"Based literal has no digits after '#' at position {position} in: {text}");
 
             long value = 0;
             foreach (var ch in digits)
@@ -442,7 +442,7 @@ namespace TcXunit.Interpreter
                 };
 
                 if (digitValue < 0 || digitValue >= numberBase)
-                    throw new ParseFailure($"Digit '{ch}' is invalid for base {numberBase} at position {position} in: {text}");
+                    throw new ParseException($"Digit '{ch}' is invalid for base {numberBase} at position {position} in: {text}");
 
                 value = (value * numberBase) + digitValue;
             }

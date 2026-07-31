@@ -26,9 +26,9 @@ namespace TcXunit.Interpreter.Tests
         // unsupported-construct above on no evidence. The exception TYPE this
         // parser raises is unchanged either way; only the classifier moved.
         [Fact]
-        public void ParseStatements_LiteralAssignmentTarget_ThrowsParseFailure()
+        public void ParseStatements_LiteralAssignmentTarget_ThrowsParseException()
         {
-            Assert.Throws<ParseFailure>(() => Parser.ParseStatements("5 := x;"));
+            Assert.Throws<ParseException>(() => Parser.ParseStatements("5 := x;"));
         }
 
         // '**' (EXPT) is a real IEC 61131-3 operator this parser does not

@@ -45,9 +45,9 @@ namespace TcXunit.Interpreter.Tests
         // out loud, instead of being smuggled in as plc-fault ("your code is
         // broken") or load-error ("nothing ran").
         [Fact]
-        public void Classify_ParseFailure_IsParseErrorWhenLocated()
+        public void Classify_ParseException_IsParseErrorWhenLocated()
         {
-            var located = new PlcSourceLocationException("FB_X", "MethodY", new ParseFailure("Unexpected token"));
+            var located = new PlcSourceLocationException("FB_X", "MethodY", new ParseException("Unexpected token"));
 
             var kind = FailureClassifier.Classify(located, out _);
 
@@ -60,9 +60,9 @@ namespace TcXunit.Interpreter.Tests
         // described TcXunit's own call path, not the failure - so the kind can't
         // depend on it.
         [Fact]
-        public void Classify_ParseFailure_IsParseErrorWhenUnlocatedToo()
+        public void Classify_ParseException_IsParseErrorWhenUnlocatedToo()
         {
-            var kind = FailureClassifier.Classify(new ParseFailure("Unexpected token"), out _);
+            var kind = FailureClassifier.Classify(new ParseException("Unexpected token"), out _);
 
             Assert.Equal(FailureKind.ParseError, kind);
         }
@@ -71,9 +71,9 @@ namespace TcXunit.Interpreter.Tests
         // field unsupported-construct uses, never a parse-error-only field, so
         // `kind` + `construct` is one vocabulary at every level of the JSON.
         [Fact]
-        public void Classify_LexerParseFailure_CarriesTheOffendingTokenAsTheConstruct()
+        public void Classify_LexerParseException_CarriesTheOffendingTokenAsTheConstruct()
         {
-            var ex = new ParseFailure("Unexpected character '@' at position 13 in: n := 1;\nn := @ 2;");
+            var ex = new ParseException("Unexpected character '@' at position 13 in: n := 1;\nn := @ 2;");
 
             FailureClassifier.Classify(ex, out var construct);
 
@@ -83,9 +83,9 @@ namespace TcXunit.Interpreter.Tests
         // The parser's own messages name the token as Token.ToString()
         // ("Type:Text") rather than quoting it.
         [Fact]
-        public void Classify_ParserParseFailure_CarriesTheOffendingTokenAsTheConstruct()
+        public void Classify_ParserParseException_CarriesTheOffendingTokenAsTheConstruct()
         {
-            var ex = new ParseFailure("Expected Semicolon but got Identifier:FOO at token index 4");
+            var ex = new ParseException("Expected Semicolon but got Identifier:FOO at token index 4");
 
             FailureClassifier.Classify(ex, out var construct);
 
@@ -96,9 +96,9 @@ namespace TcXunit.Interpreter.Tests
         // classifies - `construct` is nullable for every kind, and a missing
         // token must never cost the classification.
         [Fact]
-        public void Classify_TokenlessParseFailure_IsStillParseErrorWithNoConstruct()
+        public void Classify_TokenlessParseException_IsStillParseErrorWithNoConstruct()
         {
-            var kind = FailureClassifier.Classify(new ParseFailure("Expected END_IF"), out var construct);
+            var kind = FailureClassifier.Classify(new ParseException("Expected END_IF"), out var construct);
 
             Assert.Equal(FailureKind.ParseError, kind);
             Assert.Null(construct);
@@ -182,7 +182,7 @@ namespace TcXunit.Interpreter.Tests
             var ex = Assert.Throws<FormatException>(() => engine.RunSuite("FB_MySuite"));
 
             Assert.Contains("Not a valid ARRAY type declaration", ex.Message);
-            Assert.IsNotType<ParseFailure>(ex);
+            Assert.IsNotType<ParseException>(ex);
 
             var kind = FailureClassifier.Classify(ex, out _);
 

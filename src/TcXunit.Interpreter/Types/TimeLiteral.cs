@@ -44,7 +44,7 @@ namespace TcXunit.Interpreter
                 while (pos < text.Length && char.IsDigit(text[pos]))
                     pos++;
                 if (pos == numStart)
-                    throw new ParseFailure($"Expected a number at position {pos} in TIME literal '{text}'");
+                    throw new ParseException($"Expected a number at position {pos} in TIME literal '{text}'");
                 var number = long.Parse(text.Substring(numStart, pos - numStart));
 
                 var unitStart = pos;
@@ -56,20 +56,20 @@ namespace TcXunit.Interpreter
                     segments,
                     s => string.Equals(s.Unit, unit, StringComparison.OrdinalIgnoreCase));
                 if (segmentIndex < 0 || segmentIndex <= lastSegmentIndex)
-                    throw new ParseFailure($"Unexpected or out-of-order unit '{unit}' in TIME literal '{text}'");
+                    throw new ParseException($"Unexpected or out-of-order unit '{unit}' in TIME literal '{text}'");
 
                 // Overflow is only legal in the first unit actually used (the
                 // most-significant one present); any later unit must stay within
                 // its own range (e.g. m5s68 is illegal, s > 59).
                 if (lastSegmentIndex >= 0 && number > segments[segmentIndex].Max)
-                    throw new ParseFailure($"Value {number} overflows unit '{unit}' in TIME literal '{text}'");
+                    throw new ParseException($"Value {number} overflows unit '{unit}' in TIME literal '{text}'");
 
                 total += number * segments[segmentIndex].Multiplier;
                 lastSegmentIndex = segmentIndex;
             }
 
             if (lastSegmentIndex < 0)
-                throw new ParseFailure($"TIME literal '{text}' has no duration segments");
+                throw new ParseException($"TIME literal '{text}' has no duration segments");
 
             return total;
         }

@@ -20,15 +20,15 @@ namespace TcXunit.Interpreter
     // Derives from FormatException so every existing catch (FormatException)
     // around the front end keeps working unchanged. Note that xUnit's
     // Assert.Throws<T> is exact-match, so front-end tests that pinned the base
-    // type were retargeted to ParseFailure; Assert.ThrowsAny<FormatException>
+    // type were retargeted to ParseException; Assert.ThrowsAny<FormatException>
     // would also have held.
     //
     // Message-compatible only, deliberately. Carrying the offending token and
     // position as structured fields - and retiring FailureClassifier's
     // message-scraping with them - is TcXunit-fpw8, not this change.
-    public class ParseFailure : FormatException
+    public class ParseException : FormatException
     {
-        public ParseFailure(string message)
+        public ParseException(string message)
             : base(message)
         {
         }

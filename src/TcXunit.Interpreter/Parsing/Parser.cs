@@ -45,7 +45,7 @@ namespace TcXunit.Interpreter
         private Token Expect(TokenType type)
         {
             if (Current.Type != type)
-                throw new ParseFailure($"Expected {type} but got {Current} at token index {_pos}");
+                throw new ParseException($"Expected {type} but got {Current} at token index {_pos}");
             return Advance();
         }
 
@@ -148,7 +148,7 @@ namespace TcXunit.Interpreter
             // that reaches this fallback only malformed source does (e.g. a
             // bare non-call expression used as a statement), so claiming
             // unsupported-construct here would be a guess, not evidence.
-            throw new ParseFailure($"Statement did not resolve to an assignment or call at token index {_pos}");
+            throw new ParseException($"Statement did not resolve to an assignment or call at token index {_pos}");
         }
 
         // Assignment targets: plain identifier, .Member field access, or
@@ -167,7 +167,7 @@ namespace TcXunit.Interpreter
             if (target is DerefExpr)
                 throw new UnsupportedConstructException("x^ :=", "Pointer dereference on the assignment left-hand side (x^ := ...) is not supported in the v1 subset");
 
-            throw new ParseFailure("Assignment target must be an identifier, field access, or array index in the v1 subset");
+            throw new ParseException("Assignment target must be an identifier, field access, or array index in the v1 subset");
         }
 
         private Stmt ParseIf()
@@ -175,7 +175,7 @@ namespace TcXunit.Interpreter
             Advance(); // IF
             var condition = ParseExpr();
             if (!IsKeyword("THEN"))
-                throw new ParseFailure("Expected THEN");
+                throw new ParseException("Expected THEN");
             Advance();
 
             var thenBranch = ParseStatementList();
@@ -198,7 +198,7 @@ namespace TcXunit.Interpreter
                 Advance();
                 var elsifCondition = ParseExpr();
                 if (!IsKeyword("THEN"))
-                    throw new ParseFailure("Expected THEN");
+                    throw new ParseException("Expected THEN");
                 Advance();
 
                 var elsifThen = ParseStatementList();
@@ -215,7 +215,7 @@ namespace TcXunit.Interpreter
             }
 
             if (!IsKeyword("END_IF"))
-                throw new ParseFailure("Expected END_IF");
+                throw new ParseException("Expected END_IF");
             Advance();
             SkipOptionalSemicolon();
 
@@ -230,7 +230,7 @@ namespace TcXunit.Interpreter
             var from = ParseExpr();
 
             if (!IsKeyword("TO"))
-                throw new ParseFailure("Expected TO");
+                throw new ParseException("Expected TO");
             Advance();
             var to = ParseExpr();
 
@@ -242,13 +242,13 @@ namespace TcXunit.Interpreter
             }
 
             if (!IsKeyword("DO"))
-                throw new ParseFailure("Expected DO");
+                throw new ParseException("Expected DO");
             Advance();
 
             var body = ParseStatementList(new HashSet<string> { "END_FOR" });
 
             if (!IsKeyword("END_FOR"))
-                throw new ParseFailure("Expected END_FOR");
+                throw new ParseException("Expected END_FOR");
             Advance();
             SkipOptionalSemicolon();
 
@@ -261,13 +261,13 @@ namespace TcXunit.Interpreter
             var condition = ParseExpr();
 
             if (!IsKeyword("DO"))
-                throw new ParseFailure("Expected DO");
+                throw new ParseException("Expected DO");
             Advance();
 
             var body = ParseStatementList(new HashSet<string> { "END_WHILE" });
 
             if (!IsKeyword("END_WHILE"))
-                throw new ParseFailure("Expected END_WHILE");
+                throw new ParseException("Expected END_WHILE");
             Advance();
             SkipOptionalSemicolon();
 
@@ -280,12 +280,12 @@ namespace TcXunit.Interpreter
             var body = ParseStatementList(new HashSet<string> { "UNTIL" });
 
             if (!IsKeyword("UNTIL"))
-                throw new ParseFailure("Expected UNTIL");
+                throw new ParseException("Expected UNTIL");
             Advance();
             var until = ParseExpr();
 
             if (!IsKeyword("END_REPEAT"))
-                throw new ParseFailure("Expected END_REPEAT");
+                throw new ParseException("Expected END_REPEAT");
             Advance();
             SkipOptionalSemicolon();
 
@@ -298,7 +298,7 @@ namespace TcXunit.Interpreter
             var selector = ParseExpr();
 
             if (!IsKeyword("OF"))
-                throw new ParseFailure("Expected OF");
+                throw new ParseException("Expected OF");
             Advance();
 
             var arms = new List<CaseArm>();
@@ -320,7 +320,7 @@ namespace TcXunit.Interpreter
             }
 
             if (!IsKeyword("END_CASE"))
-                throw new ParseFailure("Expected END_CASE");
+                throw new ParseException("Expected END_CASE");
             Advance();
             SkipOptionalSemicolon();
 

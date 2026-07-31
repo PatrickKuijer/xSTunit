@@ -21,7 +21,7 @@ namespace TcXunit.Interpreter
             var pos = 0;
             var (year, month, day) = ReadDate(text, ref pos);
             if (pos != text.Length)
-                throw new ParseFailure($"Unexpected trailing text '{text.Substring(pos)}' in DATE literal '{text}'");
+                throw new ParseException($"Unexpected trailing text '{text.Substring(pos)}' in DATE literal '{text}'");
 
             return ToEpochSeconds(year, month, day, 0, 0, 0, text);
         }
@@ -36,9 +36,9 @@ namespace TcXunit.Interpreter
             Expect(text, ref pos, '-', text);
             var (hour, minute, second, fractionMs) = ReadTime(text, ref pos);
             if (fractionMs != null)
-                throw new ParseFailure($"DATE_AND_TIME literal '{text}' doesn't support fractional seconds");
+                throw new ParseException($"DATE_AND_TIME literal '{text}' doesn't support fractional seconds");
             if (pos != text.Length)
-                throw new ParseFailure($"Unexpected trailing text '{text.Substring(pos)}' in DATE_AND_TIME literal '{text}'");
+                throw new ParseException($"Unexpected trailing text '{text.Substring(pos)}' in DATE_AND_TIME literal '{text}'");
 
             return ToEpochSeconds(year, month, day, hour, minute, second, text);
         }
@@ -50,7 +50,7 @@ namespace TcXunit.Interpreter
             var pos = 0;
             var (hour, minute, second, fractionMs) = ReadTime(text, ref pos);
             if (pos != text.Length)
-                throw new ParseFailure($"Unexpected trailing text '{text.Substring(pos)}' in TIME_OF_DAY literal '{text}'");
+                throw new ParseException($"Unexpected trailing text '{text.Substring(pos)}' in TIME_OF_DAY literal '{text}'");
 
             return (uint)(((hour * 60 + minute) * 60 + second) * 1000 + (fractionMs ?? 0));
         }
@@ -64,9 +64,9 @@ namespace TcXunit.Interpreter
             var day = ReadDigits(text, ref pos, 2, "day", text);
 
             if (month < 1 || month > 12)
-                throw new ParseFailure($"Month {month} out of range in DATE literal '{text}'");
+                throw new ParseException($"Month {month} out of range in DATE literal '{text}'");
             if (day < 1 || day > DateTime.DaysInMonth(year, month))
-                throw new ParseFailure($"Day {day} out of range in DATE literal '{text}'");
+                throw new ParseException($"Day {day} out of range in DATE literal '{text}'");
 
             return (year, month, day);
         }
@@ -80,11 +80,11 @@ namespace TcXunit.Interpreter
             var second = ReadDigits(text, ref pos, 2, "second", text);
 
             if (hour > 23)
-                throw new ParseFailure($"Hour {hour} out of range in literal '{text}'");
+                throw new ParseException($"Hour {hour} out of range in literal '{text}'");
             if (minute > 59)
-                throw new ParseFailure($"Minute {minute} out of range in literal '{text}'");
+                throw new ParseException($"Minute {minute} out of range in literal '{text}'");
             if (second > 59)
-                throw new ParseFailure($"Second {second} out of range in literal '{text}'");
+                throw new ParseException($"Second {second} out of range in literal '{text}'");
 
             int? fractionMs = null;
             if (pos < text.Length && text[pos] == '.')
@@ -94,7 +94,7 @@ namespace TcXunit.Interpreter
                 while (pos < text.Length && char.IsDigit(text[pos]))
                     pos++;
                 if (pos == fracStart)
-                    throw new ParseFailure($"Expected digits after '.' in literal '{text}'");
+                    throw new ParseException($"Expected digits after '.' in literal '{text}'");
 
                 // Normalize to milliseconds regardless of how many fractional
                 // digits were given (TOD#10:00:00.5 == 500ms, matching TIME's
@@ -110,11 +110,11 @@ namespace TcXunit.Interpreter
         private static int ReadDigits(string text, ref int pos, int count, string fieldName, string literalText)
         {
             if (pos + count > text.Length)
-                throw new ParseFailure($"Expected {count}-digit {fieldName} at position {pos} in literal '{literalText}'");
+                throw new ParseException($"Expected {count}-digit {fieldName} at position {pos} in literal '{literalText}'");
             for (var j = 0; j < count; j++)
             {
                 if (!char.IsDigit(text[pos + j]))
-                    throw new ParseFailure($"Expected {count}-digit {fieldName} at position {pos} in literal '{literalText}'");
+                    throw new ParseException($"Expected {count}-digit {fieldName} at position {pos} in literal '{literalText}'");
             }
 
             var value = int.Parse(text.Substring(pos, count));
@@ -125,7 +125,7 @@ namespace TcXunit.Interpreter
         private static void Expect(string text, ref int pos, char expected, string literalText)
         {
             if (pos >= text.Length || text[pos] != expected)
-                throw new ParseFailure($"Expected '{expected}' at position {pos} in literal '{literalText}'");
+                throw new ParseException($"Expected '{expected}' at position {pos} in literal '{literalText}'");
             pos++;
         }
 
@@ -134,7 +134,7 @@ namespace TcXunit.Interpreter
             var dt = new DateTime(year, month, day, hour, minute, second, DateTimeKind.Utc);
             var totalSeconds = (dt - Epoch).TotalSeconds;
             if (totalSeconds < 0 || totalSeconds > uint.MaxValue)
-                throw new ParseFailure($"Literal '{literalText}' is out of the representable DATE/DATE_AND_TIME range (1970-01-01 to 2106)");
+                throw new ParseException($"Literal '{literalText}' is out of the representable DATE/DATE_AND_TIME range (1970-01-01 to 2106)");
 
             return (uint)totalSeconds;
         }

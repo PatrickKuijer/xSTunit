@@ -73,7 +73,7 @@ namespace TcXunit.Interpreter
 
                 // TcXunit-229.15: the ST front end (Lexer/Parser and the
                 // literal parsers) reports every body it cannot read as a
-                // ParseFailure, and that is now its own kind - LOCATED OR NOT.
+                // ParseException, and that is now its own kind - LOCATED OR NOT.
                 // It used to split on whether an ExecuteBody frame happened to
                 // have stamped a location on the way out, which made the same
                 // unreadable body a plc-fault when it was reached through a
@@ -89,9 +89,9 @@ namespace TcXunit.Interpreter
                 // Convert.To* the engine performs on interpreted values, and
                 // ArrayTypeInfo.Parse during instantiation - and claiming those
                 // as parse-error told an agent to escalate a genuine PLC defect
-                // instead of fixing it. Everything that is not a ParseFailure
+                // instead of fixing it. Everything that is not a ParseException
                 // falls through to the located/unlocated split below.
-                case ParseFailure _:
+                case ParseException _:
                     construct = OffendingToken(ex.Message);
                     return FailureKind.ParseError;
             }
@@ -106,7 +106,7 @@ namespace TcXunit.Interpreter
         // uses, so `kind` + `construct` is one vocabulary at every level of the
         // JSON instead of a second field nobody would know to read.
         //
-        // Recovered from the front end's own message text because ParseFailure
+        // Recovered from the front end's own message text because ParseException
         // is message-compatible only for now; carrying the token and position as
         // structured fields, and retiring this scraping with them, is
         // TcXunit-fpw8. Best effort by construction: null when the message names

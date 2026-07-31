@@ -44,13 +44,13 @@ namespace TcXunit.Interpreter.Tests
         [Fact]
         public void ParseExpression_TimeLiteralWithOverflowInLowerUnit_Throws()
         {
-            Assert.Throws<ParseFailure>(() => Parser.ParseExpression("T#5m68s"));
+            Assert.Throws<ParseException>(() => Parser.ParseExpression("T#5m68s"));
         }
 
         [Fact]
         public void ParseExpression_TimeLiteralWithReorderedUnits_Throws()
         {
-            Assert.Throws<ParseFailure>(() => Parser.ParseExpression("T#500ms1s"));
+            Assert.Throws<ParseException>(() => Parser.ParseExpression("T#500ms1s"));
         }
 
         [Fact]

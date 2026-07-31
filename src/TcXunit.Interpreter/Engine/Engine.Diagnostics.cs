@@ -38,24 +38,17 @@ namespace TcXunit.Interpreter
         {
             try
             {
-                var statements = statementsFactory();
-                ExecuteStatements(statements, frame);
+                RunWithFaultAttribution(
+                    () => ExecuteStatements(statementsFactory(), frame),
+                    frame);
             }
             catch (MethodReturnSignal)
             {
                 // RETURN ends this body only - it must not unwind into the
                 // caller (a top-level RETURN in an FB's cyclic body ends that
-                // cycle, not the ST call that invoked it).
-            }
-            catch (Exception ex)
-            {
-                RecordFaultSite(ex, frame);
-
-                // Bare rethrow, not `throw ex`: the original exception - type,
-                // message and CLR stack trace - reaches the caller untouched.
-                // Wrapping deliberately does NOT happen here; see
-                // TryCreateSourceLocationException.
-                throw;
+                // cycle, not the ST call that invoked it). RecordFaultSite
+                // ignores control-flow signals, so passing through the wrapper
+                // above leaves this signal unannotated as before.
             }
         }
 
@@ -201,6 +194,38 @@ namespace TcXunit.Interpreter
         // last" order TryCreateSourceLocationException hands to
         // PlcSourceLocationException - no sorting needed.
         private const string FaultCallStackKey = "TcXunit.Interpreter.FaultCallStack";
+
+        // TcXunit-8ldh: the one shape shared by ExecuteBody and BindParams's
+        // default-value construction - "run this, and if it faults charge the
+        // fault to `frame` on the way out". Both are pure attribution: they add
+        // a frame to the in-flight exception and change nothing else about it.
+        //
+        // ExecuteSuiteBody's catches are deliberately NOT expressed in terms of
+        // this: they look the same but also decide whether the fault can be
+        // charged to an open test case and how much of the body to skip
+        // afterwards, which is a different fact about a different boundary.
+        private static void RunWithFaultAttribution(Action action, Frame frame)
+        {
+            RunWithFaultAttribution<object>(() => { action(); return null; }, frame);
+        }
+
+        private static T RunWithFaultAttribution<T>(Func<T> action, Frame frame)
+        {
+            try
+            {
+                return action();
+            }
+            catch (Exception ex)
+            {
+                RecordFaultSite(ex, frame);
+
+                // Bare rethrow, not `throw ex`: the original exception - type,
+                // message and CLR stack trace - reaches the caller untouched.
+                // Wrapping deliberately does NOT happen here; see
+                // TryCreateSourceLocationException.
+                throw;
+            }
+        }
 
         private static void RecordFaultSite(Exception ex, Frame frame)
         {

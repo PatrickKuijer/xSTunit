@@ -79,6 +79,12 @@ namespace TcXunit.Interpreter
         // Non-null when ActualTypeName is a native edge-trigger type (R_TRIG/
         // F_TRIG) - the native host backing this instance's CLK->Q behavior
         // (TcXunit-f6b's native-stub boundary).
+        // Non-null when ActualTypeName is a native bistable latch type (RS/SR) -
+        // the native host backing this instance's SET/RESET->Q1 behavior
+        // (TcXunit-ejjl's native-stub boundary).
+        public BistableLatchHost NativeBistableLatchHost =>
+            NativeKind == NativeHostKind.BistableLatch ? (BistableLatchHost)NativeHost : null;
+
         public EdgeTriggerHost NativeEdgeTriggerHost =>
             NativeKind == NativeHostKind.Edge ? (EdgeTriggerHost)NativeHost : null;
 

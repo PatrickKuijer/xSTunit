@@ -109,6 +109,15 @@ namespace TcXunit.Interpreter
                             callee.NativeEdgeTriggerHost.Update(callee);
                             return null;
 
+                        // Native RS/SR, e.g. fbLatch(SET:=x, RESET1:=y) - like
+                        // the edge trigger above, but with two inputs whose
+                        // names differ between RS and SR, so the host supplies
+                        // them (TcXunit-ejjl).
+                        case NativeHostKind.BistableLatch:
+                            BindBistableLatchInputs(callee, positionalArgs, namedArgs, callerFrame);
+                            callee.NativeBistableLatchHost.Update(callee);
+                            return null;
+
                         // Ordinary interpreted (non-native) FB field or
                         // method-local var, e.g. sfbLoopback(ibEnable := TRUE)
                         // - generalizes the native-timer bare-invoke above:
@@ -492,6 +501,26 @@ namespace TcXunit.Interpreter
         {
             for (var i = 0; i < positionalArgs.Count && i < EdgeTriggerPositionalParams.Length; i++)
                 callee.Fields[EdgeTriggerPositionalParams[i]].Value = Evaluate(positionalArgs[i], callerFrame);
+
+            foreach (var arg in namedArgs)
+                if (callee.Fields.TryGetValue(arg.Name, out var cell))
+                    cell.Value = Evaluate(arg.Value, callerFrame);
+        }
+
+        // RS/SR take two VAR_INPUTs, but not the same two: RS is
+        // (SET, RESET1) and SR is (SET1, RESET). The positional order comes
+        // from the callee's own host so this site never has to know which of
+        // the two it is holding (TcXunit-ejjl).
+        private void BindBistableLatchInputs(
+            FbInstance callee,
+            IReadOnlyList<Expr> positionalArgs,
+            IReadOnlyList<NamedArg> namedArgs,
+            Frame callerFrame)
+        {
+            var inputNames = callee.NativeBistableLatchHost.PositionalInputNames;
+
+            for (var i = 0; i < positionalArgs.Count && i < inputNames.Count; i++)
+                callee.Fields[inputNames[i]].Value = Evaluate(positionalArgs[i], callerFrame);
 
             foreach (var arg in namedArgs)
                 if (callee.Fields.TryGetValue(arg.Name, out var cell))

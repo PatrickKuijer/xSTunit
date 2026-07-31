@@ -27,6 +27,9 @@ namespace TcXunit.Interpreter
         // R_TRIG/F_TRIG (TcXunit-f6b).
         Edge,
 
+        // RS/SR bistable latches (TcXunit-ejjl).
+        BistableLatch,
+
         // Loopback's fault-injection stub (TcXunit-w5x.15.5).
         Loopback,
 
@@ -48,6 +51,7 @@ namespace TcXunit.Interpreter
         // Engine.cs.
         private static readonly HashSet<string> NativeTimerTypes = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "TON", "TOF", "TP", "FB_Pulse" };
         private static readonly HashSet<string> NativeEdgeTriggerTypes = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "R_TRIG", "F_TRIG" };
+        private static readonly HashSet<string> NativeBistableLatchTypes = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "RS", "SR" };
 
         // Single-member "set" for symmetry with the two above; matched
         // OrdinalIgnoreCase for the same TcXunit-nch reason.
@@ -134,6 +138,21 @@ namespace TcXunit.Interpreter
                     Field("CLK", false),
                     Field("Q", false));
 
+            if (NativeBistableLatchTypes.Contains(nativeBaseTypeName))
+            {
+                // RS and SR name their inputs differently (SET/RESET1 vs
+                // SET1/RESET), so the seeded fields come from the host that
+                // will read them back rather than from a literal list here -
+                // one spelling, one owner (TcXunit-ejjl).
+                var latch = BistableLatchHost.Create(nativeBaseTypeName);
+                return NativeHostBinding.Of(
+                    NativeHostKind.BistableLatch,
+                    latch,
+                    Field(latch.PositionalInputNames[0], false),
+                    Field(latch.PositionalInputNames[1], false),
+                    Field(BistableLatchHost.OutputName, false));
+            }
+
             return NativeHostBinding.Of(NativeHostKind.Suite, new TcUnitSuiteHost());
         }
 
@@ -154,6 +173,7 @@ namespace TcXunit.Interpreter
         private static bool IsNativeFbTypeName(string typeName) =>
             NativeTimerTypes.Contains(typeName)
             || NativeEdgeTriggerTypes.Contains(typeName)
+            || NativeBistableLatchTypes.Contains(typeName)
             || string.Equals(typeName, NativeLoopbackType, StringComparison.OrdinalIgnoreCase);
     }
 }

@@ -25,6 +25,7 @@
     <Compile Include="..\..\src\xStunit.Vsix\TestRunner\XstunitModels.cs" Link="TestRunner\XstunitModels.cs" />
     <Compile Include="..\..\src\xStunit.Vsix\TestRunner\XstunitConfig.cs" Link="TestRunner\XstunitConfig.cs" />
     <Compile Include="..\..\src\xStunit.Vsix\TestRunner\XstunitArgumentBuilder.cs" Link="TestRunner\XstunitArgumentBuilder.cs" />
+    <Compile Include="..\..\src\xStunit.Vsix\TestRunner\XstunitEventStream.cs" Link="TestRunner\XstunitEventStream.cs" />
   </ItemGroup>
 
   <ItemGroup>

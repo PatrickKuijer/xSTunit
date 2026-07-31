@@ -3,11 +3,6 @@ using Xunit;
 
 namespace xStunit.Runner.Tests
 {
-    // Direct coverage for the ScalarAssertType registry (TcXunit-gd2.11):
-    // FB_TestSuite/SuiteHost/NativeMethodBridge all just forward into
-    // this table now, so its compare/format behavior for each existing
-    // entry (INT/BOOL/STRING/REAL) needs its own tests independent of the
-    // interpreter/suite-host plumbing.
     public class ScalarAssertTypeTests
     {
         [Fact]
@@ -26,8 +21,8 @@ namespace xStunit.Runner.Tests
             Assert.False(type.AreEqual(5, 6, null));
         }
 
-        // IEC INT is a signed 16-bit type - out-of-range values that wrap
-        // to the same 16-bit representation compare equal (TcXunit-k28.4).
+        // IEC INT is signed 16-bit, so a real PLC variable would already have
+        // wrapped: values that share a 16-bit representation must compare equal.
         [Fact]
         public void Int_AreEqual_TrueForWraparoundCollision()
         {
@@ -36,12 +31,9 @@ namespace xStunit.Runner.Tests
             Assert.True(type.AreEqual(32768, -32768, null));
         }
 
-        // TcXunit-vh7: unlike every other integer-family entry in this
-        // registry (DINT/UDINT/LINT/etc, all built on AsLong64/WrapXxx),
-        // INT used to unbox expected/actual straight to C# int, throwing
-        // InvalidCastException (Int64->Int32) whenever a long-boxed value
-        // (e.g. a UDINT/DWORD value or long-promoted arithmetic result)
-        // reached an INT assert.
+        // A long-boxed value (a DWORD/UDINT operand, or any long-promoted
+        // arithmetic result) can reach an INT assert, and unboxing it straight
+        // to C# int throws InvalidCastException instead of comparing.
         [Fact]
         public void Int_AreEqual_AcceptsLongBoxedValue()
         {
@@ -138,9 +130,8 @@ namespace xStunit.Runner.Tests
             Assert.Equal("'xyz'", type.FormatActual("xyz"));
         }
 
-        // WSTRING (TcXunit-gd2.4): identical behavior to STRING, since the
-        // interpreter has no narrower wide-char representation than C#
-        // string - only the registry key differs.
+        // WSTRING duplicates STRING's expectations on purpose: the interpreter
+        // has no wide-char representation of its own, so only the key differs.
         [Fact]
         public void WString_AreEqual_TrueForSameValue()
         {
@@ -199,19 +190,15 @@ namespace xStunit.Runner.Tests
         {
             var type = ScalarAssertType.Registry["REAL"];
 
-            // Production formats with InvariantCulture (TcXunit-gd2.7) so
-            // the failure message doesn't vary with the running culture's
-            // decimal separator - assert against a fixed literal rather
-            // than a culture-sensitive interpolation.
+            // Fixed literals, not interpolation: production formats with
+            // InvariantCulture, and an interpolated expectation would follow the
+            // running culture's decimal separator instead of pinning that.
             Assert.Equal("1 +/- 0.1", type.FormatExpected(1.0, 0.1));
             Assert.Equal("1.2", type.FormatActual(1.2));
         }
 
-        // Integer-family types (TcXunit-gd2.1). Boundary values exercise
-        // each type's own min/max width - deliberately no wraparound cases
-        // like INT's (ticket calls for exact equality only, not collision
-        // semantics) - plus one mismatch case per type to prove Format*
-        // produces the value used in the Fail() message.
+        // The remaining integer types compare exactly at their own min/max
+        // width; unlike INT, no wraparound collision is expected of them.
 
         [Theory]
         [InlineData((sbyte)0, (sbyte)0, true)]
@@ -344,9 +331,6 @@ namespace xStunit.Runner.Tests
             Assert.Equal("65535", type.FormatActual(ushort.MaxValue));
         }
 
-        // AssertEquals_DINT is highest priority (failing in a real
-        // production suite today per TcXunit-gd2.1) - covered here plus an
-        // E2E interpreter test in NativeMethodBridgeAssertTests.
         [Theory]
         [InlineData(0, 0, true)]
         [InlineData(int.MinValue, int.MinValue, true)]
@@ -505,11 +489,9 @@ namespace xStunit.Runner.Tests
             Assert.Equal(ulong.MaxValue.ToString(), type.FormatActual(ulong.MaxValue));
         }
 
-        // Interpreted ST integer literals are always boxed C# int
-        // (Parser.Expressions.cs IntLiteralExpr), regardless of which
-        // integer-family type the call targets - the registry entries must
-        // accept boxed int for the wider (long/ulong-backed) types too, not
-        // just their own natural CLR box (TcXunit-gd2.1).
+        // An interpreted ST integer literal always arrives as a boxed C# int,
+        // whichever integer type the call targets, so the wider entries have to
+        // accept that box and not only their own natural CLR one.
         [Fact]
         public void Lint_AreEqual_AcceptsBoxedIntFromInterpretedLiteral()
         {
@@ -534,8 +516,6 @@ namespace xStunit.Runner.Tests
             Assert.True(type.AreEqual(100L, 100L, null));
         }
 
-        // LREAL (TcXunit-gd2.2): the 64-bit delta-based twin of REAL - same
-        // compare/format logic, but at double precision throughout.
         [Fact]
         public void Lreal_AreEqual_TrueWithinDelta()
         {
@@ -563,14 +543,13 @@ namespace xStunit.Runner.Tests
         {
             var type = ScalarAssertType.Registry["LREAL"];
 
-            // Production formats with InvariantCulture (TcXunit-gd2.7); see
-            // the matching REAL test above.
+            // Fixed literals, not interpolation — see the REAL test above.
             Assert.Equal("1 +/- 0.1", type.FormatExpected(1.0, 0.1));
             Assert.Equal("1.2", type.FormatActual(1.2));
         }
 
-        // TIME (TcXunit-gd2.3): boxed C# uint milliseconds per
-        // TimeLiteral.ParseTimeMs, compared exactly (no Delta).
+        // A TIME value reaches the registry as a boxed uint count of
+        // milliseconds, which is what the InlineData below are.
         [Theory]
         [InlineData(0u, 0u, true)]
         [InlineData(uint.MaxValue, uint.MaxValue, true)]
@@ -607,8 +586,7 @@ namespace xStunit.Runner.Tests
             Assert.True(type.AreEqual(100, 100, null));
         }
 
-        // LTIME (TcXunit-gd2.3): boxed C# ulong nanoseconds per
-        // TimeLiteral.ParseLTimeNs, compared exactly (no Delta).
+        // LTIME is a boxed ulong count of nanoseconds, not milliseconds.
         [Theory]
         [InlineData(0ul, 0ul, true)]
         [InlineData(ulong.MaxValue, ulong.MaxValue, true)]
@@ -645,9 +623,7 @@ namespace xStunit.Runner.Tests
             Assert.True(type.AreEqual(100, 100, null));
         }
 
-        // DATE/DATE_AND_TIME/TIME_OF_DAY (TcXunit-gd2.13): all boxed C#
-        // uint per DateTimeLiteral.cs, compared exactly (no Delta), same
-        // shape as TIME above.
+        // DATE, DATE_AND_TIME and TIME_OF_DAY are all boxed uint like TIME.
         [Theory]
         [InlineData(0u, 0u, true)]
         [InlineData(uint.MaxValue, uint.MaxValue, true)]

@@ -3,12 +3,6 @@ using Xunit;
 
 namespace xStunit.Runner.Tests
 {
-    /// <summary>
-    /// TcXunit-6fb.1: FB_TestSuite starts a stopwatch on a test's record when
-    /// TEST()/TEST_ORDERED() opens it, and FinishRecord (shared by
-    /// TEST_FINISHED() and TEST_FINISHED_NAMED()) stops it and stashes the
-    /// elapsed time into the TestCaseResult it builds.
-    /// </summary>
     public class TestCaseDurationTests
     {
         [Fact]

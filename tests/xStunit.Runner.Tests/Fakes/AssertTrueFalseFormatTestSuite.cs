@@ -2,7 +2,7 @@ using xStunit.Runner.TcUnitStub;
 
 namespace xStunit.Runner.Tests.Fakes
 {
-    /// <summary>Failing AssertTrue/AssertFalse, used to prove they carry EXP/ACT detail via AssertEquals_BOOL like upstream (TcXunit-k28.2/.3).</summary>
+    /// <summary>Provokes an AssertTrue and an AssertFalse failure, so their messages can be held to upstream's EXP/ACT shape.</summary>
     internal sealed class AssertTrueFalseFormatTestSuite : FB_TestSuite
     {
         protected override void Body()

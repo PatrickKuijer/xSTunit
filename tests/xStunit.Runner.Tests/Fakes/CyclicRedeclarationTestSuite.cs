@@ -2,7 +2,11 @@ using xStunit.Runner.TcUnitStub;
 
 namespace xStunit.Runner.Tests.Fakes
 {
-    /// <summary>Calls TEST() with the same name twice but advances CurrentCycle between the two calls, simulating upstream's normal cyclic re-declaration (TEST('X') again in a later PLC cycle re-attaches instead of erroring) (TcXunit-k28.5).</summary>
+    /// <summary>
+    /// Declares the same test name twice, but advances CurrentCycle in between:
+    /// that is the ordinary cyclic re-declaration a PLC scan produces, and must
+    /// re-attach to the existing record rather than be treated as a duplicate.
+    /// </summary>
     internal sealed class CyclicRedeclarationTestSuite : FB_TestSuite
     {
         protected override void Body()

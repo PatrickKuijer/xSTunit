@@ -2,7 +2,7 @@ using xStunit.Runner.TcUnitStub;
 
 namespace xStunit.Runner.Tests.Fakes
 {
-    /// <summary>32768 and -32768 collide as signed 16-bit INT, matching what a real TwinCAT INT variable would already have wrapped to (TcXunit-k28.4).</summary>
+    /// <summary>Asserts 32768 against -32768: the two collide as signed 16-bit INT, which is the value a real PLC INT variable would already hold.</summary>
     internal sealed class Int16WraparoundTestSuite : FB_TestSuite
     {
         protected override void Body()

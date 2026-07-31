@@ -4,11 +4,6 @@ using Xunit;
 
 namespace xStunit.Runner.Tests
 {
-    /// <summary>
-    /// TcXunit-k28.7: TEST_ORDERED()/TEST_FINISHED_NAMED()/IS_TEST_FINISHED()
-    /// coverage at the FB_TestSuite level, mirroring the existing TEST()/
-    /// TEST_FINISHED() dispatch tests in SuiteDiscoverySpikeTests.
-    /// </summary>
     public class OrderedAndNamedFinishTests
     {
         [Fact]
@@ -28,9 +23,6 @@ namespace xStunit.Runner.Tests
         {
             var results = SuiteRunner.RunAll(new OutOfTurnOrderedTestSuite());
 
-            // Test_2 was declared out of turn (before Test_1 finished), so its
-            // guard stayed FALSE and it was never opened/finished - only
-            // Test_1 shows up as a completed result.
             var result = Assert.Single(results);
             Assert.Equal("Test_1", result.Name);
             Assert.True(result.Passed, result.ToString());

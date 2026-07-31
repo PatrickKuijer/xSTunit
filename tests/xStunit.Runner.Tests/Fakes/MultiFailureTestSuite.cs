@@ -2,7 +2,7 @@ using xStunit.Runner.TcUnitStub;
 
 namespace xStunit.Runner.Tests.Fakes
 {
-    /// <summary>Two failing asserts in one TEST() bracket, used to prove only the first failure's message/type is kept (TcXunit-k28.1 - matches upstream FB_Test's 'set if not already set' semantics).</summary>
+    /// <summary>Two failing asserts inside one TEST() bracket, where upstream keeps only the first failure and ignores the rest.</summary>
     internal sealed class MultiFailureTestSuite : FB_TestSuite
     {
         protected override void Body()

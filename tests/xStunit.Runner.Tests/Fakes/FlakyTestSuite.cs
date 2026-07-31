@@ -2,7 +2,7 @@ using xStunit.Runner.TcUnitStub;
 
 namespace xStunit.Runner.Tests.Fakes
 {
-    /// <summary>Deliberately failing suite, used to prove AssertTrue/AssertEquals_* failures are captured, not thrown.</summary>
+    /// <summary>Fails on purpose, so a failing assert can be shown to be captured on the result rather than thrown out of the run.</summary>
     internal sealed class FlakyTestSuite : FB_TestSuite
     {
         protected override void Body()

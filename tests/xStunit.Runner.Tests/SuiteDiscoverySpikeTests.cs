@@ -7,12 +7,9 @@ using Xunit;
 namespace xStunit.Runner.Tests
 {
     /// <summary>
-    /// Spike for TcXunit-w5x.7: proves a TcUnit-style suite's TEST()/TEST_FINISHED()
-    /// brackets can be run once and surfaced as individual xUnit Theory rows (i.e.
-    /// individual VS Test Explorer / CI entries), not one lumped test. Case
-    /// identity comes from the TEST() call's string literal, discovered by running
-    /// the suite body — see the real FB_AssertTrueFalse.TcPOU shape referenced in
-    /// the ticket notes.
+    /// A suite runs once, and each TEST()/TEST_FINISHED() bracket it executed
+    /// surfaces as its own xUnit row rather than one lumped test — case identity
+    /// comes from the TEST() call's string literal, discovered by running the body.
     /// </summary>
     public class SuiteDiscoverySpikeTests
     {

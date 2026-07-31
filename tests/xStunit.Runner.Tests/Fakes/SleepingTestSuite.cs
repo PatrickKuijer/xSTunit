@@ -3,12 +3,7 @@ using xStunit.Runner.TcUnitStub;
 
 namespace xStunit.Runner.Tests.Fakes
 {
-    /// <summary>
-    /// Sleeps a known amount inside the TEST()/TEST_FINISHED() bracket so a test
-    /// can assert the resulting TestCaseResult.ElapsedMilliseconds reflects real
-    /// wall-clock time spent between TEST() opening the record and FinishRecord
-    /// stopping it (TcXunit-6fb.1).
-    /// </summary>
+    /// <summary>Burns a known amount of wall-clock time inside the bracket, giving the reported duration a lower bound to be measured against.</summary>
     internal sealed class SleepingTestSuite : FB_TestSuite
     {
         public const int SleepMilliseconds = 30;
@@ -22,12 +17,7 @@ namespace xStunit.Runner.Tests.Fakes
         }
     }
 
-    /// <summary>
-    /// TEST_ORDERED()/TEST_FINISHED_NAMED() counterpart of SleepingTestSuite, so
-    /// the stopwatch-capture coverage isn't limited to the plain TEST()/
-    /// TEST_FINISHED() path (TcXunit-6fb.1 acceptance criteria explicitly calls
-    /// out both TEST_FINISHED() and TEST_FINISHED_NAMED()).
-    /// </summary>
+    /// <summary>The same lower bound on the other closing path, since TEST_FINISHED_NAMED() has to stop the same clock TEST_FINISHED() does.</summary>
     internal sealed class SleepingOrderedTestSuite : FB_TestSuite
     {
         public const int SleepMilliseconds = 30;

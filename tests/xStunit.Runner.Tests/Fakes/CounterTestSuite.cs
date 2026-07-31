@@ -2,13 +2,7 @@ using xStunit.Runner.TcUnitStub;
 
 namespace xStunit.Runner.Tests.Fakes
 {
-    /// <summary>
-    /// Fake equivalent of a TcUnit suite POU (FB extending FB_TestSuite). Mirrors
-    /// the real call shape seen in TcUnit-Verifier's FB_AssertTrueFalse.TcPOU:
-    /// body calls case-methods unconditionally, each brackets TEST()/assert/
-    /// TEST_FINISHED(). A real suite would be interpreted from .TcPOU XML; this
-    /// one is hand-written to spike the run/report wiring (TcXunit-w5x.7).
-    /// </summary>
+    /// <summary>The all-passing baseline suite, against which the failure fixtures here are the deviations.</summary>
     internal sealed class CounterTestSuite : FB_TestSuite
     {
         protected override void Body()

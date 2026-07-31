@@ -13,9 +13,9 @@ namespace xStunit.Interpreter.Logging
     /// site can be reconstructed from the log instead of hand-editing a catch block, rebuilding,
     /// and reverting.
     ///
-    /// Verbosity is toggled by the TCXUNIT_VERBOSE env var (Information by default, Debug when
+    /// Verbosity is toggled by the XSTUNIT_VERBOSE env var (Information by default, Debug when
     /// set to a truthy value) rather than a config file, per the original proposal. The log
-    /// directory can be overridden via TCXUNIT_LOG_DIR (defaults to %TEMP%/TcXunit/logs) so tests
+    /// directory can be overridden via XSTUNIT_LOG_DIR (defaults to %TEMP%/xStunit/logs) so tests
     /// don't write into a developer's real temp directory.
     ///
     /// No dependency on Microsoft.Extensions.Logging here, unlike the sibling tcagentplugin repo's
@@ -26,8 +26,8 @@ namespace xStunit.Interpreter.Logging
     /// </summary>
     public static class XstunitLog
     {
-        private const string VerboseEnvVar = "TCXUNIT_VERBOSE";
-        private const string LogDirEnvVar = "TCXUNIT_LOG_DIR";
+        private const string VerboseEnvVar = "XSTUNIT_VERBOSE";
+        private const string LogDirEnvVar = "XSTUNIT_LOG_DIR";
 
         private static readonly object SyncRoot = new object();
         private static ILogger _logger;
@@ -48,7 +48,7 @@ namespace xStunit.Interpreter.Logging
         /// <summary>
         /// Debug-level trace for engine decision points (POU skip/reject reasons, duplicate-type
         /// resolution, suite discovery) so a failing suite's actual code path can be reconstructed
-        /// from the log without re-instrumenting. Only reaches the log file when TCXUNIT_VERBOSE
+        /// from the log without re-instrumenting. Only reaches the log file when XSTUNIT_VERBOSE
         /// is set - otherwise a no-op cost of a single IsEnabled check.
         /// </summary>
         public static void LogDebug(string messageTemplate, params object[] propertyValues)
@@ -72,7 +72,7 @@ namespace xStunit.Interpreter.Logging
 
         internal static string ResolveLogDirectory(string logDirEnvValue) =>
             string.IsNullOrWhiteSpace(logDirEnvValue)
-                ? Path.Combine(Path.GetTempPath(), "TcXunit", "logs")
+                ? Path.Combine(Path.GetTempPath(), "xStunit", "logs")
                 : logDirEnvValue;
 
         // Test seam only: forces the next LogException/LogDebug call to rebuild the logger from
@@ -104,7 +104,7 @@ namespace xStunit.Interpreter.Logging
                         .MinimumLevel.Is(minimumLevel)
                         .Enrich.FromLogContext()
                         .WriteTo.File(
-                            Path.Combine(logDirectory, "tcxunit-.log"),
+                            Path.Combine(logDirectory, "xstunit-.log"),
                             rollingInterval: RollingInterval.Day,
                             retainedFileCountLimit: 14,
                             outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz} [{Level:u3}] {Message:lj}{NewLine}{Exception}",

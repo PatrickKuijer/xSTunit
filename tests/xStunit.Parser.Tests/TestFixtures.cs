@@ -3,9 +3,9 @@ using System.Runtime.CompilerServices;
 
 namespace xStunit.Parser.Tests
 {
-    // Resolves vendored fixture POUs (tests/Fixtures/...) relative to the
-    // calling test file instead of a machine-local external repo path
-    // (TcXunit-1ys).
+    // Fixture paths are resolved from the caller's source location, so they
+    // survive changes to the build output layout and never point at a
+    // machine-local checkout outside the repo.
     internal static class TestFixtures
     {
         public static string FbCounterFixtureDir([CallerFilePath] string callerFile = "") =>

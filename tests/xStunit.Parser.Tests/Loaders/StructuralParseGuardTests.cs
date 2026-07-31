@@ -5,20 +5,10 @@ using Xunit;
 
 namespace xStunit.Parser.Tests
 {
-    // TcXunit-jql: StructuralParseGuard.TryParseOrSkip is the shared "skip
-    // this one file, keep scanning the rest" boundary every multi-file loader
-    // (CliRunner's own POU loop, DutStructLoader, GvlLoader, DutAliasLoader)
-    // relies on. Before this ticket its catch filter only recognized
-    // XmlException/NullReferenceException - the two shapes a malformed/short
-    // .TcPOU actually produces - so any OTHER exception type raised while
-    // parsing a single file (an IOException from a file that disappeared or
-    // got locked mid-scan, or any parser failure mode nobody had hit yet)
-    // propagated straight out of this method uncaught, taking the entire
-    // remaining scan down with it: every other file after the bad one -
-    // including a perfectly good sibling suite - never got parsed at all.
-    // That silent, total loss of every later file is indistinguishable from
-    // "the run stopped after one suite failed" from the caller's side, which
-    // is exactly the bug TcXunit-jql investigated.
+    // These pin the per-file isolation every multi-file loader depends on: an
+    // exception type that escapes TryParseOrSkip instead of becoming a skip
+    // aborts the whole scan, so every file after the bad one - good sibling
+    // suites included - is silently never parsed.
     public class StructuralParseGuardTests
     {
         [Fact]
@@ -49,14 +39,9 @@ namespace xStunit.Parser.Tests
             Assert.Contains("missing element", skipped.Message);
         }
 
-        // TcXunit-jql: the actual regression. Before the fix, this exception
-        // type (deliberately something other than XmlException/
-        // NullReferenceException/TcPouRejectedException - an IOException
-        // stands in for "the file vanished/got locked mid-scan", but any
-        // other type not on the old allow-list reproduces the same escape)
-        // propagated straight out of TryParseOrSkip instead of becoming a
-        // skip, aborting the whole multi-file scan for every caller (see
-        // CliRunner.Run's foreach over MultiDirectoryPouLoader.FindPouFiles).
+        // The exception type here is deliberately one no parser is expected to
+        // raise: narrowing the guard to an enumerated list of "expected" types
+        // is what lets a scan-killing escape back in.
         [Fact]
         public void TryParseOrSkip_ParseThrowsUnanticipatedExceptionType_ReturnsFalseWithSkipInsteadOfPropagating()
         {
@@ -85,12 +70,9 @@ namespace xStunit.Parser.Tests
             Assert.Contains("unexpected shape", skipped.Message);
         }
 
-        // TcPouRejectedException keeps its own distinct handling: CliRunner.Run
-        // catches it separately (a different, already-informative message
-        // shape - "'X' uses 'Y', which is outside the v1 parse subset...")
-        // rather than folding it into this guard's generic
-        // "Failed to parse '<file>': ..." wrapper, so it must still propagate
-        // out of TryParseOrSkip uncaught.
+        // The one exclusion: callers report an unsupported-construct rejection
+        // with their own message shape, which the guard's generic "Failed to
+        // parse '<file>'" wrapper would swallow.
         [Fact]
         public void TryParseOrSkip_ParseThrowsTcPouRejectedException_PropagatesUncaught()
         {

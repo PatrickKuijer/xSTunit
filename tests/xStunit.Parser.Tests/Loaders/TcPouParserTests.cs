@@ -82,9 +82,9 @@ END_VAR
             Assert.Equal("GetValue := value;", getValue.ImplementationText);
         }
 
-        // TcXunit-sxv: TcPouParser never looked for <Property>/<Get>/<Set>
-        // elements at all, so a PROPERTY member was silently dropped from
-        // the parsed POU AST during load.
+        // A PROPERTY lives in <Property>/<Get>/<Set> elements the POU-and-method
+        // walk never visits; miss them and the member disappears from the AST
+        // silently, with no parse error to point at.
         [Fact]
         public void Parse_FunctionBlockWithGetSetProperty_ReadsPropertyNameAndBothAccessorBodies()
         {
@@ -287,9 +287,9 @@ END_VAR]]></Declaration>
         [Fact]
         public void Parse_RecordsBodyStartLinePerScope_SoInBodyLinesMapBackToTheFile()
         {
-            // Line numbers are load-bearing here: the ST bodies below sit on
-            // XML lines 9 (POU), 18 (Increment) and 26 (GetValue) of this
-            // literal, counting the <?xml ...?> line as 1 (TcXunit-p3t.3).
+            // Editing this literal moves the assertions below: the ST bodies
+            // sit on lines 9 (POU), 18 (Increment) and 26 (GetValue), counting
+            // the <?xml ...?> line as 1.
             const string xml = @"<?xml version=""1.0"" encoding=""utf-8""?>
 <TcPlcObject Version=""1.1.0.1"">
   <POU Name=""FB_Counter"" Id=""{a1b2c3d4-0001-4a1a-8b1b-000000000001}"" SpecialFunc=""None"">
@@ -327,9 +327,9 @@ value := value + 0;]]></ST>
             Assert.Equal(18, ast.Methods[0].BodyStartLine);
             Assert.Equal(26, ast.Methods[1].BodyStartLine);
 
-            // The contract: BodyStartLine + zero-based line within the body ==
-            // the real file line. Increment's second statement is body line 1,
-            // and lives on file line 19.
+            // The contract callers rely on: BodyStartLine plus the zero-based
+            // line within the body is the real file line. Increment's second
+            // statement is body line 1, on file line 19.
             var increment = ast.Methods[0];
             Assert.Equal(
                 19,
@@ -339,9 +339,9 @@ value := value + 0;]]></ST>
         [Fact]
         public void Parse_CdataOpeningWithNewline_CountsThatNewlineAsTheBodysFirstLine()
         {
-            // TwinCAT sometimes emits `<ST><![CDATA[` followed immediately by a
-            // newline. That newline is part of the body string, so body line 0
-            // is the empty tail of the <ST> line and the offset still holds.
+            // TwinCAT sometimes opens `<ST><![CDATA[` with a trailing newline.
+            // That newline belongs to the body string, so body line 0 is the
+            // empty tail of the <ST> line and the offset still holds.
             const string xml = @"<?xml version=""1.0"" encoding=""utf-8""?>
 <TcPlcObject Version=""1.1.0.1"">
   <POU Name=""FB_Blank"" Id=""{00000000-0000-0000-0000-000000000009}"" SpecialFunc=""None"">

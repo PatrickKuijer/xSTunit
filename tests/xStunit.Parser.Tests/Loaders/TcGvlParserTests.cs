@@ -3,9 +3,6 @@ using Xunit;
 
 namespace xStunit.Parser.Tests
 {
-    // TcXunit-71o: a .TcGVL file's root is <GVL Name="X">, not <POU> -
-    // TcGvlParser is the analogous entry point to TcPouParser/TcDutParser
-    // for that root element.
     public class TcGvlParserTests
     {
         [Fact]

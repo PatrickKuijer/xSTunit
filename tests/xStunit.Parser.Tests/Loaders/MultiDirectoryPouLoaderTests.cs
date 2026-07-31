@@ -5,8 +5,6 @@ using Xunit;
 
 namespace xStunit.Parser.Tests
 {
-    // TcXunit-98e.1: shared prefactor for multi-directory POU discovery
-    // (Tests PLC project + separately-referenced Source PLC project).
     public class MultiDirectoryPouLoaderTests : IDisposable
     {
         private readonly string _dirA;

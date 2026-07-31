@@ -5,9 +5,9 @@ using Xunit;
 
 namespace xStunit.Parser.Tests
 {
-    // Exercises the parser against the real TcXunit-w5x.8 fixture project, not
-    // embedded XML strings, so structural drift in the actual fixture files
-    // gets caught here instead of only in hand-picked snippets.
+    // Parses the vendored fixture project on disk rather than embedded XML, so
+    // drift between the parser and the files it is aimed at surfaces here and
+    // not only in hand-picked snippets.
     public class FixtureParsingTests
     {
         private static readonly string FixturePouDir = TestFixtures.FbCounterFixtureDir();
@@ -56,22 +56,20 @@ namespace xStunit.Parser.Tests
             var ast = ParseFixture("FB_Counter.TcPOU");
             var fileLines = File.ReadAllLines(Path.Combine(FixturePouDir, "FB_Counter.TcPOU"));
 
-            // Rather than hard-coding line numbers that drift whenever the
-            // fixture is edited, re-read the file and check that every body
-            // line lands on the file line BodyStartLine claims it does
-            // (TcXunit-p3t.3).
+            // Expectations come from re-reading the file rather than hard-coded
+            // line numbers, which would drift on every edit to the fixture.
             AssertBodyLinesLandOnFile(fileLines, ast.BodyStartLine, ast.ImplementationText);
             foreach (var method in ast.Methods)
                 AssertBodyLinesLandOnFile(fileLines, method.BodyStartLine, method.ImplementationText);
 
-            // Per-method offsets must actually differ, i.e. they are not all
-            // defaulting to the same value.
+            // Distinct offsets are what rule out every scope defaulting to one
+            // shared line number.
             Assert.Equal(ast.Methods.Count, new HashSet<int>(ast.Methods.Select(m => m.BodyStartLine)).Count);
         }
 
-        // A body line is "on" its file line when the file line ends with it:
-        // the first body line shares its file line with the `<ST><![CDATA[`
-        // prologue, and the last one is followed by `]]></ST>`.
+        // Matching is by suffix, not equality: the first body line shares its
+        // file line with the `<ST><![CDATA[` prologue, and the last one is
+        // followed by `]]></ST>`.
         private static void AssertBodyLinesLandOnFile(string[] fileLines, int bodyStartLine, string implementationText)
         {
             var bodyLines = implementationText.Split('\n');

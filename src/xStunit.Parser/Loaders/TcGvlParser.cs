@@ -2,12 +2,15 @@ using System.Xml.Linq;
 
 namespace xStunit.Parser
 {
-    // Parses a .TcGVL file's XML into a GvlAst. A GVL's root element is
-    // <GVL Name="X"> alongside <POU>, not a variant of it (TcXunit-71o) -
-    // TcPouParser.Parse hardcoding <POU> is exactly why GVLs couldn't be
-    // parsed before this existed.
+    /// <summary>Parses a .TcGVL file's XML into a <see cref="GvlAst"/>.</summary>
+    /// <remarks>
+    /// A GVL's root element is &lt;GVL Name="X"&gt; alongside &lt;POU&gt;,
+    /// not a variant of it - <see cref="TcPouParser.Parse"/> hardcoding
+    /// &lt;POU&gt; is exactly why GVLs needed their own parser.
+    /// </remarks>
     public static class TcGvlParser
     {
+        /// <summary>Parses the given .TcGVL XML content into a <see cref="GvlAst"/>.</summary>
         public static GvlAst Parse(string xml)
         {
             var doc = XDocument.Parse(xml);

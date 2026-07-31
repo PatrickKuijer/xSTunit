@@ -6,6 +6,7 @@ using System.Xml.Linq;
 
 namespace xStunit.Parser
 {
+    /// <summary>Parses a .TcPOU file's XML into a <see cref="PouAst"/>.</summary>
     public static class TcPouParser
     {
         private static readonly Regex ExtendsPattern = new Regex(
@@ -20,11 +21,17 @@ namespace xStunit.Parser
             (new Regex(@"\bcall_after_init\b", RegexOptions.Compiled), "call_after_init"),
         };
 
+        /// <summary>Parses the given .TcPOU XML content into a <see cref="PouAst"/>.</summary>
+        /// <exception cref="TcPouRejectedException">
+        /// The POU's own implementation text, or that of one of its methods
+        /// or property accessors, uses a construct outside the parser's
+        /// supported subset.
+        /// </exception>
         public static PouAst Parse(string xml)
         {
-            // SetLineInfo is what makes failure logs able to point at a line in
-            // the user's .TcPOU instead of a line in an extracted string
-            // (TcXunit-p3t.3).
+            // LoadOptions.SetLineInfo is what makes failure logs able to
+            // point at a line in the user's .TcPOU instead of a line in an
+            // extracted string - see BodyStartLine below.
             var doc = XDocument.Parse(xml, LoadOptions.SetLineInfo);
             var pou = doc.Root.Element("POU");
             var name = pou.Attribute("Name").Value;
@@ -59,7 +66,7 @@ namespace xStunit.Parser
         // it becomes the body's own (empty) line 0 rather than shifting the
         // body down - which makes the <ST> line the file line of body line 0
         // in both shapes, i.e. BodyStartLine + zeroBasedLineWithinBody is the
-        // real file line (TcXunit-p3t.3).
+        // real file line.
         private static int BodyStartLine(XElement st)
         {
             var lineInfo = (IXmlLineInfo)st;

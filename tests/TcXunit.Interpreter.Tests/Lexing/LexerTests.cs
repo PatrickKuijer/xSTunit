@@ -141,13 +141,13 @@ namespace TcXunit.Interpreter.Tests
         [Fact]
         public void Tokenize_BasedLiteralWithInvalidDigitForBase_Throws()
         {
-            Assert.Throws<FormatException>(() => Lexer.Tokenize("2#1012"));
+            Assert.Throws<ParseFailure>(() => Lexer.Tokenize("2#1012"));
         }
 
         [Fact]
         public void Tokenize_BasedLiteralWithUnsupportedBase_Throws()
         {
-            Assert.Throws<FormatException>(() => Lexer.Tokenize("10#123"));
+            Assert.Throws<ParseFailure>(() => Lexer.Tokenize("10#123"));
         }
     }
 }

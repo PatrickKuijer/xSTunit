@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using TcXunit.Interpreter;
+using TcXunit.Parser;
 using TcXunit.Runner;
 using Xunit;
 
@@ -45,7 +47,7 @@ namespace TcXunit.Interpreter.Tests
         [Fact]
         public void Classify_FormatException_IsParseErrorWhenLocated()
         {
-            var located = new PlcSourceLocationException("FB_X", "MethodY", new FormatException("Unexpected token"));
+            var located = new PlcSourceLocationException("FB_X", "MethodY", new ParseFailure("Unexpected token"));
 
             var kind = FailureClassifier.Classify(located, out _);
 
@@ -60,7 +62,7 @@ namespace TcXunit.Interpreter.Tests
         [Fact]
         public void Classify_FormatException_IsParseErrorWhenUnlocatedToo()
         {
-            var kind = FailureClassifier.Classify(new FormatException("Unexpected token"), out _);
+            var kind = FailureClassifier.Classify(new ParseFailure("Unexpected token"), out _);
 
             Assert.Equal(FailureKind.ParseError, kind);
         }
@@ -71,7 +73,7 @@ namespace TcXunit.Interpreter.Tests
         [Fact]
         public void Classify_LexerFormatException_CarriesTheOffendingTokenAsTheConstruct()
         {
-            var ex = new FormatException("Unexpected character '@' at position 13 in: n := 1;\nn := @ 2;");
+            var ex = new ParseFailure("Unexpected character '@' at position 13 in: n := 1;\nn := @ 2;");
 
             FailureClassifier.Classify(ex, out var construct);
 
@@ -83,7 +85,7 @@ namespace TcXunit.Interpreter.Tests
         [Fact]
         public void Classify_ParserFormatException_CarriesTheOffendingTokenAsTheConstruct()
         {
-            var ex = new FormatException("Expected Semicolon but got Identifier:FOO at token index 4");
+            var ex = new ParseFailure("Expected Semicolon but got Identifier:FOO at token index 4");
 
             FailureClassifier.Classify(ex, out var construct);
 
@@ -96,7 +98,7 @@ namespace TcXunit.Interpreter.Tests
         [Fact]
         public void Classify_TokenlessFormatException_IsStillParseErrorWithNoConstruct()
         {
-            var kind = FailureClassifier.Classify(new FormatException("Expected END_IF"), out var construct);
+            var kind = FailureClassifier.Classify(new ParseFailure("Expected END_IF"), out var construct);
 
             Assert.Equal(FailureKind.ParseError, kind);
             Assert.Null(construct);
@@ -123,6 +125,68 @@ namespace TcXunit.Interpreter.Tests
             var line = FailureClassifier.ParseErrorBodyLine("Expected Semicolon but got Identifier:FOO at token index 4");
 
             Assert.Equal(PlcSourceLocationException.UnknownLine, line);
+        }
+
+        // TcXunit-g14q: parse-error is claimed by the front end's OWN type, not
+        // by the FormatException base. Engine.ExecuteFor coerces its loop bounds
+        // with Convert.ToInt32, so a STRING bound throws a bare FormatException
+        // from deep inside a running body - a genuine defect in the code under
+        // test. Matching the base type reported it as parse-error, whose
+        // guidance is "STOP and escalate if it looks like valid ST": an agent
+        // told to page a human over a bug it should simply have fixed, which is
+        // this vocabulary's own failure mode inverted.
+        [Fact]
+        public void Classify_StringForLoopBound_IsPlcFaultNotParseError()
+        {
+            var suite = new PouAst(
+                "FB_MySuite",
+                "TcUnit.FB_TestSuite",
+                "VAR\n\ti : INT;\n\ttotal : INT;\nEND_VAR",
+                "FOR i := 1 TO 'not a number' DO\n\ttotal := total + i;\nEND_FOR",
+                new List<MethodAst>());
+            var engine = new Engine(new TypeRegistry(new[] { suite }));
+
+            var ex = Assert.Throws<PlcSourceLocationException>(() => engine.RunSuite("FB_MySuite"));
+
+            // The throw really is a FormatException - the base type alone is no
+            // evidence of a parse failure, which is the whole point.
+            Assert.IsType<FormatException>(ex.InnerException);
+
+            var kind = FailureClassifier.Classify(ex, out _);
+
+            Assert.Equal(FailureKind.PlcFault, kind);
+        }
+
+        // The other half of the same rule: ArrayTypeInfo.Parse throws a bare
+        // FormatException while Engine.BuildArrayDefault is constructing a
+        // declared VAR's default value - before any body has run. That is
+        // instantiation, which FailureKind.LoadError's own doc comment claims,
+        // so the classifier must agree with it rather than calling it a
+        // parse-error of a body that was never even reached.
+        //
+        // "OFINT" (no space) is the narrowest declaration that VarBlockParser
+        // still accepts as an ARRAY-typed VAR - ArrayTypeInfo's own pattern
+        // requires whitespace after OF - so it reaches ArrayTypeInfo.Parse and
+        // fails there, which is exactly the throw site under test.
+        [Fact]
+        public void Classify_UnparseableArrayTypeDuringInstantiation_IsLoadErrorNotParseError()
+        {
+            var suite = new PouAst(
+                "FB_MySuite",
+                "TcUnit.FB_TestSuite",
+                "VAR\n\tbad : ARRAY[1..2] OFINT;\nEND_VAR",
+                "",
+                new List<MethodAst>());
+            var engine = new Engine(new TypeRegistry(new[] { suite }));
+
+            var ex = Assert.Throws<FormatException>(() => engine.RunSuite("FB_MySuite"));
+
+            Assert.Contains("Not a valid ARRAY type declaration", ex.Message);
+            Assert.IsNotType<ParseFailure>(ex);
+
+            var kind = FailureClassifier.Classify(ex, out _);
+
+            Assert.Equal(FailureKind.LoadError, kind);
         }
 
         [Fact]

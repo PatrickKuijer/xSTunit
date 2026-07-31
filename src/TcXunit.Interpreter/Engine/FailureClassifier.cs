@@ -71,17 +71,27 @@ namespace TcXunit.Interpreter
                 case ConvergenceAssertionException _:
                     return FailureKind.Assertion;
 
-                // TcXunit-229.15: the ST front end (Lexer/Parser) reports every
-                // body it cannot read as a FormatException, and that is now its
-                // own kind - LOCATED OR NOT. It used to split on whether an
-                // ExecuteBody frame happened to have stamped a location on the
-                // way out, which made the same unreadable body a plc-fault when
-                // it was reached through a call and a load-error when it wasn't.
-                // That distinction described TcXunit's own call path, not the
-                // failure, and both answers were wrong: nothing about the code
-                // under test was established (so not plc-fault) and the
-                // container loaded fine (so not load-error).
-                case FormatException _:
+                // TcXunit-229.15: the ST front end (Lexer/Parser and the
+                // literal parsers) reports every body it cannot read as a
+                // ParseFailure, and that is now its own kind - LOCATED OR NOT.
+                // It used to split on whether an ExecuteBody frame happened to
+                // have stamped a location on the way out, which made the same
+                // unreadable body a plc-fault when it was reached through a
+                // call and a load-error when it wasn't. That distinction
+                // described TcXunit's own call path, not the failure, and both
+                // answers were wrong: nothing about the code under test was
+                // established (so not plc-fault) and the container loaded fine
+                // (so not load-error).
+                //
+                // TcXunit-g14q: matched by the front end's OWN type, never by
+                // the FormatException base. FormatException is thrown all over
+                // the process by things that are not the front end - every
+                // Convert.To* the engine performs on interpreted values, and
+                // ArrayTypeInfo.Parse during instantiation - and claiming those
+                // as parse-error told an agent to escalate a genuine PLC defect
+                // instead of fixing it. Everything that is not a ParseFailure
+                // falls through to the located/unlocated split below.
+                case ParseFailure _:
                     construct = OffendingToken(ex.Message);
                     return FailureKind.ParseError;
             }
@@ -96,12 +106,12 @@ namespace TcXunit.Interpreter
         // uses, so `kind` + `construct` is one vocabulary at every level of the
         // JSON instead of a second field nobody would know to read.
         //
-        // Recovered from the front end's own message text because the front end
-        // raises a bare FormatException and this classifier is downstream of it
-        // (TcXunit-229.15 deliberately leaves Lexer/Parser throw sites alone, so
-        // their existing exception-type contracts hold). Best effort by
-        // construction: null when the message names no token, which is a fine
-        // answer - `construct` is already nullable for every other kind.
+        // Recovered from the front end's own message text because ParseFailure
+        // is message-compatible only for now; carrying the token and position as
+        // structured fields, and retiring this scraping with them, is
+        // TcXunit-fpw8. Best effort by construction: null when the message names
+        // no token, which is a fine answer - `construct` is already nullable for
+        // every other kind.
         public static string OffendingToken(string message)
         {
             if (string.IsNullOrEmpty(message))

@@ -28,7 +28,7 @@ namespace TcXunit.Interpreter.Tests
         [Fact]
         public void ParseStatements_LiteralAssignmentTarget_ThrowsFormatException()
         {
-            Assert.Throws<FormatException>(() => Parser.ParseStatements("5 := x;"));
+            Assert.Throws<ParseFailure>(() => Parser.ParseStatements("5 := x;"));
         }
 
         // '**' (EXPT) is a real IEC 61131-3 operator this parser does not

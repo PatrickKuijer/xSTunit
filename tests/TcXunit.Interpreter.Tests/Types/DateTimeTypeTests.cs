@@ -38,13 +38,13 @@ namespace TcXunit.Interpreter.Tests
         [Fact]
         public void ParseExpression_DateLiteralWithInvalidMonth_Throws()
         {
-            Assert.Throws<FormatException>(() => Parser.ParseExpression("D#2024-13-01"));
+            Assert.Throws<ParseFailure>(() => Parser.ParseExpression("D#2024-13-01"));
         }
 
         [Fact]
         public void ParseExpression_DateLiteralWithInvalidDay_Throws()
         {
-            Assert.Throws<FormatException>(() => Parser.ParseExpression("D#2024-02-30"));
+            Assert.Throws<ParseFailure>(() => Parser.ParseExpression("D#2024-02-30"));
         }
 
         [Fact]
@@ -68,13 +68,13 @@ namespace TcXunit.Interpreter.Tests
         [Fact]
         public void ParseExpression_DateAndTimeLiteralWithFractionalSeconds_Throws()
         {
-            Assert.Throws<FormatException>(() => Parser.ParseExpression("DT#2024-01-01-10:00:00.500"));
+            Assert.Throws<ParseFailure>(() => Parser.ParseExpression("DT#2024-01-01-10:00:00.500"));
         }
 
         [Fact]
         public void ParseExpression_DateAndTimeLiteralWithHourOutOfRange_Throws()
         {
-            Assert.Throws<FormatException>(() => Parser.ParseExpression("DT#2024-01-01-24:00:00"));
+            Assert.Throws<ParseFailure>(() => Parser.ParseExpression("DT#2024-01-01-24:00:00"));
         }
 
         [Fact]
@@ -107,13 +107,13 @@ namespace TcXunit.Interpreter.Tests
         [Fact]
         public void ParseExpression_TimeOfDayLiteralWithHourOutOfRange_Throws()
         {
-            Assert.Throws<FormatException>(() => Parser.ParseExpression("TOD#24:00:00"));
+            Assert.Throws<ParseFailure>(() => Parser.ParseExpression("TOD#24:00:00"));
         }
 
         [Fact]
         public void ParseExpression_TimeOfDayLiteralWithMinuteOutOfRange_Throws()
         {
-            Assert.Throws<FormatException>(() => Parser.ParseExpression("TOD#10:60:00"));
+            Assert.Throws<ParseFailure>(() => Parser.ParseExpression("TOD#10:60:00"));
         }
 
         [Fact]

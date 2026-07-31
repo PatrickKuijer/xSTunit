@@ -8,30 +8,18 @@
   </PropertyGroup>
 
   <!--
-    xStunit.Vsix.csproj is a classic packages.config VSSDK project (net472,
-    references WebView2/EnvDTE/VS SDK assemblies) that does not build outside
-    Visual Studio on Windows; see src/xStunit.Vsix/README.md and
-    docs/design-system.html's Testing Decisions. A normal ProjectReference to
-    it is not viable here (nor in CI). Instead this project source-links the
-    handful of files under TestRunner/ that have zero VS SDK/WebView2
-    dependency; the "one genuinely testable seam" the TcXunit-1tt epic calls
-    out. XstunitConfig.cs and XstunitProcessRunner.cs originally could NOT be
-    linked here: both used System.Web.Script.Serialization.JavaScriptSerializer,
-    a .NET Framework only API with no netstandard/net8.0-compatible package.
-    TcXunit-cmp swapped both (and ResultsToolWindowControl.xaml.cs's postMessage
-    envelope parsing) to System.Text.Json instead, which is available on both
-    net472 and net8.0; XstunitConfig.cs is linked below as a result.
-    XstunitProcessRunner.cs still isn't: RunAsync itself shells out via
-    System.Diagnostics.Process, not something worth unit testing here, and its
-    only pure logic (argument construction) already lives in
-    XstunitArgumentBuilder.cs, linked separately. XstunitArgumentBuilder.cs
-    (added TcXunit-1tt.8) takes plain strings/lists rather than a XstunitConfig
-    instance (see its own file comment) and is linked, covering the epic's
-    "suite argument construction for rerun-failed" testing decision (a
-    repeated suite &lt;name&gt; flag). Note: this comment avoids the
-    double-hyphen aside this codebase otherwise favors in .cs/.js/.css files,
-    since XML comments may not contain one; semicolons/parens stand in
-    instead.
+    src/xStunit.Vsix is a classic packages.config VSSDK project (net472,
+    referencing WebView2/EnvDTE/VS SDK assemblies) that does not build outside
+    Visual Studio on Windows, so a ProjectReference to it would break this
+    project everywhere else, CI included; see src/xStunit.Vsix/README.md and
+    docs/design-system.html's Testing Decisions. The files below are
+    source-linked instead: they are the TestRunner/ types with zero VS
+    SDK/WebView2 dependency, and they serialize with System.Text.Json, which
+    resolves on both net472 and net8.0.
+
+    XstunitProcessRunner.cs is deliberately not linked. RunAsync shells out via
+    System.Diagnostics.Process, and its only pure logic (argument construction)
+    lives in XstunitArgumentBuilder.cs, which is linked.
   -->
   <ItemGroup>
     <Compile Include="..\..\src\xStunit.Vsix\TestRunner\XstunitModels.cs" Link="TestRunner\XstunitModels.cs" />

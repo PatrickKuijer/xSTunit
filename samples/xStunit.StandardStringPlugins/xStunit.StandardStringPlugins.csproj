@@ -7,10 +7,10 @@
     <RootNamespace>xStunit.StandardStringPlugins</RootNamespace>
     <!-- Not packed or shipped: built and pointed at with the CLI's "plugins"
          option, same as samples/xStunit.SamplePlugins. Unlike that project
-         (a worked EXAMPLE of the TcXunit-6k2 extension point standing in for
-         a proprietary vendor function), Tc2_Standard's string functions are
+         (a worked EXAMPLE of the extension point, standing in for a
+         proprietary vendor function), Tc2_Standard's string functions are
          publicly documented and used by nearly every TwinCAT project, so this
-         project is a real, usable plugin rather than a demo (TcXunit-8po). -->
+         project is a real, usable plugin rather than a demo. -->
     <IsPackable>false</IsPackable>
   </PropertyGroup>
 

@@ -15,7 +15,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\xStunit.Cli\xStunit.Cli.csproj" />
-    <!-- TcXunit-6k2: built, but deliberately NOT linked
+    <!-- Built, but deliberately NOT linked
          (ReferenceOutputAssembly=false). The plugin end-to-end test must load
          this assembly the way a real user's plugin is loaded - discovered as a
          file in a directory and loaded into a PluginLoadContext at run time -
@@ -25,8 +25,8 @@
          configuration, before the test looks for it. -->
     <ProjectReference Include="..\..\samples\xStunit.SamplePlugins\xStunit.SamplePlugins.csproj"
                       ReferenceOutputAssembly="false" />
-    <!-- TcXunit-8po: same reasoning as the SamplePlugins reference above,
-         for the Tc2_Standard string-function plugin. -->
+    <!-- Same reasoning as the SamplePlugins reference above, for the
+         Tc2_Standard string-function plugin. -->
     <ProjectReference Include="..\..\samples\xStunit.StandardStringPlugins\xStunit.StandardStringPlugins.csproj"
                       ReferenceOutputAssembly="false" />
   </ItemGroup>

@@ -1,15 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  VSIX test-result viewer for TwinCAT XAE Shell. Graduated from spike
-  (TcXunit-6nt) into this repo per TcXunit-iyd.1 — release process not
-  decided yet.
-
-  Scaffolding structure (classic packages.config VSSDK project, not SDK-style,
-  net472, AnyCPU, VS2017 SDK 15.0) is copied from the known-working template
-  at C:\Git\TcAgentPlugin\src\TcAgent\TcAgent.csproj, since TwinCAT's XAE
-  Shell is an Isolated Shell built on VS2017 and that project is confirmed to
-  load correctly there. Trimmed down: no WebView2, no AiCore/Chat/Auth
-  dependencies, no binding redirects (not needed without those packages).
+  VSIX test-result viewer for TwinCAT XAE Shell. The project shape (classic
+  packages.config VSSDK project, not SDK-style, net472, AnyCPU, VS2017 SDK
+  15.0) is dictated by the host: XAE Shell is an Isolated Shell built on
+  VS2017, and this is the shape confirmed to load there.
 -->
 <Project ToolsVersion="15.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <Import Project="..\..\packages\Microsoft.VSSDK.BuildTools.15.9.3086\build\Microsoft.VSSDK.BuildTools.props" Condition="Exists('..\..\packages\Microsoft.VSSDK.BuildTools.15.9.3086\build\Microsoft.VSSDK.BuildTools.props')" />
@@ -138,7 +132,7 @@
     <Reference Include="Microsoft.VisualStudio.Validation, Version=15.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL">
       <HintPath>..\..\packages\Microsoft.VisualStudio.Validation.15.0.82\lib\net45\Microsoft.VisualStudio.Validation.dll</HintPath>
     </Reference>
-    <!-- Same version TcAgentPlugin/src/TcAgent pins; see TcXunit-1tt.1. -->
+    <!-- Same version TcAgentPlugin/src/TcAgent pins, which is proven under XAE Shell. -->
     <Reference Include="Microsoft.Web.WebView2.Core, Version=1.0.2592.51, Culture=neutral, processorArchitecture=MSIL">
       <HintPath>..\..\packages\Microsoft.Web.WebView2.1.0.2592.51\lib\net462\Microsoft.Web.WebView2.Core.dll</HintPath>
     </Reference>
@@ -146,18 +140,16 @@
       <HintPath>..\..\packages\Microsoft.Web.WebView2.1.0.2592.51\lib\net462\Microsoft.Web.WebView2.Wpf.dll</HintPath>
     </Reference>
     <!--
-      XstunitConfig.cs, XstunitProcessRunner.cs, and ResultsToolWindowControl.xaml.cs use
-      System.Text.Json directly (swapped off System.Web.Script.Serialization.JavaScriptSerializer
-      per TcXunit-cmp, so XstunitConfig.cs could be source-linked into tests/xStunit.Vsix.Tests
-      the way XstunitModels.cs already was). Same package versions
-      TcAgentPlugin/src/TcAgent already ships and proves work under XAE Shell's devenv (see that
-      project's TcAgent.csproj Content block and ChatToolWindowPackage.cs); System.Text.Json's
-      net461 asset plus its own net461-compatible dependency closure. Referenced without an
-      explicit assembly Version/PublicKeyToken (unlike the WebView2 references above) since only
-      System.Text.Json's and System.Runtime.CompilerServices.Unsafe's exact assembly versions are
-      independently confirmed (via TcAgent's own ProvideBindingRedirection NewVersion targets,
-      6.0.0.10 and 6.0.0.0 respectively); a bare Reference name plus HintPath resolves off the
-      file directly rather than risking a wrong guessed identity for the rest.
+      XstunitConfig.cs, XstunitProcessRunner.cs, and ResultsToolWindowControl.xaml.cs
+      serialize with System.Text.Json rather than a .NET Framework only API such as
+      JavaScriptSerializer, so that the TestRunner/ types stay source-linkable into
+      tests/xStunit.Vsix.Tests, which targets net8.0. These are the same package
+      versions TcAgentPlugin/src/TcAgent ships and proves work under XAE Shell's
+      devenv: System.Text.Json's net461 asset plus its own net461-compatible
+      dependency closure. Referenced by bare name plus HintPath, unlike the WebView2
+      references above, because only some of these packages' exact assembly identities
+      are independently confirmed; resolving off the file avoids asserting a wrong
+      guessed Version/PublicKeyToken for the rest.
     -->
     <Reference Include="System.Text.Json">
       <HintPath>..\..\packages\System.Text.Json.6.0.10\lib\net461\System.Text.Json.dll</HintPath>
@@ -181,23 +173,13 @@
       <HintPath>..\..\packages\System.Threading.Tasks.Extensions.4.5.4\lib\net461\System.Threading.Tasks.Extensions.dll</HintPath>
     </Reference>
     <!--
-      TcXunit-qwh.4: the closure above was still short two entries. Loading
-      System.Text.Json.6.0.10's net461 asset with ReflectionOnlyLoadFrom shows
-      its AssemblyRef table also names Microsoft.Bcl.AsyncInterfaces
-      (6.0.0.0) and System.ValueTuple (4.0.3.0) - the .NETFramework4.6.1
-      dependency group in its own .nuspec lists exactly these two packages
-      (at 6.0.0 / 4.5.0 respectively) alongside the ones already referenced
-      above. Neither was ever added here, so under TcXaeShell's devenv
-      (CLR v4.0.30319, no NuGet-generated app.config to fall back on) the
-      loader's OnAssemblyResolve had nothing to find for
-      Microsoft.Bcl.AsyncInterfaces and threw FileNotFoundException resolving
-      System.Text.Json.dll's own static dependencies - not a version
-      mismatch, the files were simply never restored/deployed. Confirmed by
-      reflecting both packages' net461 lib assemblies: they report exactly
-      6.0.0.0 and 4.0.3.0, i.e. bit-for-bit what System.Text.Json.dll asks
-      for, so (unlike TcAgent.csproj's ProvideBindingRedirection entries for
-      this same package) no binding redirect is needed here - only the
-      missing reference and deployment.
+      Also named in System.Text.Json 6.0.10's net461 AssemblyRef table, so they
+      complete the closure above. Without them, XAE Shell's devenv (which has no
+      NuGet-generated app.config to fall back on) throws FileNotFoundException
+      resolving System.Text.Json.dll's own static dependencies. Their assembly
+      versions are exactly the ones System.Text.Json asks for, 6.0.0.0 and
+      4.0.3.0, so no binding redirect is needed here; only the reference and the
+      matching Content entries below.
     -->
     <Reference Include="Microsoft.Bcl.AsyncInterfaces">
       <HintPath>..\..\packages\Microsoft.Bcl.AsyncInterfaces.6.0.0\lib\net461\Microsoft.Bcl.AsyncInterfaces.dll</HintPath>
@@ -254,13 +236,6 @@
       <IncludeInVSIX>true</IncludeInVSIX>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
-    <!--
-      Pre-existing gap found while implementing TcXunit-1tt.3: results.js (added by
-      TcXunit-1tt.2) was never added here, so it would never be copied to the output
-      directory or packaged into the VSIX; results.html's script tag pointing at
-      results.js would 404 at runtime despite the file being on disk. Fixed here
-      since 1tt.3's own work (run/stop wiring, empty-state swap) lives in this file.
-    -->
     <Content Include="Resources\results.js">
       <IncludeInVSIX>true</IncludeInVSIX>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
@@ -325,12 +300,6 @@
       <IncludeInVSIX>true</IncludeInVSIX>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
-    <!--
-      TcXunit-qwh.4: completes System.Text.Json's net461 dependency closure
-      (see the Reference block's comment above) - these two were missing
-      from both the References above and this Content list, so they were
-      never copied into the VSIX output/bin at all.
-    -->
     <Content Include="..\..\packages\Microsoft.Bcl.AsyncInterfaces.6.0.0\lib\net461\Microsoft.Bcl.AsyncInterfaces.dll">
       <Link>Microsoft.Bcl.AsyncInterfaces.dll</Link>
       <IncludeInVSIX>true</IncludeInVSIX>

@@ -6,8 +6,8 @@
     <Nullable>disable</Nullable>
     <RootNamespace>xStunit.SamplePlugins</RootNamespace>
     <!-- Not packed or shipped: this exists to be built and pointed at with
-         the CLI's plugins option, as the worked example of the TcXunit-6k2
-         extension point. -->
+         the CLI's plugins option, as the worked example of the native-function
+         plugin extension point. -->
     <IsPackable>false</IsPackable>
   </PropertyGroup>
 

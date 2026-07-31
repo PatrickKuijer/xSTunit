@@ -37,7 +37,7 @@ namespace xStunit.Interpreter.Tests.Logging
         {
             var resolved = XstunitLog.ResolveLogDirectory(null);
 
-            Assert.Equal(Path.Combine(Path.GetTempPath(), "TcXunit", "logs"), resolved);
+            Assert.Equal(Path.Combine(Path.GetTempPath(), "xStunit", "logs"), resolved);
         }
 
         [Fact]
@@ -51,9 +51,9 @@ namespace xStunit.Interpreter.Tests.Logging
         [Fact]
         public void LogException_WritesFullExceptionToLogFile()
         {
-            var logDir = Path.Combine(Path.GetTempPath(), "TcXunitTests", Guid.NewGuid().ToString("N"));
-            Environment.SetEnvironmentVariable("TCXUNIT_LOG_DIR", logDir);
-            Environment.SetEnvironmentVariable("TCXUNIT_VERBOSE", "1");
+            var logDir = Path.Combine(Path.GetTempPath(), "xStunitTests", Guid.NewGuid().ToString("N"));
+            Environment.SetEnvironmentVariable("XSTUNIT_LOG_DIR", logDir);
+            Environment.SetEnvironmentVariable("XSTUNIT_VERBOSE", "1");
             XstunitLog.ResetForTests();
             try
             {
@@ -73,7 +73,7 @@ namespace xStunit.Interpreter.Tests.Logging
                 // through a separate handle immediately after LogException can race it.
                 XstunitLog.ResetForTests();
 
-                var logFile = Assert.Single(Directory.GetFiles(logDir, "tcxunit-*.log"));
+                var logFile = Assert.Single(Directory.GetFiles(logDir, "xstunit-*.log"));
                 var contents = File.ReadAllText(logFile);
 
                 Assert.Contains("unit test context", contents);
@@ -84,8 +84,8 @@ namespace xStunit.Interpreter.Tests.Logging
             }
             finally
             {
-                Environment.SetEnvironmentVariable("TCXUNIT_LOG_DIR", null);
-                Environment.SetEnvironmentVariable("TCXUNIT_VERBOSE", null);
+                Environment.SetEnvironmentVariable("XSTUNIT_LOG_DIR", null);
+                Environment.SetEnvironmentVariable("XSTUNIT_VERBOSE", null);
                 XstunitLog.ResetForTests();
                 if (Directory.Exists(logDir))
                     Directory.Delete(logDir, recursive: true);

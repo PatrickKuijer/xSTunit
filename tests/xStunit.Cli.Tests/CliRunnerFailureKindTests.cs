@@ -280,6 +280,33 @@ namespace xStunit.Cli.Tests
             Assert.Contains(FailureKind.Guidance(FailureKind.Assertion), message);
         }
 
+        // `assertion` is not confined to the per-test failure path: a
+        // convergence assertion raised with no TEST()/TEST_FINISHED() bracket
+        // open has no test to charge, takes the suite down, and reaches the
+        // suite-level error with the same kind and the same guidance. A
+        // consumer that switches on a suite's `kind` therefore has to handle
+        // `assertion` there too; if this goes red, either that kind stopped
+        // being reachable at suite level or the suite-level path started
+        // spelling it differently from the per-test one.
+        [Fact]
+        public void Run_ConvergenceAssertionOutsideAnyTestBracket_ReportsAssertionKindOnTheSuiteError()
+        {
+            File.WriteAllText(Path.Combine(_tempDir, "FB_SuiteConvergenceTests.TcPOU"), SuiteLevelConvergenceSuiteXml);
+            File.WriteAllText(Path.Combine(_tempDir, "FB_ConvergenceMaster.TcPOU"), ConvergenceMasterXml);
+            File.WriteAllText(Path.Combine(_tempDir, "FB_ConvergenceRamp.TcPOU"), ConvergenceRampXml);
+            var output = new StringWriter();
+
+            var exitCode = CliRunner.Run(new[] { _tempDir, "--format", "json" }, output);
+
+            var suite = FirstSuite(output.ToString());
+            Assert.Equal(1, exitCode);
+            Assert.Equal("assertion", suite.GetProperty("kind").GetString());
+            Assert.Empty(suite.GetProperty("tests").EnumerateArray());
+            var error = suite.GetProperty("error").GetString();
+            Assert.Contains("AssertConverges: fields did not converge", error);
+            Assert.Contains(FailureKind.Guidance(FailureKind.Assertion), error);
+        }
+
         private static JsonElement FirstSuite(string json)
         {
             using var document = JsonDocument.Parse(json);
@@ -453,6 +480,24 @@ VAR
 END_VAR]]></Declaration>
     <Implementation>
       <ST><![CDATA[Value := Value + 1;]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>";
+
+        // The same non-converging pair as ConvergenceSuiteXml, asserted straight
+        // from the suite body instead of from inside a bracket: with no test
+        // open there is nothing to charge the fault to, so it escapes RunSuite.
+        private const string SuiteLevelConvergenceSuiteXml = @"<?xml version=""1.0"" encoding=""utf-8""?>
+<TcPlcObject Version=""1.1.0.1"">
+  <POU Name=""FB_SuiteConvergenceTests"" Id=""{00000000-0000-0000-0000-0000000000c4}"" SpecialFunc=""None"">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_SuiteConvergenceTests EXTENDS TcUnit.FB_TestSuite
+VAR
+	master : FB_ConvergenceMaster;
+	proxy : FB_ConvergenceRamp;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[master.Value := 99;
+AssertConverges(master, proxy, ['Value'], 2);]]></ST>
     </Implementation>
   </POU>
 </TcPlcObject>";

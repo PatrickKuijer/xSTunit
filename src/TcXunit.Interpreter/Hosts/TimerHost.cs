@@ -13,8 +13,8 @@ namespace TcXunit.Interpreter
         private bool _initialized;
 
         // TcXunit-nch: matched case-insensitively (typeName.ToUpperInvariant()),
-        // same decision as the NativeTimerTypes lookup in Engine.cs that
-        // decides to call Create in the first place - a lowercase/mixed-case
+        // same decision as the NativeTimerTypes lookup in Engine.NativeHost.cs
+        // that decides to call Create in the first place - a lowercase/mixed-case
         // spelling that passes that lookup must not then throw
         // NotSupportedException here.
         public static TimerHost Create(string typeName) => typeName?.ToUpperInvariant() switch

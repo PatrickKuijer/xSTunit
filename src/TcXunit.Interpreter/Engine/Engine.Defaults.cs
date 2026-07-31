@@ -21,7 +21,7 @@ namespace TcXunit.Interpreter
             if (structAst != null)
                 return BuildStructDefault(structAst, decl.DefaultValueText, owningInstance);
 
-            if (_registry.Get(typeName) != null || NativeTimerTypes.Contains(typeName) || typeName.Equals("Loopback", StringComparison.OrdinalIgnoreCase) || NativeEdgeTriggerTypes.Contains(typeName))
+            if (_registry.Get(typeName) != null || IsNativeFbTypeName(typeName))
                 return NewInstance(typeName);
 
             // TcXunit-5qs: a bare (unsuffixed) decimal literal like 2.5 lexes
@@ -49,13 +49,13 @@ namespace TcXunit.Interpreter
             // (BOOL/TIME/LTIME/DATE-family types, plus the POINTER TO/
             // REFERENCE TO prefix check) matches case-insensitively - the
             // same decision as IecNumericType, StringTypeInfo, ArrayTypeInfo,
-            // and TypeRegistry. The native-FB base-type checks above
-            // (NativeTimerTypes/NativeEdgeTriggerTypes/"Loopback") are a
-            // separate lookup family (native stub instantiation, not
-            // elementary-type defaulting) - matched case-insensitively too,
-            // via NativeTimerTypes/NativeEdgeTriggerTypes's OrdinalIgnoreCase
-            // comparer and the explicit OrdinalIgnoreCase Loopback check
-            // above (TcXunit-nch).
+            // and TypeRegistry. The native-FB base-type check above
+            // (IsNativeFbTypeName, Engine.NativeHost.cs) is a separate lookup
+            // family (native stub instantiation, not elementary-type
+            // defaulting) - matched case-insensitively too, via
+            // NativeTimerTypes/NativeEdgeTriggerTypes's OrdinalIgnoreCase
+            // comparer and its OrdinalIgnoreCase NativeLoopbackType compare
+            // (TcXunit-nch).
             if (typeName.Equals("BOOL", StringComparison.OrdinalIgnoreCase))
                 return false;
 

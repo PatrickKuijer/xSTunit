@@ -136,5 +136,24 @@ namespace TcXunit.Interpreter
 
             return NativeHostBinding.Of(NativeHostKind.Suite, new TcUnitSuiteHost());
         }
+
+        // Whether typeName names one of the native FB stubs this engine can
+        // instantiate directly - i.e. whether a VAR declared of that type gets
+        // an FbInstance rather than an elementary-type default value
+        // (Engine.Defaults' only caller).
+        //
+        // TcXunit-d6qq: deliberately NOT ClassifyNativeHost(typeName).Kind !=
+        // None. That would answer a different question: ClassifyNativeHost's
+        // trailing else is Suite, so *every* non-null name it sees classifies
+        // as native - correct for "which host kind backs this ancestry tail?",
+        // wrong for "is this type name instantiable as a native FB stub?".
+        // The two questions stay separate; what they share is this one list of
+        // native base-type names, which is what the duplication was really
+        // about (Engine.Defaults used to re-spell all three checks inline,
+        // Loopback as a bare string literal).
+        private static bool IsNativeFbTypeName(string typeName) =>
+            NativeTimerTypes.Contains(typeName)
+            || NativeEdgeTriggerTypes.Contains(typeName)
+            || string.Equals(typeName, NativeLoopbackType, StringComparison.OrdinalIgnoreCase);
     }
 }

@@ -42,6 +42,21 @@ namespace TcXunit.Interpreter
         // that is NativeKind's job, and null-checking these instead is the
         // duplication TcXunit-j98/kwv6/fvp6 removed. Setters are gone with it:
         // kind and host are only ever assigned together, by the classifier.
+        //
+        // TcXunit-d6qq/6a09 ratified KEEPING all four, so the next reader does
+        // not re-litigate them as trivial pass-throughs. They are not
+        // pass-throughs: NativeHost is typed object precisely because the four
+        // host types share no base class, so each getter is a *checked* cast -
+        // and the null it returns on mismatch is load-bearing, not incidental.
+        // Callers with no switch in hand depend on it, e.g. the suite-API
+        // precedence gate documented at NativeMethodBridge.CanInvoke, which
+        // only works because a non-suite receiver's NativeSuiteHost is null.
+        // Retiring them would mean ~12 hand-written unchecked casts at the
+        // Engine.Invocation call sites. The residue where a caller has already
+        // switched on Kind and the getter compares it a second time (e.g.
+        // Engine.Invocation.cs's 'case NativeHostKind.Timer:') is accepted:
+        // that compare provably cannot fail there, and costs one enum compare
+        // on a cold path.
 
         // Non-null when ActualTypeName's ancestry reaches TcUnit.FB_TestSuite -
         // the native C# stub instance backing TEST()/AssertEquals_INT()/etc for

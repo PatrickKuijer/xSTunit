@@ -3,38 +3,19 @@ using System.Collections.Generic;
 namespace xStunit.Runner.TcUnitStub
 {
     /// <summary>
-    /// One recorded failure of a test case.
+    /// One recorded failure of a test case, in two flavours. Most are
+    /// assertions - a comparison that came out wrong, with an expected/actual
+    /// pair. The other is a fault that unwound out of a test method: it never
+    /// compared anything, so it carries no Assert/Expected/Actual and has a
+    /// <see cref="CallStack"/> instead.
     /// </summary>
-    /// <remarks>
-    /// TcXunit-3tx.1/.2/.3: this used to be a bare formatted string, so
-    /// everything a consumer needed had to be regexed back out of prose, and
-    /// the location wasn't in there to recover at all.
-    ///
-    /// <see cref="Message"/> is still that same formatted string, formatted the
-    /// same way, so text output is unchanged; every other member is additive.
-    ///
-    /// Two kinds of thing land here, hence the two constructors. Most failures
-    /// are assertions - a comparison that came out wrong, with an
-    /// expected/actual pair. The other is a fault that unwound out of a test
-    /// method: rather than abandoning the whole suite, the engine charges it to
-    /// the test that was open at the time (TcXunit-3tx.3). A fault never
-    /// compared anything, so it has no Assert/Expected/Actual - what it has
-    /// instead is a <see cref="CallStack"/>.
-    /// </remarks>
     public sealed class AssertionFailure
     {
-        /// <summary>
-        /// An assertion failure with no structured detail. Kept as the
-        /// one-argument shape existing callers and tests already use.
-        /// </summary>
         public AssertionFailure(string message)
             : this(message, null, null, null, null, default(AssertSite))
         {
         }
 
-        /// <summary>
-        /// An assertion failure with the comparison and location behind it.
-        /// </summary>
         public AssertionFailure(
             string message,
             string assert,
@@ -63,8 +44,8 @@ namespace xStunit.Runner.TcUnitStub
         }
 
         /// <summary>
-        /// A fault that escaped the test's body and ended it (TcXunit-3tx.3),
-        /// charged to that test instead of to the whole suite.
+        /// A fault that escaped the test's body and ended it, charged to that
+        /// test rather than to the whole suite.
         /// </summary>
         public static AssertionFailure Fault(
             string message, string kind, string construct, AssertSite site, IReadOnlyList<AssertSite> callStack) =>

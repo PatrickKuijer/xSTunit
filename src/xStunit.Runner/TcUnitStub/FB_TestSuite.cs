@@ -5,25 +5,24 @@ using System.Diagnostics;
 namespace xStunit.Runner.TcUnitStub
 {
     /// <summary>
-    /// Native C# stand-in for TcUnit's FB_TestSuite. A real suite POU calls
-    /// TEST('name') / TEST_FINISHED() imperatively inside its cyclic body — the
-    /// case list isn't known ahead of time, it's discovered by running the body
-    /// (see TcXunit-w5x.7 item 3, grounded against real TcUnit-Verifier suites).
-    /// Duplicate-name detection is keyed off CurrentCycle, mirroring upstream's
-    /// CycleCount-keyed TestCycleCountIndex[] comparison in AddTest: a repeat
-    /// TEST('X') in the SAME cycle is a real duplicate (error); a repeat in a
-    /// LATER cycle is the normal cyclic re-declaration flow and re-attaches to
-    /// the existing test instead (TcXunit-k28.5). No runner today advances
-    /// CurrentCycle (single pass per suite, always 0), so this is currently
-    /// behavior-identical to always erroring on a repeat name; it's structured
-    /// so a future multi-cycle runner can drive re-declaration without further
-    /// changes here.
+    /// Native C# stand-in for TcUnit's FB_TestSuite. A suite POU calls
+    /// TEST('name') / TEST_FINISHED() imperatively inside its cyclic body, so
+    /// the case list is not known ahead of time - it is discovered by running
+    /// the body.
     /// </summary>
+    /// <remarks>
+    /// Whether a repeated TEST('X') is an error depends on the cycle it lands
+    /// in, mirroring upstream's CycleCount-keyed AddTest: a repeat in the SAME
+    /// cycle is a genuine duplicate name; a repeat in a LATER cycle is the
+    /// normal cyclic re-declaration and re-attaches to the existing test. No
+    /// runner advances <see cref="CurrentCycle"/> today, so in practice every
+    /// repeat is currently an error - the structure is here so a multi-cycle
+    /// runner needs no changes in this class.
+    /// </remarks>
     public abstract class FB_TestSuite
     {
-        // A test's in-progress record, keyed by name. Kept around after
-        // finishing (rather than removed) so IS_TEST_FINISHED('X') can still
-        // resolve 'X' by name after it completes.
+        // Kept in _records after finishing rather than removed, so
+        // IS_TEST_FINISHED('X') can still resolve 'X' once it completes.
         private sealed class TestRecord
         {
             public TestRecord(string name, int cycleIndex)
@@ -40,12 +39,10 @@ namespace xStunit.Runner.TcUnitStub
             public bool Finished { get; set; }
             public int LastCycleIndex { get; set; }
 
-            // Per-test elapsed time (TcXunit-6fb.1): started when TEST()/
-            // TEST_ORDERED() opens this record's bracket, stopped in the
-            // shared FinishRecord. Restart() (not Start()) so a re-declared
-            // test in a later cycle (see class-level comment) times only its
-            // most recent open->finish span, matching how FinishRecord
-            // replaces rather than appends its TestCaseResult.
+            // Callers Restart() rather than Start() it, so a test re-declared
+            // in a later cycle times only its most recent open->finish span -
+            // matching how FinishRecord replaces rather than appends its
+            // TestCaseResult.
             public Stopwatch Stopwatch { get; }
         }
 
@@ -53,14 +50,12 @@ namespace xStunit.Runner.TcUnitStub
         private readonly Dictionary<string, TestRecord> _records = new Dictionary<string, TestRecord>();
         private string _currentName;
 
-        // Cycle index the suite is currently executing at. Defaults to 0 to
-        // match today's single-pass runner; a future multi-cycle runner would
-        // advance this between passes (TcXunit-k28.5, out-of-scope multi-cycle
-        // loop tracked separately).
+        // Stays 0 under today's single-pass runner; a multi-cycle runner would
+        // advance it between passes.
         protected int CurrentCycle { get; set; }
 
-        // Mirrors upstream's per-suite NumberOfOrderedTests / CurrentlyRunningOrderedTestInTestSuite.
-        // Order numbers and the "whose turn is it" counter both start at 1.
+        // Mirrors upstream's per-suite NumberOfOrderedTests /
+        // CurrentlyRunningOrderedTestInTestSuite, which are 1-based.
         private int _nextOrderNumber = 1;
         private int _currentOrderedTurn = 1;
 
@@ -87,7 +82,7 @@ namespace xStunit.Runner.TcUnitStub
                     throw new NotSupportedException(
                         $"TEST('{name}') called twice in the same cycle — this is a real duplicate test name");
 
-                // Re-declaration in a later cycle: re-attach to the existing
+                // Re-declaration in a later cycle re-attaches to the existing
                 // test rather than erroring, matching upstream AddTest.
                 existing.LastCycleIndex = CurrentCycle;
                 existing.Stopwatch.Restart();
@@ -101,9 +96,9 @@ namespace xStunit.Runner.TcUnitStub
             _currentName = name;
         }
 
-        // Declares (or re-attaches to) an ordered test. Returns TRUE only when
-        // it's currently this test's turn and it hasn't finished yet - matching
-        // upstream TEST_ORDERED() semantics for a single-pass run (TcXunit-k28.7).
+        // Declares (or re-attaches to) an ordered test, returning TRUE only
+        // when it is this test's turn and it hasn't finished - the caller's
+        // body is meant to run only then, matching upstream TEST_ORDERED().
         protected bool TEST_ORDERED(string name)
         {
             if (!_records.TryGetValue(name, out var record))
@@ -133,10 +128,9 @@ namespace xStunit.Runner.TcUnitStub
             _currentName = null;
         }
 
-        // Finishes a named test regardless of which test is "current" (used
-        // by multi-cycle/async test bodies). Unlike TEST_FINISHED(), an
-        // unknown name fails fast rather than upstream's log-and-abort
-        // mechanic, which TcXunit has no equivalent for (TcXunit-k28.7).
+        // Finishes a named test regardless of which test is "current", for
+        // multi-cycle/async bodies. An unknown name fails fast, upstream's
+        // log-and-abort mechanic having no equivalent here.
         protected void TEST_FINISHED_NAMED(string name)
         {
             if (!_records.TryGetValue(name, out var record))
@@ -151,10 +145,9 @@ namespace xStunit.Runner.TcUnitStub
                 _currentName = null;
         }
 
-        // Polls whether a named test in this suite has finished. Unlike
-        // upstream (whose Tests[] scan silently returns FALSE for an unknown
-        // name), an unknown name fails fast here to surface suite-authoring
-        // typos (TcXunit-k28.7).
+        // An unknown name throws rather than returning FALSE the way upstream's
+        // Tests[] scan does, so a suite-authoring typo surfaces instead of
+        // reading as "not finished yet".
         protected bool IS_TEST_FINISHED(string name)
         {
             if (!_records.TryGetValue(name, out var record))
@@ -164,20 +157,18 @@ namespace xStunit.Runner.TcUnitStub
             return record.Finished;
         }
 
-        // TcXunit-3tx.3: whether a TEST()/TEST_FINISHED() bracket is currently
-        // open, i.e. whether there is a test to charge an escaping fault to.
-        // The engine asks this before deciding between failing one test and
-        // failing the whole suite.
+        // Whether there is an open bracket to charge an escaping fault to. The
+        // engine asks before deciding between failing one test and failing the
+        // whole suite.
         internal bool HasOpenTest => _currentName != null;
 
         // Charges a fault that unwound out of the current test's body to that
-        // test and closes its bracket, so the suite can carry on with the tests
-        // after it (TcXunit-3tx.3).
+        // test and closes its bracket, so the suite carries on with the tests
+        // after it.
         //
-        // Unlike Fail(), this deliberately records even when the test already
-        // has an assertion failure: upstream's first-failure-wins rule is about
-        // several asserts in one test, whereas a fault ENDED the test and is
-        // strictly the more informative of the two.
+        // Unlike Fail(), records even when the test already has an assertion
+        // failure: first-failure-wins is about several asserts in one test,
+        // whereas a fault ENDED the test and is the more informative of the two.
         internal void AbortCurrentTest(AssertionFailure failure)
         {
             if (_currentName == null)
@@ -193,9 +184,9 @@ namespace xStunit.Runner.TcUnitStub
         {
             record.Stopwatch.Stop();
 
-            // A re-declared test (TEST('X') again in a later cycle) can finish
-            // more than once across cycles; replace its prior result rather
-            // than appending a second entry for the same name (TcXunit-k28.5).
+            // A test re-declared in a later cycle finishes more than once;
+            // replace its prior result rather than reporting the same name
+            // twice.
             var previousIndex = _finished.FindIndex(r => r.Name == record.Name);
             var result = new TestCaseResult(record.Name, record.Failures, record.Stopwatch.ElapsedMilliseconds);
             if (previousIndex >= 0)
@@ -209,15 +200,15 @@ namespace xStunit.Runner.TcUnitStub
                 _currentOrderedTurn++;
         }
 
-        // Upstream FB_Test.SetAssertionMessage()/SetAssertionType() only set
-        // AssertionMessage/AssertionType 'if not already set' - a test with
-        // several failing asserts still fails, but only the first failure's
-        // message is ever recorded. Later Fail() calls in the same TEST()
-        // bracket are dropped here to match (TcXunit-k28.1).
+        // First failure wins: a test with several failing asserts still fails,
+        // but only the first one's message is recorded, so later Fail() calls
+        // in the same bracket are dropped. Upstream's
+        // FB_Test.SetAssertionMessage()/SetAssertionType() do the same by
+        // writing only 'if not already set'.
         //
         // Message format mirrors upstream FB_AdsAssertMessageFormatter:
         // "FAILED TEST '<name>', EXP: <expected>, ACT: <actual>[, MSG: <message>]"
-        // - MSG is only appended when message is non-empty (TcXunit-k28.2).
+        // - MSG only when message is non-empty.
         private void Fail(string expected, string actual, string message)
         {
             if (_currentName == null)
@@ -231,43 +222,38 @@ namespace xStunit.Runner.TcUnitStub
             if (!string.IsNullOrEmpty(message))
                 formatted += $", MSG: {message}";
 
-            // TcXunit-3tx.2: the same three substrings the line above embeds,
-            // plus the assert's name and source location, recorded as fields so
-            // a consumer never has to parse the line back apart. CurrentAssert/
-            // CurrentSite are whatever the caller last announced - both stay at
-            // their defaults for a C# fixture calling these asserts directly,
-            // which reports as nulls rather than as invented values.
+            // The same substrings the formatted line embeds, recorded as fields
+            // so a consumer never has to parse that line back apart.
+            // CurrentAssert/CurrentSite stay at their defaults for a C# fixture
+            // calling these asserts directly, which reports as nulls rather
+            // than as invented values.
             failures.Add(new AssertionFailure(formatted, CurrentAssert, expected, actual, message, CurrentSite));
         }
 
-        // TcXunit-3tx.2: the name and source location of the assert currently
-        // being evaluated, announced by the interpreter immediately before it
-        // dispatches the call (see SuiteHost/Engine.Invocation). They are
-        // set on this object rather than threaded through every assert
-        // signature because each of the ~40 AssertEquals_<TYPE> entry points
-        // would otherwise have to carry - and forward - four more parameters
-        // that none of them uses.
+        // The name and source location of the assert being evaluated, which the
+        // interpreter announces immediately before dispatching the call (see
+        // SuiteHost/Engine.Invocation). Carried on the suite rather than
+        // threaded through every assert signature: each of the ~40
+        // AssertEquals_<TYPE> entry points would otherwise have to take - and
+        // forward - four more parameters that none of them reads.
         internal string CurrentAssert { get; set; }
 
         internal AssertSite CurrentSite { get; set; }
 
-        // Upstream delegates both through AssertEquals_BOOL(Expected:=TRUE/
-        // FALSE, Actual:=Condition, Message) rather than failing with just a
-        // bare message, so a failing AssertTrue/AssertFalse carries the same
-        // EXP/ACT detail as any other assert (TcXunit-k28.3).
+        // Delegated to AssertEquals_BOOL rather than failing with a bare
+        // message, so a failing AssertTrue/AssertFalse carries the same EXP/ACT
+        // detail as any other assert - as upstream does.
         protected void AssertTrue(bool condition, string message) =>
             AssertEquals_BOOL(true, condition, message);
 
         protected void AssertFalse(bool condition, string message) =>
             AssertEquals_BOOL(false, condition, message);
 
-        // Table-driven scalar dispatch (TcXunit-gd2.11): each named
-        // AssertEquals_<TYPE> method below is kept as the real, compile-time
-        // API surface (C# fixtures under tests/xStunit.Runner.Tests/Fakes/
-        // extend FB_TestSuite directly and call these by name), but each is
-        // now a 1-line forward into this one generic method, which looks up
-        // compare/format behavior from the ScalarAssertType registry instead
-        // of every type re-implementing its own Fail()-on-mismatch method.
+        // Table-driven scalar dispatch. The named AssertEquals_<TYPE> methods
+        // below stay as the compile-time API surface - C# fixtures extend
+        // FB_TestSuite and call them by name - but each is a 1-line forward
+        // into here, so compare/format behaviour lives once in the
+        // ScalarAssertType registry instead of once per type.
         protected void AssertEqualsScalar(string typeName, object expected, object actual, object delta, string message)
         {
             var type = ScalarAssertType.Registry[typeName];
@@ -293,12 +279,6 @@ namespace xStunit.Runner.TcUnitStub
         protected void AssertEquals_LREAL(double expected, double actual, double delta, string message) =>
             AssertEqualsScalar("LREAL", expected, actual, delta, message);
 
-        // Integer-family types (TcXunit-gd2.1): each is a 1-line forward
-        // into AssertEqualsScalar, matching the INT/BOOL/STRING/REAL pattern
-        // above. Parameter CLR types mirror the natural .NET type for each
-        // IEC type's range/signedness; ScalarAssertType.AsLong64/AsULong64
-        // widen whatever boxed shape arrives (this or an interpreted Cell's
-        // own boxing per IecNumericType.cs) before narrowing/comparing.
         protected void AssertEquals_BYTE(byte expected, byte actual, string message) =>
             AssertEqualsScalar("BYTE", expected, actual, null, message);
 
@@ -332,46 +312,32 @@ namespace xStunit.Runner.TcUnitStub
         protected void AssertEquals_ULINT(ulong expected, ulong actual, string message) =>
             AssertEqualsScalar("ULINT", expected, actual, null, message);
 
-        // TIME/LTIME (TcXunit-gd2.3): durations compare exactly (no Delta
-        // param), matching upstream - mirrors the DINT/DWORD-style
-        // exact-match forward shape, not REAL/LREAL's delta-based one.
         protected void AssertEquals_TIME(uint expected, uint actual, string message) =>
             AssertEqualsScalar("TIME", expected, actual, null, message);
 
         protected void AssertEquals_LTIME(ulong expected, ulong actual, string message) =>
             AssertEqualsScalar("LTIME", expected, actual, null, message);
 
-        // Table-driven ARRAY[*] equality dispatch (TcXunit-gd2.6), the
-        // array-typed counterpart to AssertEqualsScalar (gd2.11): one
-        // dimension-agnostic generic method backs every AssertArrayEquals_
-        // <TYPE> overload, reusing each type's compare/format delegate from
-        // the ScalarAssertType registry instead of a bespoke per-type
-        // method. This project doesn't reference xStunit.Interpreter (the
-        // reference points the other way, Interpreter -> Runner, so there's
-        // no ArrayValue type here) - the caller (SuiteHost) flattens
-        // an ArrayValue into element/size/lower-bound primitives first.
+        // The array counterpart to AssertEqualsScalar: one dimension-agnostic
+        // method backing every AssertArrayEquals_<TYPE>, reusing the same
+        // registry delegates. Takes flattened element/size/lower-bound
+        // primitives because there is no ArrayValue type to take - the
+        // reference runs Interpreter -> Runner, so the caller (SuiteHost)
+        // flattens one first.
         //
-        // Mirrors upstream AssertArrayEquals_<TYPE> (FB_TestSuite.TcPOU): a
-        // per-dimension size mismatch (not exact bounds - two arrays are
-        // allowed to start at different lower bounds, per upstream's own
-        // comment) fails immediately with a "SIZE = n" EXP/ACT pair and
-        // never touches the elements; otherwise elements are compared
-        // pairwise in flattened order, stopping at the first mismatch
-        // (upstream's FOR/EXIT), and reporting "ARRAY[i] = value" using
-        // each array's own real (lower-bound-relative) index - not the flat
-        // position - exactly like upstream's ExpectedsIndex/ActualsIndex
-        // pair.
+        // Semantics mirror upstream AssertArrayEquals_<TYPE>: sizes are
+        // compared per dimension but bounds are not, two arrays being allowed
+        // to start at different lower bounds; a size mismatch fails with a
+        // "SIZE = n" pair and never touches the elements; otherwise elements
+        // are compared pairwise in flattened order and the first mismatch wins,
+        // reported at each array's own lower-bound-relative index rather than
+        // the flat position.
         //
-        // REAL/LREAL (TcXunit-gd2.7) additionally take a Delta arg, exactly
-        // like upstream AssertArrayEquals_REAL/_LREAL's VAR_INPUT Delta -
-        // an absolute per-element tolerance (ABS(Expecteds[i] - Actuals[i])
-        // > Delta fails), not scaled/proportional to the expected value
-        // despite what that method's own doc comment claims upstream.
-        // Message formatting for a per-element mismatch uses FormatActual
-        // (a plain value, no "+/- delta" suffix) for BOTH sides - matching
-        // upstream's array assert message (REAL_TO_STRING(Expecteds[i]),
-        // no delta shown), unlike the scalar AssertEquals_REAL/_LREAL
-        // failure message which does include "+/- delta" via FormatExpected.
+        // Delta is an ABSOLUTE per-element tolerance, not one scaled to the
+        // expected value - upstream's own doc comment claims otherwise, its
+        // code does not. A per-element mismatch formats BOTH sides with
+        // FormatActual, so no "+/- delta" appears here even though the scalar
+        // AssertEquals_REAL/_LREAL message shows it.
         protected void AssertArrayEquals(
             string typeName,
             IReadOnlyList<int> expectedSizes, IReadOnlyList<int> expectedLowerBounds, object[] expectedElements,
@@ -406,8 +372,8 @@ namespace xStunit.Runner.TcUnitStub
         }
 
         // Reverses the row-major flattening in Engine.Statements.cs'
-        // FlattenIndex: given a 0-based flat element position, recovers
-        // each dimension's real (lower-bound-relative) index.
+        // FlattenIndex, recovering each dimension's lower-bound-relative index
+        // from a 0-based flat position.
         private static int[] UnflattenIndex(IReadOnlyList<int> sizes, IReadOnlyList<int> lowerBounds, int flat)
         {
             var offsets = new int[sizes.Count];
@@ -423,20 +389,15 @@ namespace xStunit.Runner.TcUnitStub
             return result;
         }
 
-        // Type-erased AssertEquals(Expected: ANY, Actual: ANY, Message)
-        // dispatcher (TcXunit-gd2.5, upstream FB_TestSuite.TcPOU ~line
-        // 2215). Upstream compares the ANY parameters' TypeClass tags
-        // first - a mismatch fails immediately (EXP/ACT show the two type
-        // names, values are never compared) - and only once they agree
-        // does it delegate to the matching AssertEquals_<TYPE>, always
-        // with Delta := 0.0 for REAL/LREAL (this overload takes no delta
-        // parameter, unlike AssertEquals_REAL/_LREAL). The interpreter has
-        // no ANY value carrying its own runtime type tag the way a real
-        // TwinCAT ANY struct's TypeClass/pValue/diSize does, so both type
-        // names are resolved by the caller (from the argument *expression*,
-        // mirroring how SIZEOF() resolves a declared type - see
-        // Engine.Invocation.cs/NativeMethodBridge.cs) and handed to this
-        // method already known.
+        // Type-erased AssertEquals(Expected: ANY, Actual: ANY, Message).
+        // Type names arrive already resolved because the interpreter has no
+        // ANY value carrying its own runtime tag the way a TwinCAT ANY struct's
+        // TypeClass does - the caller resolves both from the argument
+        // *expression*, the way SIZEOF() resolves a declared type.
+        //
+        // As upstream: a type mismatch fails on the type names alone and the
+        // values are never compared, and a REAL/LREAL that gets past that
+        // compares with Delta := 0.0, this overload having no delta parameter.
         protected void AssertEqualsAny(
             string expectedTypeName, object expectedValue,
             string actualTypeName, object actualValue,

@@ -3,36 +3,31 @@ using System.Collections.Generic;
 
 namespace xStunit.Runner.TcUnitStub
 {
-    // Table-driven registry backing FB_TestSuite.AssertEqualsScalar's
-    // per-type dispatch (TcXunit-gd2.11). Before this, each scalar type
-    // (INT/BOOL/STRING/REAL) needed its own hand-written AssertEquals_<TYPE>
-    // method repeated across FB_TestSuite, SuiteHost and
-    // NativeMethodBridge - adding the ~17 remaining IEC scalar types the old
-    // way would mean ~51 new methods. Each entry here captures what used to
-    // be one hand-written method's behavior: how to compare (with any
-    // type-specific wrapping, e.g. INT's 16-bit wraparound truncation),
-    // whether the type takes a Delta argument (REAL) or compares exactly,
-    // and how to format expected/actual for the Fail() message. Adding a new
-    // scalar type means adding one entry here, not new methods in three
-    // files.
+    // Table-driven registry backing FB_TestSuite.AssertEqualsScalar's per-type
+    // dispatch. Each entry carries everything one hand-written
+    // AssertEquals_<TYPE> method used to: how to compare (with any
+    // type-specific wrapping, e.g. INT's 16-bit wraparound), whether the type
+    // takes a Delta argument, and how to format expected/actual for the Fail()
+    // message. A hand-written method has to be repeated across FB_TestSuite,
+    // SuiteHost and NativeMethodBridge, so a new scalar type costs three
+    // methods that way and one entry this way.
     public sealed class ScalarAssertType
     {
         public string Name { get; }
 
-        // True when the type compares within a tolerance (Delta arg
-        // required), false when it compares exactly.
+        // True when the type compares within a tolerance (Delta arg required),
+        // false when it compares exactly.
         public bool HasDelta { get; }
 
-        // Compares expected/actual (applying any type-specific wrap/rounding
-        // rule), consulting delta only when HasDelta is true. Returns true
-        // when the assertion should PASS.
+        // (expected, actual, delta) -> true when the assertion should PASS.
+        // Applies any type-specific wrap/rounding rule; consults delta only
+        // when HasDelta.
         public Func<object, object, object, bool> AreEqual { get; }
 
-        // Formats the expected value (and delta, when HasDelta) for the
-        // Fail() message.
+        // (expected, delta) -> the EXP text of the Fail() message; the delta is
+        // folded into it only when HasDelta.
         public Func<object, object, string> FormatExpected { get; }
 
-        // Formats the actual value for the Fail() message.
         public Func<object, string> FormatActual { get; }
 
         private ScalarAssertType(
@@ -51,14 +46,11 @@ namespace xStunit.Runner.TcUnitStub
 
         private static string FormatBool(bool value) => value ? "TRUE" : "FALSE";
 
-        // REAL/LREAL formatting (TcXunit-gd2.7 fix): plain ToString() uses
-        // CurrentCulture, which renders "." as "," on e.g. de-DE - silently
-        // corrupting the EXP/ACT failure message (and, for the array
-        // dispatcher's per-element message, making a real numeric
-        // difference look like a formatting artifact). Assertion messages
-        // are diagnostic text, not user-locale-facing output, so format
-        // with InvariantCulture like every other IEC type here already
-        // does implicitly (integers don't vary by culture).
+        // InvariantCulture, not ToString()'s CurrentCulture: on e.g. de-DE the
+        // latter renders "." as ",", silently corrupting the EXP/ACT text and
+        // making a real numeric difference look like a formatting artifact.
+        // Assertion messages are diagnostic text, not locale-facing output, and
+        // every other IEC type here is culture-invariant already.
         private static string FormatDouble(object value) =>
             Convert.ToDouble(value).ToString(System.Globalization.CultureInfo.InvariantCulture);
 
@@ -67,20 +59,12 @@ namespace xStunit.Runner.TcUnitStub
         public static readonly IReadOnlyDictionary<string, ScalarAssertType> Registry =
             new Dictionary<string, ScalarAssertType>
             {
-                // Upstream operates on IEC 61131-3 INT, a signed 16-bit
-                // type - a real INT variable would already be truncated/
-                // wrapped to that range by the time it reaches this assert.
-                // Values stay boxed C# int (the rest of this codebase has no
-                // narrower INT representation), but the compare wraps both
-                // operands to 16 bits first so out-of-range values that
-                // would collide as INT compare equal here too (TcXunit-k28.4).
-                // Uses WrapShort (AsLong64-based) rather than a direct
-                // (short)(int) cast: unlike every other integer-family entry
-                // below, this one used to unbox straight to int and threw
-                // InvalidCastException (Int64->Int32) whenever expected/
-                // actual was actually a long-boxed value (e.g. a UDINT/DWORD
-                // value or long-promoted arithmetic result reaching an INT
-                // assert) - TcXunit-vh7.
+                // IEC INT is signed 16-bit, so a real INT variable is already
+                // truncated to that range by the time an assert sees it.
+                // Values stay boxed C# int here (this codebase has no narrower
+                // representation), so the compare wraps both operands to 16
+                // bits itself - otherwise two out-of-range values that would
+                // collide as INT would compare unequal.
                 ["INT"] = new ScalarAssertType(
                     "INT",
                     hasDelta: false,
@@ -102,10 +86,8 @@ namespace xStunit.Runner.TcUnitStub
                     formatExpected: (expected, delta) => $"'{expected}'",
                     formatActual: actual => $"'{actual}'"),
 
-                // WSTRING (TcXunit-gd2.4): the interpreter has no narrower
-                // wide-char representation than C# string (already UTF-16),
-                // so this is identical to STRING's entry - only the IEC type
-                // name differs.
+                // Identical to STRING but for the type name: C# string is
+                // already UTF-16, so there is nothing narrower to model.
                 ["WSTRING"] = new ScalarAssertType(
                     "WSTRING",
                     hasDelta: false,
@@ -122,11 +104,8 @@ namespace xStunit.Runner.TcUnitStub
                         $"{FormatDouble(expected)} +/- {FormatDouble(delta)}",
                     formatActual: actual => FormatDouble(actual)),
 
-                // LREAL (TcXunit-gd2.2): the 64-bit delta-based twin of REAL.
-                // Both REAL and LREAL are boxed as C# double by the time they
-                // reach a native call (there's no narrower float representation
-                // in this codebase), so the comparison logic is identical to
-                // REAL's - only the IEC type name differs.
+                // Identical to REAL but for the type name: both arrive boxed as
+                // C# double, there being no narrower float representation here.
                 ["LREAL"] = new ScalarAssertType(
                     "LREAL",
                     hasDelta: true,
@@ -136,20 +115,16 @@ namespace xStunit.Runner.TcUnitStub
                         $"{FormatDouble(expected)} +/- {FormatDouble(delta)}",
                     formatActual: actual => FormatDouble(actual)),
 
-                // Integer-family types (TcXunit-gd2.1). The interpreter boxes
-                // these Cell values per IecNumericType.cs - SINT/USINT/BYTE/
-                // WORD/UINT/DINT as C# int, DWORD/UDINT/LINT as C# long, and
-                // LWORD/ULINT as C# ulong - but an integer literal reaching a
-                // native call from interpreted ST is *always* boxed C# int
-                // regardless of the IEC type it's headed for (Parser.
-                // Expressions.cs IntLiteralExpr), and a C# fixture calling
-                // AssertEquals_<TYPE> directly boxes whatever CLR parameter
-                // type that method declares. AsLong64/AsULong64 below accept
-                // any of those boxed shapes and each entry's compare/format
-                // then wraps to its own width/signedness (mirroring INT's
-                // pre-existing 16-bit wrap), the same way a real IEC variable
-                // would already be truncated to that width by the time an
-                // assert sees it.
+                // Integer-family types. No entry may unbox to a specific CLR
+                // integer type: the same IEC type reaches an assert boxed
+                // differently depending on the caller - an ST integer literal
+                // is always boxed C# int whatever IEC type it is headed for,
+                // an interpreted Cell uses IecNumericType.cs' own choice of
+                // int/long/ulong, and a C# fixture boxes whatever CLR type
+                // AssertEquals_<TYPE> declares. AsLong64/AsULong64 accept all
+                // of those shapes; each entry then wraps to its own
+                // width/signedness, the way a real IEC variable would already
+                // be truncated by the time an assert sees it.
                 ["SINT"] = new ScalarAssertType(
                     "SINT",
                     hasDelta: false,
@@ -227,15 +202,11 @@ namespace xStunit.Runner.TcUnitStub
                     formatExpected: (expected, delta) => AsULong64(expected).ToString(),
                     formatActual: actual => AsULong64(actual).ToString()),
 
-                // TIME/LTIME (TcXunit-gd2.3): TimeLiteral.cs already gives the
-                // interpreter a numeric representation for both - TIME as
-                // uint milliseconds, LTIME as ulong nanoseconds - so, like
-                // DWORD/UDINT and LWORD/ULINT above, they slot straight into
-                // the integer-family compare/format helpers. Upstream TcUnit
-                // has no delta-based AssertEquals_TIME/LTIME (durations
-                // compare exactly, not within tolerance), so these use exact
-                // equality the same way DWORD/LWORD do rather than REAL's
-                // delta-based compare.
+                // TIME is uint milliseconds and LTIME ulong nanoseconds per
+                // TimeLiteral.cs, so both slot into the integer-family
+                // helpers. Exact equality, no delta: upstream has no
+                // tolerance-based AssertEquals_TIME/_LTIME either, durations
+                // being compared exactly.
                 ["TIME"] = new ScalarAssertType(
                     "TIME",
                     hasDelta: false,
@@ -250,22 +221,15 @@ namespace xStunit.Runner.TcUnitStub
                     formatExpected: (expected, delta) => AsULong64(expected).ToString(),
                     formatActual: actual => AsULong64(actual).ToString()),
 
-                // DATE/DATE_AND_TIME/TIME_OF_DAY (TcXunit-gd2.13):
-                // DateTimeLiteral.cs gives the interpreter a uint
-                // representation for all three (DATE/DATE_AND_TIME as
-                // seconds since the 1970-01-01 epoch, TIME_OF_DAY as
-                // milliseconds since midnight), so - like TIME above - they
-                // slot straight into the uint compare/format helpers, with
-                // exact equality rather than a delta (matching upstream:
-                // no AssertEquals_DATE/_DT/_TOD tolerance argument).
+                // All three are uint per DateTimeLiteral.cs - DATE and
+                // DATE_AND_TIME as seconds since the 1970-01-01 epoch,
+                // TIME_OF_DAY as milliseconds since midnight - so they too
+                // compare exactly through the uint helpers.
                 //
-                // Known limitation: FormatExpected/FormatActual print the
-                // raw uint value, not a calendar/clock string (e.g.
-                // "2024-01-01" or "10:00:00.500") - same as TIME/LTIME's
-                // existing raw-integer failure-message formatting. Adding
-                // calendar-string formatting is deferred until a fixture
-                // actually needs a human-readable EXP/ACT message for these
-                // types (grow-on-demand).
+                // Known limitation: a failure message prints that raw uint,
+                // not "2024-01-01" or "10:00:00.500". Calendar formatting is
+                // deferred until a fixture actually needs a readable EXP/ACT
+                // for these types.
                 ["DATE"] = new ScalarAssertType(
                     "DATE",
                     hasDelta: false,
@@ -288,9 +252,8 @@ namespace xStunit.Runner.TcUnitStub
                     formatActual: actual => WrapUInt(actual).ToString()),
             };
 
-        // Accepts any boxed integer shape a Cell or C# fixture parameter
-        // might use (int/long/uint/ulong/etc, per IecNumericType.cs) and
-        // widens to a signed 64-bit value for narrowing/comparison.
+        // Accepts any boxed integer shape a Cell or C# fixture parameter might
+        // use and widens it to signed 64-bit for narrowing/comparison.
         private static long AsLong64(object value) => value switch
         {
             long l => l,

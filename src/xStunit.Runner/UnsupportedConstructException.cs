@@ -3,32 +3,25 @@ using System;
 namespace xStunit.Runner
 {
     /// <summary>
-    /// A deliberate grow-on-demand gap: ST that TwinCAT compiles and TcXunit
-    /// does not implement yet (TcXunit-3tx.1).
+    /// A deliberate grow-on-demand gap: ST that TwinCAT compiles and this
+    /// interpreter does not implement yet. Distinct from every other throw
+    /// here because the correct response is the opposite one - the code under
+    /// test is fine and must not be edited.
     /// </summary>
     /// <remarks>
-    /// Distinct from every other throw here because the correct response is the
-    /// opposite one: the code under test is fine and must not be edited.
+    /// The ONLY signal <see cref="FailureKind.UnsupportedConstruct"/> is
+    /// derived from, deliberately: a plain
+    /// <see cref="NotSupportedException"/> is not enough evidence, since the
+    /// engine throws it both for real gaps ("Statement type X not supported")
+    /// AND for genuine defects in the code under test ("Operator '&lt;' is not
+    /// supported between Int32 and String"). Classifying on the base type
+    /// would report real PLC bugs as "stop, escalate to a human" - the same
+    /// failure this discriminator exists to prevent, only inverted. So a throw
+    /// site opts in by name; anything that has not opted in reports as an
+    /// ordinary fault.
     ///
-    /// This is the ONLY signal <see cref="FailureKind.UnsupportedConstruct"/> is
-    /// derived from, and that is deliberate. A plain
-    /// <see cref="NotSupportedException"/> is not enough evidence: the engine
-    /// throws it both for real gaps ("Statement type X not supported") AND for
-    /// genuine defects in the code under test ("Operator '&lt;' is not supported
-    /// between Int32 and String"). Classifying on the base type would report
-    /// real PLC bugs as "stop, escalate to a human" - the same failure this
-    /// discriminator exists to prevent, only inverted. So a throw site opts in
-    /// by name, and anything that has not opted in reports as an ordinary
-    /// fault.
-    ///
-    /// Derives from <see cref="NotSupportedException"/> so every existing
-    /// `catch (NotSupportedException)` and every test asserting that type keeps
-    /// working unchanged.
-    ///
-    /// Lives in the Runner project alongside <see cref="FailureKind"/> - both
-    /// are the shared failure vocabulary, and the dependency runs
-    /// Interpreter -> Runner, so the Runner's own grow-on-demand throw
-    /// (FB_TestSuite.AssertEqualsAny) can use it too.
+    /// Derives from <see cref="NotSupportedException"/> so existing
+    /// `catch (NotSupportedException)` sites keep working unchanged.
     /// </remarks>
     public sealed class UnsupportedConstructException : NotSupportedException
     {

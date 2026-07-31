@@ -5,23 +5,25 @@ using Xunit;
 
 namespace TcXunit.Cli.Tests
 {
-    // TcXunit-8po end-to-end: Tc2_Standard's DELETE/FIND/INSERT/LEFT/LEN/MID/
-    // REPLACE/RIGHT are compiled-only, like every TwinCAT library, and
-    // resolve only through the native-function plugin/registry path
-    // (TcXunit-6k2) - never a built-in intrinsic. Mirrors
-    // CliRunnerNativeFunctionPluginTests, loading the real plugin DLL through
-    // the CLI's --plugins loader rather than an in-process registration.
+    // TcXunit-93l9 end-to-end: Tc2_Standard's WSTRING function set
+    // (WCONCAT/WDELETE/WFIND/WINSERT/WLEFT/WLEN/WMID/WREPLACE/WRIGHT) is
+    // compiled-only, like every TwinCAT library, and resolves only through the
+    // native-function plugin/registry path (TcXunit-6k2). Same shape as
+    // CliRunnerTc2StandardPluginTests (the narrow-STRING half, TcXunit-8po):
+    // the real plugin DLL is loaded through the CLI's --plugins loader rather
+    // than registered in process.
     //
-    // CONCAT is out of scope here: TcXunit-8po.1 was closed as already
-    // resolved by TcXunit-3lt's interpreter intrinsic (see the fixture POU's
-    // header comment).
-    public class CliRunnerTc2StandardPluginTests : IDisposable
+    // WCONCAT *is* covered here, unlike CONCAT in the narrow suite: the
+    // interpreter's CONCAT intrinsic is dispatched by exact ordinal name match
+    // (Engine.Expressions.cs `call.MethodName == "CONCAT"`), which "WCONCAT"
+    // never hits, so a plugin WCONCAT is reachable rather than dead code.
+    public class CliRunnerWideStringPluginTests : IDisposable
     {
         private readonly string _pluginDir;
 
-        public CliRunnerTc2StandardPluginTests()
+        public CliRunnerWideStringPluginTests()
         {
-            _pluginDir = Path.Combine(Path.GetTempPath(), "tcxunit-tc2std-plugin-test-" + Guid.NewGuid().ToString("N"));
+            _pluginDir = Path.Combine(Path.GetTempPath(), "tcxunit-wstring-plugin-test-" + Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(_pluginDir);
             File.Copy(PluginDll(), Path.Combine(_pluginDir, "TcXunit.Tc2StandardPlugins.dll"));
         }
@@ -50,19 +52,36 @@ namespace TcXunit.Cli.Tests
             var text = output.ToString();
             Assert.Equal(1, exitCode);
             Assert.DoesNotContain("Object reference not set", text);
-            Assert.Contains("DELETE", text);
-            // Unlike F_CheckSum16 (mixed-case), an ALL-CAPS unresolved call
-            // from inside a suite is classified as "looks like an IEC
-            // standard-library call" (NativeMethodBridge.LooksLikeTcUnitApiName,
-            // TcXunit-w5x.12/TcXunit-2o9.1) once the native-function registry
-            // has already had - and missed - its chance to resolve it, so the
-            // diagnostic here is the grow-on-demand message, not "native
-            // function".
+            Assert.Contains("WLEN", text);
+            // Same classification as the narrow suite's DELETE: an ALL-CAPS
+            // unresolved call from inside a suite reads as "looks like an IEC
+            // standard-library call" once the native-function registry has had
+            // - and missed - its chance to resolve it.
             Assert.Contains("isn't supported yet (grow-on-demand", text);
         }
 
+        // The evidence behind implementing WCONCAT as a plugin function rather
+        // than closing it as already-resolved the way CONCAT was
+        // (TcXunit-8po.1): with no plugin loaded, a WCONCAT call reaches the
+        // *unresolved* path. Were an intrinsic handling it, this would have
+        // concatenated and passed instead. Locks in the reachability the
+        // plugin implementation depends on, so a future intrinsic named
+        // WCONCAT can't silently turn WConcatFunction into dead code.
         [Fact]
-        public void Run_WithPluginDirectory_ResolvesEveryFunctionAndPasses()
+        public void Run_WithoutPlugins_LeavesWConcatUnresolvedRatherThanIntrinsicShadowed()
+        {
+            var output = new StringWriter();
+
+            var exitCode = CliRunner.Run(new[] { FixtureDir() }, output);
+
+            var text = output.ToString();
+            Assert.Equal(1, exitCode);
+            Assert.Contains("WConcat: FAIL", text);
+            Assert.Contains("'WCONCAT' isn't supported yet", text);
+        }
+
+        [Fact]
+        public void Run_WithPluginDirectory_ResolvesEveryWideFunctionAndPasses()
         {
             var output = new StringWriter();
 
@@ -70,16 +89,13 @@ namespace TcXunit.Cli.Tests
 
             var text = output.ToString();
             Assert.Equal(0, exitCode);
-            Assert.Contains("13 passed, 0 failed", text);
-            // 8 narrow-STRING functions (TcXunit-8po) + 9 WSTRING
-            // counterparts (TcXunit-93l9, exercised by
-            // CliRunnerWideStringPluginTests) in the one plugin assembly.
+            Assert.Contains("22 passed, 0 failed", text);
             Assert.Contains("plugin: TcXunit.Tc2StandardPlugins.dll (17 function(s))", text);
         }
 
         private static string FixtureDir([CallerFilePath] string callerFile = "") =>
             Path.GetFullPath(Path.Combine(
-                Path.GetDirectoryName(callerFile)!, "..", "Fixtures", "Tc2StandardPluginFixture"));
+                Path.GetDirectoryName(callerFile)!, "..", "Fixtures", "WideStringPluginFixture"));
 
         private static string PluginDll([CallerFilePath] string callerFile = "")
         {

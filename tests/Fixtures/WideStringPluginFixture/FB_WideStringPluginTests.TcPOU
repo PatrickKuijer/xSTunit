@@ -1,0 +1,471 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4026.18">
+  <POU Name="FB_WideStringPluginTests" Id="{93190000-0000-4a1a-8b1b-000000000000}" SpecialFunc="None">
+    <Declaration><![CDATA[(*
+    TcXunit interpreter fixture (TcXunit-93l9). Exercises the Tc2_Standard
+    WSTRING function set (WCONCAT, WDELETE, WFIND, WINSERT, WLEFT, WLEN,
+    WMID, WREPLACE, WRIGHT) resolving through the native-function
+    plugin/registry path (samples/TcXunit.Tc2StandardPlugins), not a built-in
+    intrinsic.
+
+    Unlike CONCAT - which TcXunit-3lt made an interpreter intrinsic, so its
+    plugin counterpart would be unreachable (TcXunit-8po.1) - WCONCAT is NOT
+    shadowed: the intrinsic is dispatched by exact ordinal name match on
+    "CONCAT" (Engine.Expressions.cs), which "WCONCAT" does not hit, and no
+    other intrinsic mentions it. It is therefore implemented as a plugin
+    function here and covered below.
+
+    WSTRING literals use "..." rather than STRING's '...' (TcXunit-gd2.4).
+    Both are plain C# strings inside the interpreter, so the wide functions
+    count UTF-16 code units - the same unit TwinCAT's WSTRING is defined in.
+*)
+FUNCTION_BLOCK FB_WideStringPluginTests EXTENDS TcUnit.FB_TestSuite]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[WLen();
+WLenCountsWideCharactersNotBytes();
+WLenOfEmptyIsZero();
+WLeft();
+WLeftClampsWhenSizeExceedsLength();
+WLeftReturnsEmptyForNonPositiveSize();
+WRight();
+WRightClampsWhenSizeExceedsLength();
+WMid();
+WMidClampsWhenPosPlusLenExceedsLength();
+WMidReturnsEmptyWhenPosPastEnd();
+WDelete();
+WDeleteClampsWhenPosPlusLenExceedsLength();
+WInsert();
+WInsertClampsPosBeyondEnd();
+WReplace();
+WReplaceLeavesStringUnchangedWhenPosPastEnd();
+WFind();
+WFindReturnsZeroWhenNotFound();
+WFindReturnsZeroForEmptyNeedle();
+WConcat();
+WConcatAppendsOptionalTrailingArgs();]]></ST>
+    </Implementation>
+    <Method Name="WLen" Id="{93190000-0000-4a1a-8b1b-000000000001}">
+      <Declaration><![CDATA[METHOD PRIVATE WLen
+VAR
+	wsFullPath	: WSTRING(80) := "Root.Child.Leaf";
+	nLength		: INT;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('WLen');
+
+nLength := WLEN(wsFullPath);
+
+AssertEquals_INT(Expected := 15,
+                  Actual := nLength,
+                  Message := 'WLEN returns the wide-character count');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="WLenCountsWideCharactersNotBytes" Id="{93190000-0000-4a1a-8b1b-000000000002}">
+      <Declaration><![CDATA[METHOD PRIVATE WLenCountsWideCharactersNotBytes
+VAR
+	wsAccented	: WSTRING(80) := "h$E9llo";
+	nLength		: INT;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('WLenCountsWideCharactersNotBytes');
+
+(* $E9 is a single non-ASCII wide character; WLEN counts characters, not
+   the bytes a narrow encoding would need for it. *)
+nLength := WLEN(wsAccented);
+
+AssertEquals_INT(Expected := 5,
+                  Actual := nLength,
+                  Message := 'WLEN counts wide characters, not encoded bytes');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="WLenOfEmptyIsZero" Id="{93190000-0000-4a1a-8b1b-000000000003}">
+      <Declaration><![CDATA[METHOD PRIVATE WLenOfEmptyIsZero
+VAR
+	nLength		: INT;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('WLenOfEmptyIsZero');
+
+nLength := WLEN("");
+
+AssertEquals_INT(Expected := 0,
+                  Actual := nLength,
+                  Message := 'WLEN of an empty WSTRING is 0');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="WLeft" Id="{93190000-0000-4a1a-8b1b-000000000004}">
+      <Declaration><![CDATA[METHOD PRIVATE WLeft
+VAR
+	wsFullPath	: WSTRING(80) := "Root.Child.Leaf.Extra";
+	nIndex		: INT := 16;
+	wsResult	: WSTRING(80);
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('WLeft');
+
+wsResult := WLEFT(wsFullPath, nIndex - 1);
+
+AssertEquals_WSTRING(Expected := "Root.Child.Leaf",
+                      Actual := wsResult,
+                      Message := 'WLEFT returns the leftmost SIZE characters');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="WLeftClampsWhenSizeExceedsLength" Id="{93190000-0000-4a1a-8b1b-000000000005}">
+      <Declaration><![CDATA[METHOD PRIVATE WLeftClampsWhenSizeExceedsLength
+VAR
+	wsResult	: WSTRING(80);
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('WLeftClampsWhenSizeExceedsLength');
+
+wsResult := WLEFT("abc", 10);
+
+AssertEquals_WSTRING(Expected := "abc",
+                      Actual := wsResult,
+                      Message := 'WLEFT clamps SIZE to the length of STR');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="WLeftReturnsEmptyForNonPositiveSize" Id="{93190000-0000-4a1a-8b1b-000000000006}">
+      <Declaration><![CDATA[METHOD PRIVATE WLeftReturnsEmptyForNonPositiveSize
+VAR
+	wsResult	: WSTRING(80);
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('WLeftReturnsEmptyForNonPositiveSize');
+
+wsResult := WLEFT("abc", -4);
+
+AssertEquals_WSTRING(Expected := "",
+                      Actual := wsResult,
+                      Message := 'WLEFT clamps a negative SIZE to 0');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="WRight" Id="{93190000-0000-4a1a-8b1b-000000000007}">
+      <Declaration><![CDATA[METHOD PRIVATE WRight
+VAR
+	wsFullPath	: WSTRING(80) := "Root.Child.Leaf";
+	nPos		: INT := 5;
+	wsResult	: WSTRING(80);
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('WRight');
+
+wsResult := WRIGHT(wsFullPath, WLEN(wsFullPath) - nPos);
+
+AssertEquals_WSTRING(Expected := "Child.Leaf",
+                      Actual := wsResult,
+                      Message := 'WRIGHT returns the rightmost SIZE characters');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="WRightClampsWhenSizeExceedsLength" Id="{93190000-0000-4a1a-8b1b-000000000008}">
+      <Declaration><![CDATA[METHOD PRIVATE WRightClampsWhenSizeExceedsLength
+VAR
+	wsResult	: WSTRING(80);
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('WRightClampsWhenSizeExceedsLength');
+
+wsResult := WRIGHT("abc", 10);
+
+AssertEquals_WSTRING(Expected := "abc",
+                      Actual := wsResult,
+                      Message := 'WRIGHT clamps SIZE to the length of STR');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="WMid" Id="{93190000-0000-4a1a-8b1b-000000000009}">
+      <Declaration><![CDATA[METHOD PRIVATE WMid
+VAR
+	wsFullPath	: WSTRING(80) := "Root.Child.Leaf";
+	nLen		: INT := 5;
+	nPos		: INT := 6;
+	wsResult	: WSTRING(80);
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('WMid');
+
+wsResult := WMID(wsFullPath, nLen, nPos);
+
+AssertEquals_WSTRING(Expected := "Child",
+                      Actual := wsResult,
+                      Message := 'WMID returns LEN characters starting at POS');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="WMidClampsWhenPosPlusLenExceedsLength" Id="{93190000-0000-4a1a-8b1b-00000000000a}">
+      <Declaration><![CDATA[METHOD PRIVATE WMidClampsWhenPosPlusLenExceedsLength
+VAR
+	wsResult	: WSTRING(80);
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('WMidClampsWhenPosPlusLenExceedsLength');
+
+(* POS=3, LEN=100 asks for far more than remains of a 5-character string. *)
+wsResult := WMID("abcde", 100, 3);
+
+AssertEquals_WSTRING(Expected := "cde",
+                      Actual := wsResult,
+                      Message := 'WMID clamps LEN to what remains from POS');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="WMidReturnsEmptyWhenPosPastEnd" Id="{93190000-0000-4a1a-8b1b-00000000000b}">
+      <Declaration><![CDATA[METHOD PRIVATE WMidReturnsEmptyWhenPosPastEnd
+VAR
+	wsResult	: WSTRING(80);
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('WMidReturnsEmptyWhenPosPastEnd');
+
+wsResult := WMID("abcde", 2, 99);
+
+AssertEquals_WSTRING(Expected := "",
+                      Actual := wsResult,
+                      Message := 'WMID returns an empty WSTRING when POS is past the end');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="WDelete" Id="{93190000-0000-4a1a-8b1b-00000000000c}">
+      <Declaration><![CDATA[METHOD PRIVATE WDelete
+VAR
+	wsFullPath	: WSTRING(80) := "Root.Child]";
+	nPos		: INT := 11;
+	wsResult	: WSTRING(80);
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('WDelete');
+
+wsResult := WDELETE(wsFullPath, 1, nPos);
+
+AssertEquals_WSTRING(Expected := "Root.Child",
+                      Actual := wsResult,
+                      Message := 'WDELETE removes LEN characters at POS');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="WDeleteClampsWhenPosPlusLenExceedsLength" Id="{93190000-0000-4a1a-8b1b-00000000000d}">
+      <Declaration><![CDATA[METHOD PRIVATE WDeleteClampsWhenPosPlusLenExceedsLength
+VAR
+	wsResult	: WSTRING(80);
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('WDeleteClampsWhenPosPlusLenExceedsLength');
+
+(* POS=3, LEN=100 asks to remove past the end of a 5-character string. *)
+wsResult := WDELETE("abcde", 100, 3);
+
+AssertEquals_WSTRING(Expected := "ab",
+                      Actual := wsResult,
+                      Message := 'WDELETE clamps LEN to the remaining length');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="WInsert" Id="{93190000-0000-4a1a-8b1b-00000000000e}">
+      <Declaration><![CDATA[METHOD PRIVATE WInsert
+VAR
+	wsBase		: WSTRING(80) := "Root.Leaf";
+	wsInsert	: WSTRING(80) := "Child.";
+	nPos		: INT := 5;
+	wsResult	: WSTRING(80);
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('WInsert');
+
+wsResult := WINSERT(wsBase, wsInsert, nPos);
+
+AssertEquals_WSTRING(Expected := "Root.Child.Leaf",
+                      Actual := wsResult,
+                      Message := 'WINSERT places STR2 immediately after POS');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="WInsertClampsPosBeyondEnd" Id="{93190000-0000-4a1a-8b1b-00000000000f}">
+      <Declaration><![CDATA[METHOD PRIVATE WInsertClampsPosBeyondEnd
+VAR
+	wsResult	: WSTRING(80);
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('WInsertClampsPosBeyondEnd');
+
+wsResult := WINSERT("abc", "XY", 99);
+
+AssertEquals_WSTRING(Expected := "abcXY",
+                      Actual := wsResult,
+                      Message := 'WINSERT clamps POS to the end of STR1');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="WReplace" Id="{93190000-0000-4a1a-8b1b-000000000010}">
+      <Declaration><![CDATA[METHOD PRIVATE WReplace
+VAR
+	wsFullPath	: WSTRING(80) := "Root[0].Leaf";
+	nPos		: INT := 5;
+	wsResult	: WSTRING(80);
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('WReplace');
+
+wsResult := WREPLACE(wsFullPath, "_", 1, nPos);
+
+AssertEquals_WSTRING(Expected := "Root_0].Leaf",
+                      Actual := wsResult,
+                      Message := 'WREPLACE swaps L characters at P for STR2');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="WReplaceLeavesStringUnchangedWhenPosPastEnd" Id="{93190000-0000-4a1a-8b1b-000000000011}">
+      <Declaration><![CDATA[METHOD PRIVATE WReplaceLeavesStringUnchangedWhenPosPastEnd
+VAR
+	wsResult	: WSTRING(80);
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('WReplaceLeavesStringUnchangedWhenPosPastEnd');
+
+wsResult := WREPLACE("abcde", "XY", 2, 99);
+
+AssertEquals_WSTRING(Expected := "abcde",
+                      Actual := wsResult,
+                      Message := 'WREPLACE is a no-op when P is past the end of STR1');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="WFind" Id="{93190000-0000-4a1a-8b1b-000000000012}">
+      <Declaration><![CDATA[METHOD PRIVATE WFind
+VAR
+	wsFullPath	: WSTRING(80) := "Root.Child.Leaf";
+	nSeparator	: INT;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('WFind');
+
+nSeparator := WFIND(wsFullPath, ".");
+
+AssertEquals_INT(Expected := 5,
+                  Actual := nSeparator,
+                  Message := 'WFIND returns the 1-based position of the first match');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="WFindReturnsZeroWhenNotFound" Id="{93190000-0000-4a1a-8b1b-000000000013}">
+      <Declaration><![CDATA[METHOD PRIVATE WFindReturnsZeroWhenNotFound
+VAR
+	nResult		: INT;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('WFindReturnsZeroWhenNotFound');
+
+nResult := WFIND("abcde", "z");
+
+AssertEquals_INT(Expected := 0,
+                  Actual := nResult,
+                  Message := 'WFIND returns 0 when STR2 is not found');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="WFindReturnsZeroForEmptyNeedle" Id="{93190000-0000-4a1a-8b1b-000000000014}">
+      <Declaration><![CDATA[METHOD PRIVATE WFindReturnsZeroForEmptyNeedle
+VAR
+	nResult		: INT;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('WFindReturnsZeroForEmptyNeedle');
+
+nResult := WFIND("abcde", "");
+
+AssertEquals_INT(Expected := 0,
+                  Actual := nResult,
+                  Message := 'WFIND returns 0 for an empty STR2');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="WConcat" Id="{93190000-0000-4a1a-8b1b-000000000015}">
+      <Declaration><![CDATA[METHOD PRIVATE WConcat
+VAR
+	wsLeft		: WSTRING(80) := "Root.";
+	wsResult	: WSTRING(80);
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('WConcat');
+
+(* Unlike CONCAT (an interpreter intrinsic since TcXunit-3lt), WCONCAT is
+   not intercepted before native-function dispatch - the intrinsic matches
+   the method name "CONCAT" exactly - so this call reaches the plugin. *)
+wsResult := WCONCAT(wsLeft, "Leaf");
+
+AssertEquals_WSTRING(Expected := "Root.Leaf",
+                      Actual := wsResult,
+                      Message := 'WCONCAT appends STR2 to STR1');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="WConcatAppendsOptionalTrailingArgs" Id="{93190000-0000-4a1a-8b1b-000000000016}">
+      <Declaration><![CDATA[METHOD PRIVATE WConcatAppendsOptionalTrailingArgs
+VAR
+	wsResult	: WSTRING(80);
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('WConcatAppendsOptionalTrailingArgs');
+
+(* STR3..STR10 are optional trailing arguments, same shape as the CONCAT
+   intrinsic (Engine.Expressions.cs's ConcatParamNames). *)
+wsResult := WCONCAT("a", "b", "c", "d");
+
+AssertEquals_WSTRING(Expected := "abcd",
+                      Actual := wsResult,
+                      Message := 'WCONCAT appends every supplied STRn in declared order');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+  </POU>
+</TcPlcObject>

@@ -8,26 +8,44 @@ this file is the quality standard those workflows point at.
 ## Comments
 
 The house comment style lives in [CLAUDE.md](../CLAUDE.md#comment-standard) —
-XML doc always on public/internal API surface, inline comments state WHY not
-WHAT, no ticket IDs or change-history prose in comments. Do not duplicate that
-text here; update it in one place and mirror the edit into AGENTS.md.
+good code doesn't need comments, delete rather than reformat, inline comments
+state WHY not WHAT, no ticket IDs or change-history prose. Do not duplicate
+that text here; update it in one place and mirror the edit into AGENTS.md.
 
-One durability test on top of that, for comments written mid-task by any
-contributor (human or agent): **a comment must be true and useful to a reader
-with no access to the task, issue, or conversation that produced it.**
-Comments that reference "the problem you mentioned," explain the diff rather
-than the code, or narrate a decision process get deleted in review, not
-reworded.
+Two durability tests on top of that, for comments written mid-task by any
+contributor (human or agent):
+
+- **A comment must be true and useful to a reader with no access to the task,
+  issue, or conversation that produced it.** Comments that reference "the
+  problem you mentioned," explain the diff rather than the code, or narrate a
+  decision process get deleted in review, not reworded.
+- **A comment that fails the bar is deleted, not polished.** Reformatting bad
+  prose into well-formatted bad prose gives it a second life it didn't earn,
+  and a comment that survives review is one future readers will trust. Prefer
+  no comment over one that may go stale.
 
 ## Doc comments (`///`)
 
-Required on every public and internal type, member, and parameter — see the
-Comment Standard for what goes in `<summary>`/`<param>`/`<returns>`/
-`<exception>`/`<remarks>`. This is enforced by the compiler, not just
-convention: `<GenerateDocumentationFile>true</GenerateDocumentationFile>` on a
-project turns a missing doc comment into `CS1591`. Until that's wired into
-every `.csproj`, treat a missing `<summary>` on public/internal surface as a
-review-blocking finding, same as a compiler warning would be.
+**Not required on every member.** Write a `<summary>` only where it tells a
+caller something the signature doesn't already — what a non-obvious return
+means, what state a type represents, why a type exists at all. A `Name`
+property of type `string` needs nothing; adding "The name." is noise that will
+outlive its accuracy. See the Comment Standard for what belongs in
+`<param>`/`<returns>`/`<exception>`/`<remarks>`.
+
+Document without fail: **exceptions a caller must handle**, and **parameters
+or return values with non-obvious semantics** (units, ranges, null/empty
+meaning, ownership).
+
+`<GenerateDocumentationFile>` is on for the three consumable libraries
+(`Interpreter`, `Runner`, `Parser`) via `Directory.Build.props`, with
+`CS1591` in `NoWarn` — the flag is an emit switch for docgen/IntelliSense,
+deliberately **not** a "document everything" enforcement mechanism. A missing
+`<summary>` is therefore not a review finding; a *wrong* or *redundant* one is.
+
+One compiler constraint to know: `CS1573` makes `<param>` all-or-nothing per
+member. Documenting some parameters and not others warns, so once one
+parameter genuinely needs a tag, give the remaining ones a short one too.
 
 ## Naming
 
@@ -71,10 +89,15 @@ project already has nullable enabled, keep it enabled and annotate honestly
 - Exit codes for `xStunit.Cli` are part of the public contract (`0`/`1`/`2`,
   see CLAUDE.md) — don't repurpose them or add new ones without updating that
   contract and its docs together.
-- Catch narrowly. A catch-and-summarize boundary (e.g. `CliRunner`,
-  `SuiteCaseRunner`) is a deliberate design choice for surfacing partial
-  failures to the caller — don't add speculative `catch (Exception)` blocks
-  elsewhere to swallow errors "just in case."
+- Catch narrowly by default — don't add speculative `catch (Exception)` blocks
+  to swallow errors "just in case."
+- The exception is a deliberate **isolation boundary**: `CliRunner`,
+  `SuiteCaseRunner` and `StructuralParseGuard` catch broadly *on purpose*, so
+  one bad file or suite can't abort a whole run. Narrowing those to an
+  enumerated list of "expected" exception types is a regression, not a
+  tidy-up: anything off the list escapes past every caller's handler and takes
+  the remaining scan down with it. Their doc comments say so — read before
+  "fixing".
 - Unloadable/malformed input files are skipped and reported per file; they
   must never crash the run or produce exit code `2` for anything other than
   usage/discovery errors.

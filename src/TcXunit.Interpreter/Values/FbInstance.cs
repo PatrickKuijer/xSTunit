@@ -85,6 +85,12 @@ namespace TcXunit.Interpreter
         public BistableLatchHost NativeBistableLatchHost =>
             NativeKind == NativeHostKind.BistableLatch ? (BistableLatchHost)NativeHost : null;
 
+        // Non-null when ActualTypeName is a native counter type (CTU/CTD/
+        // CTUD) - the native host backing this instance's counting behavior
+        // (TcXunit-l64b's native-stub boundary).
+        public CounterHost NativeCounterHost =>
+            NativeKind == NativeHostKind.Counter ? (CounterHost)NativeHost : null;
+
         public EdgeTriggerHost NativeEdgeTriggerHost =>
             NativeKind == NativeHostKind.Edge ? (EdgeTriggerHost)NativeHost : null;
 

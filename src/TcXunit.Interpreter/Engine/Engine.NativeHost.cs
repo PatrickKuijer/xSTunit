@@ -30,6 +30,9 @@ namespace TcXunit.Interpreter
         // RS/SR bistable latches (TcXunit-ejjl).
         BistableLatch,
 
+        // CTU/CTD/CTUD counters (TcXunit-l64b).
+        Counter,
+
         // Loopback's fault-injection stub (TcXunit-w5x.15.5).
         Loopback,
 
@@ -52,6 +55,7 @@ namespace TcXunit.Interpreter
         private static readonly HashSet<string> NativeTimerTypes = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "TON", "TOF", "TP", "FB_Pulse" };
         private static readonly HashSet<string> NativeEdgeTriggerTypes = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "R_TRIG", "F_TRIG" };
         private static readonly HashSet<string> NativeBistableLatchTypes = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "RS", "SR" };
+        private static readonly HashSet<string> NativeCounterTypes = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "CTU", "CTD", "CTUD" };
 
         // Single-member "set" for symmetry with the two above; matched
         // OrdinalIgnoreCase for the same TcXunit-nch reason.
@@ -153,6 +157,27 @@ namespace TcXunit.Interpreter
                     Field(BistableLatchHost.OutputName, false));
             }
 
+            if (NativeCounterTypes.Contains(nativeBaseTypeName))
+            {
+                // Same reason as the latch above, one step further: CTU/CTD/
+                // CTUD disagree on their input names (CU/RESET vs CD/LOAD vs
+                // all four) AND on their BOOL outputs (Q vs QU+QD), so the
+                // seeded fields are enumerated off the host that will read
+                // them back (TcXunit-l64b). PV/CV are seeded as WORD zeros -
+                // ints, per IecNumericType's boxing for WORD.
+                var counter = CounterHost.Create(nativeBaseTypeName);
+                var counterFields = new List<KeyValuePair<string, object>>();
+
+                foreach (var inputName in counter.BooleanInputNames)
+                    counterFields.Add(Field(inputName, false));
+                counterFields.Add(Field(CounterHost.PresetInputName, 0));
+                foreach (var outputName in counter.BooleanOutputNames)
+                    counterFields.Add(Field(outputName, false));
+                counterFields.Add(Field(CounterHost.CurrentValueOutputName, 0));
+
+                return NativeHostBinding.Of(NativeHostKind.Counter, counter, counterFields.ToArray());
+            }
+
             return NativeHostBinding.Of(NativeHostKind.Suite, new TcUnitSuiteHost());
         }
 
@@ -174,6 +199,7 @@ namespace TcXunit.Interpreter
             NativeTimerTypes.Contains(typeName)
             || NativeEdgeTriggerTypes.Contains(typeName)
             || NativeBistableLatchTypes.Contains(typeName)
+            || NativeCounterTypes.Contains(typeName)
             || string.Equals(typeName, NativeLoopbackType, StringComparison.OrdinalIgnoreCase);
     }
 }

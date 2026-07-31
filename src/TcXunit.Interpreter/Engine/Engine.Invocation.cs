@@ -118,6 +118,15 @@ namespace TcXunit.Interpreter
                             callee.NativeBistableLatchHost.Update(callee);
                             return null;
 
+                        // Native CTU/CTD/CTUD, e.g. fbCounter(CU:=x, PV:=3) -
+                        // same shape as the latch above; the counters disagree
+                        // on both the number and the names of their inputs, so
+                        // the host supplies them (TcXunit-l64b).
+                        case NativeHostKind.Counter:
+                            BindNativeInputs(callee, callee.NativeCounterHost.PositionalInputNames, positionalArgs, namedArgs, callerFrame);
+                            callee.NativeCounterHost.Update(callee);
+                            return null;
+
                         // Ordinary interpreted (non-native) FB field or
                         // method-local var, e.g. sfbLoopback(ibEnable := TRUE)
                         // - generalizes the native-timer bare-invoke above:
@@ -475,50 +484,28 @@ namespace TcXunit.Interpreter
         // passes IN relies on PT staying whatever it was last set to).
         private static readonly string[] TimerPositionalParams = { "IN", "PT" };
 
-        private void BindTimerInputs(
-            FbInstance callee,
-            IReadOnlyList<Expr> positionalArgs,
-            IReadOnlyList<NamedArg> namedArgs,
-            Frame callerFrame)
-        {
-            for (var i = 0; i < positionalArgs.Count && i < TimerPositionalParams.Length; i++)
-                callee.Fields[TimerPositionalParams[i]].Value = Evaluate(positionalArgs[i], callerFrame);
-
-            foreach (var arg in namedArgs)
-                if (callee.Fields.TryGetValue(arg.Name, out var cell))
-                    cell.Value = Evaluate(arg.Value, callerFrame);
-        }
-
-        // R_TRIG/F_TRIG have a single VAR_INPUT (CLK), bound by position or
-        // by name same as BindTimerInputs.
+        // R_TRIG/F_TRIG have a single VAR_INPUT (CLK).
         private static readonly string[] EdgeTriggerPositionalParams = { "CLK" };
 
-        private void BindEdgeTriggerInputs(
+        // Binds a bare invocation's arguments into a native stub's already-
+        // seeded VAR_INPUT Cells: positionally against inputNames (the
+        // callee's VAR_INPUTs in IEC declaration order), then by name. Unset
+        // params deliberately keep whatever the instance already held, so a
+        // caller that passes only CU relies on PV staying where it was.
+        //
+        // One helper for all four native families (TcXunit-l64b): the loop is
+        // identical, only the name list differs, and for RS/SR (TcXunit-ejjl)
+        // and CTU/CTD/CTUD it isn't even a constant - the two latches and the
+        // three counters each spell their inputs differently, so those call
+        // sites pass the list straight off the callee's own host rather than
+        // re-spelling it here.
+        private void BindNativeInputs(
             FbInstance callee,
+            IReadOnlyList<string> inputNames,
             IReadOnlyList<Expr> positionalArgs,
             IReadOnlyList<NamedArg> namedArgs,
             Frame callerFrame)
         {
-            for (var i = 0; i < positionalArgs.Count && i < EdgeTriggerPositionalParams.Length; i++)
-                callee.Fields[EdgeTriggerPositionalParams[i]].Value = Evaluate(positionalArgs[i], callerFrame);
-
-            foreach (var arg in namedArgs)
-                if (callee.Fields.TryGetValue(arg.Name, out var cell))
-                    cell.Value = Evaluate(arg.Value, callerFrame);
-        }
-
-        // RS/SR take two VAR_INPUTs, but not the same two: RS is
-        // (SET, RESET1) and SR is (SET1, RESET). The positional order comes
-        // from the callee's own host so this site never has to know which of
-        // the two it is holding (TcXunit-ejjl).
-        private void BindBistableLatchInputs(
-            FbInstance callee,
-            IReadOnlyList<Expr> positionalArgs,
-            IReadOnlyList<NamedArg> namedArgs,
-            Frame callerFrame)
-        {
-            var inputNames = callee.NativeBistableLatchHost.PositionalInputNames;
-
             for (var i = 0; i < positionalArgs.Count && i < inputNames.Count; i++)
                 callee.Fields[inputNames[i]].Value = Evaluate(positionalArgs[i], callerFrame);
 
@@ -526,6 +513,27 @@ namespace TcXunit.Interpreter
                 if (callee.Fields.TryGetValue(arg.Name, out var cell))
                     cell.Value = Evaluate(arg.Value, callerFrame);
         }
+
+        private void BindTimerInputs(
+            FbInstance callee,
+            IReadOnlyList<Expr> positionalArgs,
+            IReadOnlyList<NamedArg> namedArgs,
+            Frame callerFrame) =>
+            BindNativeInputs(callee, TimerPositionalParams, positionalArgs, namedArgs, callerFrame);
+
+        private void BindEdgeTriggerInputs(
+            FbInstance callee,
+            IReadOnlyList<Expr> positionalArgs,
+            IReadOnlyList<NamedArg> namedArgs,
+            Frame callerFrame) =>
+            BindNativeInputs(callee, EdgeTriggerPositionalParams, positionalArgs, namedArgs, callerFrame);
+
+        private void BindBistableLatchInputs(
+            FbInstance callee,
+            IReadOnlyList<Expr> positionalArgs,
+            IReadOnlyList<NamedArg> namedArgs,
+            Frame callerFrame) =>
+            BindNativeInputs(callee, callee.NativeBistableLatchHost.PositionalInputNames, positionalArgs, namedArgs, callerFrame);
 
         // Declared VAR_INPUT/VAR_IN_OUT params for a bare-invoked interpreted
         // FB, in base-to-derived declaration order (matches IEC positional

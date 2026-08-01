@@ -6,10 +6,13 @@ namespace xStunit.Interpreter
     // Parses declared STRING/WSTRING type text - bare "STRING"/"WSTRING", or
     // the sized "STRING(n)"/"WSTRING(n)" - for StructBoundaryBuilder's
     // empty/max-length boundary and Engine.Defaults's "" default. An
-    // unsized declaration is taken as length 80. WSTRING is handled
-    // identically to STRING: the length is neither scaled nor reinterpreted
-    // for the wider element, since C# strings are already UTF-16, so the
-    // keyword is the only difference.
+    // unsized declaration is taken as length 80.
+    //
+    // The declared length is a CHARACTER count for both keywords: in the value
+    // model WSTRING collapses onto STRING, since a C# string is already
+    // UTF-16 and holds either. The BYTE model does not collapse - a WSTRING
+    // character is two bytes on the wire - so callers that size or lay out
+    // bytes ask IsWideStringType and scale the length themselves.
     internal static class StringTypeInfo
     {
         private const int DefaultLength = 80;
@@ -21,7 +24,7 @@ namespace xStunit.Interpreter
         // case-insensitive ('WString' is as valid as 'WSTRING'), as are the
         // bare-keyword comparisons below.
         private static readonly Regex SizedPattern = new Regex(
-            @"^(STRING|WSTRING)\s*\(\s*(?<n>[^()]+?)\s*\)$", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+            @"^(?<keyword>STRING|WSTRING)\s*\(\s*(?<n>[^()]+?)\s*\)$", RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
         public static bool IsStringType(string typeName)
         {
@@ -32,6 +35,20 @@ namespace xStunit.Interpreter
             return string.Equals(trimmed, "STRING", System.StringComparison.OrdinalIgnoreCase)
                 || string.Equals(trimmed, "WSTRING", System.StringComparison.OrdinalIgnoreCase)
                 || SizedPattern.IsMatch(trimmed);
+        }
+
+        public static bool IsWideStringType(string typeName)
+        {
+            if (typeName == null)
+                return false;
+
+            var trimmed = typeName.Trim();
+            if (string.Equals(trimmed, "WSTRING", System.StringComparison.OrdinalIgnoreCase))
+                return true;
+
+            var match = SizedPattern.Match(trimmed);
+            return match.Success
+                && string.Equals(match.Groups["keyword"].Value, "WSTRING", System.StringComparison.OrdinalIgnoreCase);
         }
 
         // Digit-literal sizes only; throws NotSupportedException for a

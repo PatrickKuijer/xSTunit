@@ -298,6 +298,75 @@ END_TYPE");
             Assert.Equal(new object[] { 97, 98, 99, 0 }, outBuf.Elements); // "abc\0"
         }
 
+        // WSTRING goes on the wire as little-endian UCS-2 - two bytes per
+        // character, matching TwinCAT on x86 - not as one byte per character
+        // the way a narrow STRING does.
+        [Fact]
+        public void Memcpy_WStringVariable_PacksTwoLittleEndianBytesPerCharacter()
+        {
+            var (engine, instance, frame) = NewHolder(
+                "VAR\n\ts : WSTRING(3) := \"AB\";\n\tout : ARRAY[0..7] OF BYTE;\nEND_VAR");
+
+            engine.Evaluate(Parser.ParseExpression("MEMCPY(ADR(out), ADR(s), 8)"), frame);
+
+            var outBuf = (ArrayValue)instance.Fields["out"].Value;
+            Assert.Equal(new object[] { 65, 0, 66, 0, 0, 0, 0, 0 }, outBuf.Elements);
+        }
+
+        [Fact]
+        public void Memcpy_IntoWStringVariable_ReadsTwoBytesPerCharacterAndStopsAtWideTerminator()
+        {
+            var (engine, instance, frame) = NewHolder(
+                "VAR\n\ts : WSTRING(3);\n\tsrc : ARRAY[0..7] OF BYTE := [120, 0, 121, 0, 0, 0, 0, 0];\nEND_VAR");
+
+            engine.Evaluate(Parser.ParseExpression("MEMCPY(ADR(s), ADR(src), 8)"), frame);
+
+            Assert.Equal("xy", instance.Fields["s"].Value);
+        }
+
+        // A character above U+00FF is representable in a WSTRING, so the high
+        // byte must survive the round trip rather than being dropped the way
+        // one-byte-per-character packing dropped it.
+        [Fact]
+        public void Memcpy_WStringWithNonLatin1Character_KeepsBothBytes()
+        {
+            var (engine, instance, frame) = NewHolder(
+                "VAR\n\ts : WSTRING(2) := \"€\";\n\tout : ARRAY[0..5] OF BYTE;\nEND_VAR");
+
+            engine.Evaluate(Parser.ParseExpression("MEMCPY(ADR(out), ADR(s), 6)"), frame);
+
+            var outBuf = (ArrayValue)instance.Fields["out"].Value;
+            Assert.Equal(new object[] { 0xAC, 0x20, 0, 0, 0, 0 }, outBuf.Elements);
+        }
+
+        // The whole point of the WSTRING alignment and size fix: a field
+        // declared after a WSTRING member sits at a different byte offset than
+        // one-byte-per-character sizing put it at.
+        [Fact]
+        public void Memcpy_StructWithWStringField_PlacesFollowingFieldAfterTheWideBuffer()
+        {
+            var structType = StructDeclParser.Parse(@"TYPE ST_WideMsg :
+STRUCT
+	label : WSTRING(2);
+	count : INT;
+END_STRUCT
+END_TYPE");
+            var fb = new PouAst(
+                "FB_Holder", null,
+                "VAR\n\tm : ST_WideMsg := (label := \"AB\", count := 258);\n\tout : ARRAY[0..7] OF BYTE;\nEND_VAR",
+                "", new List<MethodAst>());
+            var engine = new Engine(new TypeRegistry(new[] { fb }, new[] { structType }));
+            var instance = engine.NewInstance("FB_Holder");
+            var frame = new Frame(instance, "FB_Holder");
+
+            engine.Evaluate(Parser.ParseExpression("MEMCPY(ADR(out), ADR(m), 8)"), frame);
+
+            var outBuf = (ArrayValue)instance.Fields["out"].Value;
+            // "AB" fills offsets 0..3, the wide terminator 4..5, and count
+            // (0x0102, little-endian) lands at 6..7.
+            Assert.Equal(new object[] { 65, 0, 66, 0, 0, 0, 2, 1 }, outBuf.Elements);
+        }
+
         [Fact]
         public void Memset_OnScalarCell_FillsBytesOfValue()
         {

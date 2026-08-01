@@ -20,7 +20,7 @@ namespace xStunit.Interpreter
     // that looks like a right one.
     public static class NarrowStringByte
     {
-        private const char MaxChar = 'ÿ';
+        private const char MaxChar = '\u00FF';
 
         public static byte FromChar(char ch)
         {

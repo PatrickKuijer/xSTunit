@@ -124,7 +124,7 @@ namespace xStunit.Cli.Plugins
             private readonly AssemblyDependencyResolver _resolver;
 
             public PluginLoadContext(string pluginPath)
-                : base(name: $"TcXunitPlugin:{Path.GetFileName(pluginPath)}", isCollectible: true)
+                : base(name: $"XstunitPlugin:{Path.GetFileName(pluginPath)}", isCollectible: true)
             {
                 _resolver = new AssemblyDependencyResolver(pluginPath);
             }

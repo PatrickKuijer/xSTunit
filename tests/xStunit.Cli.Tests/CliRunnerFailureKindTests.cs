@@ -203,7 +203,7 @@ namespace xStunit.Cli.Tests
 
             var error = FirstSuite(output.ToString()).GetProperty("error").GetString();
             Assert.Contains("could not read this body at line 2", error);
-            Assert.Contains("beyond TcXunit's subset, or it is invalid ST", error);
+            Assert.Contains("beyond xStunit's subset, or it is invalid ST", error);
             Assert.Contains("STOP and escalate", error);
         }
 

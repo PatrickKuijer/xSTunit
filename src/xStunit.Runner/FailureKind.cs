@@ -84,9 +84,9 @@ namespace xStunit.Runner
                         "or fix the expectation if the expectation is what's wrong.";
                 case PlcFault:
                     return "The interpreted ST faulted at run time - a real defect in the code under " +
-                        "test. Fix the code under test; this is not a TcXunit limitation.";
+                        "test. Fix the code under test; this is not an xStunit limitation.";
                 case UnsupportedConstruct:
-                    return "This is valid IEC 61131-3 that TwinCAT compiles and TcXunit does not " +
+                    return "This is valid IEC 61131-3 that TwinCAT compiles and xStunit does not " +
                         "implement yet. STOP: escalate it as a grammar gap. Never rewrite the POU, " +
                         "and never delete the construct, to make this pass.";
                 case LoadError:

@@ -12,7 +12,7 @@ using xStunit.Runner;
 namespace xStunit.Cli
 {
     /// <summary>
-    /// Testable core of the `tcxunit` command line; <see cref="Program"/> is a
+    /// Testable core of the `xstunit` command line; <see cref="Program"/> is a
     /// thin wrapper so a run can be driven from a test without a subprocess.
     /// </summary>
     /// <remarks>
@@ -28,7 +28,7 @@ namespace xStunit.Cli
         {
             // A whole-array pre-scan rather than a branch in the parse loop
             // below: --plugins, --format and --suite each consume the next
-            // token unconditionally as their value, so "tcxunit --plugins
+            // token unconditionally as their value, so "xstunit --plugins
             // --help" would swallow --help as a directory name. Exit 0 - an
             // explicitly requested action that succeeded, not a usage error.
             if (args.Any(a => string.Equals(a, "--help", StringComparison.OrdinalIgnoreCase) ||
@@ -115,8 +115,8 @@ namespace xStunit.Cli
             {
                 // Flag names only: the descriptions live in --help rather than
                 // being duplicated on this error path.
-                output.WriteLine("usage: tcxunit <path-to-POUs-directory> [<path-to-POUs-directory> ...] [--format text|json] [--suite <name>] [--plugins <dir>] [--coverage] [--stream]");
-                output.WriteLine("Run 'tcxunit --help' for flag descriptions and examples.");
+                output.WriteLine("usage: xstunit <path-to-POUs-directory> [<path-to-POUs-directory> ...] [--format text|json] [--suite <name>] [--plugins <dir>] [--coverage] [--stream]");
+                output.WriteLine("Run 'xstunit --help' for flag descriptions and examples.");
                 return 2;
             }
 
@@ -494,8 +494,8 @@ namespace xStunit.Cli
                 var at = bodyLine != PlcSourceLocationException.UnknownLine
                     ? $" at line {bodyLine}"
                     : string.Empty;
-                guidance = $"TcXunit could not read this body{at} - " +
-                    "either it uses ST beyond TcXunit's subset, or it is invalid ST. " + guidance;
+                guidance = $"xStunit could not read this body{at} - " +
+                    "either it uses ST beyond xStunit's subset, or it is invalid ST. " + guidance;
             }
 
             // " -- " rather than a space: the factual half often ends in ST
@@ -538,10 +538,10 @@ namespace xStunit.Cli
         // kept in step with the parsing in Run. The no-args usage line stays a
         // pointer here rather than a second copy.
         private static readonly string HelpText =
-@"tcxunit - xUnit-style test runner for TwinCAT/IEC 61131-3 PLC code (no TwinCAT runtime required)
+@"xstunit - xUnit-style test runner for TwinCAT/IEC 61131-3 PLC code (no TwinCAT runtime required)
 
 Usage:
-  tcxunit <path-to-POUs-directory> [<path-to-POUs-directory> ...] [options]
+  xstunit <path-to-POUs-directory> [<path-to-POUs-directory> ...] [options]
 
 Arguments:
   <path-to-POUs-directory>  One or more directories, scanned recursively for
@@ -574,24 +574,24 @@ Exit codes:
   2   usage or discovery error (bad path, no suites found, ...)
 
 Examples:
-  tcxunit ./Plc/POUs
+  xstunit ./Plc/POUs
       Run every suite found under ./Plc/POUs, plain text output.
 
-  tcxunit ./src ./tests --format json
+  xstunit ./src ./tests --format json
       Union two directories and print one JSON result - for a script or an
       agent to parse instead of scraping console text.
 
-  tcxunit ./Plc/POUs --suite FB_CounterTests --suite FB_ClampedCounterTests
+  xstunit ./Plc/POUs --suite FB_CounterTests --suite FB_ClampedCounterTests
       Run only the named suites (e.g. re-running just the ones that failed).
 
-  tcxunit ./Plc/POUs --plugins ./plugins/bin/Release/netstandard2.0
+  xstunit ./Plc/POUs --plugins ./plugins/bin/Release/netstandard2.0
       Resolve compiled-only library calls via native-function plugins.
 
-  tcxunit ./Plc/POUs --coverage
+  xstunit ./Plc/POUs --coverage
       List every non-suite POU with the suites exercising it; ""(none)""
       marks a POU with no test coverage yet.
 
-  tcxunit ./Plc/POUs --stream
+  xstunit ./Plc/POUs --stream
       Emit one NDJSON event per line as suites run, for a live progress UI.";
 
         private static readonly JsonSerializerOptions JsonOptions = new JsonSerializerOptions

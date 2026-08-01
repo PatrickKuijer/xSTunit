@@ -95,9 +95,25 @@ namespace xStunit.Interpreter
         public IReadOnlyList<TestCaseResult> RunSuite(string suiteTypeName) =>
             RunSuite(suiteTypeName, out _);
 
-        public IReadOnlyList<TestCaseResult> RunSuite(string suiteTypeName, out long elapsedMilliseconds)
+        public IReadOnlyList<TestCaseResult> RunSuite(string suiteTypeName, out long elapsedMilliseconds) =>
+            RunSuite(suiteTypeName, out elapsedMilliseconds, out _);
+
+        // completedTests is the only way to reach the tests that finished before
+        // a fault ended the suite: they are recorded on the suite host, which
+        // goes out of scope with the exception. It is written BEFORE the throw,
+        // so a caller whose variable is assigned before the call reads it from
+        // its own catch block - a fault outside a TEST()/TEST_FINISHED() bracket
+        // does not un-run the tests before it, and reporting them as if it did
+        // says "nothing passed" about a run where something did.
+        public IReadOnlyList<TestCaseResult> RunSuite(
+            string suiteTypeName, out long elapsedMilliseconds, out IReadOnlyList<TestCaseResult> completedTests)
         {
             var stopwatch = Stopwatch.StartNew();
+            completedTests = Array.Empty<TestCaseResult>();
+
+            // Held outside the try so the catch below can still reach the host
+            // after the statement that built it faulted.
+            SuiteHost host = null;
 
             // The one place interpreter faults are wrapped with their PLC source
             // location, and deliberately the OUTERMOST boundary rather than every
@@ -110,6 +126,7 @@ namespace xStunit.Interpreter
             try
             {
                 var instance = NewInstance(suiteTypeName);
+                host = instance.NativeSuiteHost;
                 var def = _registry.Get(suiteTypeName);
                 ResetTopLevelTempFields(instance);
                 // A suite body is a POU body, not a METHOD, so the frame
@@ -123,13 +140,20 @@ namespace xStunit.Interpreter
                 ExecuteSuiteBody(
                     () => _registry.GetStatements(def.ImplementationText),
                     new Frame(instance, suiteTypeName, null, def.BodyStartLine),
-                    instance.NativeSuiteHost);
+                    host);
                 stopwatch.Stop();
                 elapsedMilliseconds = stopwatch.ElapsedMilliseconds;
-                return instance.NativeSuiteHost.Collect();
+                completedTests = host.Collect();
+                return completedTests;
             }
             catch (Exception ex)
             {
+                // CompletedTests, not Collect(): Collect() re-runs the
+                // end-of-suite check and would throw over a bracket this fault
+                // left open, replacing the fault being reported with a
+                // complaint about its own side effect.
+                completedTests = host?.CompletedTests ?? Array.Empty<TestCaseResult>();
+
                 var located = TryCreateSourceLocationException(ex);
                 if (located != null)
                     throw located;

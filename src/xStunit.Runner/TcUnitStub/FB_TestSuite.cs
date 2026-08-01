@@ -61,6 +61,11 @@ namespace xStunit.Runner.TcUnitStub
 
         protected abstract void Body();
 
+        // The tests finished so far, asking nothing about whether a bracket is
+        // still open. Read on the failure path, where Run()'s unclosed-TEST
+        // check would throw a second exception over the one being reported.
+        internal IReadOnlyList<TestCaseResult> Completed => _finished;
+
         internal IReadOnlyList<TestCaseResult> Run()
         {
             Body();

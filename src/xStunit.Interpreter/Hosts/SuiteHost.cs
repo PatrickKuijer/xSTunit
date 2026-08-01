@@ -69,6 +69,11 @@ namespace xStunit.Interpreter
 
         public IReadOnlyList<TestCaseResult> Collect() => Run();
 
+        // Collect()'s counterpart for a suite that never reached its end: the
+        // tests already finished, with none of the end-of-suite checking that
+        // makes Collect() the wrong question after a fault.
+        public IReadOnlyList<TestCaseResult> CompletedTests => Completed;
+
         // The two halves of "charge this fault to the open test instead of
         // killing the suite". Engine, not this type, decides when a fault is
         // one test's problem rather than the whole suite's.

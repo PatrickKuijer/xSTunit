@@ -275,6 +275,41 @@ namespace xStunit.Cli
             var failCount = 0;
             var suiteReports = new List<SuiteReport>();
 
+            // Shared by the two paths that have test results to report: a suite
+            // that ran to completion, and one that faulted after some of its
+            // tests had already finished. Counting them in one place is what
+            // keeps `passed`/`failed` describing the same tests the report
+            // lists.
+            List<TestReport> ReportTests(IReadOnlyList<xStunit.Runner.TcUnitStub.TestCaseResult> results)
+            {
+                var reports = new List<TestReport>();
+                foreach (var result in results)
+                {
+                    if (!asJson && !streaming)
+                    {
+                        output.WriteLine(result.ToString());
+
+                        foreach (var failure in result.Failures)
+                        {
+                            if (failure.CallStack == null)
+                                continue;
+                            foreach (var frame in failure.CallStack)
+                                output.WriteLine($"    at {frame.LocationWithLine}");
+                        }
+                    }
+                    reports.Add(new TestReport(
+                        result.Name, result.Passed, result.Failures.Select(ToFailureReport).ToArray(), result.ElapsedMilliseconds));
+                    if (result.Passed)
+                        passCount++;
+                    else
+                    {
+                        failCount++;
+                        anyFailed = true;
+                    }
+                }
+                return reports;
+            }
+
             if (streaming)
             {
                 var discoverySuites = suiteNames.Select(name =>
@@ -292,9 +327,15 @@ namespace xStunit.Cli
 
                 IReadOnlyList<xStunit.Runner.TcUnitStub.TestCaseResult> results;
                 long suiteDurationMs;
+                // Assigned before the call, not just by it: RunSuite writes the
+                // tests that finished before a fault on its way out, and the
+                // catch below can only read that if the variable was already
+                // definitely assigned.
+                IReadOnlyList<xStunit.Runner.TcUnitStub.TestCaseResult> completedTests =
+                    Array.Empty<xStunit.Runner.TcUnitStub.TestCaseResult>();
                 try
                 {
-                    results = engine.RunSuite(suiteName, out suiteDurationMs);
+                    results = engine.RunSuite(suiteName, out suiteDurationMs, out completedTests);
                 }
                 catch (Exception ex)
                 {
@@ -314,6 +355,10 @@ namespace xStunit.Cli
                     // default-value construction, say) has no PLC location, and
                     // every location-derived field below stays null for it.
                     var located = ex as PlcSourceLocationException;
+                    // Reported before the FAIL line below, in the order they
+                    // happened: these tests ran and finished, and the fault came
+                    // after them.
+                    var completedReports = ReportTests(completedTests);
                     if (!asJson && !streaming)
                     {
                         // located.Message rather than a locally composed
@@ -351,7 +396,10 @@ namespace xStunit.Cli
                     var errorText = WithGuidance(ex.Message, errorKind, isVerbatim: false, errorBodyLine);
                     suiteReports.Add(new SuiteReport(
                         suiteName, failFilePath, errorText, errorKind, errorConstruct,
-                        Array.Empty<TestReport>(), null, fileLine, callStack));
+                        completedReports, null, fileLine, callStack));
+                    // The suite-level fault is a failure in its own right, on
+                    // top of whatever the tests above reported: a run cannot
+                    // pass just because everything that got to run passed.
                     failCount++;
                     anyFailed = true;
                     if (streaming)
@@ -362,37 +410,13 @@ namespace xStunit.Cli
                         output.WriteLine(JsonSerializer.Serialize(
                             new SuiteReport(
                                 suiteName, failFilePath, errorText, errorKind, errorConstruct,
-                                Array.Empty<TestReport>(), null, fileLine, callStack, "suite-result", "fail"),
+                                completedReports, null, fileLine, callStack, "suite-result", "fail"),
                             StreamJsonOptions));
                     }
                     continue;
                 }
 
-                var testReports = new List<TestReport>();
-                foreach (var result in results)
-                {
-                    if (!asJson && !streaming)
-                    {
-                        output.WriteLine(result.ToString());
-
-                        foreach (var failure in result.Failures)
-                        {
-                            if (failure.CallStack == null)
-                                continue;
-                            foreach (var frame in failure.CallStack)
-                                output.WriteLine($"    at {frame.LocationWithLine}");
-                        }
-                    }
-                    testReports.Add(new TestReport(
-                        result.Name, result.Passed, result.Failures.Select(ToFailureReport).ToArray(), result.ElapsedMilliseconds));
-                    if (result.Passed)
-                        passCount++;
-                    else
-                    {
-                        failCount++;
-                        anyFailed = true;
-                    }
-                }
+                var testReports = ReportTests(results);
 
                 suiteFilePaths.TryGetValue(suiteName, out var filePath);
                 suiteReports.Add(new SuiteReport(suiteName, filePath, null, null, null, testReports, suiteDurationMs, null, null));

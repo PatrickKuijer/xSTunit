@@ -115,6 +115,15 @@ well-shaped methods are the default; a comment is the exception that earns its
 place, not the norm. When in doubt, delete rather than reformat — a wrong or
 stale comment is worse than no comment, and a deleted one can't rot.
 
+**`///` is for the public API surface; everything else stays `//`.** A type or
+member ships XML doc when code outside its own project can call it: the plugin
+contract in `xStunit.Interpreter/Extensibility`, the native-stub boundary in
+`xStunit.Runner`, the loader entry points in `xStunit.Parser`. Internals of
+those projects — and all of `xStunit.Interpreter` outside `Extensibility/` —
+keep `//` and are not converted. `Directory.Build.props` suppresses CS1591 so
+that partial coverage is the intended state, not a warning wall to chip away
+at. Never mass-promote `//` to `///` to close the gap.
+
 **XML doc `<summary>` only when it adds information beyond the signature.**
 Skip it entirely for a member whose name and type already say everything (a
 `Name` property of type `string`, a `Parse(string xml)` method with an obvious

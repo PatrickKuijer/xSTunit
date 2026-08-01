@@ -106,9 +106,9 @@ $includeFiles = @(
     'System.Numerics.Vectors.dll'
     'System.Runtime.CompilerServices.Unsafe.dll'
     'System.Threading.Tasks.Extensions.dll'
-    # TcXunit-qwh.4: completes System.Text.Json's net461 dependency closure;
-    # previously missing here (and from the csproj), which is what produced
-    # the OnAssemblyResolve failure / FileNotFoundException under TcXaeShell.
+    # The rest of System.Text.Json's net461 closure: it binds against both of
+    # these, and omitting either fails the load at runtime under XAE Shell
+    # rather than at build time.
     'Microsoft.Bcl.AsyncInterfaces.dll'
     'System.ValueTuple.dll'
 )

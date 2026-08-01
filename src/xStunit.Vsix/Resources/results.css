@@ -1,43 +1,18 @@
 /*
-  TcXunit-only results layer: .toolbar .tree .node .assert .banner .count -- per
-  docs/design-system.html section 5 (results tree) and section 8's file-split plan.
+  The results layer this extension owns alone: .toolbar .tree .node .assert
+  .banner .count .prog, per docs/design-system.html section 5 and section 8's
+  file-split plan. The shell layer every panel shares lives in vsix-shell.css.
 
-  Selectors below are copied verbatim from design-system.html's embedded ".vsix"
-  specimen stylesheet (section 5's "extension layer: results components" block),
-  with the ".vsix " scope prefix dropped -- results.html's <body> IS the panel
-  (same de-scoping vsix-shell.css already did for .tw-tabs/.send-btn/etc.), so
-  there is no wrapping .vsix element to key off here.
-
-  Implemented by TcXunit-1tt.2 (static results tree render: node anatomy, banner,
-  assert detail). Extended by later sibling tickets:
-    - TcXunit-1tt.3 adds .prog (running/progress sweep, below) -- design-system.html
-      section 8's file list only spells out .toolbar/.tree/.node/.assert/.banner/
-      .count by name, but .prog lives in the same "extension layer: results
-      components" CSS block as those selectors (not the shared "Components --
-      Core" block .empty-state comes from, see vsix-shell.css), so it belongs
-      here, not vsix-shell.css.
-    - TcXunit-1tt.5 adds filter/segmented-control behavior over .node. The text
-      filter (results.js's applyTextFilter) toggles the `hidden` attribute on
-      existing rows directly, no new selectors needed for it -- but see the
-      `[hidden]` rule below, which the text filter depends on. The segmented
-      All/Failed/Skipped control instead toggles a status class on .tree per
-      the epic's own wording ("the segmented control toggles a status class on
-      .tree"), so that *does* add new selectors: see "status segmented
-      control" below.
-    - TcXunit-1tt.6 fills in real .node-dur text (results.js now renders
-      "<n> ms" from the CLI's durationMs field, or omits the element entirely
-      for a row that didn't run -- no CSS change needed here, .node-dur's
-      styling below is content-agnostic).
-    - TcXunit-1tt.7/.4 add keyboard-nav/selection and click-to-navigate
-      *behavior*; the selection/hover visuals and .node-open affordance are
-      already styled below since they're pure CSS states.
+  Selectors are copied verbatim from design-system.html's embedded ".vsix"
+  specimen stylesheet, with the ".vsix " scope prefix dropped: results.html's
+  <body> is the panel, so there is no wrapping .vsix element to key off, the
+  same de-scoping vsix-shell.css does for .tw-tabs/.send-btn and the rest.
 */
 
-/* Extension-layer tokens: TcXunit's pass/fail/skip/busy vocabulary, aliased
-   (not invented) onto the shared tokens from vsix-tokens.css, exactly per
-   design-system.html section 1's "Extension: result status" table. These are
-   TcXunit-specific (not part of the shared/never-forked vsix-tokens.css), so
-   they live here rather than in that file. */
+/* The pass/fail/skip/busy vocabulary, aliased onto vsix-tokens.css's shared
+   tokens rather than invented, per design-system.html section 1's "Extension:
+   result status" table. These are specific to the results panel, so they stay
+   out of the shared, never-forked token file. */
 :root {
   --pass: var(--local);
   --pass-bg: var(--local-bg-strong);
@@ -66,13 +41,11 @@ body[data-theme="light"] {
 .toolbar .field { flex: 1 1 auto; min-width: 80px; }
 .counts { display: flex; gap: 4px; margin-left: auto; flex: none; }
 
-/* -- footer bar (TcXunit-qwh.3): #statusSeg + #filterInput moved out of the
-   top .toolbar into a second .toolbar-styled row docked below #tree/.tw-body
-   and above the required .tw-statusbar (vsix-shell.css), instead of sharing
-   the run/rerun/counts row. Same flex layout as .toolbar (row, 6px gap, same
-   padding) so the seg control and field align exactly as they did up top --
-   only the border edge flips, since this row sits above the statusbar rather
-   than below the run/rerun row above #tree. */
+/* -- footer bar: a second .toolbar-styled row holding #statusSeg and
+   #filterInput, docked between .tw-body and the required .tw-statusbar. It
+   reuses .toolbar wholesale so the seg control and field keep the same
+   alignment; only the border edge flips, since this row sits above the
+   statusbar rather than below the run/rerun row. -- */
 .tw-footerbar {
   border-bottom: none;
   border-top: 1px solid var(--border);
@@ -112,33 +85,25 @@ body[data-theme="light"] {
 .node:hover { background: var(--accent-soft); }
 .node.selected { background: var(--accent-soft); border-left-color: var(--accent); }
 
-/* CSS cascades per-property, not per-rule: `.node`'s own `display: flex`
-   above is an author-origin declaration, so it silently beats the (lower-
-   priority) UA stylesheet's `[hidden] { display: none }` default on that same
-   property, no matter how the `hidden` attribute is toggled from JS. Restated
-   explicitly here so `hidden` actually hides a .node -- the twisty's
-   expand/collapse (TcXunit-1tt.2) and this ticket's text filter
-   (results.js's applyTextFilter) both depend on it. `.assert`/`.banner` don't
-   need the same override -- neither sets `display` itself, so nothing shadows
-   the UA default for them. */
+/* CSS cascades per-property, not per-rule: `.node`'s own `display: flex` above
+   is author-origin, so it silently beats the UA stylesheet's
+   `[hidden] { display: none }` on that property however the attribute is
+   toggled from JS. Restated here so `hidden` actually hides a .node, which
+   both the twisty's expand/collapse and the text filter depend on. .assert and
+   .banner need no such override: neither sets `display` itself, so nothing
+   shadows the UA default for them. */
 .node[hidden] { display: none; }
 
-/* TcXunit-1tt.7: #tree is the sole tabbable element the keyboard-nav feature
-   adds (results.js wires tabindex="0" via results.html, plus a roving
-   .node.selected -- see that class above, already present for this ticket).
-   design-system.html section 8's A11y rule requires "a visible --accent
-   outline everywhere" a focusable element gets focus; inset (negative
-   offset) so it draws inside .tree's own box rather than risk being clipped
-   by body's `overflow:hidden` (vsix-shell.css) at the panel's edges. Matches
-   vsix-shell.css's existing `.field:focus` convention of a plain :focus
-   selector (not :focus-visible) -- this panel has no other convention to
-   follow. */
+/* #tree is the page's sole tabbable element (tabindex="0" in results.html),
+   so design-system.html section 8's A11y rule requires a visible --accent
+   outline on it. The offset is negative so the outline draws inside .tree's
+   own box, where body's `overflow:hidden` cannot clip it at the panel edges.
+   Plain :focus, not :focus-visible, matching vsix-shell.css's .field:focus. */
 .tree:focus { outline: 2px solid var(--accent); outline-offset: -2px; }
 
-/* Indent: 6 / 24 / 42px (18px per level). Two-level max -- suite (no depth
-   class) then depth1 (leaf test). depth2 exists only as a defensive ceiling;
-   deeper nesting is a modelling error per design-system.html section 5, not a
-   UI concern this file needs to grow to accommodate. */
+/* Indent: 6 / 24 / 42px, 18px per level. The tree is two levels deep -- suite,
+   then leaf test -- so depth2 is only a defensive ceiling. Deeper nesting is a
+   modelling error, not a UI concern this file grows to accommodate. */
 .node.depth1 { padding-left: 24px; }
 .node.depth2 { padding-left: 42px; }
 
@@ -150,11 +115,10 @@ body[data-theme="light"] {
   font-size: 8px;
   line-height: 1;
   transform: translateY(-1px);
-  /* Not part of design-system.html's verbatim rule set -- results.js (TcXunit-
-     1tt.2) makes this element clickable to satisfy "twisty expand/collapse
-     works". A cursor change is the minimum affordance to make that
-     discoverable without touching layout/color, so it's additive rather than
-     a deviation from the spec'd visuals. */
+  /* Not part of design-system.html's verbatim rule set: results.js makes this
+     element clickable, and a cursor change is the least that makes that
+     discoverable without touching layout or color, so it reads as additive
+     rather than a deviation from the specified visuals. */
   cursor: pointer;
 }
 
@@ -168,11 +132,10 @@ body[data-theme="light"] {
 .node.fail .node-name { color: var(--text); }
 .node.skip .node-name { color: var(--text-dim); }
 
-/* Path row: drawn below the suite name row instead of inline next to it --
-   an absolute filePath overlapping a suite name was the original complaint.
-   Same left indent as .node.depth1 so it reads as "belonging to" the suite
-   row above it; folds into the suite's own expand/collapse (see
-   results.js's renderSuite -- it's part of childRows). */
+/* The path gets its own row below the suite name rather than sitting inline
+   beside it, where a long absolute path overlaps the name. It shares
+   .node.depth1's left indent so it reads as belonging to the suite row above,
+   and results.js folds it into that suite's expand/collapse. */
 .node-src-row {
   padding: 0 9px 3px 24px;
 }
@@ -207,10 +170,9 @@ body[data-theme="light"] {
 }
 .node:hover .node-open { opacity: 1; }
 
-/* Not part of design-system.html's verbatim rule set -- same rationale as
-   .twisty's cursor comment above: TcXunit-1tt.4 makes rows carrying a
-   .node-open affordance double-click targets (results.js adds this class
-   only alongside the dblclick handler it wires), so the cursor should say so. */
+/* Additive for the same reason as .twisty's cursor above: results.js adds this
+   class only alongside the dblclick handler it wires, so the cursor is what
+   says the row is a double-click target. */
 .node.has-open { cursor: pointer; }
 
 /* -- failed-assertion detail block -- */
@@ -241,12 +203,10 @@ body[data-theme="light"] {
 .banner strong { display: block; color: var(--error); font-weight: 600; margin-bottom: 3px; font-size: 11px; }
 .banner code { font-family: var(--mono); font-size: 10.5px; }
 
-/* -- call-stack section inside a failed-to-load suite's banner (TcXunit-9fs):
-   an expandable list of suite.callStack frames, same
-   toggle-glyph-in-text-plus-hidden-children pattern the tree's own .twisty
-   uses (results.js's buildCallStackSection), scoped inside .banner rather
-   than reusing .node/.twisty since it has no glyph/dur/open columns of its
-   own to align. -- */
+/* -- call-stack section inside a failed-to-load suite's banner: an expandable
+   frame list on the same toggle-glyph-plus-hidden-children pattern as the
+   tree's own .twisty, styled separately from .node/.twisty because it has no
+   glyph, duration or open columns of its own to align. -- */
 .callstack { margin-top: 6px; }
 .callstack-toggle {
   cursor: pointer;
@@ -268,28 +228,23 @@ body[data-theme="light"] {
 .callstack-frame.has-open { cursor: pointer; }
 .callstack-frame.has-open:hover { color: var(--accent); }
 
-/* -- status segmented control (TcXunit-1tt.5): All/Failed/Skipped. results.js
-   toggles "filter-fail"/"filter-skip" on #tree itself when a segment other
-   than "All" is active (no class at all = "All", nothing to select against).
-   Only leaf test rows (.node.depth1) are pruned -- suite header rows (plain
-   .node, no depth class) and .banner are deliberately left out of these
-   selectors so they stay visible "with their ancestor suite rows still
-   visible for context" per this ticket's acceptance criteria, regardless of
-   which segment is active. .assert blocks only ever exist for failed tests,
-   so "Skipped" hides them outright rather than needing a per-row rule tied to
-   a specific failed sibling; "Failed" needs no rule for them since they're
-   visible by default. This is independent of (and composes with) the text
-   filter's per-row `hidden` toggling above -- a row shows only if neither
-   mechanism hides it. */
+/* -- status segmented control, All/Failed/Skipped: results.js toggles
+   "filter-fail"/"filter-skip" on #tree itself, "All" being the absence of a
+   class since there is nothing to select against. Only leaf test rows are
+   pruned here; suite headers and .banner stay out of these selectors so a
+   matching leaf keeps its suite context, and results.js's own suite-visibility
+   check is what hides a suite with no row of the selected status. .assert
+   blocks exist only under failed tests, so "Skipped" hides them outright while
+   "Failed" needs no rule for them at all. Composes with the text filter's
+   per-row `hidden` above: a row shows only if neither mechanism hides it. */
 .tree.filter-fail .node.depth1:not(.fail) { display: none; }
 .tree.filter-skip .node.depth1:not(.skip) { display: none; }
 .tree.filter-skip .assert { display: none; }
 
-/* -- running/progress sweep (TcXunit-1tt.3): a thin CSS-only bar that lives
-   between .toolbar and .tw-body while a run is in flight, per
-   design-system.html's "running" spec example. Toggled via the #prog
-   element's hidden attribute (results.js's setRunning), never a class --
-   there's nothing else to vary here. Animation is copied verbatim, including
+/* -- running/progress sweep: a thin CSS-only bar between .toolbar and
+   .tw-body while a run is in flight, per design-system.html's "running"
+   example. #prog is toggled by its hidden attribute rather than a class, since
+   nothing else about it varies. The animation is copied verbatim, including
    the prefers-reduced-motion fallback. -- */
 .prog { height: 2px; background: var(--border); overflow: hidden; flex: none; }
 .prog i { display: block; height: 100%; width: 38%; background: var(--accent); animation: sweep 1.4s ease-in-out infinite; }
@@ -301,15 +256,15 @@ body[data-theme="light"] {
   .prog i { animation: none; width: 100%; opacity: .5; }
 }
 
-/* -- running placeholder (TcXunit-qjt): #runningState borrows #emptyState's
-   box styling verbatim (vsix-shell.css) -- only its heading's accent color is
-   TcXunit-specific, so that alone lives here. -- */
+/* -- running placeholder: #runningState borrows #emptyState's box styling from
+   vsix-shell.css wholesale, and only its heading's accent color belongs to the
+   results layer, so that alone lives here. -- */
 .running-state strong { color: var(--busy); }
 
-/* -- statusbar dot run-state coloring (TcXunit-qjt): default (no class,
-   vsix-shell.css) stays the existing "ready" green; results.js's
-   tcxunitSetStatus swaps in the matching status hue for the other states,
-   reusing the same --busy/--skip/--fail tokens as everything else here. -- */
+/* -- statusbar dot run-state coloring: the class-less default in
+   vsix-shell.css is the "ready" green; xstunitSetStatus swaps in the matching
+   status hue for the other states, reusing the same tokens as the rest of this
+   file. -- */
 .tw-statusbar .dot.running { background: var(--busy); }
 .tw-statusbar .dot.stopped { background: var(--skip); }
 .tw-statusbar .dot.error { background: var(--fail); }

@@ -1,13 +1,13 @@
 /*
-  TcXunit.Vsix shared design tokens: :root (dark, default) + body[data-theme="light"]
-  overrides. Copy-sourced from TcAgentPlugin/src/TcAgent/Resources/chat.css per
-  docs/design-system.html section 8's file-split plan -- "shared, never forked".
+  The shared design tokens: :root is the dark default, body[data-theme="light"]
+  overrides it. Copy-sourced from TcAgentPlugin/src/TcAgent/Resources/chat.css
+  per docs/design-system.html section 8's file-split plan, which marks this
+  layer "shared, never forked" -- keep the values in sync with chat.css by
+  hand, since a single-sourced package for them is out of scope.
 
-  Keep this file's values in sync with chat.css by hand; a single-sourced shared
-  package is explicitly out of scope for TcXunit-1tt (see design-system.html's
-  "Out of Scope" note). WebView2 does not inherit the host's light/dark theme from
-  prefers-color-scheme -- the WPF host pushes body[data-theme] in directly via
-  ExecuteScriptAsync (see ResultsToolWindowControl.xaml.cs).
+  WebView2 does not inherit the host's light/dark theme from
+  prefers-color-scheme, so body[data-theme] is pushed in by the WPF host
+  (ResultsToolWindowControl.xaml.cs) rather than resolved here.
 */
 
 :root{

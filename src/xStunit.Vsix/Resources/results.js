@@ -1,125 +1,26 @@
-// TcXunit-1tt.2: static results tree render (node anatomy, banner, assert
-// detail). Builds the .tree DOM from a XstunitRunResult (see
-// src/xStunit.Vsix/TestRunner/XstunitModels.cs for the C# shape; wire JSON is
-// camelCase: { suites: [{ name, filePath, error, tests: [{ name, passed,
-// failures }] }], passed, failed, exitCode, error } per
-// docs/design-system.html section 8's "Data" rule).
+// The page half of the WebView2 channel the WPF host
+// (ResultsToolWindowControl.xaml.cs) talks to, and the renderer that turns a
+// run result into #tree's rows.
 //
-// window.xstunitRenderResult(result) is called by
-// ResultsToolWindowControl.xaml.cs's StartRunAsync via ExecuteScriptAsync,
-// passing the CLI's own JSON output as a literal JS expression (not a string
-// to JSON.parse -- see BuildRenderResultScript in that file).
+// Inbound, the host calls four globals via ExecuteScriptAsync:
+// xstunitBeginRun(), xstunitRenderResult(result), xstunitSetRunning(bool) and
+// xstunitSetStatus(state, text). The result argument arrives as a literal JS
+// expression, not a string to JSON.parse. Its wire shape is camelCase over
+// TestRunner/XstunitModels.cs: { suites: [{ name, filePath, error,
+// durationMs, callStack, tests: [{ name, passed, failures, durationMs }] }],
+// passed, failed, exitCode, error }.
 //
-// TcXunit-1tt.3 adds the other half of the run lifecycle: #runButton posts
-// 'run'/'stop' strings to the WPF host over window.chrome.webview.postMessage
-// (CoreWebView2.WebMessageReceived on the host side), and the host calls
-// window.xstunitSetRunning(bool) back in once the run actually starts/ends --
-// the button's label/class and #prog's visibility are host-driven, not
-// optimistically flipped on click, so they can never desync from whether a
-// xstunit process is actually running.
+// Outbound, window.chrome.webview.postMessage carries two payload shapes: the
+// bare strings 'run' and 'stop', and JSON envelopes ({ type: 'openFile',
+// filePath } and { type: 'rerunFailed' }). The host tells the two apart by
+// whether TryGetWebMessageAsString succeeds, so any message carrying data has
+// to stay an envelope.
 //
-// TcXunit-1tt.4 adds click-to-navigate: a suite row's .node-open (and, per
-// the epic's explicit design decision, a failed leaf test row's -- it has no
-// file of its own, so it inherits its parent suite's filePath) posts
-// {type:'openFile', filePath} to the WPF host over the same
-// window.chrome.webview.postMessage channel TcXunit-1tt.3 uses for 'run'/
-// 'stop', on double-click (design-system.html section 5: "the double-click
-// target hint" / section 8's Data rule: "filePath is what
-// ItemOperations.OpenFile receives on double-click"). Passing/skipped leaf
-// rows never get a .node-open span (see buildTestNode below), so they have
-// nothing to wire a handler onto -- satisfies "do not attempt navigation"
-// without a separate guard.
-//
-// TcXunit-1tt.5 adds the filter box (#filterInput, a .field per
-// design-system.html section 5) and the All/Failed/Skipped segmented control
-// (#statusSeg, a .seg). These are two independent, composable mechanisms, not
-// one:
-//   - The segmented control toggles a "filter-fail"/"filter-skip" class on
-//     #tree itself (see setStatusFilter below) -- results.css keys its
-//     .tree.filter-fail/.tree.filter-skip selectors off that class and does
-//     the actual hide/show in CSS, per the epic's own wording ("the
-//     segmented control toggles a status class on .tree"). No JS walk of the
-//     tree needed for it, and nothing to redo on a later render -- the class
-//     lives on #tree, which a rerun never replaces (only its children).
-//   - The text filter (applyTextFilter) is pure per-row `hidden` toggling
-//     over the already-rendered DOM, re-run on every keystroke -- no
-//     debounce; these trees are a handful of suites/tests, not worth the
-//     complexity. It groups the tree's flat row sequence back into
-//     suite/test/assert units (mirroring renderSuite's own output shape) to
-//     decide, per row, whether the suite name or the row's own name matches.
-// Both apply to the same rows at once (a status-filtered-out row's CSS
-// display:none and a text-filtered-out row's hidden attribute are
-// independent effects -- a row needs neither to be visible).
-//
-// TcXunit-1tt.6 wires real .node-dur values from durationMs (added to the
-// CLI's --format json output by the companion TcXunit-6fb.1/.2 tickets):
-// suite.durationMs and test.durationMs are milliseconds (a plain number for a
-// test -- every test entry in the JSON ran; a nullable number for a suite,
-// null when the suite failed to load). formatDurationMs renders "<n> ms" per
-// design-system.html section 5's populated-tree example (12 ms, 3 ms, 31 ms,
-// ...) -- the doc's node-anatomy table gives no unit-switching threshold (no
-// example duration is anywhere near 1000ms), so this does not invent one.
-// "Omitted entirely when a test didn't run" (same table) is what governs
-// whether a .node-dur element exists at all -- a skipped test or a
-// failed-to-load suite gets no slot, exactly as before this ticket; what
-// changes here is only what fills the slot when one is drawn.
-//
-// TcXunit-1tt.8 adds #rerunFailedButton (a .ghost-btn per design-system.html
-// section 5's populated-tree example). It carries no suite-name data of its
-// own -- the WPF host, not this page, tracks which suites failed in the last
-// run (ResultsToolWindowControl.xaml.cs's _lastFailedSuiteNames) -- so a
-// click just posts the JSON envelope {type:'rerunFailed'}, the same
-// window.chrome.webview.postMessage channel TcXunit-1tt.4's openFile uses,
-// and the host does the rest (re-invokes xstunit with --suite <name> per
-// failed suite, then pushes a normal window.xstunitRenderResult(...) back in
-// -- REPLACING #tree exactly like any other run, never merging into it,
-// since there is no separate "partial render" code path here at all). This
-// page's only two jobs are (1) posting the click and (2) keeping the
-// button's `disabled` attribute correct -- per the mockup's
-// ".ghost-btn[disabled]" state, disabled whenever the last render had zero
-// failures OR a run is currently in flight (updateRerunFailedButton, wired
-// into both xstunitRenderResult and xstunitSetRunning below).
-//
-// TcXunit-1tt.7 adds keyboard nav: #tree carries tabindex="0" (results.html)
-// as the one tabbable element for a "roving selection" over its .node rows
-// -- Up/Down move a tracked selectedRow (.node.selected, results.css) through
-// the currently *visible* rows (visibleRows() below skips both TcXunit-1tt.5
-// mechanisms -- the text filter's `hidden` attribute and the segmented
-// control's CSS-class-driven display:none -- via offsetParent rather than
-// duplicating either rule here), Enter opens the selected row's file by
-// calling the same openNodeFile() a dblclick uses (TcXunit-1tt.4), and Space
-// toggles a selected suite row's twisty by calling the same toggleExpand()
-// a twisty click uses (TcXunit-1tt.2). No Left/Right binding is added --
-// docs/design-system.html section 8's A11y rule only specifies arrows/Enter/
-// Space.
-//
-// TcXunit-qjt supersedes TcXunit-1tt.3's "results already rendered from a
-// prior run stay visible/updating during a subsequent run" decision, per
-// explicit user feedback: a stale tree left on screen for the full duration
-// of a new run turned out to be indistinguishable from a fresh one. Two new
-// global entry points -- window.xstunitBeginRun() (clears #tree/counts and
-// swaps in #runningState, called by StartRunAsync right before its CLI
-// process starts) and window.xstunitSetStatus(state, text) (drives the
-// .tw-statusbar dot/#statusText, called alongside xstunitSetRunning at every
-// one of StartRunAsync's status-line branches) -- plus #runningState itself
-// (results.html) are this ticket's additions; see their own comments below
-// for how they fit into the existing render/running-state plumbing.
-//
-// Not implemented here: per-node "currently executing" state (the CLI emits
-// one JSON blob at the end of a run, not an incremental stream, so there is
-// no data to know which suite is currently executing -- only that a run is
-// or isn't in flight; #runningState is a single generic placeholder, not a
-// per-suite one). Plain script (no ES modules) since this page has exactly
-// one small render concern, unlike TcAgent's chat.html.
-//
-// TcXunit-9fs adds an expandable "call stack" section to a failed-to-load
-// suite's banner (buildBanner/buildCallStackSection below), rendering
-// suite.callStack -- additive JSON the CLI has emitted since TcXunit-7s6,
-// one frame ({ pouTypeName, methodName, line, bodyLine }) per level of the
-// interpreted call chain, innermost first. Frames carry no filePath of their
-// own (only the suite does), so a frame click opens the suite's file --
-// the only navigation target this data can support -- same as the suite
-// row's own dblclick.
+// Run state is host-driven throughout: the run button's label, #prog and
+// #runningState change only when the host reports that a run actually started
+// or ended, never optimistically on click, so they cannot desync from whether
+// a xstunit process is really running. Every render replaces #tree's rows
+// outright; there is no partial-update path.
 (function () {
   'use strict';
 
@@ -134,23 +35,19 @@
   var statusTextEl = document.getElementById('statusText');
   var statusDotEl = document.querySelector('.tw-statusbar .dot');
 
-  // TcXunit-1tt.8: the two independent reasons #rerunFailedButton can be
-  // disabled -- "last render had zero failures" (hasFailures, set by
-  // xstunitRenderResult) and "a run is currently in flight" (isRunning, set
-  // by xstunitSetRunning). Neither alone is the whole rule: a passing run
-  // must disable it regardless of run state, and a run in flight must
-  // disable it regardless of the previous result (one action live at a
-  // time, same reasoning #runButton/#prog already follow).
+  // #rerunFailedButton is disabled for two independent reasons, and neither
+  // alone is the whole rule: a passing run must disable it whatever the run
+  // state, and a run in flight must disable it whatever the last result said.
+  // One action is live at a time, the same rule #runButton/#prog follow.
   var hasFailures = false;
   var isRunning = false;
 
-  // FB_TestSuite.Fail()'s baked failure-message format (see
-  // src/xStunit.Runner/TcUnitStub/FB_TestSuite.cs):
+  // The failure-message format FB_TestSuite.Fail bakes in
+  // (src/xStunit.Runner/TcUnitStub/FB_TestSuite.cs):
   //   FAILED TEST '<name>', EXP: <expected>, ACT: <actual>[, MSG: <message>]
-  // XstunitTestResult.Failures is free text, not structured expected/actual
-  // fields -- this regex is how the .assert block recovers them. A failure
-  // message that doesn't match (e.g. some future/foreign shape) still
-  // renders, just as plain text instead of bolded expected/actual.
+  // The wire shape carries that as one free-text line, not structured
+  // expected/actual fields, so this regex is how the .assert block recovers
+  // them. A message in some other shape still renders, just as plain text.
   var FAILURE_PATTERN = /^FAILED TEST '[^']*', EXP: (.*?), ACT: (.*?)(?:, MSG: (.*))?$/;
 
   function el(tag, className) {
@@ -167,14 +64,8 @@
     return e;
   }
 
-  // Click-to-navigate (TcXunit-1tt.4): posts a JSON envelope, not a plain
-  // string -- unlike 'run'/'stop' (TcXunit-1tt.3) this needs to carry data.
-  // OnWebMessageReceived (ResultsToolWindowControl.xaml.cs) distinguishes the
-  // two by trying TryGetWebMessageAsString first and falling back to parsing
-  // WebMessageAsJson, mirroring the envelope shape TcAgentPlugin's
-  // Browser_WebMessageReceived already uses for its own object messages.
   // No-op with no filePath (nothing to navigate to) or outside the WebView2
-  // host (same guard #runButton's click handler uses below).
+  // host, where nothing is listening on the other end of postMessage.
   function postOpenFile(filePath) {
     if (!filePath || !(window.chrome && window.chrome.webview)) {
       return;
@@ -182,23 +73,19 @@
     window.chrome.webview.postMessage({ type: 'openFile', filePath: filePath });
   }
 
-  // TcXunit-1tt.7: the shared "open" step a row's dblclick handler and the
-  // Enter key both call -- reads the filePath a node's dblclick wiring
-  // already stashed on its own dataset (see buildTestNode/renderSuite below)
-  // rather than each caller re-deriving it from the suite/test data a second
-  // time. No-op for a row with no filePath (e.g. a passing/skipped test, or
-  // Enter pressed with nothing selected) -- postOpenFile already guards that
-  // case, so nothing further is needed here.
+  // The shared "open" step a row's dblclick handler and the Enter key both
+  // call, reading the filePath the row already carries on its own dataset
+  // rather than re-deriving it from the suite/test data a second time.
   function openNodeFile(node) {
     if (node) {
       postOpenFile(node.dataset.filePath);
     }
   }
 
-  // No "skipped" concept exists in the interpreter/CLI today (TestResult.Passed
-  // is a plain bool) -- test.skipped is read defensively so this keeps working
-  // unchanged if that ever ships, without inventing a status the data can't
-  // produce yet.
+  // No "skipped" concept exists in the interpreter or the CLI: a test's status
+  // is a plain bool. test.skipped is read defensively so this keeps working
+  // unchanged if one ever ships, without inventing a status the data cannot
+  // produce.
   function statusOf(test) {
     if (test && test.skipped) {
       return 'skip';
@@ -206,12 +93,9 @@
     return test && test.passed ? 'pass' : 'fail';
   }
 
-  // Formats a durationMs number as the .node-dur slot's text, per
-  // design-system.html section 5's populated-tree example ("12 ms", "3 ms",
-  // "31 ms"). Returns null for anything that isn't a genuine numeric
-  // duration (missing/null -- the "didn't run" case, which callers use to
-  // decide whether to draw the .node-dur element at all) rather than
-  // rendering "NaN ms" or similar.
+  // Returns null for anything that is not a genuine numeric duration -- the
+  // "didn't run" case, which callers use to decide whether to draw a
+  // .node-dur element at all -- rather than rendering "NaN ms".
   function formatDurationMs(durationMs) {
     if (typeof durationMs !== 'number' || !isFinite(durationMs)) {
       return null;
@@ -219,11 +103,8 @@
     return durationMs + ' ms';
   }
 
-  // TcXunit-1tt.8: whether a suite counts as "failed" for #rerunFailedButton's
-  // enable/disable rule -- exactly the same test renderSuite below uses to
-  // pick a suite row's glyph/status class (hasError || anyFail), pulled out
-  // to a named function since both this file's own render path and the
-  // button-state check need the identical definition of "failed".
+  // Named so #rerunFailedButton's enable rule and renderSuite's glyph/status
+  // choice cannot drift apart on what counts as a failed suite.
   function suiteFailed(suite) {
     if (suite && suite.error) {
       return true;
@@ -232,10 +113,6 @@
     return tests.some(function (t) { return statusOf(t) === 'fail'; });
   }
 
-  // Applies the combined disabled rule (see hasFailures/isRunning's own
-  // comment above) to #rerunFailedButton. Called after every render and
-  // every running-state change so the two independently-updated flags never
-  // leave the button in a stale state.
   function updateRerunFailedButton() {
     if (rerunFailedButton) {
       rerunFailedButton.disabled = !hasFailures || isRunning;
@@ -283,17 +160,11 @@
     setCount('countSkip', 'skip', countSkipped(result));
   }
 
-  // Renders one failure message as an .assert block. Bolds expected/actual
-  // when the message matches FB_TestSuite's known format; otherwise falls
-  // back to the raw text -- "with expected/actual if present in the JSON"
-  // per TcXunit-1tt.2's acceptance criteria, not a guarantee every failure
-  // parses that way.
-  // TcXunit-3tx.2: failures[] entries became objects ({ message, kind,
-  // expected, actual, assert, pou, method, bodyLine, ... }) instead of bare
-  // strings. `message` is the identical formatted line the string used to be,
-  // so this renderer needs nothing else. No string fallback: the page only ever
-  // renders JSON that XstunitProcessRunner already deserialized into
-  // XstunitFailure, so a bare-string payload could not reach here anyway.
+  // A failures[] entry is an object, never a bare string: the host renders
+  // only JSON it has already deserialized into XstunitFailure. Its other keys
+  // (kind, expected, actual, pou, method, bodyLine, ...) are for
+  // non-interactive consumers; `message` alone is what the .assert block
+  // parses.
   function failureText(failure) {
     return (failure && failure.message) || '';
   }
@@ -324,15 +195,13 @@
     return div;
   }
 
-  // One callStack[] frame's label: "PouTypeName.MethodName(line)" when a
-  // method is known (an assert/method-level frame), or just "PouTypeName(line)"
-  // for a suite-body/bare-FB frame (methodName null, per CallStackFrameReport's
-  // own convention) -- mirrors the console output's own frame formatting
-  // (AssertSite.LocationWithLine, TcXunit-7s6's console path): the
-  // XAE-implementation-editor-relative bodyLine, not the raw .TcPOU XML
-  // line -- console output never uses the latter for a frame, so this
-  // doesn't either. Falls back to the raw line if bodyLine is unknown, then
-  // omits the "(...)" suffix entirely if neither is known.
+  // "PouTypeName.MethodName(line)" when a method is known, "PouTypeName(line)"
+  // for a suite-body or bare-FB frame, whose methodName is null by the wire
+  // shape's own convention. The line preferred is bodyLine, the
+  // XAE-implementation-editor-relative one, not the raw .TcPOU XML line --
+  // the console output never labels a frame with the latter, so neither does
+  // this. Falls back to the raw line, then drops the suffix entirely, as each
+  // becomes unavailable.
   function callStackFrameLabel(frame) {
     var pou = (frame && frame.pouTypeName) || '?';
     var name = (frame && frame.methodName) ? pou + '.' + frame.methodName : pou;
@@ -341,13 +210,12 @@
     return line === null ? name : name + '(' + line + ')';
   }
 
-  // TcXunit-9fs: the expandable "call stack" section inside a failed-to-load
-  // suite's banner, one row per suite.callStack frame (innermost first, per
-  // the CLI's own ordering -- CallStack[0] describes the same fault as
-  // suite.error/fileLine, so no re-sorting happens here). Only drawn when the
-  // CLI actually emitted frames (null/empty for a load-level failure that
-  // never entered an interpreted ST body) -- returns null in that case so the
-  // caller can skip appending anything.
+  // The expandable "call stack" section inside a failed-to-load suite's
+  // banner, one row per suite.callStack frame. Frames stay in the CLI's own
+  // order, innermost first, so callStack[0] describes the same fault as
+  // suite.error. Returns null when the suite carries no frames -- the case
+  // for a load-level failure that never entered an interpreted ST body -- so
+  // the caller appends nothing rather than an empty section.
   function buildCallStackSection(suite) {
     var frames = (suite && suite.callStack) || [];
     if (frames.length === 0) {
@@ -368,10 +236,8 @@
 
     frames.forEach(function (frame) {
       var frameRow = textEl('div', 'callstack-frame', callStackFrameLabel(frame));
-      // No per-frame filePath in the wire shape (TcXunit-7s6's
-      // CallStackFrameReport carries POU/method/line only) -- every frame
-      // opens the suite's own file, same as the suite row's dblclick, which
-      // is the only navigation target this data can support.
+      // A frame carries POU, method and line but no filePath, so the suite's
+      // own file is the only navigation target this data can support.
       if (suite && suite.filePath) {
         frameRow.classList.add('has-open');
         frameRow.addEventListener('click', function () {
@@ -386,13 +252,11 @@
     return section;
   }
 
-  // Suite-failed-to-load banner: distinct from a swallowed empty suite, per
-  // TcXunit-1tt.2's acceptance criteria. suite.error is CliRunner's caught
-  // exception message (unresolved type, parse error, etc.) -- free text, not
-  // HTML, so it's set via textContent even though the mockup shows a <code>
-  // fragment inline; this data has no reliable way to locate that substring.
-  // TcXunit-9fs: also appends an expandable call-stack section (see
-  // buildCallStackSection) when the CLI emitted one for this suite.
+  // A suite that failed to load reads as its own banner rather than being
+  // swallowed as an empty suite. suite.error is the CLI's caught exception
+  // message (unresolved type, parse error, and so on): free text, not HTML,
+  // so it goes in via textContent -- there is no reliable way to locate the
+  // inline <code> fragment the mockup draws.
   function buildBanner(suite) {
     var div = el('div', 'banner');
     div.appendChild(textEl('strong', null, 'Suite failed to load'));
@@ -406,9 +270,8 @@
     return div;
   }
 
-  // suiteFilePath is the parent suite's filePath (or falsy) -- a failed leaf
-  // test has no file of its own (out of scope per the epic: "no per-test file
-  // granularity exists"), so it inherits the suite's for navigation purposes.
+  // suiteFilePath is the parent suite's filePath, or falsy: a leaf test has no
+  // file of its own, so it inherits the suite's to have anywhere to navigate.
   function buildTestNode(test, suiteFilePath) {
     var status = statusOf(test);
     var classes = 'node depth1';
@@ -420,23 +283,21 @@
     node.appendChild(textEl('span', 'glyph ' + status, glyphFor(status)));
     node.appendChild(textEl('span', 'node-name', (test && test.name) || ''));
 
-    // .node-dur: "Omitted entirely when a test didn't run" (design-system.html
-    // section 5) -- a skipped test never ran, so it gets no slot at all. A
-    // pass/fail test did run and the CLI always emits a non-negative
-    // durationMs for it (TcXunit-6fb.1); formatDurationMs returning null here
-    // would mean an unexpected payload shape, in which case omitting the slot
-    // is still the right call (no fabricated placeholder).
+    // A test that did not run gets no .node-dur slot at all rather than an
+    // empty or placeholder one. A skipped test is that case by definition; a
+    // pass/fail test always carries a durationMs, so formatDurationMs
+    // returning null there means an unexpected payload, where omitting the
+    // slot is still the right answer.
     var testDur = formatDurationMs(test && test.durationMs);
     if (status !== 'skip' && testDur !== null) {
       node.appendChild(textEl('span', 'node-dur', testDur));
     }
 
-    // Click-to-navigate (TcXunit-1tt.4): only failed tests inherit their
-    // suite's filePath as a navigation target. No .node-open arrow here --
-    // feedback: the arrow only ever actually opened via the suite header row,
-    // never from the test row itself, so drawing it on this row was a false
-    // affordance. 'has-open' (cursor: pointer, results.css) + the dblclick
-    // handler stay -- double-click still opens the suite's file.
+    // Only a failed test is worth a navigation target, and it gets no
+    // .node-open arrow: the arrow opens the suite's file, not the test's own,
+    // so drawing it on this row would be a false affordance. The pointer
+    // cursor and the dblclick handler stay -- double-click still opens the
+    // suite's file.
     if (status === 'fail' && suiteFilePath) {
       node.classList.add('has-open');
       node.dataset.filePath = suiteFilePath;
@@ -448,12 +309,11 @@
     return node;
   }
 
-  // Builds one suite's full row set: the suite header node, plus either a
-  // failed-to-load banner or its test rows (+ any assert blocks). Returns
-  // { rows: Element[] } where rows is the flat sequence to append to .tree --
-  // the tree's DOM has no per-suite wrapper element (matches
-  // docs/design-system.html's markup exactly), so expand/collapse below
-  // works by toggling `hidden` on each row directly rather than a container.
+  // Returns the flat sequence of rows to append to .tree: the suite header
+  // node, then either a failed-to-load banner or the suite's test rows and
+  // their assert blocks. The tree's DOM has no per-suite wrapper element, so
+  // expand/collapse toggles `hidden` on each row directly rather than on a
+  // container, and applyTextFilter has to regroup the sequence by shape.
   function renderSuite(suite) {
     var rows = [];
     var tests = (suite && suite.tests) || [];
@@ -467,10 +327,9 @@
     suiteNode.appendChild(textEl('span', 'glyph ' + suiteStatus, glyphFor(suiteStatus)));
     suiteNode.appendChild(textEl('span', 'node-name', (suite && suite.name) || ''));
 
-    // A suite that failed to load never ran -- same "didn't run" rule as a
-    // skipped test, so no .node-dur slot at all (matches the mockup's
-    // failed-to-load suite row, which also omits it; the CLI backs this up by
-    // emitting durationMs: null for exactly this case, TcXunit-6fb.2).
+    // A suite that failed to load never ran, so the same "didn't run" rule as
+    // a skipped test applies: no .node-dur slot at all. The CLI agrees,
+    // emitting a null durationMs for exactly this case.
     var suiteDur = formatDurationMs(suite && suite.durationMs);
     if (!hasError && suiteDur !== null) {
       suiteNode.appendChild(textEl('span', 'node-dur', suiteDur));
@@ -487,11 +346,10 @@
 
     rows.push(suiteNode);
 
-    // Path row: a suite row's own name can be arbitrarily overlapped by a
-    // long absolute filePath if drawn inline (feedback: "the FB_CounterTest
-    // is overlapped by the path") -- drawn as its own row below the name
-    // instead, folded into childRows/toggleExpand below so it collapses with
-    // the rest of the suite rather than always taking up a line.
+    // The path gets its own row below the suite name rather than sitting
+    // inline beside it, where a long absolute path overlaps the name. It joins
+    // childRows so it collapses with the suite instead of always costing a
+    // line.
     var childRows = [];
     if (suite && suite.filePath) {
       var srcRow = el('div', 'node-src-row');
@@ -505,10 +363,9 @@
       rows.push(bannerRow);
       childRows.push(bannerRow);
 
-      // Feedback: a failed-to-load suite couldn't be collapsed into its
-      // parent result -- give it the same twisty/toggleExpand wiring a
-      // normal suite gets below, gating the path row + banner instead of
-      // test/assert rows.
+      // A failed-to-load suite collapses like any other, on the same twisty
+      // wiring a passing suite gets below -- it just gates the path row and
+      // banner instead of test/assert rows.
       var errorExpanded = true;
       function toggleErrorExpand() {
         errorExpanded = !errorExpanded;
@@ -539,12 +396,9 @@
       }
     });
 
-    // TcXunit-1tt.7: named (not an inline closure passed straight to
-    // addEventListener) and stashed on suiteNode itself so the Space-key
-    // handler below can call the identical function a twisty click uses --
-    // "reuse, don't duplicate" for expand/collapse. The hasError branch above
-    // returns before this point with its own toggleErrorExpand wired instead
-    // (same shape, gating the path row + banner rather than test/assert rows).
+    // Named and stashed on suiteNode rather than passed inline to
+    // addEventListener, so the Space-key handler can call the identical
+    // function a twisty click does instead of duplicating expand/collapse.
     var expanded = true;
     function toggleExpand() {
       expanded = !expanded;
@@ -568,24 +422,24 @@
     return normalize(nameEl && nameEl.textContent);
   }
 
-  // TcXunit-1tt.5: text filter over the already-rendered .tree. Walks the
-  // flat row sequence (.tree has no per-suite wrapper element -- see
-  // renderSuite's own comment on why) back into suite-sized groups, then
-  // toggles `hidden` per row rather than touching the DOM structure or
-  // re-rendering from JSON. A suite header row (and its .banner, if any)
-  // stays visible whenever its own name matches OR any of its tests do --
-  // "narrows the visible tree to matching suite/test names" without losing a
-  // matching leaf's suite context; a suite whose name matches shows all of
-  // its tests too, same reasoning in the other direction. Composes with the
-  // segmented status control (results.css's .tree.filter-fail/-skip) purely
-  // by both being independently necessary for visibility -- no interaction
-  // between the two is coded here.
-  // Segmented control's current value ('fail'/'skip'/null for "All"), read by
-  // applyTextFilter's suite-visibility check below. Kept as its own var
-  // (rather than re-reading #tree's filter-fail/filter-skip class back out)
-  // since setStatusFilter is the single place that already knows it.
+  // The segmented control's current value: 'fail', 'skip', or null for "All".
+  // Held here rather than read back off #tree's filter-fail/filter-skip class,
+  // since setStatusFilter is the one place that already knows it.
   var statusFilter = null;
 
+  // Filters the already-rendered .tree by name, toggling `hidden` per row
+  // rather than touching the DOM structure or re-rendering from JSON. It runs
+  // on every keystroke undebounced: these trees are a handful of rows.
+  //
+  // Because .tree is a flat row sequence, the walk has to regroup rows into
+  // suite-sized units by their classes to decide visibility. A suite header
+  // (and its banner) stays visible when its own name matches or any of its
+  // tests do, so a matching leaf never loses its suite context and a matching
+  // suite shows all its tests.
+  //
+  // This composes with the segmented status control (results.css's
+  // .tree.filter-fail/-skip) only by both being independently necessary for a
+  // row to be visible; no interaction between the two is coded anywhere.
   function applyTextFilter() {
     if (!treeEl) {
       return;
@@ -600,8 +454,8 @@
       i++;
 
       if (!suiteRow.classList || !suiteRow.classList.contains('node') || suiteRow.classList.contains('depth1')) {
-        // Not a suite header (shouldn't happen given renderSuite's output
-        // shape) -- skip rather than misclassify or loop forever.
+        // Not a suite header, which renderSuite's output shape rules out --
+        // skip rather than misclassify the row or loop forever on it.
         continue;
       }
 
@@ -639,14 +493,11 @@
         i++;
       }
 
-      // Feedback: selecting "Failed" in the segmented control hid failing
-      // rows' non-matching siblings but left the suite header itself (and a
-      // passing suite's now-childless header) visible -- results.css's
-      // .tree.filter-fail/.filter-skip rules deliberately only prune
-      // .node.depth1 rows for suite context, but that leaves an
-      // all-passing suite showing an empty header under "Failed". A suite
-      // only earns visibility under an active status filter if it actually
-      // has a row of that status: a load error or a failing test for
+      // results.css's status rules prune only .node.depth1 rows, so that a
+      // matching leaf keeps its suite context -- which on its own would leave
+      // an all-passing suite showing an empty header under "Failed". A suite
+      // earns visibility under an active status filter only if it actually
+      // holds a row of that status: a load error or a failing test for
       // "fail", a skipped test for "skip".
       var suiteHasError = !!bannerRow;
       var statusOk = true;
@@ -675,12 +526,10 @@
     }
   }
 
-  // TcXunit-1tt.5: All/Failed/Skipped segmented control. Pure class-toggle on
-  // #tree -- results.css's selectors do the actual hide/show (see that
-  // file's "status segmented control" block) -- plus the .seg's own
-  // active-button bookkeeping (data-v="plain" is what vsix-shell.css's
-  // existing `.seg button.active[data-v]` rule keys its highlight off; the
-  // separate data-status attribute is only for this handler to read).
+  // The All/Failed/Skipped control hides nothing itself: it only toggles a
+  // class on #tree, and results.css's "status segmented control" selectors do
+  // the hide/show. Nothing has to be redone on a later render, since #tree
+  // itself survives every render -- only its children are replaced.
   function setStatusFilter(status) {
     statusFilter = (status === 'fail' || status === 'skip') ? status : null;
     if (!treeEl) {
@@ -690,29 +539,19 @@
     if (statusFilter) {
       treeEl.classList.add('filter-' + statusFilter);
     }
-    // Suite headers' own visibility depends on statusFilter too (see
-    // applyTextFilter's suiteHasError/statusOk check) -- rerun it here since
-    // this is the one path (segment click) that changes statusFilter without
-    // also going through the text-input or render paths that already call it.
+    // Suite header visibility depends on statusFilter too, and a segment click
+    // is the one path that changes it without going through the text-input or
+    // render paths that already rerun the filter.
     applyTextFilter();
   }
 
-  // TcXunit-1tt.7: keyboard nav's selection state. Tracks the currently
-  // selected .node element, or null when nothing is selected (fresh page,
-  // just after a render, or the previous selection scrolled out of the
-  // visible set -- see moveSelection below, which treats all three the
-  // same way).
   var selectedRow = null;
 
-  // The rows keyboard nav is allowed to land on: every .node currently
-  // rendered as actually visible. Deliberately uses offsetParent rather than
-  // re-deriving visibility from `hidden`/the segmented control's filter-fail/
-  // filter-skip class by hand -- that would mean keeping a second copy of
-  // results.css's hide rules in sync here. offsetParent is null for both
-  // TcXunit-1tt.5 mechanisms (the text filter's `hidden` attribute, via
-  // results.css's `.node[hidden] { display: none; }`, and the segmented
-  // control's CSS-class-driven display:none) without this file needing to
-  // know which one applies.
+  // The rows keyboard nav may land on: every .node actually rendered visible.
+  // offsetParent is the test rather than a hand-rolled check of `hidden` plus
+  // the segmented control's class, which would mean keeping a second copy of
+  // results.css's hide rules in sync here. It reads null for both filtering
+  // mechanisms without this file knowing which one applied.
   function visibleRows() {
     if (!treeEl) {
       return [];
@@ -723,11 +562,6 @@
     });
   }
 
-  // Applies/clears .node.selected (results.css) and keeps selectedRow in
-  // sync. Passing null clears the selection entirely (used on every render,
-  // since a rerun/rerun-failed replaces #tree's rows -- see
-  // xstunitRenderResult below -- and a stale element reference would only
-  // ever be wrong).
   function setSelectedRow(row) {
     if (selectedRow) {
       selectedRow.classList.remove('selected');
@@ -741,13 +575,10 @@
     }
   }
 
-  // Moves the selection through visibleRows(): direction is +1 (ArrowDown) or
-  // -1 (ArrowUp). Clamps at the ends rather than wrapping -- design-system.
-  // html's A11y rule doesn't specify wraparound, and clamping is the more
-  // common convention for this kind of list. If selectedRow isn't found in
-  // the current visible set (nothing selected yet, or it was filtered/
-  // rerendered away since), this falls back to the first visible row for
-  // either direction rather than guessing an offset from a stale position.
+  // direction is +1 for ArrowDown, -1 for ArrowUp. Clamps at the ends rather
+  // than wrapping. A selection that is not in the current visible set -- never
+  // set, or filtered or rerendered away since -- restarts at the first visible
+  // row either way, rather than guessing an offset from a stale position.
   function moveSelection(direction) {
     var rows = visibleRows();
     if (rows.length === 0) {
@@ -771,12 +602,11 @@
     setSelectedRow(rows[nextIndex]);
   }
 
-  // #tree is the sole tabbable element this feature adds (tabindex="0" in
-  // results.html) -- a "roving selection" tracked here in JS, not real
-  // per-row DOM focus. Enter/Space only act when they'd do something (an
-  // open target / a toggleExpand function present, respectively), mirroring
-  // how the equivalent mouse paths (dblclick / twisty click) are themselves
-  // only wired onto rows that support them -- see buildTestNode/renderSuite.
+  // #tree is the one tabbable element on the page (tabindex="0" in
+  // results.html), carrying a roving selection tracked in JS rather than real
+  // per-row DOM focus. Enter and Space act only where they would do something
+  // -- an open target, a toggleExpand -- mirroring how the equivalent mouse
+  // paths are themselves wired only onto rows that support them.
   if (treeEl) {
     treeEl.addEventListener('keydown', function (event) {
       switch (event.key) {
@@ -811,6 +641,9 @@
     filterInput.addEventListener('input', applyTextFilter);
   }
 
+  // A segment carries two attributes on purpose: data-v drives vsix-shell.css's
+  // active-button highlight, data-status is read only here, so the filter never
+  // depends on visual state.
   if (statusSeg) {
     var segButtons = Array.prototype.slice.call(statusSeg.querySelectorAll('button'));
     segButtons.forEach(function (btn) {
@@ -822,7 +655,6 @@
     });
   }
 
-  // Global entry point -- see the file banner above for who calls this and how.
   window.xstunitRenderResult = function (result) {
     if (!treeEl) {
       return;
@@ -832,10 +664,7 @@
       treeEl.removeChild(treeEl.firstChild);
     }
 
-    // TcXunit-1tt.7: every render (a normal run or a rerun-failed) replaces
-    // #tree's rows outright, so any previous selection is a stale element
-    // reference the moment this runs -- clear it rather than leave
-    // selectedRow pointing at a detached node.
+    // The rows above are gone, so any held selection is now a detached node.
     setSelectedRow(null);
 
     var suites = (result && result.suites) || [];
@@ -847,28 +676,14 @@
 
     updateCounts(result || {});
 
-    // TcXunit-1tt.8: recompute #rerunFailedButton's "last run had zero
-    // failures" half of its disabled rule from this render's own suites list
-    // -- covers a normal run, a rerun-failed run (button correctly goes back
-    // to disabled once the previously-failed suites all pass), and the
-    // suite-load-failure case (a suite with an .error banner counts via
-    // suiteFailed, same as any other failure).
     hasFailures = suites.some(suiteFailed);
     updateRerunFailedButton();
 
-    // TcXunit-1tt.5: a rerun replaces #tree's children (above) but never
-    // #tree itself, so the segmented control's "filter-fail"/"filter-skip"
-    // class survives automatically -- only the text filter's per-row hidden
-    // state needs recomputing against the freshly-built rows, so a filter
-    // typed before a rerun still applies to the new results.
+    // The status filter's class rides on #tree, which survives this render, so
+    // only the text filter's per-row hidden state needs recomputing against
+    // the fresh rows -- a filter typed before a rerun still applies after it.
     applyTextFilter();
 
-    // TcXunit-qjt: every completed run swaps #runningState (shown for the
-    // run's duration by xstunitBeginRun below) and #emptyState (the
-    // pre-first-run copy) back out for #tree, unconditionally -- a rerun no
-    // longer needs the "already showing the tree" guard TcXunit-1tt.3 used to
-    // have here, since xstunitBeginRun now always hides the tree at the start
-    // of every run.
     if (runningStateEl) {
       runningStateEl.hidden = true;
     }
@@ -878,15 +693,11 @@
     treeEl.hidden = false;
   };
 
-  // TcXunit-qjt: clears #tree's rows/counts and swaps in #runningState, in
-  // #emptyState's/#tree's place, right before a run's CLI process starts
-  // (ResultsToolWindowControl.xaml.cs's StartRunAsync calls this ahead of
-  // window.xstunitSetRunning(true) below) -- so the panel can never show a
-  // mix of a prior run's stale rows and a new run in flight. hasFailures
-  // resets to false along with the counts: there is no result on screen for
-  // #rerunFailedButton to rerun until the next xstunitRenderResult call sets
-  // it again (isRunning already disables the button for the run's own
-  // duration -- see updateRerunFailedButton).
+  // Called right before a run's CLI process starts, so the panel can never
+  // show a prior run's rows alongside a new run in flight -- a stale tree left
+  // up for the duration of a run is indistinguishable from a fresh one.
+  // hasFailures resets with the counts: nothing is on screen for
+  // #rerunFailedButton to rerun until the next render sets it again.
   window.xstunitBeginRun = function () {
     if (!treeEl) {
       return;
@@ -910,14 +721,10 @@
     }
   };
 
-  // TcXunit-qjt: drives the .tw-statusbar dot/#statusText pushed in by
-  // ResultsToolWindowControl.xaml.cs's new PushStatus, mirroring
-  // StartRunAsync's own status-line branches (running while the CLI process
-  // is in flight, then ready/stopped/error once it ends). state is one of
-  // 'running'/'stopped'/'error' (colored via the matching class, see
-  // results.css) or anything else (including 'ready') for the default green
-  // dot -- results.css only defines the three non-default classes since
-  // "ready" is the dot's plain, class-less state already in markup.
+  // Drives the .tw-statusbar dot and #statusText. state is 'running',
+  // 'stopped' or 'error', each colored by the matching class in results.css;
+  // anything else, 'ready' included, leaves the dot in its plain class-less
+  // state, which is already the ready color in markup.
   window.xstunitSetStatus = function (state, text) {
     if (statusDotEl) {
       statusDotEl.classList.remove('running', 'stopped', 'error');
@@ -930,11 +737,6 @@
     }
   };
 
-  // Global entry point -- called by ResultsToolWindowControl.xaml.cs's
-  // StartRunAsync/StopRun (via PushSetRunning) once a run has actually
-  // started or actually ended, so this is always a true reflection of
-  // whether a xstunit child process is running, never an optimistic guess
-  // made on click.
   window.xstunitSetRunning = function (running) {
     isRunning = !!running;
 
@@ -946,15 +748,11 @@
       progEl.hidden = !running;
     }
 
-    // TcXunit-qjt: a run that ends without ever calling xstunitRenderResult
-    // (Stop, or a host-level error -- both skip straight to the finally
-    // block that calls this with running=false) leaves #runningState still
-    // showing; left alone that would freeze a "Running..." placeholder on
-    // screen for a run that is no longer running. Reverting to #emptyState
-    // is correct either way here since xstunitBeginRun already cleared
-    // #tree -- there is nothing to show. A run that DID render already
-    // hid #runningState itself (see xstunitRenderResult above), so this is a
-    // no-op in that case.
+    // A run that ends without ever rendering -- Stop, or a host-level error --
+    // would otherwise freeze the "Running..." placeholder on screen for a run
+    // that is no longer running. #emptyState is the honest replacement, since
+    // xstunitBeginRun already cleared the tree and there is nothing to show. A
+    // run that did render hid the placeholder itself, so this is a no-op then.
     if (!running && runningStateEl && !runningStateEl.hidden) {
       runningStateEl.hidden = true;
       if (emptyStateEl) {
@@ -962,20 +760,15 @@
       }
     }
 
-    // TcXunit-1tt.8: a run in flight (whether started from #runButton or
-    // #rerunFailedButton itself) disables #rerunFailedButton regardless of
-    // the previous result -- one action live at a time, same reasoning
-    // #runButton/#prog already follow.
     updateRerunFailedButton();
   };
 
   if (runButton) {
     runButton.addEventListener('click', function () {
       if (!(window.chrome && window.chrome.webview)) {
-        // Not hosted inside the VS WebView2 control (e.g. opened directly in
-        // a browser for a quick visual check) -- nothing to post to, and
-        // nothing would ever call xstunitSetRunning back, so there is
-        // nothing safe to do here.
+        // Opened outside the VS WebView2 host, e.g. straight in a browser for
+        // a visual check: there is nothing to post to, and nothing would ever
+        // call xstunitSetRunning back to undo an optimistic label flip.
         return;
       }
       var running = runButton.classList.contains('stop-btn');
@@ -983,13 +776,9 @@
     });
   }
 
-  // TcXunit-1tt.8: posts the JSON envelope (mirrors postOpenFile's shape,
-  // TcXunit-1tt.4) requesting a rerun of just the last run's failed suites.
-  // No payload of its own -- see this file's top-of-file banner comment for
-  // why the host, not this page, is the one holding the suite-name list.
-  // The `disabled` attribute (kept correct by updateRerunFailedButton) is
-  // the only guard needed here; a disabled button doesn't fire click events,
-  // so there's nothing further to check before posting.
+  // The rerun request carries no payload: the host, not this page, holds the
+  // list of suites that failed last run. The `disabled` attribute is the only
+  // guard needed, since a disabled button fires no click events.
   if (rerunFailedButton) {
     rerunFailedButton.addEventListener('click', function () {
       if (!(window.chrome && window.chrome.webview)) {

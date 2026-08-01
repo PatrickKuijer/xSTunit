@@ -7,25 +7,20 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              d:DesignHeight="400" d:DesignWidth="350">
     <!--
-      Row 1 (the former WPF TreeView) is now a WebView2 loading Resources/results.html,
-      which itself loads vsix-tokens.css/vsix-shell.css/results.css; see
-      docs/design-system.html section 8 and TcXunit-1tt.1. Results-tree rendering into
-      the WebView2 is TcXunit-1tt.2. WebView2 fills its row edge-to-edge (no Margin) so
-      the panel's own dark chrome reaches the tool window's borders, matching
-      TcAgentPlugin's chat panel.
+      Row 1 is a WebView2 loading Resources/results.html, which pulls in
+      vsix-tokens.css, vsix-shell.css and results.css; see docs/design-system.html
+      section 8. It fills its row edge to edge, with no Margin, so the page's own
+      chrome reaches the tool window's borders instead of framing itself in WPF
+      background.
 
-      TcXunit-1tt.3 retires the native WPF "Run tests (tcxunit)" Button that used to sit
-      in Row 0: docs/design-system.html's toolbar has exactly one primary action
-      (.send-btn, toggling to .stop-btn while a run is in flight, per its "exactly two
-      buttons" rule and user story 12's "unambiguous about which action is live") and
-      that now lives entirely inside the WebView2 page as #runButton (results.html),
-      driven by ResultsToolWindowControl.xaml.cs's StartRunAsync/StopRun over
-      window.chrome.webview.postMessage / CoreWebView2.WebMessageReceived. StatusText
-      remains as a host-level fallback for errors the WebView2 page itself can't show
-      (e.g. WebView2 failing to initialize, tcxunit.json missing); everything else
-      (running state, run results) is pushed into the page. Note: this comment avoids
-      the double-hyphen aside this codebase otherwise favors in .cs/.js/.css files,
-      since XML comments may not contain one; semicolons/parens stand in instead.
+      There is no native WPF button here: design-system.html's toolbar has exactly one
+      primary action, and that lives inside the page as #runButton, driven over
+      window.chrome.webview.postMessage and CoreWebView2.WebMessageReceived. Row 0's
+      StatusText is the host-level fallback for the errors the page cannot show at all
+      (WebView2 failing to initialize, xstunit.json missing); running state and run
+      results are pushed into the page instead. Note that this comment avoids the
+      double hyphen used as an aside elsewhere in the codebase, since XML comments may
+      not contain one; semicolons and parens stand in.
     -->
     <Grid>
         <Grid.RowDefinitions>

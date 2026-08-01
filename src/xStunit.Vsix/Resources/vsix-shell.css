@@ -1,15 +1,14 @@
 /*
-  TcXunit.Vsix shared shell layer: base panel layout, tabs, buttons, seg, field,
-  chip, picker, statusbar -- per docs/design-system.html section 8's file-split
-  plan. Copy-sourced from TcAgentPlugin/src/TcAgent/Resources/chat.css, adapting
-  its TcAgent-specific selector names (e.g. .tw-session-search, .picker-filter)
-  to the generic ones docs/design-system.html itself already demonstrates in its
-  embedded .vsix specimen stylesheet (.field, .picker-menu/.picker-opt).
+  The shell layer every panel shares: base layout, tabs, buttons, seg, field,
+  chip, picker, statusbar, per docs/design-system.html section 8's file-split
+  plan. Copy-sourced from TcAgentPlugin/src/TcAgent/Resources/chat.css with its
+  chat-specific selector names generalized to the ones design-system.html's own
+  specimen stylesheet demonstrates (.field, .picker-menu/.picker-opt).
 
-  Requires vsix-tokens.css to be loaded first (every rule here references its
-  custom properties -- no literal colors, per section 7's "Style through tokens"
-  rule). TcXunit's own layer (.toolbar .tree .node .assert .banner .count) lives
-  in results.css, not here -- see that file.
+  Load vsix-tokens.css first: every rule here references its custom properties,
+  and section 7's "Style through tokens" rule leaves no literal colors to fall
+  back on. The results layer (.toolbar .tree .node .assert .banner .count) is
+  results.css's, not this file's.
 */
 
 *{ box-sizing:border-box; }
@@ -26,13 +25,11 @@ body{
   overflow:hidden;
 }
 
-/* -- body scroll region (section 6 tool-window anatomy: flex:1, panel-bg,
-   min-height:0 -- without min-height:0 the flex child refuses to shrink and
-   the status bar gets pushed off the bottom of the panel) -- overflow-y:auto
-   is what actually makes a results tree taller than the panel scroll instead
-   of growing .tw-body past its flex-constrained height and overlapping the
-   footer/statusbar below it (body itself is overflow:hidden, so without this
-   the overflow was clipped/overlapping, never scrollable). -- */
+/* -- body scroll region, per section 6's tool-window anatomy. Without
+   min-height:0 the flex child refuses to shrink and pushes the status bar off
+   the bottom of the panel. overflow-y:auto is what makes a tree taller than
+   the panel scroll rather than overlap the footer and statusbar: body itself
+   is overflow:hidden, so the excess is otherwise clipped, never scrollable. */
 .tw-body{
   flex:1;
   min-height:0;
@@ -62,15 +59,12 @@ body{
 .tw-tab:hover:not(.active){ color:var(--text-dim); }
 
 /* -- buttons --
-   Padding/border here are deliberately kept in lockstep with .field's box
-   (below): same 5px vertical padding, same 1px border width (send-btn's is
-   just painted transparent instead of omitted), same inherited font-size/
-   line-height. All toolbar controls share the global `*{box-sizing:border-
-   box}` above, so matching those three inputs is what makes #runButton/
-   #rerunFailedButton compute to the same rendered height as #filterInput
-   sitting next to them in results.html's .toolbar (TcXunit-qwh.2) -- .send-btn
-   previously had `border:none` and 4px vertical padding vs. .field's 1px
-   border + 5px padding, which shorted its box by 3px. */
+   Padding and border stay in lockstep with .field's box below: same 5px
+   vertical padding, same 1px border width (painted transparent here rather
+   than omitted), same inherited font-size and line-height. Under the global
+   `*{box-sizing:border-box}` above, matching those three is what makes a
+   button and a field sitting side by side in a toolbar compute to the same
+   rendered height. */
 .send-btn,
 .ghost-btn{
   border-radius:3px;
@@ -156,11 +150,10 @@ body{
 .picker-opt .opt-note{ color:var(--text-faint); font-size:10.5px; }
 .picker-dot{ width:7px; height:7px; border-radius:50%; flex:none; }
 
-/* -- empty state (TcXunit-1tt.3: shown in results.html's #tree area before
-   the first run of a session) -- copied verbatim from design-system.html's
-   "Components -- Core" section (shared across every panel, alongside
-   buttons/seg/field/chip/picker above), not results.css, even though today
-   only results.html uses it. */
+/* -- empty state -- copied verbatim from design-system.html's "Components --
+   Core" section, so it belongs to this shared layer alongside the
+   buttons/seg/field/chip/picker above, not to results.css, even though the
+   results panel is its only caller today. */
 .empty-state{
   padding:18px 16px;
   border:1px dashed var(--border);

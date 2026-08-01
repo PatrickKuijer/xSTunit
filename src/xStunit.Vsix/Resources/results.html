@@ -10,85 +10,42 @@
 </head>
 <body>
   <!--
-    WebView2 page loaded by ResultsToolWindowControl.xaml.cs, which follows the VS
-    host's light/dark theme (document.body.dataset.theme, pushed via
-    ExecuteScriptAsync -- see BuildApplyThemeScript there) and, after a run,
-    pushes the CLI's run-result JSON in by calling window.xstunitRenderResult(...)
-    (see results.js, and BuildRenderResultScript on the host side).
+    The WebView2 page ResultsToolWindowControl.xaml.cs hosts. The host follows
+    the VS light/dark theme by pushing document.body.dataset.theme in, and
+    pushes each run's result JSON in by calling window.xstunitRenderResult;
+    results.js holds the whole page-side contract.
 
-    #runButton (TcXunit-1tt.3) is the panel's one send-btn/stop-btn per
-    design-system.html's "exactly two [buttons]" rule and user story 12
-    ("unambiguous about which action is live"): a click posts the string
-    'run' or 'stop' to the WPF host via window.chrome.webview.postMessage
-    (see results.js), which drives XstunitProcessRunner.RunAsync and pushes
-    window.xstunitSetRunning(bool) back in to flip this button's label/class
-    and toggle #prog. This retires the separate native WPF "Run tests
-    (xstunit)" button TcXunit-1tt.1/.2 left in ResultsToolWindowControl.xaml,
-    per that button's own since-removed comment foreshadowing this ticket.
+    #runButton is the panel's one send-btn/stop-btn, per design-system.html's
+    "exactly two [buttons]" rule and user story 12 ("unambiguous about which
+    action is live"). Its label and class are host-driven, so it cannot claim a
+    run is in flight when none is. #prog, the CSS-only sweep in results.css,
+    follows the same state.
 
-    #prog is the CSS-only sweep (results.css) shown only while a run is in
-    flight -- hidden by default, toggled via the hidden attribute, never a
-    class (nothing else about it varies).
+    #rerunFailedButton is section 5's ".ghost-btn" affordance. It starts
+    disabled because no run has happened yet, and results.js keeps the
+    attribute correct from there. The host, not this page, holds the list of
+    suites that failed, so the message it posts carries no payload.
 
-    #emptyState is design-system.html's ".empty-state" block (Components --
-    Core, so its rules live in vsix-shell.css) shown verbatim until the first
-    window.xstunitRenderResult(...) call swaps it out for #tree. As of
-    TcXunit-qjt this is no longer a one-way, permanent swap: a run that ends
-    without ever reaching xstunitRenderResult (Stop, or a host-level error)
-    reverts the page from #runningState back to this empty state instead of
-    leaving a stale placeholder on screen -- see results.js's
-    xstunitSetRunning and #runningState's own comment below.
+    #emptyState is the shared ".empty-state" block from vsix-shell.css, shown
+    before the first run. #runningState replaces it for the duration of a run,
+    and is a separate element rather than a relabelled one so it can become the
+    anchor for per-suite progress rows if the panel ever consumes the CLI's
+    event stream. A run that ends without rendering, by Stop or a host-level
+    error, reverts to #emptyState rather than leaving the placeholder frozen.
 
-    #tree is results.css/.tree's render target, filled in by results.js. The
-    .tw-statusbar region is required per docs/design-system.html section 6
-    (tool-window anatomy) and is never omitted, even in this empty state.
+    #tree is .tree's render target. Its tabindex="0" makes it the page's one
+    tabbable element: keyboard nav is a roving selection over its .node rows
+    tracked in JS, not per-row tabindex or real DOM focus, per section 8's
+    A11y rule.
 
-    tabindex="0" (TcXunit-1tt.7) makes #tree itself the one tabbable element
-    for keyboard nav -- a "roving selection" over its .node rows tracked in
-    JS (.node.selected, results.css), not per-row tabindex/real DOM focus.
-    See results.js's keydown handler: Up/Down move the selection, Enter opens
-    the selected row's file (reuses TcXunit-1tt.4's postOpenFile), Space
-    toggles a selected suite row's twisty (reuses TcXunit-1tt.2's expand/
-    collapse), per docs/design-system.html section 8's A11y rule.
+    #statusSeg carries two attributes per segment on purpose: data-v drives
+    vsix-shell.css's active-button highlight, data-status is read only by
+    results.js, so filtering never depends on visual state. It and #filterInput
+    sit in a second .toolbar-styled row below .tw-body rather than in the top
+    toolbar; results.js looks both up by id, so the placement is layout-only.
 
-    #statusSeg (TcXunit-1tt.5) is design-system.html section 5's All/Failed/
-    Skipped .seg control -- data-status is a separate attribute from data-v
-    ("plain", already styled by vsix-shell.css's .seg button.active[data-v]
-    rule) purely for results.js to read without depending on visual state.
-    Clicking a segment toggles a "filter-fail"/"filter-skip" class on #tree
-    itself (see results.css); "All" clears it. #filterInput (design-system.html's
-    .field, "Filter tests...") live-filters by suite/test name substring --
-    see results.js's applyTextFilter for how the two compose. Per TcXunit-qwh.3,
-    both controls live in a second .toolbar-styled row (.tw-footerbar, results.css)
-    docked below .tw-body/#tree and above .tw-statusbar, not in the top toolbar --
-    results.js only ever looks these up by id, so the move is layout-only.
-
-    #rerunFailedButton (TcXunit-1tt.8) is design-system.html section 5's
-    ".ghost-btn" "Rerun failed" affordance (populated-tree example): a click
-    posts {type:'rerunFailed'} to the WPF host over the same JSON-envelope
-    postMessage channel #tree's node-open double-click uses (TcXunit-1tt.4).
-    The host -- not this page -- tracks which suites failed in the last run,
-    so the message carries no payload; the host re-invokes xstunit with
-    --suite <name> per failed suite and pushes a normal
-    window.xstunitRenderResult(...) back in, replacing #tree exactly like any
-    other run. Starts `disabled` in markup (no run yet = no failures); results.js
-    toggles the attribute after every render and on xstunitSetRunning, per the
-    mockup's ".ghost-btn[disabled]" rule ("disabled when the last run had zero
-    failures").
-
-    #runningState (TcXunit-qjt) is a dedicated placeholder shown for the
-    duration of a run, in #tree's place -- a separate element from #emptyState
-    (not a relabeled/reused one) so it can later become the anchor for
-    per-suite progress rows if streaming ever lands, per a companion future
-    ticket. window.xstunitBeginRun() (called by
-    ResultsToolWindowControl.xaml.cs's StartRunAsync right before the CLI
-    process starts) clears #tree's rows/counts and swaps this in; a completed
-    run's window.xstunitRenderResult(...) swaps it back out for #tree, and a
-    stopped/errored run (no new render) reverts to #emptyState instead of
-    leaving this frozen on screen once nothing is actually running -- see
-    results.js's xstunitSetRunning. This supersedes TcXunit-1tt.3's original
-    "results from a prior run stay visible during a subsequent run" decision,
-    per explicit user feedback.
+    The .tw-statusbar region is required by section 6's tool-window anatomy and
+    is never omitted, empty state included.
   -->
   <div class="toolbar">
     <button class="send-btn" type="button" id="runButton">Run tests</button>

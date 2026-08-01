@@ -59,6 +59,28 @@ namespace xStunit.Interpreter
                 $"STRING/WSTRING size '{exprText}' is not an integer literal; " +
                 "use the ParseLength(typeName, resolveExpr) overload to resolve constant expressions."));
 
+        // The declared character capacity, for a caller with no expression
+        // evaluator to hand. False for a type that is not a STRING/WSTRING and
+        // for a constant-expression size (e.g. STRING(cConstants.MAX)), which
+        // only ParseLength's resolveExpr overload can settle.
+        public static bool TryParseLength(string typeName, out int length)
+        {
+            length = 0;
+            if (typeName == null)
+                return false;
+
+            var trimmed = typeName.Trim();
+            if (string.Equals(trimmed, "STRING", System.StringComparison.OrdinalIgnoreCase)
+                || string.Equals(trimmed, "WSTRING", System.StringComparison.OrdinalIgnoreCase))
+            {
+                length = DefaultLength;
+                return true;
+            }
+
+            var match = SizedPattern.Match(trimmed);
+            return match.Success && int.TryParse(match.Groups["n"].Value.Trim(), out length);
+        }
+
         public static int ParseLength(string typeName, Func<string, int> resolveExpr)
         {
             var trimmed = typeName.Trim();

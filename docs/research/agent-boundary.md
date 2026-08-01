@@ -3,27 +3,30 @@
 - Issue: `TcXunit-229.10` (part of epic `TcXunit-229`; blocker `TcXunit-229.9`,
   the result contract, closed; blocks `TcXunit-229.11`, the v0.1 spec
   write-up). Product framing comes from epic `TcXunit-3tx`.
-- Date: 2026-07-31.
-- **STATUS: DRAFT — awaiting ratification.** The boundary proposed here is a
-  proposal. Section 4 is the load-bearing argument; if that reasoning is
-  rejected, the rest of the document does not stand.
+- Date: drafted 2026-07-31, ratified 2026-08-01.
+- **STATUS: ratified.** All nine calls were answered; the outcomes, including
+  the one amendment (decision 4, the no-progress key), are recorded in the
+  "Decisions" section at the end. Section 4 is the load-bearing argument; if
+  that reasoning is ever rejected, the rest of the document does not stand.
 - Method: repo-grounded, cited to `path/file.cs:line`. Two deliberate
   exceptions, both flagged inline: the numeric bounds in §3.4 (attempt limits)
   are guesses with no data behind them, and §5 proposes detections that do not
   exist yet.
+- **Cite convention.** Line numbers were accurate at the drafting date and are
+  reading aids, not the contract; they drift. The durable anchors are the
+  symbol names and, for the failure taxonomy specifically, the `kind` table in
+  `README.md` — that table is the live contract, and no `FailureKind.cs` line
+  cite appears in this document because those have already gone stale once.
 - **Naming**: the ticket title uses a `Tc`-prefixed label for the agent role.
   Per `CLAUDE.md`'s pre-beta naming constraint, this document does not coin it
   as a product name and refers to "the agent" or "the loop" throughout. The
   ticket label is left as-is; nothing new is built on it.
 - **Contract version**: written against the post-`229.9` result contract —
   five `FailureKind`s including `parse-error`, and one vocabulary `kind` /
-  `construct` at every JSON level. At the time of writing this worktree still
-  carries the pre-change shape (four kinds in
-  `src/xStunit.Runner/FailureKind.cs:20-48`; suite-level `errorKind` /
-  `errorConstruct` at `src/xStunit.Cli/CliRunner.cs:896,902`). That rename is
-  landing concurrently and is treated here as done. Line citations to
-  `CliRunner.cs` are to the pre-rename file; the field *names* below are
-  post-rename.
+  `construct` at every JSON level. That contract has since landed
+  (`xstunit-229.15`), so the field names below are the live ones. `229.15` also
+  narrowed `load-error` to container level and moved body-level parse failures
+  to `parse-error`; §3.3 and §3.5 are written to the narrowed meaning.
 
 ---
 
@@ -40,7 +43,7 @@ that every other kind's wrong fix leaves a *failing* test, while this kind's
 wrong fix leaves a *passing* one, and the evidence of what was deleted is the
 thing that was deleted. But `kind` alone is not a sufficient stop rule, because
 the classifier deliberately under-claims `unsupported-construct`
-(`src/xStunit.Interpreter/Engine/FailureClassifier.cs:15-24`; `README.md:62`),
+(`src/xStunit.Interpreter/Engine/FailureClassifier.cs:15-24`; `README.md:67`),
 so real interpreter gaps are known to be sitting inside the `plc-fault` bucket.
 The boundary therefore needs a second, kind-independent net: no-progress
 detection plus two zero-cost invariants (total test count must not fall; never
@@ -105,7 +108,7 @@ success while doing nothing, and it costs one `if` to prevent.
 
 Order: `exitCode == 2` → the invocation or the tree is wrong, nothing ran.
 `exitCode == 1` → read `suites[].kind` and `failures[].kind`.
-`exitCode == 0` → green, subject to §5b.
+`exitCode == 0` → green, subject to §6b (green may be vacuous).
 
 ---
 
@@ -113,8 +116,8 @@ Order: `exitCode == 2` → the invocation or the tree is wrong, nothing ran.
 
 ### 3.1 `assertion` — iterate freely
 
-An assert compared two values and they differed
-(`src/xStunit.Runner/FailureKind.cs:22-26`). This is the safest kind, and the
+An assert compared two values and they differed (`FailureKind.Assertion`;
+`README.md:53-59`). This is the safest kind, and the
 reason is not "assertions are usually simple" — it is that **the failure is
 fully described and entirely inside the agent's editing territory**. The report
 carries the assert that failed, both formatted values, the author's own
@@ -128,7 +131,7 @@ expectation) are ordinary edits.
 
 ### 3.2 `plc-fault` — iterate, but this bucket is not clean
 
-Interpreted ST faulted at run time (`FailureKind.cs:28-33`). The
+Interpreted ST faulted at run time (`FailureKind.PlcFault`). The
 classification is *earned*, not assumed: `FailureClassifier.Classify` returns
 `PlcFault` only when some interpreted body claimed the fault, and `LoadError`
 otherwise — `return located ? FailureKind.PlcFault : FailureKind.LoadError`
@@ -145,8 +148,8 @@ correct — the engine throws plain `NotSupportedException` for genuine defects
 in the code under test too (`Operator '<' is not supported between Int32 and
 String`, `Engine.Expressions.cs:221-224`) and classifying on the base type
 would halt an agent over its own bug, the same failure inverted. But the
-consequence is stated openly in `README.md:62`: *"some real interpreter gaps
-… still read as `plc-fault`; widening the opt-in is incremental work."*
+consequence is stated openly in `README.md:67`: *"anything that hasn't opted in
+reports as `plc-fault`"*, and the opt-in list grows construct by construct.
 
 So the `plc-fault` bucket is known to contain some number of "the tool cannot
 do this" failures wearing "your code is broken" labels. **That is why §3.4's
@@ -157,12 +160,16 @@ convert that from source corruption into an escalation.
 
 ### 3.3 `load-error` — actionable, but on a different surface
 
-Nothing ran: discovery, parsing or instantiation failed before or outside any
-interpreted body (`FailureKind.cs:42-47`). The agent's action is on **its own**
-surface — paths, directory sets, duplicate type names across merged directories
-(`CliRunner.cs:232-239`), a `--suite` name that matches nothing
-(`CliRunner.cs:294-299`) — not on the code under test. Fixing an invocation
-unsupervised is fine.
+Nothing ran, at **container** level: the file or its XML was unreadable, no
+suites were discovered, or instantiation failed (`FailureKind.LoadError`;
+`README.md:53-59`). Note what is *not* here: a body that failed to parse is
+`parse-error`, not `load-error` — that suite loaded, and its other tests ran
+and reported their own verdicts (§3.5). Reading a body-level parse failure as
+`load-error` would send the agent to fix its invocation over a problem in the
+source. The agent's action here is on **its own** surface — paths, directory
+sets, duplicate type names across merged directories (`CliRunner.cs:232-239`),
+a `--suite` name that matches nothing (`CliRunner.cs:294-299`) — not on the
+code under test. Fixing an invocation unsupervised is fine.
 
 One case deserves a named rule. If a `load-error` reading
 `no TcUnit suites found under …` (`CliRunner.cs:318-319`) appears *after* the
@@ -171,7 +178,7 @@ identifies suites purely by walking `EXTENDS` ancestry to the literal
 `TcUnit.FB_TestSuite`
 (`src/xStunit.Interpreter/Discovery/SuiteDiscovery.cs:11,16-32`), so touching a
 suite's `EXTENDS` line makes it vanish from discovery entirely. **The correct
-response is revert, not repair** — and see §5c, because "suites vanish" is the
+response is revert, not repair** — and see §6c, because "suites vanish" is the
 most rewarding wrong move available to a loop optimizing for "no failures".
 
 ### 3.4 What "iterate" is bounded by
@@ -180,13 +187,32 @@ Three bounds. The first is the important one; the other two are cheap and
 mechanical.
 
 **(a) No-progress detection, independent of `kind`.** Define a failure
-identity as `(suite, test, pou, method, bodyLine, kind)` — every component is
-already in the JSON (`CliRunner.cs:1015-1047`). After each run, compare the
-identity *set* with the previous run's. Progress means the set strictly
-shrinks. **N consecutive attempts against the same identity with no shrinkage →
-halt and escalate.** This is the second net under §3.2's leaky bucket, and it
-is the only mechanism in this document that does not depend on the tool having
-classified the failure correctly.
+identity as the **coarse counter key** `(suite, test, kind)` — for a
+suite-level failure, which carries no `test`, `(suite, kind)`. All three
+components are already in the JSON (`CliRunner.cs:1015-1047`). After each run,
+compare the identity *set* with the previous run's. Progress means the set
+strictly shrinks. **N consecutive attempts against the same identity with no
+shrinkage → halt and escalate.** This is the second net under §3.2's leaky
+bucket, and it is the only mechanism in this document that does not depend on
+the tool having classified the failure correctly.
+
+*Why coarse, and why that is the whole point.* The obvious key is the full
+location — `pou`, `method`, `bodyLine`, `line` are all on the wire and all
+tempting. Every one of them moves under the agent's own edits: inserting three
+lines above the failing assert changes `bodyLine`, and lifting the call into a
+helper changes `method`. A key containing any of them therefore renders the
+*same* stuck failure as a *new* identity, the set appears to have changed, and
+the counter resets — the detector is defeated precisely by the churn it exists
+to detect, and it fails silently in the permissive direction. `(suite, test,
+kind)` is stable across arbitrary edits to the body, which is exactly the
+property the counter needs. The cost is real and accepted: a genuinely
+different failure in the same test under the same kind — a second assert in
+the same method going red once the first is fixed — does not read as progress,
+so the loop escalates a case a human would have let continue. That trade is
+deliberate: this rule's job is to bound wasted iterations, and its expensive
+error is the one that halts, not the one that lets a corrupting loop run.
+The location fields stay in the report and stay in the escalation, where a
+human reads them; they are just not part of the key.
 
 *The value of N is a guess.* Three is proposed because it allows one
 misdiagnosis and one correction; there is no data behind it. It should be
@@ -208,8 +234,24 @@ three separate cheating routes at once.
   (`Engine/Engine.Diagnostics.cs:169-172` recognizes `TEST`/`TEST_ORDERED`
   brackets), so a removed call leaves no trace beyond the count in (b).
 - Any file the runner itself reported as a suite, when the task is to fix the
-  code under test — see §5c, which makes this checkable rather than merely
+  code under test — see §6c, which makes this checkable rather than merely
   stated.
+
+### 3.5 `unsupported-construct` and `parse-error` — nothing, unsupervised
+
+The remaining two of the five kinds appear here only to be excluded, so that a
+reader working down section 3 sees the whole vocabulary rather than three of
+five and a gap.
+
+- `unsupported-construct` — statement level: a throw site recognized the
+  construct *by name* (`FailureKind.UnsupportedConstruct`; `README.md:53-59`).
+- `parse-error` — body level: the front end could not read that body at all.
+  The suite loaded, and its sibling tests ran and reported their own verdicts,
+  which is what separates it from `load-error` (§3.3). It fails a test and
+  exits `1`, like any other failure inside a suite that was found.
+
+Both halt. §4 is the argument for why, and §4.3 gives the one narrow exception
+— a `parse-error` on a line this session authored.
 
 ---
 
@@ -223,12 +265,12 @@ Three of the five kinds are statements **about the program**:
 
 - `assertion` — "your value was wrong."
 - `plc-fault` — "your code faulted while running."
-- `load-error` — "I could not find or assemble the tree."
+- `load-error` — "I could not find or assemble the container."
 
 Two are statements **about the tool**:
 
 - `unsupported-construct` — "this is valid IEC 61131-3 that TwinCAT compiles
-  and I do not implement yet" (`FailureKind.cs:35-40`;
+  and I do not implement yet" (`FailureKind.UnsupportedConstruct`;
   `UnsupportedConstructException.cs:5-8`).
 - `parse-error` — "I could not read this text."
 
@@ -241,10 +283,10 @@ searching the space of source edits for one the tool tolerates — which is
 using tool capability as the specification. Applied to a real POU, that means
 rewriting or deleting correct ST because the interpreter has not grown support
 for it yet. This is precisely the scenario the whole taxonomy was built to
-prevent; `FailureKind.cs:9-15` says so directly: *"a genuine defect in the code
-under test, and valid IEC 61131-3 the interpreter has not grown support for
-yet. An agent that cannot tell them apart 'fixes' the second by deleting
-correct code."* `README.md:60` gives the concrete case: an agent deletes a
+prevent; `FailureKind`'s own type doc says so directly: *"a genuine defect in
+the code under test, and valid IEC 61131-3 the interpreter has not grown
+support for yet. An agent that cannot tell them apart 'fixes' the second by
+deleting correct code."* `README.md:61` gives the concrete case: an agent deletes a
 correct `SEL()` call to make a test pass, and reports success.
 
 ### 4.2 Why this specific kind of wrong fix is worse than the others
@@ -280,7 +322,7 @@ the tool refused for good reason. `Parser.cs:143-151` records it:
 > claiming unsupported-construct here would be a guess, not evidence."*
 
 The front end "cannot tell syntax it doesn't implement from syntax that is
-simply wrong" (`README.md:62`). Handing that undecidable classification to a
+simply wrong" (`README.md:67`). Handing that undecidable classification to a
 model that is *also* the author of the recent edits is the weakest joint in the
 whole contract, and it should be recorded as such rather than papered over.
 
@@ -393,9 +435,11 @@ is smaller, but never zero.
 Four, with detections where cheap ones exist. Where none exists, that is said.
 
 **6a. The agent loops on an assertion it cannot satisfy.** Symptom: the same
-failure identity across iterations, possibly with growing edits around it.
-*Detection: §3.4(a), the identity-set no-progress rule.* Entirely agent-side,
-no tool change, and it also covers the leaky `plc-fault` bucket from §3.2.
+failure identity across iterations, possibly with growing edits around it —
+and "growing edits around it" is exactly why §3.4(a)'s key excludes the
+location fields those edits move. *Detection: §3.4(a), the identity-set
+no-progress rule.* Entirely agent-side, no tool change, and it also covers the
+leaky `plc-fault` bucket from §3.2.
 
 **6b. A suite is green because it never actually executed the POU.** The most
 dangerous quiet failure, because it produces exit `0`. Today's `--coverage`
@@ -444,11 +488,11 @@ one `if`.
 
 | `kind` | What it is a statement about | Agent action | Escalation trigger |
 | --- | --- | --- | --- |
-| `assertion` | The program's values | Iterate unsupervised: fix the code under test, or the expectation | No-progress on the same failure identity after N attempts (§3.4a) |
-| `plc-fault` | The program's runtime behaviour | Iterate unsupervised: fix the code under test | Same as above — **and this bucket is known to contain real interpreter gaps** (`README.md:62`), so the no-progress rule is the primary net, not a backstop |
+| `assertion` | The program's values | Iterate unsupervised: fix the code under test, or the expectation | No-progress on the same coarse key `(suite, test, kind)` after N attempts (§3.4a) |
+| `plc-fault` | The program's runtime behaviour | Iterate unsupervised: fix the code under test | Same as above — **and this bucket is known to contain real interpreter gaps** (`README.md:67`), so the no-progress rule is the primary net, not a backstop |
 | `unsupported-construct` | **The tool's reach** | **STOP.** Never rewrite the POU. Report the named `construct` as a grammar gap | Immediate, on first occurrence |
-| `parse-error` | **The tool's reach** | **STOP by default.** May repair only if the cited line falls inside a hunk this session authored (§4.3) | Immediate, unless agent-authored |
-| `load-error` | The invocation or the tree | Fix paths / directory set / `--suite` name. Never edit POUs for this | Immediate if it followed an edit to a suite's `EXTENDS` line — revert, don't repair (§3.3) |
+| `parse-error` | **The tool's reach** | **STOP by default.** Body level: that body never ran, its siblings did. May repair only if the cited line falls inside a hunk this session authored (§4.3) | Immediate, unless agent-authored |
+| `load-error` | The invocation or the tree | Container level: fix paths / directory set / `--suite` name. Never edit POUs for this | Immediate if it followed an edit to a suite's `EXTENDS` line — revert, don't repair (§3.3) |
 
 | Exit code | Meaning | Agent action |
 | --- | --- | --- |
@@ -465,47 +509,50 @@ Loop-level invariants, independent of `kind`:
 
 ---
 
-## Decisions requested
+## Decisions — all answered 2026-07-31, one amended
 
-Each is a yes/no; recommendation and one-line reasoning follow. None is
-decided.
+Every call below was accepted. One was amended in ratification (4); one is
+accepted but not yet carried out (7), and is tracked rather than assumed done.
 
-1. **Ratify `assertion` and `plc-fault` as the only kinds an agent may iterate
-   on unsupervised?** — *Recommend yes.* Both are statements about the program
-   and carry complete, locally-actionable detail (`CliRunner.cs:1021-1047`).
-2. **Ratify `load-error` as agent-actionable on the invocation/tree surface
-   only, never by editing POUs?** — *Recommend yes.* Nothing ran, so nothing
-   about the code under test has been established either way
-   (`FailureKind.cs:42-47`).
-3. **Adopt the authorship rule for `parse-error` — repair only lines inside a
-   hunk this session authored, escalate otherwise?** — *Recommend yes.* It
-   replaces an undecidable semantic judgement the tool itself declined to make
+1. **`assertion` and `plc-fault` are the only kinds an agent may iterate on
+   unsupervised.** *Accepted.* Both are statements about the program and carry
+   complete, locally-actionable detail (`CliRunner.cs:1021-1047`).
+2. **`load-error` is agent-actionable on the invocation/tree surface only,
+   never by editing POUs.** *Accepted.* Nothing ran, so nothing about the code
+   under test has been established either way (`FailureKind.LoadError`;
+   `README.md:53-59`).
+3. **The authorship rule for `parse-error` — repair only lines inside a hunk
+   this session authored, escalate otherwise.** *Accepted.* It replaces an
+   undecidable semantic judgement the tool itself declined to make
    (`Parser.cs:143-151`) with a decidable provenance question the agent can
    answer locally.
-4. **Adopt no-progress detection as a halt condition independent of `kind`?** —
-   *Recommend yes.* It is the only net under the known leak in the `plc-fault`
-   bucket (`README.md:62`); N=3 is an explicit guess and should be tunable.
-5. **Adopt "total test count must not decrease" as a hard loop invariant?** —
-   *Recommend yes.* Zero tool cost, fields already on the wire
+4. **No-progress detection as a halt condition independent of `kind`.**
+   *Accepted, amended.* The draft keyed the counter on the full location; the
+   ratified key is the coarse `(suite, test, kind)`, because every location
+   field moves under the agent's own edits and would reset the counter (§3.4a
+   carries the reasoning and the accepted cost). It is the only net under the
+   known leak in the `plc-fault` bucket (`README.md:67`); N=3 remains an
+   explicit guess and should be tunable.
+5. **"Total test count must not decrease" as a hard loop invariant.**
+   *Accepted.* Zero tool cost, fields already on the wire
    (`CliRunner.cs:760-763`), and it catches three separate cheating routes at
    once.
-6. **Adopt "never edit a file the runner reported as `suites[].filePath` when
-   the task is to fix the code under test", as a review trigger?** — *Recommend
-   yes, as a trigger rather than a prohibition.* Zero tool cost
-   (`CliRunner.cs:884`); sometimes the expectation genuinely is the bug, so it
-   must surface rather than block.
-7. **Publish §5's never-certifies list as an external product statement (README
-   / docs), not just an internal note?** — *Recommend yes.* The honesty is what
-   makes the milliseconds claim credible. Note this is a `README.md` change and
-   is outside this draft's territory — it is proposed, not made.
-8. **Ratify §5f's outer-run floor — one on-target execution plus I/O and timing
-   validation, irreducible, with `TcXunit-229.3`'s oracle as what collapses the
-   logic half?** — *Recommend yes.* It is the honest limit, and stating it is
-   what stops the inner loop being oversold.
-9. **Confirm that `--stream` is explicitly not part of the agent contract?** —
-   *Recommend yes.* It exists for UI progress (`CliRunner.cs:60-72`); a
-   milliseconds-long run gains nothing from incremental events and pays a
-   second parsing path.
+6. **"Never edit a file the runner reported as `suites[].filePath` when the
+   task is to fix the code under test", as a review trigger.** *Accepted as a
+   trigger, not a prohibition.* Zero tool cost (`CliRunner.cs:884`); sometimes
+   the expectation genuinely is the bug, so it must surface rather than block.
+7. **Publish §5's never-certifies list as an external product statement
+   (README / docs), not just an internal note.** *Accepted, not yet done.* The
+   honesty is what makes the milliseconds claim credible. It is a `README.md`
+   change, outside this document's territory; tracked as `xstunit-kr5i`. Until
+   that lands, §5 is the only place the list exists.
+8. **§5f's outer-run floor — one on-target execution plus I/O and timing
+   validation, irreducible, with `xstunit-229.3`'s oracle as what collapses the
+   logic half.** *Accepted.* It is the honest limit, and stating it is what
+   stops the inner loop being oversold.
+9. **`--stream` is explicitly not part of the agent contract.** *Accepted.* It
+   exists for UI progress (`CliRunner.cs:60-72`); a milliseconds-long run gains
+   nothing from incremental events and pays a second parsing path.
 
 ---
 

@@ -168,8 +168,16 @@ namespace xStunit.Interpreter
                 var length = StringTypeInfo.ParseLength(
                     resolved, boundText => Convert.ToInt32(Evaluate(Parser.ParseExpression(boundText), frame)));
                 var text = (string)value ?? string.Empty;
-                var charCount = Math.Min(text.Length, length);
                 var charWidth = StringTypeInfo.CharWidth(resolved);
+                if (charWidth == 2)
+                    WideStringUnit.RequireRepresentable(text);
+
+                // A CLR char is exactly one character on the wire in both
+                // encodings once the surrogate case is excluded, so counting
+                // code units counts characters. The narrow half needs no
+                // equivalent guard: Latin-1 has no multi-unit character, and
+                // FromChar below rejects anything outside it.
+                var charCount = Math.Min(text.Length, length);
                 for (var i = 0; i < charCount; i++)
                 {
                     if (charWidth == 2)

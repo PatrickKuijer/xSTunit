@@ -407,6 +407,51 @@ END_TYPE");
             Assert.Equal(new object[] { 65, 0, 66, 0, 0, 0, 2, 1 }, outBuf.Elements);
         }
 
+        // A WSTRING is WORD-aligned, so a member declared before one cannot be
+        // packed flush against it: the odd byte after a BYTE has to be padded
+        // away or every wide character lands split across the alignment.
+        [Fact]
+        public void Memcpy_StructWithWStringAfterAByte_PadsTheWideFieldToItsAlignment()
+        {
+            var structType = StructDeclParser.Parse(@"TYPE ST_TaggedMsg :
+STRUCT
+	tag : BYTE;
+	label : WSTRING(2);
+END_STRUCT
+END_TYPE");
+            var fb = new PouAst(
+                "FB_Holder", null,
+                "VAR\n\tm : ST_TaggedMsg := (tag := 9, label := \"AB\");\n\tout : ARRAY[0..7] OF BYTE;\nEND_VAR",
+                "", new List<MethodAst>());
+            var engine = new Engine(new TypeRegistry(new[] { fb }, new[] { structType }));
+            var instance = engine.NewInstance("FB_Holder");
+            var frame = new Frame(instance, "FB_Holder");
+
+            engine.Evaluate(Parser.ParseExpression("MEMCPY(ADR(out), ADR(m), 8)"), frame);
+
+            var outBuf = (ArrayValue)instance.Fields["out"].Value;
+            // tag at 0, one pad byte at 1, then "AB" at 2..5 and the wide
+            // terminator at 6..7.
+            Assert.Equal(new object[] { 9, 0, 65, 0, 66, 0, 0, 0 }, outBuf.Elements);
+        }
+
+        // UCS-2 has no surrogates, so a character above U+FFFF has no WSTRING
+        // encoding at all. Packing UTF-16's surrogate pair would put two units
+        // on the wire where TwinCAT holds one and shift everything after it.
+        [Fact]
+        public void Memcpy_WStringHoldingANonBmpCharacter_Throws()
+        {
+            var (engine, _, frame) = NewHolder(
+                "VAR\n\tw : WSTRING(4) := \"x\";\n\tout : ARRAY[0..9] OF BYTE;\nEND_VAR");
+            frame.Instance.Fields["w"].Value = "a\U0001F600b";
+
+            var ex = Assert.Throws<UnsupportedConstructException>(() =>
+                engine.Evaluate(Parser.ParseExpression("MEMCPY(ADR(out), ADR(w), 10)"), frame));
+
+            Assert.Contains("U+1F600", ex.Message);
+            Assert.Equal("WSTRING", ex.Construct);
+        }
+
         [Fact]
         public void Memset_OnScalarCell_FillsBytesOfValue()
         {

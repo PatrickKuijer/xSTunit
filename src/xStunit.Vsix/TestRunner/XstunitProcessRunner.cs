@@ -11,38 +11,122 @@ namespace xStunit.Vsix.TestRunner
 {
     /// <summary>
     /// The extension's whole test-execution path, and it is entirely out of process:
-    /// <see cref="XstunitArgumentBuilder"/> builds an `xstunit ... --format json`
-    /// command line, this class runs it and deserializes its stdout into
-    /// <see cref="XstunitRunResult"/>. The extension holds no reference to any xStunit
-    /// library and never hosts the interpreter itself.
+    /// <see cref="XstunitArgumentBuilder"/> builds an `xstunit ... --stream` command
+    /// line, this class runs it and folds its NDJSON stdout into
+    /// <see cref="XstunitRunResult"/> via <see cref="XstunitEventStream"/>. The
+    /// extension holds no reference to any xStunit library and never hosts the
+    /// interpreter itself.
     /// </summary>
     internal sealed class XstunitProcessRunner
     {
-        // XstunitModels.cs's properties are PascalCase; the CLI's JSON is camelCase (see
-        // XstunitModelsDeserializationTests.cs, which asserts against this same option set).
-        private static readonly JsonSerializerOptions SerializerOptions = new JsonSerializerOptions
-        {
-            PropertyNameCaseInsensitive = true,
-        };
-
         /// <summary>
         /// Runs one `xstunit` invocation to completion. Cancelling kills the in-flight
         /// process tree and ends the returned task in the canceled state, so the caller
         /// can tell "stopped on purpose" apart from "the run failed".
         /// </summary>
-        /// <remarks>
-        /// Null or empty <paramref name="suiteNames"/> runs every suite under
-        /// config.Paths; a non-empty list restricts the run to those suites via a
-        /// repeated --suite &lt;name&gt;, which is what the tool window's "rerun failed"
-        /// is built on.
-        /// </remarks>
-        public async Task<XstunitRunResult> RunAsync(XstunitConfig config, string workingDirectory, CancellationToken cancellationToken, IReadOnlyList<string> suiteNames = null)
+        /// <param name="config">Where the executable is and which POU directories to scan.</param>
+        /// <param name="workingDirectory">Directory the CLI process is started in.</param>
+        /// <param name="cancellationToken">Cancelling kills the process tree; see above.</param>
+        /// <param name="suiteNames">
+        /// Null or empty runs every suite under config.Paths; a non-empty list restricts
+        /// the run to those suites via a repeated --suite &lt;name&gt;, which is what the
+        /// tool window's "rerun failed" is built on.
+        /// </param>
+        /// <param name="onEvent">
+        /// Called once per NDJSON event as it arrives, on a thread pool thread, so a
+        /// caller wanting live progress marshals it itself. Null asks for the completed
+        /// result only.
+        /// </param>
+        /// <returns>
+        /// The finished run - the same shape whether it came from the stream's summary
+        /// line or from the buffered `--format json` retry below.
+        /// </returns>
+        public async Task<XstunitRunResult> RunAsync(
+            XstunitConfig config,
+            string workingDirectory,
+            CancellationToken cancellationToken,
+            IReadOnlyList<string> suiteNames = null,
+            Action<IXstunitStreamEvent> onEvent = null)
         {
-            var startInfo = BuildStartInfo(config, workingDirectory, suiteNames);
+            var events = new XstunitEventStream();
+            var stderr = new StringBuilder();
 
+            var exitCode = await RunToExitAsync(
+                BuildStartInfo(XstunitArgumentBuilder.BuildStreamingArguments(config.CliPath, config.Paths, suiteNames, config.Plugins), workingDirectory),
+                cancellationToken,
+                line =>
+                {
+                    var streamed = events.Append(line);
+                    if (streamed != null)
+                    {
+                        onEvent?.Invoke(streamed);
+                    }
+                },
+                line => stderr.AppendLine(line)).ConfigureAwait(false);
+
+            if (events.Result != null)
+            {
+                events.Result.ExitCode = exitCode;
+                return events.Result;
+            }
+
+            // Output that the fold made nothing of means a CLI predating --stream: it
+            // read the flag as a directory name and complained about that. Re-running
+            // the pre-stream command line beats surfacing a complaint about an argument
+            // the user never wrote.
+            if (events.NeedsJsonFallback)
+            {
+                return await RunBufferedAsync(config, workingDirectory, cancellationToken, suiteNames).ConfigureAwait(false);
+            }
+
+            return NoOutputResult(exitCode, stderr);
+        }
+
+        // The pre-stream path, unchanged: one blob on stdout, deserialized once the
+        // process has exited.
+        private static async Task<XstunitRunResult> RunBufferedAsync(XstunitConfig config, string workingDirectory, CancellationToken cancellationToken, IReadOnlyList<string> suiteNames)
+        {
             var stdout = new StringBuilder();
             var stderr = new StringBuilder();
 
+            var exitCode = await RunToExitAsync(
+                BuildStartInfo(XstunitArgumentBuilder.BuildJsonArguments(config.CliPath, config.Paths, suiteNames, config.Plugins), workingDirectory),
+                cancellationToken,
+                line => stdout.AppendLine(line),
+                line => stderr.AppendLine(line)).ConfigureAwait(false);
+
+            if (stdout.Length == 0)
+            {
+                return NoOutputResult(exitCode, stderr);
+            }
+
+            var stdoutText = stdout.ToString();
+            var result = JsonSerializer.Deserialize<XstunitRunResult>(stdoutText, XstunitEventStream.SerializerOptions);
+            result.ExitCode = exitCode;
+            // Kept verbatim so the WebView2 host can forward the CLI's own JSON
+            // rather than re-serializing this object (see XstunitRunResult.RawJson).
+            result.RawJson = stdoutText;
+            return result;
+        }
+
+        private static XstunitRunResult NoOutputResult(int exitCode, StringBuilder stderr) =>
+            new XstunitRunResult
+            {
+                Error = $"xstunit produced no output (exit code {exitCode}). stderr: {stderr}",
+                ExitCode = exitCode,
+            };
+
+        /// <param name="onOutputLine">Called per stdout line as it arrives, on a thread pool thread.</param>
+        /// <param name="onErrorLine">Called per stderr line, same threading.</param>
+        /// <param name="startInfo">Already-built command line; see BuildStartInfo.</param>
+        /// <param name="cancellationToken">Cancelling kills the process tree and throws.</param>
+        /// <returns>The process's exit code.</returns>
+        /// <exception cref="OperationCanceledException">
+        /// The run was cancelled - as opposed to any nonzero exit code, which is a
+        /// completed run.
+        /// </exception>
+        private static async Task<int> RunToExitAsync(ProcessStartInfo startInfo, CancellationToken cancellationToken, Action<string> onOutputLine, Action<string> onErrorLine)
+        {
             using (var process = new Process { StartInfo = startInfo, EnableRaisingEvents = true })
             {
                 // Bridges Process.Exited to something awaitable: net472 predates
@@ -50,8 +134,8 @@ namespace xStunit.Vsix.TestRunner
                 // the continuation off the thread raising the Exited event.
                 var exitedTcs = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
                 process.Exited += (s, e) => exitedTcs.TrySetResult(process.ExitCode);
-                process.OutputDataReceived += (s, e) => { if (e.Data != null) stdout.AppendLine(e.Data); };
-                process.ErrorDataReceived += (s, e) => { if (e.Data != null) stderr.AppendLine(e.Data); };
+                process.OutputDataReceived += (s, e) => { if (e.Data != null) onOutputLine(e.Data); };
+                process.ErrorDataReceived += (s, e) => { if (e.Data != null) onErrorLine(e.Data); };
 
                 process.Start();
                 process.BeginOutputReadLine();
@@ -67,30 +151,13 @@ namespace xStunit.Vsix.TestRunner
                 // "was it killed" from an exit code that varies by how it died.
                 cancellationToken.ThrowIfCancellationRequested();
 
-                if (stdout.Length == 0)
-                {
-                    return new XstunitRunResult
-                    {
-                        Error = $"xstunit produced no output (exit code {process.ExitCode}). stderr: {stderr}",
-                        ExitCode = process.ExitCode,
-                    };
-                }
-
-                var stdoutText = stdout.ToString();
-                var result = JsonSerializer.Deserialize<XstunitRunResult>(stdoutText, SerializerOptions);
-                result.ExitCode = process.ExitCode;
-                // Kept verbatim so the WebView2 host can forward the CLI's own JSON
-                // rather than re-serializing this object (see XstunitRunResult.RawJson).
-                result.RawJson = stdoutText;
-                return result;
+                return process.ExitCode;
             }
         }
 
-        private static ProcessStartInfo BuildStartInfo(XstunitConfig config, string workingDirectory, IReadOnlyList<string> suiteNames)
+        private static ProcessStartInfo BuildStartInfo(string arguments, string workingDirectory)
         {
-            var arguments = XstunitArgumentBuilder.BuildArguments(config.CliPath, config.Paths, suiteNames, config.Plugins);
-
-            // Run via "cmd.exe /c" rather than invoking config.CliPath directly:
+            // Run via "cmd.exe /c" rather than invoking the configured CliPath directly:
             // Process.Start with UseShellExecute=false calls CreateProcess, which does
             // NOT do the PATHEXT (.exe/.cmd/.bat) or PATH resolution a real shell does,
             // so a PATH-based launcher or shim (a dotnet global tool's .cmd, say) that

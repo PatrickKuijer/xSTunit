@@ -17,9 +17,9 @@ whoever owns the requirement, not to this repo:
 - **Proprietary logic stays private.** A company's real checksum/protocol/
   business behavior lives in that company's own plugin assembly, in that
   company's own repository. Nothing about it lands here.
-- **Grow-on-demand stays honest.** TcXunit implements what its fixtures
+- **Grow-on-demand stays honest.** xStunit implements what its fixtures
   actually exercise. A function only one downstream project needs is that
-  project's plugin, not TcXunit's permanent maintenance burden.
+  project's plugin, not xStunit's permanent maintenance burden.
 
 ## Writing one
 
@@ -63,7 +63,7 @@ them and returning one of their results stays consistent by construction.
 
 ```bash
 dotnet build samples/xStunit.SamplePlugins -c Release
-tcxunit run <path-to-POUs> --plugins samples/xStunit.SamplePlugins/bin/Release/netstandard2.0
+xstunit <path-to-POUs> --plugins samples/xStunit.SamplePlugins/bin/Release/netstandard2.0
 ```
 
 Every `*.dll` in the directory is scanned for `IXstunitNativeFunction`
@@ -83,7 +83,7 @@ POUs are handled.
   `Frame`, cannot evaluate ST, and cannot observe the caller's scope. Pointer
   access via `RequireBytes` is **read-only**.
 - **Unresolved and unplugged is still a clear error**, naming the function and
-  suggesting a plugin — not a `NullReferenceException` (TcXunit-kii).
+  suggesting a plugin — not a `NullReferenceException`.
 - **Loading a DLL runs its code.** Point `--plugins` only at a directory you
   control.
 

@@ -5,24 +5,23 @@ whose call chain reaches `DELETE`, `FIND`, `INSERT`, `LEFT`, `LEN`, `MID`,
 `REPLACE`, or `RIGHT` - or any of their `W`-prefixed `WSTRING` counterparts -
 can't resolve them the way it resolves a `FUNCTION` POU in your own tree (see
 `samples/xStunit.SamplePlugins` for the general native-function-plugin
-extension point, TcXunit-6k2).
+extension point).
 
 Unlike that project's `F_CheckSum16` (a stand-in for a proprietary,
 undocumented vendor algorithm), Tc2_Standard's string functions are publicly
 documented and used by nearly every TwinCAT project, so this project ships
-real, spec-accurate implementations rather than a worked example (TcXunit-8po).
+real, spec-accurate implementations rather than a worked example.
 
-`CONCAT` is deliberately not part of this bundle: TcXunit-3lt already added it
-as an interpreter intrinsic (variadic `STR1..STR10`) before this epic was
-filed. Native functions are consulted only as a last resort, after intrinsics,
-so a plugin `CONCAT` would never be reached - TcXunit-8po.1 was closed as
-already-resolved rather than adding unreachable code.
+`CONCAT` is deliberately not part of this bundle: it is already an interpreter
+intrinsic (variadic `STR1..STR10`). Native functions are consulted only as a
+last resort, after intrinsics, so a plugin `CONCAT` would never be reached -
+implementing one here would be unreachable code.
 
 ## Using it
 
 ```bash
 dotnet build samples/xStunit.StandardStringPlugins -c Release
-tcxunit run <path-to-POUs> --plugins samples/xStunit.StandardStringPlugins/bin/Release/netstandard2.0
+xstunit <path-to-POUs> --plugins samples/xStunit.StandardStringPlugins/bin/Release/netstandard2.0
 ```
 
 ## Functions covered
@@ -38,15 +37,15 @@ tcxunit run <path-to-POUs> --plugins samples/xStunit.StandardStringPlugins/bin/R
 | `REPLACE` | `REPLACE(STR1, STR2, L, P)`         | Replaces `L` characters in `STR1` starting at the 1-based `P` with `STR2`. |
 | `RIGHT`   | `RIGHT(STR, SIZE)`                  | Rightmost `SIZE` characters of `STR`. |
 
-Out-of-range position/size arguments clamp rather than throw, matching each
-ticket's acceptance criteria (TcXunit-8po.2 through TcXunit-8po.9).
+Out-of-range position/size arguments clamp rather than throw, in every function
+above.
 
-## WSTRING counterparts (TcXunit-93l9)
+## WSTRING counterparts
 
 The wide-character half of the same set. Identical semantics - 1-based
 indexing, clamp rather than throw - so narrow and wide are two registrations
 over one shared body (`StringOperations.cs`), differing only in the function
-name and the `CharacterMeasure` the body counts with (TcXunit-p4qb).
+name and the `CharacterMeasure` the body counts with.
 
 | Function   | Signature                     | Behavior |
 |------------|-------------------------------|----------|
@@ -76,9 +75,11 @@ values instead would make these functions disagree with the PLC they are
 standing in for.
 
 That makes `CharacterMeasure.Wide` exact. `CharacterMeasure.Narrow` is the
-same code-unit measure today but is only an approximation: TwinCAT counts a
-narrow `STRING` in bytes, so the narrow half disagrees with the PLC on any
-input above U+007F. That is tracked separately (TcXunit-ielv) and is why the
-shared body takes its arithmetic from a measure rather than calling
+same code-unit measure today but is only an approximation, and this is a known
+open limitation: the narrow `LEN`, `MID`, `LEFT`, `RIGHT` and `FIND` count
+characters, where TwinCAT counts a narrow `STRING` in bytes. The two therefore
+disagree on any input above U+007F - if your fixtures feed non-ASCII text
+through the narrow functions, the results here will not match the PLC. It is
+why the shared body takes its arithmetic from a measure rather than calling
 `string.Length`/`Substring` directly - fixing it should be a change to one
 field, not an unpicking of the shared body.

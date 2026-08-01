@@ -240,7 +240,7 @@ namespace xStunit.Interpreter
         public static NotSupportedException NotSupported(string methodName) =>
             new UnsupportedConstructException(
                 methodName,
-                $"TcUnit native call '{methodName}' isn't supported yet (grow-on-demand, TcXunit-w5x.12).");
+                $"TcUnit native call '{methodName}' isn't supported yet (grow-on-demand).");
 
         private static readonly string[] ConditionAssertParamNames = { "Condition", "Message" };
         private static readonly string[] ScalarAssertParamNames = { "Expected", "Actual", "Message" };

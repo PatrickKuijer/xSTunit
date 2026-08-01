@@ -3,8 +3,9 @@ using System.Collections.Generic;
 namespace xStunit.Vsix.TestRunner
 {
     /// <summary>
-    /// Mirrors the camelCase JSON emitted by `xstunit run --format json` (see
-    /// xStunit.Cli.CliRunner):
+    /// Mirrors the camelCase JSON emitted by `xstunit &lt;path&gt; --format json`, and by
+    /// `--stream`'s final summary line, which is the same CLI type serialized twice
+    /// (see xStunit.Cli.CliRunner):
     /// { suites: [{ name, filePath, error, kind, construct, durationMs, callStack, tests: [{ name, passed, failures, durationMs }] }], passed, failed, exitCode }
     /// and its early-exit error shape: { error, kind }.
     /// </summary>
@@ -16,7 +17,7 @@ namespace xStunit.Vsix.TestRunner
     /// into this file by hand, in the same change; XstunitModelsDeserializationTests is
     /// where that gets pinned.
     /// </remarks>
-    internal sealed class XstunitRunResult
+    internal class XstunitRunResult
     {
         public List<XstunitSuiteResult> Suites { get; set; }
 
@@ -42,7 +43,7 @@ namespace xStunit.Vsix.TestRunner
         public string RawJson { get; set; }
     }
 
-    internal sealed class XstunitSuiteResult
+    internal class XstunitSuiteResult
     {
         public string Name { get; set; }
 
@@ -117,5 +118,92 @@ namespace xStunit.Vsix.TestRunner
         /// The formatted "FAILED TEST '<c>name</c>', EXP: ..., ACT: ..." line.
         /// </summary>
         public string Message { get; set; }
+    }
+
+    /// <summary>
+    /// One line of `xstunit --stream`, which emits one JSON object per line as the run
+    /// progresses instead of one blob at the end.
+    /// </summary>
+    /// <remarks>
+    /// Every line carries its own "event" discriminator, so a consumer classifies a
+    /// line without depending on the order they arrive in - and so an event name this
+    /// build has never heard of can be skipped rather than mistaken for another.
+    /// </remarks>
+    internal interface IXstunitStreamEvent
+    {
+        string Event { get; }
+    }
+
+    // The wire values of that discriminator. They are xStunit.Cli.CliRunner's, spelled
+    // in one place here so a rename shows up as one failing test rather than as a tool
+    // window that renders nothing.
+    internal static class XstunitStreamEventNames
+    {
+        public const string Discovery = "discovery";
+        public const string SuiteStart = "suite-start";
+        public const string SuiteResult = "suite-result";
+        public const string Summary = "summary";
+        public const string Error = "error";
+    }
+
+    /// <summary>
+    /// Every suite the run will attempt, emitted before the first one starts.
+    /// </summary>
+    /// <remarks>
+    /// The suite count is knowable up front from this event alone: waiting for the
+    /// summary to learn it would mean the run is already over.
+    /// </remarks>
+    internal sealed class XstunitDiscoveryEvent : IXstunitStreamEvent
+    {
+        public string Event => XstunitStreamEventNames.Discovery;
+
+        public List<XstunitDiscoveredSuite> Suites { get; set; }
+    }
+
+    internal sealed class XstunitDiscoveredSuite
+    {
+        public string Name { get; set; }
+
+        public string FilePath { get; set; }
+    }
+
+    // Emitted immediately before a suite runs, and always paired with exactly one
+    // XstunitSuiteResultEvent for the same suite - including when the suite throws, so
+    // a consumer's "still running" set always empties out.
+    internal sealed class XstunitSuiteStartEvent : IXstunitStreamEvent
+    {
+        public string Event => XstunitStreamEventNames.SuiteStart;
+
+        public string Suite { get; set; }
+    }
+
+    /// <summary>
+    /// One finished suite, carrying everything that suite's entry in the final
+    /// summary's suites[] carries - hence the inheritance - plus its outcome.
+    /// </summary>
+    internal sealed class XstunitSuiteResultEvent : XstunitSuiteResult, IXstunitStreamEvent
+    {
+        public string Event => XstunitStreamEventNames.SuiteResult;
+
+        // "pass" or "fail". A suite that never ran to completion reports "fail" rather
+        // than a third state: it counts toward the exit code like any failing test, and
+        // Kind is what says why.
+        public string Outcome { get; set; }
+    }
+
+    // The last line of a streamed run, and the whole `--format json` blob: same CLI
+    // type, same keys, one extra "event". Inheriting rather than wrapping is what lets
+    // a streamed run be handed to a caller that only ever knew the buffered shape.
+    internal sealed class XstunitSummaryEvent : XstunitRunResult, IXstunitStreamEvent
+    {
+        public string Event => XstunitStreamEventNames.Summary;
+    }
+
+    // A usage or discovery failure that produced no results at all, and so the last
+    // line of that run. Same reasoning as the summary above: it deserializes into the
+    // run result's Error/Kind exactly as the buffered early-exit shape does.
+    internal sealed class XstunitErrorEvent : XstunitRunResult, IXstunitStreamEvent
+    {
+        public string Event => XstunitStreamEventNames.Error;
     }
 }

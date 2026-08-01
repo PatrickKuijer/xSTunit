@@ -5,7 +5,8 @@ namespace xStunit.Vsix.TestRunner
 {
     /// <summary>
     /// Builds the command line for one `xstunit &lt;path-a&gt; [&lt;path-b&gt; ...]
-    /// --format json [--plugins &lt;dir&gt;] [--suite &lt;name&gt; ...]` invocation.
+    /// (--stream|--format json) [--plugins &lt;dir&gt;] [--suite &lt;name&gt; ...]`
+    /// invocation.
     /// </summary>
     /// <remarks>
     /// Carries no VS SDK dependency and takes plain strings rather than an
@@ -18,7 +19,20 @@ namespace xStunit.Vsix.TestRunner
         // Null or empty suiteNames runs every suite found under paths; a non-empty list
         // restricts the run to those suites, one repeated --suite <name> each. That is
         // what the tool window's "rerun failed" is built on.
-        public static string BuildArguments(string cliPath, IEnumerable<string> paths, IReadOnlyList<string> suiteNames, string pluginsDirectory = null)
+        public static string BuildStreamingArguments(string cliPath, IEnumerable<string> paths, IReadOnlyList<string> suiteNames, string pluginsDirectory = null) =>
+            Build(cliPath, paths, suiteNames, pluginsDirectory, "--stream");
+
+        /// <summary>
+        /// The same run, asking for one buffered blob at the end instead of a stream of
+        /// events - what XstunitProcessRunner retries with when a CLI turns out to
+        /// predate --stream.
+        /// </summary>
+        public static string BuildJsonArguments(string cliPath, IEnumerable<string> paths, IReadOnlyList<string> suiteNames, string pluginsDirectory = null) =>
+            Build(cliPath, paths, suiteNames, pluginsDirectory, "--format json");
+
+        // One body for both output flags, so the retry can never differ from the run it
+        // is retrying in anything but that flag.
+        private static string Build(string cliPath, IEnumerable<string> paths, IReadOnlyList<string> suiteNames, string pluginsDirectory, string outputFlag)
         {
             var arguments = new StringBuilder();
             arguments.Append(EscapeArgument(cliPath)).Append(' ');
@@ -26,7 +40,7 @@ namespace xStunit.Vsix.TestRunner
             {
                 arguments.Append(EscapeArgument(path)).Append(' ');
             }
-            arguments.Append("--format json");
+            arguments.Append(outputFlag);
 
             if (!string.IsNullOrEmpty(pluginsDirectory))
             {

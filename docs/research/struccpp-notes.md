@@ -38,7 +38,7 @@ vendor's test framework. Concretely:
    STruC++'s documented control-flow set (`IF/ELSIF/ELSE`, `CASE`,
    `FOR/TO/BY`, `WHILE`, `REPEAT/UNTIL`, `EXIT`, `RETURN` —
    `docs/IEC_COMPLIANCE.md:93-103`) matches xStunit's own control-flow set
-   almost exactly (`wiki/09-control-flow-statements.md:1`, `Stmt.cs`/
+   almost exactly (`wiki/09-control-flow-statements.md`, `Stmt.cs`/
    `Engine.Statements.cs`/`Parser.cs`) — good validation that xStunit's
    grow-on-demand set already covers the IEC 61131-3 statement-level
    surface that matters for coverage/MC-DC evidence claims. The gaps are all
@@ -156,10 +156,10 @@ vendor's test framework. Concretely:
   `src/frontend/lexer.ts:366-401`), each accepting an optional trailing
   message (`docs/TESTING.md:98-116`) — a strictly larger assertion vocabulary
   than xStunit's current `AssertTrue`/`AssertFalse`/`AssertEquals`
-  (`src/xStunit.Interpreter/Hosts/NativeMethodBridge.cs:57-58`; no
+  (`NativeMethodBridge.FixedNativeMethodNames`; no
   `AssertGreaterThan`/`AssertLessThan`/`AssertNear`-equivalent exists in
   xStunit today, confirmed by grep of `NativeMethodBridge.cs` and
-  `TcUnitSuiteHost.cs`).
+  `SuiteHost.cs`).
 - `ADVANCE_TIME(nanoseconds)` (`docs/TESTING.md:120-136`) is directly
   analogous to xStunit's `Engine.Clock.AdvanceMs(dt)`
   (`wiki/03-simulated-clock-and-timers.md`) — same underlying idea (advance a
@@ -180,19 +180,13 @@ vendor's test framework. Concretely:
 
 ### xStunit's own control-flow/expression surface, re-verified from code (not comments)
 
-- `wiki/09-control-flow-statements.md:1-97` documents `FOR`/`WHILE`/`REPEAT`/
+- `wiki/09-control-flow-statements.md` documents `FOR`/`WHILE`/`REPEAT`/
   `CASE`/`EXIT` plus unary minus as **built**, sourced to `Stmt.cs`/
-  `Parser.cs`/`Engine.cs`. Verified directly: `Parser.Expressions.cs:96-110`
-  (`ParseUnary`) handles both `NOT` and unary `Minus` — confirming the wiki's
-  claim and, per this project's own "verify wiring, not doc comments"
-  convention (`bd remember tcxunit-verify-wiring-not-doc-comments`), directly
-  contradicting a **stale comment** at
-  `src/xStunit.Interpreter/Lexing/Lexer.cs:9`: `"No unary minus, no real/string
-  escapes - grow-on-demand..."` — that comment predates
-  `TcXunit-mym.3` landing unary minus and is now wrong; the lexer already
-  emits a plain `Minus` token (`Lexer.cs:257`) and the parser already
-  consumes it as a prefix operator. Worth a small doc-hygiene fix
-  independent of this research task.
+  `Parser.cs`/`Engine.cs`. Verified directly: `Parser.ParseUnary` handles both
+  `NOT` and unary `Minus`, and `Lexer.Tokenize` emits a plain `Minus` token, so
+  the wiki's claim holds against the wiring rather than against a doc comment
+  (`bd remember tcxunit-verify-wiring-not-doc-comments`). The stale `Lexer`
+  header comment this audit flagged — it denied unary minus — is gone.
 - No `SHL`/`SHR`/`ROL`/`ROR` tokens or grammar anywhere in
   `src/xStunit.Interpreter` (grep across the whole project directory: zero
   matches). STruC++ supports all four (`docs/IEC_COMPLIANCE.md:79`,
@@ -203,8 +197,8 @@ vendor's test framework. Concretely:
 - `EXTENDS` ancestry walking exists in xStunit but only for two narrow
   purposes today: suite-root discovery (`SuiteDiscovery.IsSuiteType`, see
   `tf1140-audit.md`) and property/method resolution up a base-type chain
-  (`Engine.Properties.cs:16`, comment "first declaring type in the EXTENDS
-  chain"). There is no general OOP surface (`IMPLEMENTS`, `ABSTRACT`,
+  (`Engine.TryFindProperty`, comment "first type in the EXTENDS chain").
+  There is no general OOP surface (`IMPLEMENTS`, `ABSTRACT`,
   `OVERRIDE`, `INTERFACE`, virtual dispatch) — grep for all of those across
   `src/xStunit.Interpreter` returns nothing except loader/comment mentions
   that don't implement the semantics. STruC++ implements the full OOP
@@ -258,7 +252,7 @@ vendor's test framework. Concretely:
    (i.e. "MC-DC over IF/CASE/loop conditions, not over expressions using
    bit-shift operators" is an honest, currently-accurate boundary).
 3. STruC++'s CASE grammar (`caseStatement`, `src/frontend/parser.ts:1171-
-   1226`) and xStunit's (`wiki/09-control-flow-statements.md:59-76`: label
+   1226`) and xStunit's (`wiki/09-control-flow-statements.md` § CASE: label
    lists, `lo..hi` ranges, first-match-wins, no fallthrough) look
    semantically aligned from the docs alone — worth a follow-up
    line-by-line comparison of STruC++'s `caseStatement`/`caseElement`

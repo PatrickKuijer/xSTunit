@@ -8,15 +8,16 @@
   the one amendment (decision 4, the no-progress key), are recorded in the
   "Decisions" section at the end. Section 4 is the load-bearing argument; if
   that reasoning is ever rejected, the rest of the document does not stand.
-- Method: repo-grounded, cited to `path/file.cs:line`. Two deliberate
-  exceptions, both flagged inline: the numeric bounds in §3.4 (attempt limits)
-  are guesses with no data behind them, and §5 proposes detections that do not
-  exist yet.
-- **Cite convention.** Line numbers were accurate at the drafting date and are
-  reading aids, not the contract; they drift. The durable anchors are the
-  symbol names and, for the failure taxonomy specifically, the `kind` table in
-  `README.md` — that table is the live contract, and no `FailureKind.cs` line
-  cite appears in this document because those have already gone stale once.
+- Method: repo-grounded, cited to the symbol that owns the behaviour. Two
+  deliberate exceptions, both flagged inline: the numeric bounds in §3.4
+  (attempt limits) are guesses with no data behind them, and §5 proposes
+  detections that do not exist yet.
+- **Cite convention.** Cite source by symbol — `CliRunner.WriteError`,
+  `FailureKind.LoadError`, `Engine.ExecuteStatement` — never by line number. A
+  symbol survives the refactor that moves it and greps to one place; a line
+  number is wrong the moment anything above it changes. Cite Markdown by file
+  and heading (`README.md § Usage`). For the failure taxonomy specifically the
+  live contract is the `kind` table in `README.md` § Usage, not this document.
 - **Naming**: the ticket title uses a `Tc`-prefixed label for the agent role.
   Per `CLAUDE.md`'s pre-beta naming constraint, this document does not coin it
   as a product name and refers to "the agent" or "the loop" throughout. The
@@ -43,7 +44,7 @@ that every other kind's wrong fix leaves a *failing* test, while this kind's
 wrong fix leaves a *passing* one, and the evidence of what was deleted is the
 thing that was deleted. But `kind` alone is not a sufficient stop rule, because
 the classifier deliberately under-claims `unsupported-construct`
-(`src/xStunit.Interpreter/Engine/FailureClassifier.cs:15-24`; `README.md:67`),
+(`FailureClassifier.Classify`; `README.md` § Usage),
 so real interpreter gaps are known to be sitting inside the `plc-fault` bucket.
 The boundary therefore needs a second, kind-independent net: no-progress
 detection plus two zero-cost invariants (total test count must not fall; never
@@ -60,29 +61,30 @@ and no amount of offline coverage reduces it below one on-target execution.
 parses `--format json`, iterates. Concretely, that is:
 
 ```
-tcxunit <paths> --format json     # exit 0 / 1 / 2
+xstunit <paths> --format json     # exit 0 / 1 / 2
 ```
 
 - **Exit codes.** `0` all pass, `1` any failure, `2` usage or discovery error
-  (`CliRunner.cs:515`, `:139-149`, `:165-188`; `README.md:43`). Per `229.9`,
-  `parse-error` inside a loaded suite exits `1` like any other failure — it is
-  a failure *of a suite that was found*, not a failure to find anything.
-  Unloadable files are skipped and reported per file and never produce exit `2`
-  (`CliRunner.cs:209-226,509-515`; `README.md:45`).
+  (`CliRunner.Run` and its local `WriteError`; `README.md` § Usage). Per
+  `229.9`, `parse-error` inside a loaded suite exits `1` like any other
+  failure — it is a failure *of a suite that was found*, not a failure to find
+  anything. Unloadable files are skipped and reported per file and never
+  produce exit `2` (`CliRunner.Run`'s `StructuralParseGuard.TryParseOrSkip`
+  loop; `README.md` § Usage).
 - **The blob.** `RunReport` carries `suites[]`, `passed`, `failed`, `exitCode`,
   `skipped[]`, and (under `--coverage`) `coverage[]`
-  (`CliRunner.cs:734-777`).
+  (`CliRunner.RunReport`).
 - **Per suite**: `name`, `filePath`, `error`, `kind`, `construct`, `tests[]`,
-  `durationMs`, `fileLine`, `callStack[]` (`CliRunner.cs:838-927`).
+  `durationMs`, `fileLine`, `callStack[]` (`CliRunner.SuiteReport`).
 - **Per failure**: `message`, `kind`, `construct`, `assert`, `expected`,
   `actual`, `assertMessage`, `pou`, `method`, `bodyLine`, `line`, `callStack[]`
-  (`CliRunner.cs:980-1056`).
-- **Narrowing a re-run**: `--suite <name>`, repeatable
-  (`CliRunner.cs:110-122,294-303`).
+  (`CliRunner.FailureReport`).
+- **Narrowing a re-run**: `--suite <name>`, repeatable (`CliRunner.Run`).
 
 One negative worth recording so nobody builds on it: **`--stream` is not for
 the agent.** It exists so a UI can render progress
-(`CliRunner.cs:60-72,346-362,497-506`). A full run costs milliseconds, so an
+(`CliRunner.DiscoveryEvent`, `CliRunner.SuiteStartEvent`,
+`CliRunner.SuiteReport.Outcome`). A full run costs milliseconds, so an
 agent gains nothing from incremental events and pays a second parsing code
 path. The inner loop should use one-shot `--format json`.
 
@@ -100,9 +102,9 @@ different product with a different iteration cost.
 
 Before any per-kind rule: **branch on `exitCode` first, never on the failure
 list.** Exit `2` serializes an `ErrorReport`, which has no `suites` array at
-all (`CliRunner.cs:674-713`). An agent that asks "were there any failures?"
+all (`CliRunner.ErrorReport`). An agent that asks "were there any failures?"
 gets "no" from a run in which *nothing executed* — the `no TcUnit suites found`
-case (`CliRunner.cs:318-319`) reads identically to a clean green run if you
+case (`CliRunner.Run`) reads identically to a clean green run if you
 only inspect failures. That is the cheapest way to build a loop that reports
 success while doing nothing, and it costs one `if` to prevent.
 
@@ -117,39 +119,38 @@ Order: `exitCode == 2` → the invocation or the tree is wrong, nothing ran.
 ### 3.1 `assertion` — iterate freely
 
 An assert compared two values and they differed (`FailureKind.Assertion`;
-`README.md:53-59`). This is the safest kind, and the
-reason is not "assertions are usually simple" — it is that **the failure is
-fully described and entirely inside the agent's editing territory**. The report
-carries the assert that failed, both formatted values, the author's own
-message, and the exact location: `assert`, `expected`, `actual`,
-`assertMessage`, `pou`, `method`, `bodyLine`, `line`
-(`CliRunner.cs:1021-1047`) — "with three asserts in one method this is what
-says which of them failed" (`:1036-1039`). Nothing about the tool's own
-capability is in question: it read the code, ran it, compared two values, and
-told you which two. Both candidate repairs (the code under test, or the
-expectation) are ordinary edits.
+`README.md` § Usage). This is the safest kind, and the reason is not
+"assertions are usually simple" — it is that **the failure is fully described
+and entirely inside the agent's editing territory**. The report carries the
+assert that failed, both formatted values, the author's own message, and the
+exact location: `assert`, `expected`, `actual`, `assertMessage`, `pou`,
+`method`, `bodyLine`, `line` (`CliRunner.FailureReport`) — "with three asserts
+in one method this is what says which of them failed"
+(`CliRunner.FailureReport.Pou`). Nothing about the tool's own capability is in
+question: it read the code, ran it, compared two values, and told you which
+two. Both candidate repairs (the code under test, or the expectation) are
+ordinary edits.
 
 ### 3.2 `plc-fault` — iterate, but this bucket is not clean
 
-Interpreted ST faulted at run time (`FailureKind.PlcFault`). The
-classification is *earned*, not assumed: `FailureClassifier.Classify` returns
-`PlcFault` only when some interpreted body claimed the fault, and `LoadError`
-otherwise — `return located ? FailureKind.PlcFault : FailureKind.LoadError`
-(`FailureClassifier.cs:52-54`). "Located" means an `ExecuteBody` frame stamped
-itself onto the exception on the way out
-(`Engine/Engine.Diagnostics.cs:37-59,205-228`). So a `plc-fault` is evidence
-that execution really entered ST.
+Interpreted ST faulted at run time (`FailureKind.PlcFault`). The classification
+is *earned*, not assumed: `FailureClassifier.Classify` returns `PlcFault` only
+when some interpreted body claimed the fault, and `LoadError` otherwise —
+`return located ? FailureKind.PlcFault : FailureKind.LoadError`
+(`FailureClassifier.Classify`). "Located" means an `ExecuteBody` frame stamped
+itself onto the exception on the way out (`Engine.ExecuteBody`,
+`Engine.RunWithFaultAttribution`, `Engine.RecordFaultSite`). So a `plc-fault`
+is evidence that execution really entered ST.
 
 **The caveat, and it is load-bearing:** `unsupported-construct` is claimed
 *only* by explicit opt-in at the throw site, never inferred from a base type
-(`FailureClassifier.cs:15-24`;
-`src/xStunit.Runner/UnsupportedConstructException.cs:9-22`). That choice is
+(`FailureClassifier.Classify`; `UnsupportedConstructException`). That choice is
 correct — the engine throws plain `NotSupportedException` for genuine defects
 in the code under test too (`Operator '<' is not supported between Int32 and
-String`, `Engine.Expressions.cs:221-224`) and classifying on the base type
-would halt an agent over its own bug, the same failure inverted. But the
-consequence is stated openly in `README.md:67`: *"anything that hasn't opted in
-reports as `plc-fault`"*, and the opt-in list grows construct by construct.
+String`, `Engine.EvaluateBinary`) and classifying on the base type would halt
+an agent over its own bug, the same failure inverted. But the consequence is
+stated openly in `README.md` § Usage: *"anything that hasn't opted in reports
+as `plc-fault`"*, and the opt-in list grows construct by construct.
 
 So the `plc-fault` bucket is known to contain some number of "the tool cannot
 do this" failures wearing "your code is broken" labels. **That is why §3.4's
@@ -162,22 +163,22 @@ convert that from source corruption into an escalation.
 
 Nothing ran, at **container** level: the file or its XML was unreadable, no
 suites were discovered, or instantiation failed (`FailureKind.LoadError`;
-`README.md:53-59`). Note what is *not* here: a body that failed to parse is
+`README.md` § Usage). Note what is *not* here: a body that failed to parse is
 `parse-error`, not `load-error` — that suite loaded, and its other tests ran
 and reported their own verdicts (§3.5). Reading a body-level parse failure as
 `load-error` would send the agent to fix its invocation over a problem in the
 source. The agent's action here is on **its own** surface — paths, directory
-sets, duplicate type names across merged directories (`CliRunner.cs:232-239`),
-a `--suite` name that matches nothing (`CliRunner.cs:294-299`) — not on the
-code under test. Fixing an invocation unsupervised is fine.
+sets, duplicate type names across merged directories
+(`MultiDirectoryPouLoader.CheckForDuplicates`), a `--suite` name that matches
+nothing (`CliRunner.Run`) — not on the code under test. Fixing an invocation
+unsupervised is fine.
 
-One case deserves a named rule. If a `load-error` reading
-`no TcUnit suites found under …` (`CliRunner.cs:318-319`) appears *after* the
-agent edited a suite, it is a self-inflicted regression: `SuiteDiscovery`
-identifies suites purely by walking `EXTENDS` ancestry to the literal
-`TcUnit.FB_TestSuite`
-(`src/xStunit.Interpreter/Discovery/SuiteDiscovery.cs:11,16-32`), so touching a
-suite's `EXTENDS` line makes it vanish from discovery entirely. **The correct
+One case deserves a named rule. If a `load-error` reading `no TcUnit suites
+found under …` (`CliRunner.Run`) appears *after* the agent edited a suite, it
+is a self-inflicted regression: `SuiteDiscovery` identifies suites purely by
+walking `EXTENDS` ancestry to the literal `TcUnit.FB_TestSuite`
+(`SuiteDiscovery.IsSuiteType`, `SuiteDiscovery.TestSuiteBaseType`), so touching
+a suite's `EXTENDS` line makes it vanish from discovery entirely. **The correct
 response is revert, not repair** — and see §6c, because "suites vanish" is the
 most rewarding wrong move available to a loop optimizing for "no failures".
 
@@ -189,7 +190,7 @@ mechanical.
 **(a) No-progress detection, independent of `kind`.** Define a failure
 identity as the **coarse counter key** `(suite, test, kind)` — for a
 suite-level failure, which carries no `test`, `(suite, kind)`. All three
-components are already in the JSON (`CliRunner.cs:1015-1047`). After each run,
+components are already in the JSON (`CliRunner.FailureReport`). After each run,
 compare the identity *set* with the previous run's. Progress means the set
 strictly shrinks. **N consecutive attempts against the same identity with no
 shrinkage → halt and escalate.** This is the second net under §3.2's leaky
@@ -219,20 +220,20 @@ misdiagnosis and one correction; there is no data behind it. It should be
 tunable and it should be revisited once real loop traces exist.
 
 **(b) Total test count must not fall.** `passed + failed` are both in the
-report (`CliRunner.cs:760-763`), as is `skipped[]` (`:768`). A drop in
-`passed + failed` between iterations means tests *disappeared* — which is what
-deleting a test method call, breaking an `EXTENDS` line, or making a file
-unparseable all look like from outside. **Treat any decrease as an automatic
-halt.** Zero tool cost; the fields already exist. This one invariant catches
-three separate cheating routes at once.
+report (`CliRunner.RunReport.Passed`/`.Failed`), as is `skipped[]`
+(`CliRunner.RunReport.Skipped`). A drop in `passed + failed` between iterations
+means tests *disappeared* — which is what deleting a test method call, breaking
+an `EXTENDS` line, or making a file unparseable all look like from outside.
+**Treat any decrease as an automatic halt.** Zero tool cost; the fields already
+exist. This one invariant catches three separate cheating routes at once.
 
 **(c) Must-not-touch surfaces.**
 - The suite's `EXTENDS` line and its ancestry to `TcUnit.FB_TestSuite`
   (§3.3's reasoning).
 - The top-level suite body's list of test-method calls — removing one silently
   reduces the run. Note the engine reads that list structurally
-  (`Engine/Engine.Diagnostics.cs:169-172` recognizes `TEST`/`TEST_ORDERED`
-  brackets), so a removed call leaves no trace beyond the count in (b).
+  (`Engine.OpensTestBracket` recognizes `TEST`/`TEST_ORDERED` brackets), so a
+  removed call leaves no trace beyond the count in (b).
 - Any file the runner itself reported as a suite, when the task is to fix the
   code under test — see §6c, which makes this checkable rather than merely
   stated.
@@ -244,7 +245,7 @@ reader working down section 3 sees the whole vocabulary rather than three of
 five and a gap.
 
 - `unsupported-construct` — statement level: a throw site recognized the
-  construct *by name* (`FailureKind.UnsupportedConstruct`; `README.md:53-59`).
+  construct *by name* (`FailureKind.UnsupportedConstruct`; `README.md` § Usage).
 - `parse-error` — body level: the front end could not read that body at all.
   The suite loaded, and its sibling tests ran and reported their own verdicts,
   which is what separates it from `load-error` (§3.3). It fails a test and
@@ -271,7 +272,7 @@ Two are statements **about the tool**:
 
 - `unsupported-construct` — "this is valid IEC 61131-3 that TwinCAT compiles
   and I do not implement yet" (`FailureKind.UnsupportedConstruct`;
-  `UnsupportedConstructException.cs:5-8`).
+  `UnsupportedConstructException`).
 - `parse-error` — "I could not read this text."
 
 In both of the latter, **the tool has formed no opinion whatsoever about
@@ -286,8 +287,8 @@ for it yet. This is precisely the scenario the whole taxonomy was built to
 prevent; `FailureKind`'s own type doc says so directly: *"a genuine defect in
 the code under test, and valid IEC 61131-3 the interpreter has not grown
 support for yet. An agent that cannot tell them apart 'fixes' the second by
-deleting correct code."* `README.md:61` gives the concrete case: an agent deletes a
-correct `SEL()` call to make a test pass, and reports success.
+deleting correct code."* `README.md` § Usage gives the concrete case: an agent
+deletes a correct `SEL()` call to make a test pass, and reports success.
 
 ### 4.2 Why this specific kind of wrong fix is worse than the others
 
@@ -307,30 +308,33 @@ by the loop's own success signal.
 That is why the response is not "be conservative" or "prefer smaller edits" but
 a hard halt with the construct named. `construct` exists on the wire for
 exactly this — "so escalation names it without parsing Error"
-(`CliRunner.cs:898-902`) — and the escalation is a **grammar gap report**, an
-input to the interpreter's grow-on-demand backlog, not a code change.
+(`CliRunner.SuiteReport.Construct`) — and the escalation is a **grammar gap
+report**, an input to the interpreter's grow-on-demand backlog, not a code
+change.
 
 ### 4.3 The honest weakness: the tool is delegating an undecidable call
 
 `229.9`'s message for `parse-error` asks the agent to *"open the cited line,
 fix if genuinely malformed, STOP and escalate if it looks like valid ST."*
 That asks the model to make the exact judgement the tool refused to make — and
-the tool refused for good reason. `Parser.cs:143-151` records it:
+the tool refused for good reason. `Parser.ParseStatementCore` records it:
 
-> *"Left as FormatException, not converted (TcXunit-3tx.5): … There is no known
-> valid construct that reaches this fallback only malformed source does … so
-> claiming unsupported-construct here would be a guess, not evidence."*
+> *"A ParseException rather than an UnsupportedConstructException: the whole
+> IEC 61131-3 statement grammar … is dispatched by name above, so no valid
+> construct reaches here. Only malformed source does … and calling that
+> unsupported would be a guess."*
 
 The front end "cannot tell syntax it doesn't implement from syntax that is
-simply wrong" (`README.md:67`). Handing that undecidable classification to a
-model that is *also* the author of the recent edits is the weakest joint in the
-whole contract, and it should be recorded as such rather than papered over.
+simply wrong" (`README.md` § Usage). Handing that undecidable classification to
+a model that is *also* the author of the recent edits is the weakest joint in
+the whole contract, and it should be recorded as such rather than papered over.
 
 **Proposed resolution — an authorship rule, not a judgement rule.** The agent
 does not need to know whether the line is valid ST. It knows something better
 and entirely local: *did I write it?*
 
-- If the cited `line` / `bodyLine` (`CliRunner.cs:1042-1047`) falls inside a
+- If the cited `line` / `bodyLine` (`CliRunner.FailureReport.Line`,
+  `CliRunner.FailureReport.BodyLine`) falls inside a
   hunk the agent produced in this session, it may repair or revert its own
   edit. That is fixing its own typo, which is unambiguously in scope.
 - If the cited line is code the agent did not author, **escalate.** Pre-existing
@@ -361,24 +365,23 @@ Offline ST interpretation, run in milliseconds with no runtime and no hardware,
 buys its speed by giving these up. Stating them plainly is what makes the speed
 claim credible rather than glib.
 
-**5a. Timing and cycle-time behaviour.** The clock is simulated: a
-process-wide monotonic counter advanced only by explicit calls
-(`src/xStunit.Interpreter/Hosts/Clock.cs:9-14`), read by the TON/TOF/pulse
-hosts when invoked (`Engine.cs:26-28`, `Engine.Invocation.cs:88-90`).
-`StepCycles(n)` is a `for` loop re-invoking a body — *"No dt/scheduler: caller
-controls ordering across multiple instances by choosing call order"*
-(`Engine/Engine.Convergence.cs:8-11,18-37`). A green suite establishes logical
-sequencing over simulated time. It says nothing about whether the real task
-completes inside its cycle budget.
+**5a. Timing and cycle-time behaviour.** The clock is simulated: a process-wide
+monotonic counter advanced only by explicit calls (`Clock.TotalNs`,
+`Clock.AdvanceMs`), read by the TON/TOF/pulse hosts when invoked
+(`Engine.Clock`, `Engine.CallMethod`). `StepCycles(n)` is a `for` loop
+re-invoking a body — *"There is no dt and no scheduler: ordering across several
+instances is whatever order the caller invokes them in"* (`Engine.StepCycles`).
+A green suite establishes logical sequencing over simulated time. It says
+nothing about whether the real task completes inside its cycle budget.
 
 **5b. Task scheduling and multi-task interaction.** Nothing in the engine
 models more than one execution context. The interpreter's only call stack is
-CLR recursion (`Engine/Engine.Diagnostics.cs:17-20`). Task priorities,
+CLR recursion (`Engine.ExecuteBody`). Task priorities,
 preemption, jitter, and cross-task data races are not approximated badly — they
 are absent.
 
 **5c. Real I/O and fieldbus.** `Loopback` is a fault-injection *model* of a
-transport (`Engine.Invocation.cs:123-154`, `Hosts/LoopbackHost.cs`), useful for
+transport (`Engine.CallMethod`, `LoopbackHost`), useful for
 testing how a POU reacts to drops, delays, duplication and corruption. It is
 not a bus, and process-image mapping is not modelled.
 
@@ -391,18 +394,18 @@ misleading rather than merely incomplete:
 
 - Explicit narrowing casts route through `Convert.ToInt32` for every integer
   target width — `SINT` through `LWORD` all take the same branch
-  (`Engine.Expressions.cs:754-757,779-780`). Target-width truncation is not
-  modelled at the cast site.
+  (`Engine.TryEvaluateCast`, `Engine.IntegerCastTargets`). Target-width
+  truncation is not modelled at the cast site.
 - REAL/LREAL arithmetic runs on CLR `float`/`double`
-  (`Engine.Expressions.cs:523-551`), not the target FPU.
+  (`Engine.EvaluateNumeric`), not the target FPU.
 - Pointer arithmetic is documented as *"an approximation for wider element
-  types"* (`Engine.Expressions.cs:271-286`).
+  types"* (`Engine.EvaluatePointerArithmetic`).
 - `_TO_STRING` deliberately makes no attempt at TwinCAT digit/exponent parity
-  (`Engine.Expressions.cs:781-796`).
+  (`Engine.TryEvaluateCast`).
 - GVL initialization models *"no TwinCAT GVL init-cycle/task-binding semantics
-  … just zero-initialized storage"* (`Engine.cs:19-22`), and an unresolvable
-  GVL default is silently swallowed after a bounded retry loop
-  (`Engine.cs:93-105`).
+  … just zero-initialized storage"* (`Engine._globals`), and an unresolvable
+  GVL default is silently swallowed after a bounded retry loop (the
+  `Engine(TypeRegistry, NativeFunctionRegistry)` constructor).
 
 `TcXunit-229.3` (the licensed TwinCAT+TcUnit conformance oracle) is the thing
 that would put a number on 5e. It is still OPEN, so today the size of that gap
@@ -445,15 +448,14 @@ leaky `plc-fault` bucket from §3.2.
 dangerous quiet failure, because it produces exit `0`. Today's `--coverage`
 does not catch it: association is by *textual* reference — a whole-word,
 case-insensitive regex of the POU type name against the suite's
-comment-stripped text
-(`src/xStunit.Interpreter/Discovery/SuiteCoverage.cs:41-51,69-70`). A suite
-that declares `VAR fb : FB_X;` and never calls it reads as covered. **There is
-no cheap interim detection**, and pretending otherwise would be worse than
-admitting it.
+comment-stripped text (`SuiteCoverage.MentionsType`, `SuiteCoverage.AllText`).
+A suite that declares `VAR fb : FB_X;` and never calls it reads as covered.
+**There is no cheap interim detection**, and pretending otherwise would be
+worse than admitting it.
 
 This is exactly what statement coverage exists to fix. See
 `docs/research/coverage-wedge.md` §A1 and §A5: the per-statement hook already
-exists (`Engine/Engine.Statements.cs:26`), and the useful signal is the two
+exists (`Engine.ExecuteStatement`), and the useful signal is the two
 coverage kinds *together* — "referenced by a suite, zero statements executed"
 is the green-but-vacuous case rendered as one field. That is the strongest
 argument in either document for shipping statement coverage in v0.1, and it is
@@ -464,21 +466,22 @@ cannot see this — it has no notion of which files the agent touched — so
 detection must live in the harness. Two cheap ones, both using data already on
 the wire:
 
-- **Diff-scope check.** `suites[].filePath` (`CliRunner.cs:884`) is the on-disk
-  path of every discovered suite, and `--stream`'s discovery event carries the
-  same pairing (`CliRunner.cs:356-361,799-809`). So the harness can compute
-  "did I modify a file the runner reported as a suite?" with zero tool change.
-  When the task is "fix the code under test", that is a review trigger, not
-  necessarily a violation — sometimes the expectation genuinely was wrong — but
-  it must be surfaced, never silent.
+- **Diff-scope check.** `suites[].filePath` (`CliRunner.SuiteReport.FilePath`)
+  is the on-disk path of every discovered suite, and `--stream`'s discovery
+  event carries the same pairing (`CliRunner.SuiteDiscoveryEntry`). So the
+  harness can compute "did I modify a file the runner reported as a suite?"
+  with zero tool change. When the task is "fix the code under test", that is a
+  review trigger, not necessarily a violation — sometimes the expectation
+  genuinely was wrong — but it must be surfaced, never silent.
 - **Count invariant.** §3.4(b): `passed + failed` must not fall
-  (`CliRunner.cs:760-763`). This catches deleted tests, tampered `EXTENDS`
-  lines (which make suites vanish from discovery,
-  `SuiteDiscovery.cs:11,16-32`), and files that became unloadable and joined
-  `skipped[]` (`CliRunner.cs:768`) — three cheating routes, one comparison.
+  (`CliRunner.RunReport.Passed`/`.Failed`). This catches deleted tests,
+  tampered `EXTENDS` lines (which make suites vanish from discovery,
+  `SuiteDiscovery.IsSuiteType`), and files that became unloadable and joined
+  `skipped[]` (`CliRunner.RunReport.Skipped`) — three cheating routes, one
+  comparison.
 
 **6d. Exit-code confusion read as success.** §2. `ErrorReport` has no `suites`
-array (`CliRunner.cs:674-713`), so "no failures found" is the literal truth of
+array (`CliRunner.ErrorReport`), so "no failures found" is the literal truth of
 a run in which nothing ran. Detection is the `exitCode`-first branch; cost is
 one `if`.
 
@@ -489,7 +492,7 @@ one `if`.
 | `kind` | What it is a statement about | Agent action | Escalation trigger |
 | --- | --- | --- | --- |
 | `assertion` | The program's values | Iterate unsupervised: fix the code under test, or the expectation | No-progress on the same coarse key `(suite, test, kind)` after N attempts (§3.4a) |
-| `plc-fault` | The program's runtime behaviour | Iterate unsupervised: fix the code under test | Same as above — **and this bucket is known to contain real interpreter gaps** (`README.md:67`), so the no-progress rule is the primary net, not a backstop |
+| `plc-fault` | The program's runtime behaviour | Iterate unsupervised: fix the code under test | Same as above — **and this bucket is known to contain real interpreter gaps** (`README.md` § Usage), so the no-progress rule is the primary net, not a backstop |
 | `unsupported-construct` | **The tool's reach** | **STOP.** Never rewrite the POU. Report the named `construct` as a grammar gap | Immediate, on first occurrence |
 | `parse-error` | **The tool's reach** | **STOP by default.** Body level: that body never ran, its siblings did. May repair only if the cited line falls inside a hunk this session authored (§4.3) | Immediate, unless agent-authored |
 | `load-error` | The invocation or the tree | Container level: fix paths / directory set / `--suite` name. Never edit POUs for this | Immediate if it followed an edit to a suite's `EXTENDS` line — revert, don't repair (§3.3) |
@@ -516,31 +519,32 @@ accepted but not yet carried out (7), and is tracked rather than assumed done.
 
 1. **`assertion` and `plc-fault` are the only kinds an agent may iterate on
    unsupervised.** *Accepted.* Both are statements about the program and carry
-   complete, locally-actionable detail (`CliRunner.cs:1021-1047`).
+   complete, locally-actionable detail (`CliRunner.FailureReport`).
 2. **`load-error` is agent-actionable on the invocation/tree surface only,
    never by editing POUs.** *Accepted.* Nothing ran, so nothing about the code
    under test has been established either way (`FailureKind.LoadError`;
-   `README.md:53-59`).
+   `README.md` § Usage).
 3. **The authorship rule for `parse-error` — repair only lines inside a hunk
    this session authored, escalate otherwise.** *Accepted.* It replaces an
    undecidable semantic judgement the tool itself declined to make
-   (`Parser.cs:143-151`) with a decidable provenance question the agent can
-   answer locally.
+   (`Parser.ParseStatementCore`) with a decidable provenance question the
+   agent can answer locally.
 4. **No-progress detection as a halt condition independent of `kind`.**
    *Accepted, amended.* The draft keyed the counter on the full location; the
    ratified key is the coarse `(suite, test, kind)`, because every location
    field moves under the agent's own edits and would reset the counter (§3.4a
    carries the reasoning and the accepted cost). It is the only net under the
-   known leak in the `plc-fault` bucket (`README.md:67`); N=3 remains an
+   known leak in the `plc-fault` bucket (`README.md` § Usage); N=3 remains an
    explicit guess and should be tunable.
 5. **"Total test count must not decrease" as a hard loop invariant.**
    *Accepted.* Zero tool cost, fields already on the wire
-   (`CliRunner.cs:760-763`), and it catches three separate cheating routes at
-   once.
+   (`CliRunner.RunReport.Passed`/`.Failed`), and it catches three separate
+   cheating routes at once.
 6. **"Never edit a file the runner reported as `suites[].filePath` when the
    task is to fix the code under test", as a review trigger.** *Accepted as a
-   trigger, not a prohibition.* Zero tool cost (`CliRunner.cs:884`); sometimes
-   the expectation genuinely is the bug, so it must surface rather than block.
+   trigger, not a prohibition.* Zero tool cost
+   (`CliRunner.SuiteReport.FilePath`); sometimes the expectation genuinely is
+   the bug, so it must surface rather than block.
 7. **Publish §5's never-certifies list as an external product statement
    (README / docs), not just an internal note.** *Accepted, not yet done.* The
    honesty is what makes the milliseconds claim credible. It is a `README.md`
@@ -551,8 +555,8 @@ accepted but not yet carried out (7), and is tracked rather than assumed done.
    logic half.** *Accepted.* It is the honest limit, and stating it is what
    stops the inner loop being oversold.
 9. **`--stream` is explicitly not part of the agent contract.** *Accepted.* It
-   exists for UI progress (`CliRunner.cs:60-72`); a milliseconds-long run gains
-   nothing from incremental events and pays a second parsing path.
+   exists for UI progress (`CliRunner.DiscoveryEvent`); a milliseconds-long
+   run gains nothing from incremental events and pays a second parsing path.
 
 ---
 

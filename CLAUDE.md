@@ -169,3 +169,5 @@ that would otherwise delete it as redundant.
 The product is named `xStunit`, deliberately distinct from TwinCAT/Beckhoff-adjacent naming to avoid trademark confusion.
 
 Do NOT reuse the `Tc`/`TC` namespace or Beckhoff's own naming conventions (`Tc2_*`, `TcPOU`, `Tc*` prefixes, etc.) in any NEW identifier — namespaces, project names, class names, file names, CLI flags, config keys. If a new type needs to reference a TwinCAT/Beckhoff concept, name it after the IEC 61131-3 or domain concept instead (e.g. `BistableLatchHost`, not `TcBistableHost`).
+
+The `.TcPOU`/`.TcDUT`/`.TcGVL` file-format parsers (`TcPouParser` and siblings) keep their `Tc` prefix by decision — it describes a format-specific adapter accurately. Do not rename them. Full rule and reasoning: [docs/CODING_STANDARDS.md](docs/CODING_STANDARDS.md#naming).

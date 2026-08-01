@@ -1,27 +1,28 @@
 # Agent Instructions
 
-This project uses **bd** (beads) for issue tracking. Run `bd prime` for full workflow context.
+**Read [CLAUDE.md](CLAUDE.md) first — it is this project's instruction file, and
+it applies to every agent, not only Claude.** Build and test commands, the
+architecture overview, the house comment standard, the naming constraints and
+the git policy all live there and are maintained there. This file adds only
+what is specific to non-Claude tooling, plus the blocks the `bd` CLI generates.
 
-> **Architecture in one line:** Issues live in a local Dolt database
-> (`.beads/dolt/`); cross-machine sync uses `bd dolt push/pull` (a
-> git-compatible protocol), stored under `refs/dolt/data` on your git
-> remote — separate from `refs/heads/*` where your code lives.
-> `.beads/issues.jsonl` is a passive export, not the wire protocol.
->
-> See [SYNC_CONCEPTS.md](https://github.com/gastownhall/beads/blob/main/docs/SYNC_CONCEPTS.md)
-> for the one-screen overview and anti-patterns (don't treat JSONL as the
-> source of truth; don't `bd import` during normal operation; don't
-> reach for third-party Dolt hosting before trying the default).
+Do not copy sections from `CLAUDE.md` into this file. Two copies of a rule
+become two different rules; that is how the naming prohibition below came to be
+missing here while the rest of the repo enforced it.
 
-## Quick Reference
+## Naming: the one rule worth repeating here
 
-```bash
-bd ready              # Find available work
-bd show <id>          # View issue details
-bd update <id> --claim  # Claim work atomically
-bd close <id>         # Complete work
-bd dolt push          # Push beads data to remote
-```
+Repeated rather than linked because getting it wrong ships a trademark problem
+into a public artifact, and because an agent that never opens `CLAUDE.md` still
+must obey it:
+
+**Do NOT reuse the `Tc`/`TC` namespace or Beckhoff's naming conventions
+(`Tc2_*`, `TcPOU`, `Tc*` prefixes) in any NEW identifier** — namespace, project,
+class, file, CLI flag, or config key. Name after the IEC 61131-3 or domain
+concept instead (`BistableLatchHost`, not `TcBistableHost`). The `.TcPOU`
+file-format parsers (`TcPouParser` and siblings) keep their prefix by decision
+and are not to be renamed. Full rule and reasoning:
+[docs/CODING_STANDARDS.md](docs/CODING_STANDARDS.md#naming).
 
 ## Non-Interactive Shell Commands
 
@@ -103,59 +104,11 @@ This protocol applies when ending a Beads implementation workflow. It is subordi
 - If a required sync or push is blocked, stop and report the exact command and error.
 <!-- END BEADS INTEGRATION -->
 
-## Project Git Policy (overrides Conservative profile above)
+## Project Git Policy (overrides the Conservative profile above)
 
-On closing a bead (`bd close <id>`), commit resulting changes with a Conventional Commits message (`feat:`, `fix:`, `chore:`, etc., semver-relevant type). Do NOT push — commit only.
-
-## Comment Standard
-
-The house style for comments in `.cs` files. This is the definition of done for
-any comment work, and the bar new code is held to.
-
-**Good code doesn't need comments.** Self-documenting names and small,
-well-shaped methods are the default; a comment is the exception that earns its
-place, not the norm. When in doubt, delete rather than reformat — a wrong or
-stale comment is worse than no comment, and a deleted one can't rot.
-
-**XML doc `<summary>` only when it adds information beyond the signature.**
-Skip it entirely for a member whose name and type already say everything (a
-`Name` property of type `string`, a `Parse(string xml)` method with an obvious
-return). Write it when the name doesn't tell the whole story: what a
-non-obvious return value means, what state a type represents, why a type
-exists at all.
-
-- `<param>` / `<returns>` wherever the name alone does not tell the caller what
-  to pass or what comes back (units, ranges, null/empty semantics, ownership).
-  Skip when the parameter name already says it — but note `<param>` is
-  all-or-nothing per member: documenting some and not others raises CS1573, so
-  once one parameter needs a tag, give the rest a short one too.
-- `<exception>` for anything thrown that a caller must handle — including what
-  distinguishes it from neighbouring exception types.
-- `<remarks>` only for a real invariant, ordering requirement, or gotcha: what
-  must stay true, what breaks if it doesn't, why the obvious alternative was
-  rejected. Not a place to restate the summary in more words.
-- `<see cref="..."/>` for cross-references, so renames don't rot the prose.
-
-**Inline comments state WHY, not WHAT.** A comment earns its place by carrying
-what the code cannot: the invariant being held, the case being guarded against,
-the non-obvious interaction with another component. A comment that restates the
-line below it is deleted, not reworded.
-
-**When reviewing or overhauling existing comments, delete before you reformat.**
-A comment that fails the tests above (restates the code, is stale, hedges, or
-just repeats the type signature in prose) gets removed, not polished into
-better-formatted junk. Reformatting a bad comment gives it a second life it
-didn't earn.
-
-**Never encode ticket IDs, agent reasoning, or change history in a comment.**
-No bead IDs, no "fixed the bug where...", no "as requested". That belongs in the
-commit message, the `bd close` reason, or the PR description. Comments describe
-the code as it stands; history lives in git.
-
-**Test comments state the invariant the test pins, in prose.** Say what would be
-broken if the test went red — not what the arrange/act/assert lines do. A
-regression test whose reason for existing is written down survives the refactor
-that would otherwise delete it as redundant.
+On closing a bead (`bd close <id>`), commit the resulting changes with a
+Conventional Commits message (`feat:`, `fix:`, `chore:`, etc., semver-relevant
+type). Do NOT push — commit only.
 
 <!-- BEGIN BEADS CODEX SETUP: generated by bd setup codex -->
 ## Beads Issue Tracker

@@ -105,7 +105,7 @@ xstunit run <path-to-POUs> --plugins samples/xStunit.SamplePlugins/bin/Release/n
 
 Every `*.dll` in the directory is scanned for `IXstunitNativeFunction` implementations with a public parameterless constructor; a DLL that isn't managed, fails type load, or collides on a function name already registered is skipped and reported — never fatal. Registered functions are consulted last (after intrinsics, methods, and real `FUNCTION` POUs), so a plugin only fills a hole that would otherwise be an error — it can never shadow real source. The VSIX forwards a `plugins` directory from `xstunit.json` the same way.
 
-Full worked example, argument/return type table, and guarantees: [`samples/xStunit.SamplePlugins/README.md`](samples/xStunit.SamplePlugins/README.md) (epic TcXunit-rl4).
+Full worked example, argument/return type table, and guarantees: [`samples/xStunit.SamplePlugins/README.md`](samples/xStunit.SamplePlugins/README.md).
 
 ## Issue tracking
 

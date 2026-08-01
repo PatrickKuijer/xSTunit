@@ -18,10 +18,13 @@
     resolves on both net472 and net8.0.
 
     XstunitProcessRunner.cs is deliberately not linked. RunAsync shells out via
-    System.Diagnostics.Process, so everything about it that is worth testing is
-    kept in types that are: argument construction in XstunitArgumentBuilder.cs,
-    and the decision of whether to re-run the whole suite set under the
-    pre-stream buffered command line in XstunitRunResolver.cs.
+    System.Diagnostics.Process, so it holds process plumbing and nothing else:
+    every piece of logic worth testing is kept in a type that is linked above,
+    and a new one belongs there rather than inside the runner.
+
+    Keep every comment in this file free of a double hyphen. XML forbids one
+    inside a comment body, so writing a flag or an aside that way here does not
+    fail a test; it fails the parse, and the project stops loading.
   -->
   <ItemGroup>
     <Compile Include="..\..\src\xStunit.Vsix\TestRunner\XstunitModels.cs" Link="TestRunner\XstunitModels.cs" />

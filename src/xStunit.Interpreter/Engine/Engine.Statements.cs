@@ -358,7 +358,7 @@ namespace xStunit.Interpreter
         internal static int GetStringByte(string str, int idx)
         {
             ValidateStringIndex(str, idx);
-            return idx < str.Length ? str[idx] : 0;
+            return idx < str.Length ? NarrowStringByte.FromChar(str[idx]) : 0;
         }
 
         // byteValue == 0 truncates at idx (writing the terminator early,
@@ -371,7 +371,7 @@ namespace xStunit.Interpreter
             if (byteValue == 0)
                 return str.Substring(0, idx);
 
-            var ch = (char)(byteValue & 0xFF);
+            var ch = NarrowStringByte.ToChar(byteValue);
             return idx < str.Length
                 ? str.Substring(0, idx) + ch + str.Substring(idx + 1)
                 : str + ch;

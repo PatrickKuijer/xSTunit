@@ -63,7 +63,7 @@ namespace xStunit.Cli.Tests
 
             var text = output.ToString();
             Assert.Equal(0, exitCode);
-            Assert.Contains("13 passed, 0 failed", text);
+            Assert.Contains("14 passed, 0 failed", text);
             // 17 = 8 narrow-STRING functions plus the 9 WSTRING counterparts
             // CliRunnerWideStringPluginTests exercises; both live in this one
             // assembly.

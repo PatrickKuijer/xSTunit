@@ -28,7 +28,8 @@ Mid();
 MidClampsWhenPosPlusLenExceedsLength();
 Replace();
 Right();
-RightClampsWhenSizeExceedsLength();]]></ST>
+RightClampsWhenSizeExceedsLength();
+Latin1Operands();]]></ST>
     </Implementation>
     <Method Name="Delete" Id="{a1b2c3d4-8po0-4a1a-8b1b-000000000012}">
       <Declaration><![CDATA[METHOD PRIVATE Delete
@@ -278,6 +279,41 @@ sResult := RIGHT('abc', 10);
 AssertEquals_STRING(Expected := 'abc',
                      Actual := sResult,
                      Message := 'RIGHT clamps SIZE to the length of STR');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="Latin1Operands" Id="{a1b2c3d4-8po0-4a1a-8b1b-00000000001f}">
+      <Declaration><![CDATA[METHOD PRIVATE Latin1Operands
+VAR
+	sName		: STRING(80) := 'Grüße';
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('Latin1Operands');
+
+(* A narrow STRING is Latin-1, so every accented character above U+007F is
+   one byte and therefore one character - the plugin functions must count
+   them the way the PLC does, not skip or double them. *)
+AssertEquals_INT(Expected := 5,
+                  Actual := LEN(sName),
+                  Message := 'LEN counts a Latin-1 character as one');
+
+AssertEquals_STRING(Expected := 'ü',
+                     Actual := MID(sName, 1, 3),
+                     Message := 'MID indexes past a Latin-1 character by one');
+
+AssertEquals_STRING(Expected := 'Grü',
+                     Actual := LEFT(sName, 3),
+                     Message := 'LEFT counts a Latin-1 character as one');
+
+AssertEquals_STRING(Expected := 'ße',
+                     Actual := RIGHT(sName, 2),
+                     Message := 'RIGHT counts a Latin-1 character as one');
+
+AssertEquals_INT(Expected := 3,
+                  Actual := FIND(sName, 'ü'),
+                  Message := 'FIND reports a 1-based Latin-1 character position');
 
 TEST_FINISHED();]]></ST>
       </Implementation>

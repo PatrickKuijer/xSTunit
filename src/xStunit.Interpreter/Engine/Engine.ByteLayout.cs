@@ -179,7 +179,7 @@ namespace xStunit.Interpreter
                     }
                     else
                     {
-                        buffer[offset + i] = unchecked((byte)text[i]);
+                        buffer[offset + i] = NarrowStringByte.FromChar(text[i]);
                     }
                 }
                 for (var i = charCount * charWidth; i < (length + 1) * charWidth; i++)
@@ -241,7 +241,7 @@ namespace xStunit.Interpreter
         private static char ReadStringChar(byte[] buffer, int offset, int charWidth) =>
             charWidth == 2
                 ? (char)(buffer[offset] | (buffer[offset + 1] << 8))
-                : (char)buffer[offset];
+                : NarrowStringByte.ToChar(buffer[offset]);
 
         // Inverse of PackValue: reconstructs a CLR value of the CLR shape
         // IecNumericType/DefaultValue use for typeName from buffer at

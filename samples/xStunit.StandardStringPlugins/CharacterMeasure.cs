@@ -1,4 +1,5 @@
 using System;
+using xStunit.Interpreter;
 
 namespace xStunit.StandardStringPlugins
 {
@@ -11,15 +12,16 @@ namespace xStunit.StandardStringPlugins
     // raw .NET char index.
     public abstract class CharacterMeasure
     {
-        // Both measures count UTF-16 code units today, so a non-BMP character
-        // (a surrogate pair) counts as 2 under either, and the two fields are a
-        // seam rather than a present difference.
+        // A WSTRING is UCS-2, so one UTF-16 code unit is one character exactly
+        // as TwinCAT counts it, and a non-BMP character (a surrogate pair)
+        // counts as 2 in both.
         public static readonly CharacterMeasure Wide = new CodeUnitMeasure();
 
-        // Kept distinct from Wide despite the identical implementation: moving
-        // the narrow half to another unit of measure is then a change to this
-        // one field, with no operation body and no registration touched.
-        public static readonly CharacterMeasure Narrow = new CodeUnitMeasure();
+        // A narrow STRING is Latin-1, where one byte is one code unit for
+        // every character it can hold, so the arithmetic is the wide half's.
+        // What differs is the range: text beyond Latin-1 is refused rather
+        // than counted as if TwinCAT could store it.
+        public static readonly CharacterMeasure Narrow = new Latin1Measure();
 
         public abstract int Length(string value);
 
@@ -31,7 +33,12 @@ namespace xStunit.StandardStringPlugins
         // does not occur. sought is assumed non-empty.
         public abstract int IndexOf(string value, string sought);
 
-        private sealed class CodeUnitMeasure : CharacterMeasure
+        // For a string operand an operation splices in whole rather than
+        // slicing: the three methods above never see it, so nothing would
+        // otherwise check it is representable in this measure's encoding.
+        public abstract void Validate(string value);
+
+        private class CodeUnitMeasure : CharacterMeasure
         {
             public override int Length(string value) => value.Length;
 
@@ -40,6 +47,39 @@ namespace xStunit.StandardStringPlugins
 
             public override int IndexOf(string value, string sought) =>
                 value.IndexOf(sought, StringComparison.Ordinal);
+
+            public override void Validate(string value)
+            {
+            }
+        }
+
+        // Every operand goes through NarrowStringByte, the interpreter's one
+        // definition of a narrow byte, so a plugin function and the engine's
+        // own s[n]/ADR() paths can never disagree about which characters a
+        // narrow STRING holds.
+        private sealed class Latin1Measure : CodeUnitMeasure
+        {
+            public override int Length(string value)
+            {
+                Validate(value);
+                return base.Length(value);
+            }
+
+            public override string Substring(string value, int start, int count)
+            {
+                Validate(value);
+                return base.Substring(value, start, count);
+            }
+
+            public override int IndexOf(string value, string sought)
+            {
+                Validate(value);
+                Validate(sought);
+                return base.IndexOf(value, sought);
+            }
+
+            public override void Validate(string value) =>
+                NarrowStringByte.RequireRepresentable(value);
         }
     }
 }

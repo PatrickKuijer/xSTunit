@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4026.18">
+  <POU Name="FB_NarrowStringEncodingTests" Id="{a1b2c3d4-2o96-4a1a-8b1b-000000000010}" SpecialFunc="None">
+    <Declaration><![CDATA[(*
+    Fixture for the narrow-STRING encoding boundary. TwinCAT gives a STRING
+    Latin-1 by default, so a euro sign cannot be stored in one at all - only
+    under the per-variable {attribute 'TcEncoding':='UTF-8'} pragma, which
+    this interpreter does not parse.
+
+    This suite is EXPECTED TO FAIL. It exists to prove the run reports the
+    character rather than truncating it to its low byte and passing.
+*)
+FUNCTION_BLOCK FB_NarrowStringEncodingTests EXTENDS TcUnit.FB_TestSuite]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[LenOfCharacterAboveLatin1();]]></ST>
+    </Implementation>
+    <Method Name="LenOfCharacterAboveLatin1" Id="{a1b2c3d4-2o96-4a1a-8b1b-000000000011}">
+      <Declaration><![CDATA[METHOD PRIVATE LenOfCharacterAboveLatin1
+VAR
+	sPrice		: STRING(80) := 'a€b';
+	nLength		: INT;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('LenOfCharacterAboveLatin1');
+
+nLength := LEN(sPrice);
+
+AssertEquals_INT(Expected := 3,
+                  Actual := nLength,
+                  Message := 'unreachable: LEN must refuse a character outside Latin-1');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+  </POU>
+</TcPlcObject>

@@ -3,10 +3,10 @@
 - Issue: `TcXunit-229.8` (part of epic `TcXunit-229`; blocker `TcXunit-229.2`
   closed, findings in `docs/research/tf1140-audit.md`; blocks `TcXunit-229.11`,
   the v0.1 spec write-up).
-- Date: 2026-07-31.
-- **STATUS: DRAFT — awaiting ratification.** Nothing here is decided. The
-  recommendations at the end are proposals with their reasoning exposed; the
-  human ratifies, modifies, or rejects.
+- Date: drafted 2026-07-31, ratified 2026-08-01.
+- **STATUS: ratified.** All nine calls were answered; the outcomes, including
+  the one amendment (decision 9 and the demotion of K5 from a kill criterion to
+  a quality bar), are recorded in the "Decisions" section at the end.
 - Method: repo-grounded. Every claim about what the interpreter can instrument
   is cited to `path/file.cs:line` and was read, not inferred from a class name
   or a header comment. **The IEC 61508 / ISO 13849 claims in §B are NOT
@@ -32,7 +32,7 @@ any coverage level is the denominator, not the numerator** — bodies are parsed
 lazily and cached by body *text*
 (`src/xStunit.Interpreter/Types/TypeRegistry.cs:41,123-131`), so an
 un-executed body is never parsed and its statement count is unknown at end of
-run. On the commercial question, the recommendation is **no**: the
+run. On the commercial question, the answer is **no**: the
 safety-evidence thesis does not survive its own bear case while
 `TcXunit-229.3` (the licensed TwinCAT+TcUnit conformance oracle) is still OPEN,
 because the fidelity claim it rests on is currently unbacked by any evidence at
@@ -267,7 +267,7 @@ Reasoning:
   that a suite references but never executes a statement of** is precisely the
   false-confidence case (a suite declaring `VAR fb : FB_X;` and never calling
   it reads as covered today, because the match is textual). That case is the
-  bridge to `docs/research/agent-boundary.md` §5b — see the cross-reference
+  bridge to `docs/research/agent-boundary.md` §6b — see the cross-reference
   there.
 - The wire format should grow additively:
   `{pou, suites[], statements: {covered, total} | null, instrumentable: bool}`.
@@ -397,7 +397,7 @@ be a **later option gated on evidence we do not yet have**:
   the agent picking what to do next" (`SuiteCoverage.cs:12-15`). Statement
   coverage upgrades that from "which POUs does a suite mention" to "which lines
   did this run actually execute" — and it is what turns the *green-but-never-
-  executed* failure mode (`docs/research/agent-boundary.md` §5b) from
+  executed* failure mode (`docs/research/agent-boundary.md` §6b) from
   undetectable into a one-field check. That is a concrete, defensible,
   today-shippable claim that rests entirely on the structural advantage
   (no runtime, no license, milliseconds) without borrowing a fidelity claim we
@@ -413,10 +413,11 @@ be a **later option gated on evidence we do not yet have**:
   needs a sub-expression identity model, and a speculative half-built one is
   worse than none.
 
-### B4. Kill criteria
+### B4. Kill criteria, and one quality bar
 
 `TcXunit-229.11` asks for these explicitly. Stated as observations that would
-falsify, not as vibes.
+falsify, not as vibes. The numbering has a gap: K5 was demoted to Q1 in
+ratification and is kept under its old name so earlier references still resolve.
 
 **Kills the safety-evidence thesis (already leaning dead; these would confirm):**
 
@@ -443,58 +444,81 @@ falsify, not as vibes.
   report is dominated by `instrumentable: false`. The feature then reports
   mostly its own limits. The threshold is a guess; the measurement is not
   optional.
-- **K5** — the eager denominator pass measurably breaks the milliseconds
-  constraint on a real tree. Everything in `TcXunit-3tx` rests on a full run
-  costing milliseconds; a coverage feature that costs seconds is not a coverage
-  feature, it is a different product. **Currently unmeasured.**
 - **K6** — agents given the coverage output demonstrably do not change what
   they work on next. Then it is a report nobody reads, and the "work list"
   framing (`SuiteCoverage.cs:12-15`) is wrong.
 
+**Not a kill — a quality bar:**
+
+- **Q1 (was K5)** — the eager denominator pass costs enough on a real tree to
+  make a coverage run unpleasant. **Currently unmeasured**; tracked as
+  `xstunit-fddl`, which needs a real production tree, not this repo's fixtures.
+
+  The draft filed this as a kill criterion on the reasoning that everything in
+  `TcXunit-3tx` rests on a full run costing milliseconds. It cannot fire there.
+  `--coverage` is **opt-in**: the flag is parsed into a local `withCoverage`
+  (`CliRunner.cs:46,51-53`), `coverage` stays null unless it was passed
+  (`:127-128`), and `SuiteCoverage.Analyze` runs only inside that branch
+  (`:251-252`). The agent inner loop invokes `--format json` with no
+  `--coverage`, so it never pays the cost, and the milliseconds constraint is
+  therefore not on the line. What is on the line is whether a deliberate
+  coverage run stays usable — a real bar, worth measuring, but a bar the
+  feature can fail without the feature being wrong.
+
+  The measurement is also larger than the draft assumed: the eager full-tree
+  parse pass **does not exist yet**. `SuiteCoverage.Analyze` is textual
+  reference-matching over the POU AST with no statement-level parse, so
+  `xstunit-fddl` is "build a throwaway harness and time it", not "time the
+  existing pass".
+
 ---
 
-## Decisions requested
+## Decisions — all answered 2026-07-31, one amended
 
-Each is a yes/no the human makes; the recommendation and its one-line reason
-follow. None of these is decided.
+Every call below was accepted. One was amended in ratification (9), and that
+amendment is what demoted K5 to Q1.
 
-1. **Ship statement coverage in v0.1?** — *Recommend yes.* The per-statement
-   hook already exists and is universal (`Engine.Statements.cs:26`); the
-   marginal cost is one seam plus reporting.
-2. **Ship branch coverage in v0.1, or declare it the next step?** — *Recommend
-   declare-next, not v0.1.* It is only 3–5 local seams, but each needs its own
-   correctness rule (empty-ELSE, implicit-CASE-else, zero-iteration loops,
-   `EXIT` unwinding by exception) and none of them is load-bearing for the
-   agent-loop wedge.
-3. **MC-DC out of scope for v0.1, and explicitly NOT seam-proofed?** —
-   *Recommend yes to both.* It needs a sub-expression identity model that does
+1. **Ship statement coverage in v0.1.** *Accepted.* The per-statement hook
+   already exists and is universal (`Engine.Statements.cs:26`); the marginal
+   cost is one seam plus reporting.
+2. **Branch coverage is declared-next, not v0.1.** *Accepted.* It is only 3–5
+   local seams, but each needs its own correctness rule (empty-ELSE,
+   implicit-CASE-else, zero-iteration loops, `EXIT` unwinding by exception) and
+   none of them is load-bearing for the agent-loop wedge.
+3. **MC-DC is out of scope for v0.1 and explicitly NOT seam-proofed.**
+   *Accepted, both halves.* It needs a sub-expression identity model that does
    not exist (`Expr.cs:6-12` rules out line-based identity); a speculative
    partial seam is worse than none, same conclusion `TcXunit-229.7` reached
    about TF1140.
 4. **Never emit a tree-wide coverage percentage; report per-POU with an
-   explicit `instrumentable` state?** — *Recommend yes.* A percentage whose
+   explicit `instrumentable` state.** *Accepted.* A percentage whose
    denominator omits unparseable POUs (`CliRunner.cs:209-226`) improves when the
    grammar gets worse.
 5. **Subsume the existing `--coverage` by adding fields, keeping `pou` and
-   `suites` byte-identical, with no second flag?** — *Recommend yes.* The VSIX
-   parses this JSON out-of-process (`xStunit.Vsix.csproj:35`, no
-   `ProjectReference`), so additive is free and renames are not; and the two
-   signals are only useful together.
-6. **Keep "coverage never affects the exit code"?** — *Recommend yes.* Gating is
-   a CI product; the agent loop needs the number visible, and exit `2` must keep
+   `suites` byte-identical, with no second flag.** *Accepted.* The VSIX parses
+   this JSON out-of-process (`xStunit.Vsix.csproj:35`, no `ProjectReference`),
+   so additive is free and renames are not; and the two signals are only useful
+   together.
+6. **Coverage never affects the exit code.** *Accepted.* Gating is a CI
+   product; the agent loop needs the number visible, and exit `2` must keep
    meaning "nothing ran".
-7. **Is IEC 61508 / ISO 13849 evidence the commercial thesis for v0.1?** —
-   *Recommend **no**, defer and gate on `TcXunit-229.3`.* Not because
+7. **IEC 61508 / ISO 13849 evidence is not the commercial thesis for v0.1.**
+   *Accepted — deferred and gated on `xstunit-229.3`.* Not because
    qualification is unaffordable, but because the fidelity claim underneath it
    is currently supported by zero evidence, and the buyer for it looks disjoint
    from the current user.
-8. **Bar IEC 61508 / ISO 13849 from all external-facing text until §B1–B3 have
-   been checked against the actual standard text?** — *Recommend yes.* Those
-   paragraphs are recollection; §A is repo-checkable and §B is not, and the two
-   should not be quoted with equal confidence.
-9. **Measure the eager-parse denominator pass on a real tree before ratifying
-   decision 1?** — *Recommend yes.* K5 is the only kill criterion that can fire
-   silently, and it is a half-hour measurement.
+8. **IEC 61508 / ISO 13849 are barred from all external-facing text until
+   §B1–B3 have been checked against the actual standard text.** *Accepted.*
+   Those paragraphs are recollection; §A is repo-checkable and §B is not, and
+   the two should not be quoted with equal confidence.
+9. **Measure the eager-parse denominator pass on a real tree — but not as a
+   gate on decision 1.** *Accepted, amended.* The draft made the measurement a
+   precondition for shipping statement coverage, on the reading that the cost
+   lands on the milliseconds constraint. It does not: `--coverage` is opt-in and
+   the agent loop never passes it (see Q1 under §B4). So the measurement is
+   ordinary work, tracked as `xstunit-fddl`, and K5 becomes the quality bar Q1.
+   `xstunit-fddl` stays human-gated for a resource reason — it needs a real
+   production tree, which this repo does not contain.
 
 ---
 
@@ -509,6 +533,6 @@ makes `parse-error` a nameable kind and therefore what makes
 STruC++ audit's finding that xStunit's control-flow statement set already
 matches a serious independent ST implementation almost exactly
 (`struccpp-notes.md:37-45`) is the reason statement and branch coverage are
-cheap here: the statement surface is not the gap. Companion draft:
-`docs/research/agent-boundary.md` (`229.10`) — §5b there is the failure mode
-this document's statement coverage exists to detect.
+cheap here: the statement surface is not the gap. Companion document (also
+ratified): `docs/research/agent-boundary.md` (`229.10`) — §6b there is the
+failure mode this document's statement coverage exists to detect.

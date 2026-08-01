@@ -52,7 +52,7 @@ namespace xStunit.StandardStringPlugins
             var str2 = context.RequireString("STR2", 1);
             var pos = context.RequireInt32("POS", 2);
 
-            measure.Validate(str2);
+            measure.RequireRepresentable(str2);
             var length = measure.Length(str1);
             var at = Math.Min(Math.Max(pos, 0), length);
             return measure.Substring(str1, 0, at) + str2 +
@@ -96,7 +96,7 @@ namespace xStunit.StandardStringPlugins
             var l = context.RequireInt32("L", 2);
             var p = context.RequireInt32("P", 3);
 
-            measure.Validate(str2);
+            measure.RequireRepresentable(str2);
             var length = measure.Length(str1);
             if (p < 1 || p > length)
                 return str1;

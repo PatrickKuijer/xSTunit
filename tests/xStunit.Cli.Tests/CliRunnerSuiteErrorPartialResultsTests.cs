@@ -72,9 +72,8 @@ namespace xStunit.Cli.Tests
             Assert.Equal(1, exitCode);
         }
 
-        // Classification is not this fix's business: the suite error keeps
-        // whatever kind it had, so a consumer switching on `kind` sees no
-        // change from gaining the tests array.
+        // Gaining a populated tests array does not reclassify the suite error,
+        // so a consumer switching on `kind` is unaffected by it.
         [Fact]
         public void Run_SuiteFaultsAfterACompletedTest_SuiteErrorKindIsUnchanged()
         {
@@ -137,9 +136,9 @@ namespace xStunit.Cli.Tests
                 .Select(l => JsonDocument.Parse(l).RootElement.Clone())
                 .ToList();
 
-        // The bead's reproduction: one bracketed test that passes, then a
-        // convergence assertion in the suite body with no bracket open, so the
-        // fault has no test to charge and escapes as a suite-level error.
+        // One bracketed test that passes, then a convergence assertion in the
+        // suite body with no bracket open, so the fault has no test to charge
+        // and escapes as a suite-level error.
         private const string LateFaultSuiteXml = @"<?xml version=""1.0"" encoding=""utf-8""?>
 <TcPlcObject Version=""1.1.0.1"">
   <POU Name=""FB_LateFaultTests"" Id=""{00000000-0000-0000-0000-0000000000d0}"" SpecialFunc=""None"">

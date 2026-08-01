@@ -379,9 +379,9 @@ END_TYPE");
             Assert.Equal(new object[] { 0xAC, 0x20, 0, 0, 0, 0 }, outBuf.Elements);
         }
 
-        // The whole point of the WSTRING alignment and size fix: a field
-        // declared after a WSTRING member sits at a different byte offset than
-        // one-byte-per-character sizing put it at.
+        // A field declared after a WSTRING member sits past two bytes per
+        // character plus the wide terminator, so narrow sizing would place it
+        // several bytes early and corrupt everything from there on.
         [Fact]
         public void Memcpy_StructWithWStringField_PlacesFollowingFieldAfterTheWideBuffer()
         {

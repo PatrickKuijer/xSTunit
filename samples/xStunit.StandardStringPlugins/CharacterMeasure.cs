@@ -36,7 +36,7 @@ namespace xStunit.StandardStringPlugins
         // For a string operand an operation splices in whole rather than
         // slicing: the three methods above never see it, so nothing would
         // otherwise check it is representable in this measure's encoding.
-        public abstract void Validate(string value);
+        public abstract void RequireRepresentable(string value);
 
         private class CodeUnitMeasure : CharacterMeasure
         {
@@ -48,7 +48,7 @@ namespace xStunit.StandardStringPlugins
             public override int IndexOf(string value, string sought) =>
                 value.IndexOf(sought, StringComparison.Ordinal);
 
-            public override void Validate(string value)
+            public override void RequireRepresentable(string value)
             {
             }
         }
@@ -61,24 +61,24 @@ namespace xStunit.StandardStringPlugins
         {
             public override int Length(string value)
             {
-                Validate(value);
+                RequireRepresentable(value);
                 return base.Length(value);
             }
 
             public override string Substring(string value, int start, int count)
             {
-                Validate(value);
+                RequireRepresentable(value);
                 return base.Substring(value, start, count);
             }
 
             public override int IndexOf(string value, string sought)
             {
-                Validate(value);
-                Validate(sought);
+                RequireRepresentable(value);
+                RequireRepresentable(sought);
                 return base.IndexOf(value, sought);
             }
 
-            public override void Validate(string value) =>
+            public override void RequireRepresentable(string value) =>
                 NarrowStringByte.RequireRepresentable(value);
         }
     }

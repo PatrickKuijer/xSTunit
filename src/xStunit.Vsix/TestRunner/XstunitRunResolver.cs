@@ -9,7 +9,7 @@ namespace xStunit.Vsix.TestRunner
     /// run in its place.
     /// </summary>
     /// <remarks>
-    /// Split out of <see cref="XstunitProcessRunner"/>, which starts processes and so is
+    /// Kept out of <see cref="XstunitProcessRunner"/>, which starts processes and so is
     /// not source-linked into tests/xStunit.Vsix.Tests: this decision costs a second full
     /// execution of the user's suites when it goes the wrong way - every timer and
     /// convergence loop, and any side effect with them - which is too expensive to leave

@@ -98,9 +98,8 @@ namespace xStunit.Interpreter
                 // one-byte terminator; UCS-2 WSTRING is two bytes per character
                 // plus a two-byte terminator, and its elements are WORD-aligned,
                 // so a WSTRING member pads itself and everything after it.
-                return StringTypeInfo.IsWideStringType(resolved)
-                    ? (2 * (length + 1), 2)
-                    : (length + 1, 1);
+                var charWidth = StringTypeInfo.CharWidth(resolved);
+                return (charWidth * (length + 1), charWidth);
             }
 
             if (resolved == "BOOL")

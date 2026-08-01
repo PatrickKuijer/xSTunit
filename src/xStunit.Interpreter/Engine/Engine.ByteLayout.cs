@@ -169,7 +169,7 @@ namespace xStunit.Interpreter
                     resolved, boundText => Convert.ToInt32(Evaluate(Parser.ParseExpression(boundText), frame)));
                 var text = (string)value ?? string.Empty;
                 var charCount = Math.Min(text.Length, length);
-                var charWidth = StringTypeInfo.IsWideStringType(resolved) ? 2 : 1;
+                var charWidth = StringTypeInfo.CharWidth(resolved);
                 for (var i = 0; i < charCount; i++)
                 {
                     if (charWidth == 2)
@@ -294,7 +294,7 @@ namespace xStunit.Interpreter
                 // legitimate Latin-1 character.
                 var length = StringTypeInfo.ParseLength(
                     resolved, boundText => Convert.ToInt32(Evaluate(Parser.ParseExpression(boundText), frame)));
-                var charWidth = StringTypeInfo.IsWideStringType(resolved) ? 2 : 1;
+                var charWidth = StringTypeInfo.CharWidth(resolved);
                 var count = 0;
                 while (count < length && ReadStringChar(buffer, offset + count * charWidth, charWidth) != 0)
                     count++;

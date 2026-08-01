@@ -12,7 +12,7 @@ namespace xStunit.Interpreter
     // model WSTRING collapses onto STRING, since a C# string is already
     // UTF-16 and holds either. The BYTE model does not collapse - a WSTRING
     // character is two bytes on the wire - so callers that size or lay out
-    // bytes ask IsWideStringType and scale the length themselves.
+    // bytes scale the length by CharWidth.
     internal static class StringTypeInfo
     {
         private const int DefaultLength = 80;
@@ -50,6 +50,11 @@ namespace xStunit.Interpreter
             return match.Success
                 && string.Equals(match.Groups["keyword"].Value, "WSTRING", System.StringComparison.OrdinalIgnoreCase);
         }
+
+        // Bytes per character on the wire, which doubles as the type's
+        // alignment and as the width of its terminator: a narrow STRING ends
+        // at a zero byte, a WSTRING at a zero WORD.
+        public static int CharWidth(string typeName) => IsWideStringType(typeName) ? 2 : 1;
 
         // Digit-literal sizes only; throws NotSupportedException for a
         // constant-expression size, which callers that may see one resolve

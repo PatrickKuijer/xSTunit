@@ -336,10 +336,11 @@ namespace xStunit.Interpreter
         // "IF s[0] = 0 THEN" to test for an empty string, since a STRING is a
         // null-terminated byte buffer internally.
         //
-        // Unlike ARRAY, a STRING's declared capacity isn't tracked on the Cell,
-        // so bounds are checked against the string's *current* content: index ==
-        // Length reads or writes the terminator one past the last character, and
-        // anything beyond that is out of range.
+        // Bounds are the string's *current* content, not its declared capacity:
+        // index == Length reads or writes the terminator one past the last
+        // character, and anything beyond that is out of range. A write that
+        // appends is still capped by the declared capacity, which the parent
+        // Cell applies when the rebuilt string lands back on it.
         private int ResolveStringIndex(IReadOnlyList<Expr> indexExprs, Frame frame)
         {
             if (indexExprs.Count != 1)
@@ -358,7 +359,7 @@ namespace xStunit.Interpreter
         internal static int GetStringByte(string str, int idx)
         {
             ValidateStringIndex(str, idx);
-            return idx < str.Length ? str[idx] : 0;
+            return idx < str.Length ? NarrowStringByte.FromChar(str[idx]) : 0;
         }
 
         // byteValue == 0 truncates at idx (writing the terminator early,
@@ -371,7 +372,7 @@ namespace xStunit.Interpreter
             if (byteValue == 0)
                 return str.Substring(0, idx);
 
-            var ch = (char)(byteValue & 0xFF);
+            var ch = NarrowStringByte.ToChar(byteValue);
             return idx < str.Length
                 ? str.Substring(0, idx) + ch + str.Substring(idx + 1)
                 : str + ch;

@@ -6,10 +6,13 @@ namespace xStunit.Interpreter
     // Parses declared STRING/WSTRING type text - bare "STRING"/"WSTRING", or
     // the sized "STRING(n)"/"WSTRING(n)" - for StructBoundaryBuilder's
     // empty/max-length boundary and Engine.Defaults's "" default. An
-    // unsized declaration is taken as length 80. WSTRING is handled
-    // identically to STRING: the length is neither scaled nor reinterpreted
-    // for the wider element, since C# strings are already UTF-16, so the
-    // keyword is the only difference.
+    // unsized declaration is taken as length 80.
+    //
+    // The declared length is a CHARACTER count for both keywords: in the value
+    // model WSTRING collapses onto STRING, since a C# string is already
+    // UTF-16 and holds either. The BYTE model does not collapse - a WSTRING
+    // character is two bytes on the wire - so callers that size or lay out
+    // bytes ask IsWideStringType and scale the length themselves.
     internal static class StringTypeInfo
     {
         private const int DefaultLength = 80;
@@ -21,7 +24,7 @@ namespace xStunit.Interpreter
         // case-insensitive ('WString' is as valid as 'WSTRING'), as are the
         // bare-keyword comparisons below.
         private static readonly Regex SizedPattern = new Regex(
-            @"^(STRING|WSTRING)\s*\(\s*(?<n>[^()]+?)\s*\)$", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+            @"^(?<keyword>STRING|WSTRING)\s*\(\s*(?<n>[^()]+?)\s*\)$", RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
         public static bool IsStringType(string typeName)
         {
@@ -34,6 +37,20 @@ namespace xStunit.Interpreter
                 || SizedPattern.IsMatch(trimmed);
         }
 
+        public static bool IsWideStringType(string typeName)
+        {
+            if (typeName == null)
+                return false;
+
+            var trimmed = typeName.Trim();
+            if (string.Equals(trimmed, "WSTRING", System.StringComparison.OrdinalIgnoreCase))
+                return true;
+
+            var match = SizedPattern.Match(trimmed);
+            return match.Success
+                && string.Equals(match.Groups["keyword"].Value, "WSTRING", System.StringComparison.OrdinalIgnoreCase);
+        }
+
         // Digit-literal sizes only; throws NotSupportedException for a
         // constant-expression size, which callers that may see one resolve
         // through the resolveExpr overload instead.
@@ -41,6 +58,28 @@ namespace xStunit.Interpreter
             ParseLength(typeName, exprText => throw new NotSupportedException(
                 $"STRING/WSTRING size '{exprText}' is not an integer literal; " +
                 "use the ParseLength(typeName, resolveExpr) overload to resolve constant expressions."));
+
+        // The declared character capacity, for a caller with no expression
+        // evaluator to hand. False for a type that is not a STRING/WSTRING and
+        // for a constant-expression size (e.g. STRING(cConstants.MAX)), which
+        // only ParseLength's resolveExpr overload can settle.
+        public static bool TryParseLength(string typeName, out int length)
+        {
+            length = 0;
+            if (typeName == null)
+                return false;
+
+            var trimmed = typeName.Trim();
+            if (string.Equals(trimmed, "STRING", System.StringComparison.OrdinalIgnoreCase)
+                || string.Equals(trimmed, "WSTRING", System.StringComparison.OrdinalIgnoreCase))
+            {
+                length = DefaultLength;
+                return true;
+            }
+
+            var match = SizedPattern.Match(trimmed);
+            return match.Success && int.TryParse(match.Groups["n"].Value.Trim(), out length);
+        }
 
         public static int ParseLength(string typeName, Func<string, int> resolveExpr)
         {

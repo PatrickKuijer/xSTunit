@@ -74,12 +74,34 @@ therefore counts as 2, in both TwinCAT and here; counting Unicode scalar
 values instead would make these functions disagree with the PLC they are
 standing in for.
 
-That makes `CharacterMeasure.Wide` exact. `CharacterMeasure.Narrow` is the
-same code-unit measure today but is only an approximation, and this is a known
-open limitation: the narrow `LEN`, `MID`, `LEFT`, `RIGHT` and `FIND` count
-characters, where TwinCAT counts a narrow `STRING` in bytes. The two therefore
-disagree on any input above U+007F - if your fixtures feed non-ASCII text
-through the narrow functions, the results here will not match the PLC. It is
-why the shared body takes its arithmetic from a measure rather than calling
-`string.Length`/`Substring` directly - fixing it should be a change to one
-field, not an unpicking of the shared body.
+That makes `CharacterMeasure.Wide` exact.
+
+## Narrow STRING: the Latin-1 assumption
+
+TwinCAT counts a narrow `STRING` in **bytes**, and gives it **Latin-1
+(ISO/IEC 8859-1)** encoding by default - one byte per character plus one for
+the terminator. Across the whole range a default `STRING` can hold,
+U+0000..U+00FF, one Latin-1 byte is one UTF-16 code unit, so counting code
+units *is* counting bytes: `LEN('Grüße')` is 5 here and 5 on the PLC.
+`CharacterMeasure.Narrow` is exact for every character a `STRING` can store.
+
+Above U+00FF there is nothing to agree about - TwinCAT cannot put such a
+character in a default `STRING` at all. These functions **raise** there,
+naming the character, rather than counting it as one and letting its low byte
+through: a silently truncated `0xAC` for `€` is a wrong answer that looks like
+a right one. The failure reports as `unsupported-construct`, so it reads as a
+gap in xStunit rather than a defect in your POU.
+
+The known gap that produces it: TwinCAT can opt a single variable into UTF-8
+with `{attribute 'TcEncoding':='UTF-8'}`, under which a character spans 1-4
+bytes. **xStunit does not model that** - the lexer skips pragmas and nothing
+parses `TcEncoding` - so there is no per-variable encoding to switch on. Use a
+`WSTRING` for text beyond Latin-1, or keep narrow operands within it.
+
+Narrow and wide both take their arithmetic from a `CharacterMeasure` rather
+than calling `string.Length`/`Substring` directly, so the two halves can
+differ without the shared body being unpicked. `CharacterMeasure.Narrow`
+delegates the byte definition itself to `NarrowStringByte` in
+`xStunit.Interpreter` - the same one the engine's `s[n]` accessors and
+`MEMCPY` byte layout use, so a plugin function and the interpreter can never
+disagree about what a narrow byte is.

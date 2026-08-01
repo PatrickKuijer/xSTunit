@@ -1,0 +1,73 @@
+using xStunit.Interpreter;
+using xStunit.Runner;
+using Xunit;
+
+namespace xStunit.Interpreter.Tests
+{
+    // The single definition of a narrow-STRING byte. TwinCAT's default STRING
+    // encoding is Latin-1, so every character a STRING can hold maps onto one
+    // byte of the same numeric value - and a character it cannot hold is
+    // refused rather than quietly reduced to its low byte.
+    public class NarrowStringByteTests
+    {
+        [Theory]
+        [InlineData('A', 65)]
+        [InlineData('\0', 0)]
+        [InlineData('ä', 0xE4)]
+        [InlineData('ÿ', 0xFF)]
+        public void FromChar_Latin1Character_IsTheSameNumericValue(char ch, int expected)
+        {
+            Assert.Equal(expected, NarrowStringByte.FromChar(ch));
+        }
+
+        [Theory]
+        [InlineData(65, 'A')]
+        [InlineData(0xE4, 'ä')]
+        public void ToChar_ByteValue_IsTheSameNumericValue(int byteValue, char expected)
+        {
+            Assert.Equal(expected, NarrowStringByte.ToChar(byteValue));
+        }
+
+        // The character has to appear in the message: "some character was out
+        // of range" leaves the reader to find it, which is the whole cost the
+        // silent truncation used to impose.
+        [Fact]
+        public void FromChar_AboveLatin1_ThrowsNamingTheCharacterAndItsCodePoint()
+        {
+            var ex = Assert.Throws<UnsupportedConstructException>(() => NarrowStringByte.FromChar('€'));
+
+            Assert.Contains("€", ex.Message);
+            Assert.Contains("U+20AC", ex.Message);
+        }
+
+        // The failure has to classify as a gap in this interpreter, not as a
+        // defect in the code under test: the POU may be perfectly valid TwinCAT
+        // that declares its STRING with the TcEncoding pragma nothing here
+        // parses.
+        [Fact]
+        public void FromChar_AboveLatin1_ClassifiesAsUnsupportedConstruct()
+        {
+            var ex = Record.Exception(() => NarrowStringByte.FromChar('€'));
+
+            var kind = FailureClassifier.Classify(ex, out var construct);
+
+            Assert.Equal(FailureKind.UnsupportedConstruct, kind);
+            Assert.Equal("STRING", construct);
+        }
+
+        [Fact]
+        public void RequireRepresentable_StringWithACharacterAboveLatin1_ThrowsNamingThatCharacter()
+        {
+            var ex = Assert.Throws<UnsupportedConstructException>(
+                () => NarrowStringByte.RequireRepresentable("ab€cd"));
+
+            Assert.Contains("€", ex.Message);
+        }
+
+        [Fact]
+        public void RequireRepresentable_AllLatin1_DoesNotThrow()
+        {
+            NarrowStringByte.RequireRepresentable("Grüße, Ærø");
+        }
+    }
+}

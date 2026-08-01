@@ -93,7 +93,14 @@ namespace xStunit.Interpreter
                 // than a bare int.Parse, same as the ARRAY bound above.
                 var length = StringTypeInfo.ParseLength(
                     resolved, boundText => Convert.ToInt32(Evaluate(Parser.ParseExpression(boundText), frame)));
-                return (length + 1, 1);
+
+                // Latin-1 narrow STRING is one byte per character plus a
+                // one-byte terminator; UCS-2 WSTRING is two bytes per character
+                // plus a two-byte terminator, and its elements are WORD-aligned,
+                // so a WSTRING member pads itself and everything after it.
+                return StringTypeInfo.IsWideStringType(resolved)
+                    ? (2 * (length + 1), 2)
+                    : (length + 1, 1);
             }
 
             if (resolved == "BOOL")

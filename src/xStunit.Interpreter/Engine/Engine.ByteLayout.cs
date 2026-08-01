@@ -160,18 +160,29 @@ namespace xStunit.Interpreter
 
             if (StringTypeInfo.IsStringType(resolved))
             {
-                // Wire format is a fixed length+1 byte buffer (matching
-                // SizeOfType's STRING/WSTRING size), ASCII, null-terminated:
-                // truncate to length chars, then null-pad (and terminate)
-                // the rest. WSTRING mirrors STRING here (StringTypeInfo's
-                // character width isn't enforced elsewhere either).
+                // Wire format is the fixed buffer SizeOfType computes for the
+                // declared length, null-terminated: truncate to length
+                // characters, then null-pad (and terminate) the rest. A narrow
+                // STRING is one Latin-1 byte per character; a WSTRING is
+                // little-endian UCS-2, matching TwinCAT on x86.
                 var length = StringTypeInfo.ParseLength(
                     resolved, boundText => Convert.ToInt32(Evaluate(Parser.ParseExpression(boundText), frame)));
                 var text = (string)value ?? string.Empty;
                 var charCount = Math.Min(text.Length, length);
+                var charWidth = StringTypeInfo.IsWideStringType(resolved) ? 2 : 1;
                 for (var i = 0; i < charCount; i++)
-                    buffer[offset + i] = unchecked((byte)text[i]);
-                for (var i = charCount; i <= length; i++)
+                {
+                    if (charWidth == 2)
+                    {
+                        buffer[offset + 2 * i] = (byte)(text[i] & 0xFF);
+                        buffer[offset + 2 * i + 1] = (byte)(text[i] >> 8);
+                    }
+                    else
+                    {
+                        buffer[offset + i] = NarrowStringByte.FromChar(text[i]);
+                    }
+                }
+                for (var i = charCount * charWidth; i < (length + 1) * charWidth; i++)
                     buffer[offset + i] = 0;
                 return;
             }
@@ -227,6 +238,11 @@ namespace xStunit.Interpreter
             }
         }
 
+        private static char ReadStringChar(byte[] buffer, int offset, int charWidth) =>
+            charWidth == 2
+                ? (char)(buffer[offset] | (buffer[offset + 1] << 8))
+                : NarrowStringByte.ToChar(buffer[offset]);
+
         // Inverse of PackValue: reconstructs a CLR value of the CLR shape
         // IecNumericType/DefaultValue use for typeName from buffer at
         // offset.
@@ -272,16 +288,19 @@ namespace xStunit.Interpreter
             if (StringTypeInfo.IsStringType(resolved))
             {
                 // Inverse of the PackValue case above: read up to the
-                // declared length, stopping early at the null terminator.
+                // declared length, stopping early at the null terminator - one
+                // byte wide for a narrow STRING, a whole zero WORD for a
+                // WSTRING, where a lone zero byte is the high half of a
+                // legitimate Latin-1 character.
                 var length = StringTypeInfo.ParseLength(
                     resolved, boundText => Convert.ToInt32(Evaluate(Parser.ParseExpression(boundText), frame)));
-                var end = offset;
-                var max = offset + length;
-                while (end < max && buffer[end] != 0)
-                    end++;
-                var chars = new char[end - offset];
-                for (var i = 0; i < chars.Length; i++)
-                    chars[i] = (char)buffer[offset + i];
+                var charWidth = StringTypeInfo.IsWideStringType(resolved) ? 2 : 1;
+                var count = 0;
+                while (count < length && ReadStringChar(buffer, offset + count * charWidth, charWidth) != 0)
+                    count++;
+                var chars = new char[count];
+                for (var i = 0; i < count; i++)
+                    chars[i] = ReadStringChar(buffer, offset + i * charWidth, charWidth);
                 return new string(chars);
             }
 

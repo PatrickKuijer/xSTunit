@@ -95,6 +95,52 @@ namespace xStunit.Interpreter.Tests
             Assert.Equal(33, result);
         }
 
+        // WSTRING is UCS-2 on the wire: two bytes per character plus a
+        // two-byte terminator, so it is not the narrow size even though the
+        // value model stores both in one CLR string.
+        [Fact]
+        public void SizeOf_DefaultWString_ReturnsTwoBytesPerCharacterPlusTerminator()
+        {
+            var (engine, _, frame) = NewHolder("VAR\n\ts : WSTRING;\nEND_VAR");
+
+            var result = engine.Evaluate(Parser.ParseExpression("SIZEOF(s)"), frame);
+
+            Assert.Equal(162, result);
+        }
+
+        [Fact]
+        public void SizeOf_SizedWString_ReturnsTwoBytesPerCharacterPlusTerminator()
+        {
+            var (engine, _, frame) = NewHolder("VAR\n\ts : WSTRING(10);\nEND_VAR");
+
+            var result = engine.Evaluate(Parser.ParseExpression("SIZEOF(s)"), frame);
+
+            Assert.Equal(22, result);
+        }
+
+        // A WSTRING member's alignment is 2, not 1, so it both pads itself onto
+        // an even offset and pushes every field after it - the consequence a
+        // scalar SIZEOF check on its own would miss.
+        [Fact]
+        public void SizeOf_StructWithWStringField_AlignsMemberAndFollowingFieldsToTwoBytes()
+        {
+            var structType = StructDeclParser.Parse(@"TYPE ST_WideMsg :
+STRUCT
+	flag : BYTE;
+	label : WSTRING(2);
+	count : INT;
+END_STRUCT
+END_TYPE");
+            var (engine, _, frame) = NewHolder("VAR\n\tm : ST_WideMsg;\nEND_VAR", new[] { structType });
+
+            var result = engine.Evaluate(Parser.ParseExpression("SIZEOF(m)"), frame);
+
+            // flag at offset 0; label needs 2-byte alignment so a 1-byte pad
+            // lands it at offset 2..7 (6 bytes); count at offset 8..9 - 10
+            // bytes, already a multiple of the struct's alignment of 2.
+            Assert.Equal(10, result);
+        }
+
         [Fact]
         public void SizeOf_Array_ReturnsElementSizeTimesCount()
         {

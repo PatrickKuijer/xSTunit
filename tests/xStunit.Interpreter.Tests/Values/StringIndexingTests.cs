@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using xStunit.Interpreter;
 using xStunit.Parser;
+using xStunit.Runner;
 using Xunit;
 
 namespace xStunit.Interpreter.Tests
@@ -106,6 +107,42 @@ namespace xStunit.Interpreter.Tests
 
             Assert.Throws<IndexOutOfRangeException>(() =>
                 engine.ExecuteStatements(Parser.ParseStatements("sLabel[5] := 88;"), frame));
+        }
+
+        // A narrow STRING is Latin-1, so indexing one reads the character's
+        // Latin-1 byte - identical to its code point for everything a STRING
+        // can hold, including the accented half above U+007F.
+        [Fact]
+        public void Evaluate_StringIndexExpr_Latin1Character_ReadsItsByte()
+        {
+            var fb = new PouAst("FB_Holder", null, "VAR\n\tsLabel : STRING;\nEND_VAR", "", new List<MethodAst>());
+            var engine = new Engine(new TypeRegistry(new[] { fb }));
+            var instance = engine.NewInstance("FB_Holder");
+            var frame = new Frame(instance, "FB_Holder");
+
+            engine.ExecuteStatements(Parser.ParseStatements("sLabel := 'Aä';"), frame);
+
+            var result = engine.Evaluate(Parser.ParseExpression("sLabel[1]"), frame);
+
+            Assert.Equal(0xE4, result);
+        }
+
+        // Above U+00FF there is no narrow byte to read, and returning the low
+        // one would report 0xAC for a euro sign as if that were the answer.
+        [Fact]
+        public void Evaluate_StringIndexExpr_CharacterAboveLatin1_ThrowsNamingIt()
+        {
+            var fb = new PouAst("FB_Holder", null, "VAR\n\tsLabel : STRING;\nEND_VAR", "", new List<MethodAst>());
+            var engine = new Engine(new TypeRegistry(new[] { fb }));
+            var instance = engine.NewInstance("FB_Holder");
+            var frame = new Frame(instance, "FB_Holder");
+
+            engine.ExecuteStatements(Parser.ParseStatements("sLabel := 'a€b';"), frame);
+
+            var ex = Assert.Throws<UnsupportedConstructException>(
+                () => engine.Evaluate(Parser.ParseExpression("sLabel[1]"), frame));
+
+            Assert.Contains("€", ex.Message);
         }
 
         // Array indexing shares the evaluation path with string indexing and

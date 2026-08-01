@@ -202,6 +202,7 @@
     <Compile Include="TestRunner\XstunitEventStream.cs" />
     <Compile Include="TestRunner\XstunitModels.cs" />
     <Compile Include="TestRunner\XstunitProcessRunner.cs" />
+    <Compile Include="TestRunner\XstunitRunResolver.cs" />
     <Compile Include="ResultsToolWindowControl.xaml.cs">
       <DependentUpon>ResultsToolWindowControl.xaml</DependentUpon>
     </Compile>

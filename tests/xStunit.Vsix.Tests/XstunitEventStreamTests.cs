@@ -269,6 +269,53 @@ namespace xStunit.Vsix.Tests
             Assert.False(stream.NeedsJsonFallback);
         }
 
+        // A stream that emitted events and then died is a failed run, not a CLI that
+        // cannot stream. Re-running it under --format json would execute the user's whole
+        // suite a second time - every timer and convergence loop, and any side effect
+        // with it - to learn what the stream already said.
+        [Fact]
+        public void Append_RecognizedEventsThenNoSummary_DoesNotAskForTheJsonFallback()
+        {
+            var stream = new XstunitEventStream();
+
+            stream.Append(@"{""event"":""discovery"",""suites"":[{""name"":""FB_A"",""filePath"":null}]}");
+            stream.Append(@"{""event"":""suite-start"",""suite"":""FB_A""}");
+
+            Assert.Null(stream.Result);
+            Assert.False(stream.NeedsJsonFallback);
+            Assert.True(stream.EndedMidStream);
+        }
+
+        // The fold runs on the process's output thread, where nothing catches: a payload
+        // this build cannot read has to be skipped like any other unrecognized line
+        // rather than thrown on.
+        [Fact]
+        public void Append_KnownEventNameWithAMalformedPayload_IsSkippedRatherThanThrown()
+        {
+            var stream = new XstunitEventStream();
+
+            Assert.Null(stream.Append(
+                @"{""event"":""suite-result"",""outcome"":""pass"",""name"":""FB_A"",""tests"":[],""durationMs"":""soon""}"));
+
+            // The name was one this build knows, so the CLI does speak --stream: the
+            // answer to a payload it cannot read is never a whole second run.
+            Assert.False(stream.NeedsJsonFallback);
+        }
+
+        // Half a summary is not a finished run: completing on one would render counts
+        // that were never parsed.
+        [Fact]
+        public void Append_SummaryLineWithAMalformedPayload_LeavesTheRunUnfinished()
+        {
+            var stream = new XstunitEventStream();
+
+            Assert.Null(stream.Append(
+                @"{""event"":""summary"",""suites"":[],""passed"":""three"",""failed"":0,""exitCode"":0,""skipped"":[]}"));
+
+            Assert.Null(stream.Result);
+            Assert.False(stream.NeedsJsonFallback);
+        }
+
         [Fact]
         public void Append_JsonLineWithoutAnEventKey_IsIgnored()
         {

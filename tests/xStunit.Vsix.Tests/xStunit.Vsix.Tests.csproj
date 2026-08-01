@@ -18,14 +18,17 @@
     resolves on both net472 and net8.0.
 
     XstunitProcessRunner.cs is deliberately not linked. RunAsync shells out via
-    System.Diagnostics.Process, and its only pure logic (argument construction)
-    lives in XstunitArgumentBuilder.cs, which is linked.
+    System.Diagnostics.Process, so everything about it that is worth testing is
+    kept in types that are: argument construction in XstunitArgumentBuilder.cs,
+    and the decision of whether to re-run the whole suite set under the
+    pre-stream buffered command line in XstunitRunResolver.cs.
   -->
   <ItemGroup>
     <Compile Include="..\..\src\xStunit.Vsix\TestRunner\XstunitModels.cs" Link="TestRunner\XstunitModels.cs" />
     <Compile Include="..\..\src\xStunit.Vsix\TestRunner\XstunitConfig.cs" Link="TestRunner\XstunitConfig.cs" />
     <Compile Include="..\..\src\xStunit.Vsix\TestRunner\XstunitArgumentBuilder.cs" Link="TestRunner\XstunitArgumentBuilder.cs" />
     <Compile Include="..\..\src\xStunit.Vsix\TestRunner\XstunitEventStream.cs" Link="TestRunner\XstunitEventStream.cs" />
+    <Compile Include="..\..\src\xStunit.Vsix\TestRunner\XstunitRunResolver.cs" Link="TestRunner\XstunitRunResolver.cs" />
   </ItemGroup>
 
   <ItemGroup>

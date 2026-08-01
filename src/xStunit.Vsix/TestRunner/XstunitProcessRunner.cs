@@ -39,7 +39,8 @@ namespace xStunit.Vsix.TestRunner
         /// </param>
         /// <returns>
         /// The finished run - the same shape whether it came from the stream's summary
-        /// line or from the buffered `--format json` retry below.
+        /// line or from the buffered `--format json` retry
+        /// <see cref="XstunitRunResolver"/> may ask for.
         /// </returns>
         public async Task<XstunitRunResult> RunAsync(
             XstunitConfig config,
@@ -64,22 +65,11 @@ namespace xStunit.Vsix.TestRunner
                 },
                 line => stderr.AppendLine(line)).ConfigureAwait(false);
 
-            if (events.Result != null)
-            {
-                events.Result.ExitCode = exitCode;
-                return events.Result;
-            }
-
-            // Output that the fold made nothing of means a CLI predating --stream: it
-            // read the flag as a directory name and complained about that. Re-running
-            // the pre-stream command line beats surfacing a complaint about an argument
-            // the user never wrote.
-            if (events.NeedsJsonFallback)
-            {
-                return await RunBufferedAsync(config, workingDirectory, cancellationToken, suiteNames).ConfigureAwait(false);
-            }
-
-            return NoOutputResult(exitCode, stderr);
+            return await XstunitRunResolver.ResolveAsync(
+                events,
+                exitCode,
+                stderr.ToString(),
+                () => RunBufferedAsync(config, workingDirectory, cancellationToken, suiteNames)).ConfigureAwait(false);
         }
 
         // The pre-stream path, unchanged: one blob on stdout, deserialized once the
@@ -97,7 +87,7 @@ namespace xStunit.Vsix.TestRunner
 
             if (stdout.Length == 0)
             {
-                return NoOutputResult(exitCode, stderr);
+                return XstunitRunResolver.NoOutput(exitCode, stderr.ToString());
             }
 
             var stdoutText = stdout.ToString();
@@ -108,13 +98,6 @@ namespace xStunit.Vsix.TestRunner
             result.RawJson = stdoutText;
             return result;
         }
-
-        private static XstunitRunResult NoOutputResult(int exitCode, StringBuilder stderr) =>
-            new XstunitRunResult
-            {
-                Error = $"xstunit produced no output (exit code {exitCode}). stderr: {stderr}",
-                ExitCode = exitCode,
-            };
 
         /// <param name="onOutputLine">Called per stdout line as it arrives, on a thread pool thread.</param>
         /// <param name="onErrorLine">Called per stderr line, same threading.</param>

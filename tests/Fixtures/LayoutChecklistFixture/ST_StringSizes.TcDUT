@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4026.18">
+  <DUT Name="ST_StringSizes" Id="{c0de1a70-0000-4000-8000-000000000008}">
+    <Declaration><![CDATA[// Layout checklist: STRING(n) and WSTRING(n) sizes.
+// The guard byte behind the narrow string shows whether the terminator is
+// counted; the wide string's own offset shows whether it is WORD-aligned,
+// and the trailing byte whether that alignment pads the type out.
+TYPE ST_StringSizes :
+STRUCT
+	narrow : STRING(5);
+	guard : BYTE;
+	wide : WSTRING(5);
+	trailer : BYTE;
+END_STRUCT
+END_TYPE
+]]></Declaration>
+  </DUT>
+</TcPlcObject>

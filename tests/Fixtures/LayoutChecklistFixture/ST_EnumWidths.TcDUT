@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4026.18">
+  <DUT Name="ST_EnumWidths" Id="{c0de1a70-0000-4000-8000-00000000000c}">
+    <Declaration><![CDATA[// Layout checklist: enum base width.
+// Each enum is followed by its own guard byte, so every width shows up as a
+// moved offset and not only as the enum member's own declared size: guardOne
+// reports what the BYTE-based enum was worth, guardTwo what an enum with no
+// declared base defaulted to.
+TYPE ST_EnumWidths :
+STRUCT
+	byteBased : E_ByteBase;
+	guardOne : BYTE;
+	defaultBased : E_DefaultBase;
+	guardTwo : BYTE;
+	dintBased : E_DintBase;
+END_STRUCT
+END_TYPE
+]]></Declaration>
+  </DUT>
+</TcPlcObject>

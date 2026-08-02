@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4026.18">
+  <DUT Name="ST_PackedToTwo" Id="{c0de1a70-0000-4000-8000-000000000011}">
+    <Declaration><![CDATA[// Layout checklist: pack_mode caps a field's alignment, it does not replace
+// it. A DINT under pack_mode 2 aligns to 2 - at 4 the pragma was ignored, at
+// 1 it was read as byte-packing regardless of its value.
+{attribute 'pack_mode' := '2'}
+TYPE ST_PackedToTwo :
+STRUCT
+	leadIn : BYTE;
+	wide : DINT;
+	tail : BYTE;
+END_STRUCT
+END_TYPE
+]]></Declaration>
+  </DUT>
+</TcPlcObject>

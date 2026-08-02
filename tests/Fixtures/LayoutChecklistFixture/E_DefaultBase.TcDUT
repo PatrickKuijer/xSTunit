@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4026.18">
+  <DUT Name="E_DefaultBase" Id="{c0de1a70-0000-4000-8000-000000000009}">
+    <Declaration><![CDATA[// Layout checklist: an enum with no declared base type, whose width is
+// whatever the compiler defaults to.
+TYPE E_DefaultBase :
+(
+	Idle := 0,
+	Running := 1
+);
+END_TYPE
+]]></Declaration>
+  </DUT>
+</TcPlcObject>

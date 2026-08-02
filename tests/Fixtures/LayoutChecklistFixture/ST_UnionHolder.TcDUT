@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4026.18">
+  <DUT Name="ST_UnionHolder" Id="{c0de1a70-0000-4000-8000-000000000010}">
+    <Declaration><![CDATA[// Layout checklist: what a union is worth as a member.
+// The union's own declaration says nothing about the size and alignment it
+// imposes on the struct holding it - leadIn and trailer are what report
+// those, and both move if the union is sized by any member other than its
+// widest.
+TYPE ST_UnionHolder :
+STRUCT
+	leadIn : BYTE;
+	overlay : U_OverlaidScalars;
+	trailer : BYTE;
+END_STRUCT
+END_TYPE
+]]></Declaration>
+  </DUT>
+</TcPlcObject>

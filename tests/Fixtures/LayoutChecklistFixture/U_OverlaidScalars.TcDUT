@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4026.18">
+  <DUT Name="U_OverlaidScalars" Id="{c0de1a70-0000-4000-8000-00000000000f}">
+    <Declaration><![CDATA[// Layout checklist: union layout. Every member starts at offset 0, and the
+// union is as wide as its widest member. The three members are deliberately
+// three different widths - all-same-width members would make "widest member"
+// indistinguishable from "first member" and from "last member".
+TYPE U_OverlaidScalars :
+UNION
+	asWord : WORD;
+	asBytes : ARRAY[0..3] OF BYTE;
+	asLong : LWORD;
+END_UNION
+END_TYPE
+]]></Declaration>
+  </DUT>
+</TcPlcObject>

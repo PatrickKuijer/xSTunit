@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4026.18">
+  <DUT Name="E_ByteBase" Id="{c0de1a70-0000-4000-8000-00000000000a}">
+    <Declaration><![CDATA[// Layout checklist: an enum narrowed below the default width by its declared
+// base type.
+TYPE E_ByteBase :
+(
+	Closed := 0,
+	Open := 1
+) BYTE;
+END_TYPE
+]]></Declaration>
+  </DUT>
+</TcPlcObject>

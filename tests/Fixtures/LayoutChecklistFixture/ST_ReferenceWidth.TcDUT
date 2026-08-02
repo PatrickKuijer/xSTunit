@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4026.18">
+  <DUT Name="ST_ReferenceWidth" Id="{c0de1a70-0000-4000-8000-000000000002}">
+    <Declaration><![CDATA[// Layout checklist: REFERENCE TO is an address, not the referent.
+// Kept apart from ST_PointerWidth so that a compiler which refuses a
+// REFERENCE member inside a STRUCT costs this rule alone.
+TYPE ST_ReferenceWidth :
+STRUCT
+	leadIn : BYTE;
+	target : REFERENCE TO INT;
+	trailer : BYTE;
+END_STRUCT
+END_TYPE
+]]></Declaration>
+  </DUT>
+</TcPlcObject>

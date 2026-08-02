@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4026.18">
+  <DUT Name="ST_ArrayStride" Id="{c0de1a70-0000-4000-8000-000000000007}">
+    <Declaration><![CDATA[// Layout checklist: array-of-struct stride.
+// Three elements of a type carrying trailing padding: the sentinel behind
+// them lands at 24 if each element is rounded up to its alignment, and at 15
+// if the elements are packed end to end.
+TYPE ST_ArrayStride :
+STRUCT
+	items : ARRAY[0..2] OF ST_TrailingPadding;
+	sentinel : BYTE;
+END_STRUCT
+END_TYPE
+]]></Declaration>
+  </DUT>
+</TcPlcObject>

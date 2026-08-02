@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4026.18">
+  <DUT Name="ST_PointerWidth" Id="{c0de1a70-0000-4000-8000-000000000001}">
+    <Declaration><![CDATA[// Layout checklist: the width of an address.
+// The bytes between leadIn and trailer are the whole measurement - 4 on a
+// 32-bit target, 8 on a 64-bit one, from identical source.
+TYPE ST_PointerWidth :
+STRUCT
+	leadIn : BYTE;
+	target : POINTER TO INT;
+	trailer : BYTE;
+END_STRUCT
+END_TYPE
+]]></Declaration>
+  </DUT>
+</TcPlcObject>

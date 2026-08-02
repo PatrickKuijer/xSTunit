@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4026.18">
+  <DUT Name="ST_WideAlignment" Id="{c0de1a70-0000-4000-8000-000000000003}">
+    <Declaration><![CDATA[// Layout checklist: alignment of the 8-byte scalars, and trailing padding.
+// leadIn is a DINT so that an LREAL aligned to 8 and one aligned to 4 land
+// on different bytes; the single trailing byte then shows whether the type's
+// own size is rounded up to its widest member.
+TYPE ST_WideAlignment :
+STRUCT
+	leadIn : DINT;
+	wideFloat : LREAL;
+	wideInt : LINT;
+	trailer : BYTE;
+END_STRUCT
+END_TYPE
+]]></Declaration>
+  </DUT>
+</TcPlcObject>

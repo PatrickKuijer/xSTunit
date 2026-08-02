@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4026.18">
+  <GVL Name="LayoutChecklistInstances" Id="{c0de1a70-0000-4000-8000-000000000100}">
+    <Declaration><![CDATA[// One instance of every checklist type, so the compiler emits all of them
+// into the .tmc. A DUT nothing references may be optimised out of the symbol
+// set entirely, which would drop a checklist rule from the comparison without
+// anything failing; 'linkalways' keeps the whole list even when no code reads
+// a single one of these.
+{attribute 'linkalways'}
+VAR_GLOBAL
+	pointerWidth : ST_PointerWidth;
+	referenceWidth : ST_ReferenceWidth;
+	wideAlignment : ST_WideAlignment;
+	nestedNatural : ST_NestedNatural;
+	packedOuter : ST_PackedOuter;
+	packedToTwo : ST_PackedToTwo;
+	trailingPadding : ST_TrailingPadding;
+	arrayStride : ST_ArrayStride;
+	stringSizes : ST_StringSizes;
+	enumWidths : ST_EnumWidths;
+	defaultBase : E_DefaultBase;
+	byteBase : E_ByteBase;
+	dintBase : E_DintBase;
+	boolWidth : ST_BoolWidth;
+	bitPacking : ST_BitPacking;
+	overlaidScalars : U_OverlaidScalars;
+	unionHolder : ST_UnionHolder;
+END_VAR
+]]></Declaration>
+  </GVL>
+</TcPlcObject>

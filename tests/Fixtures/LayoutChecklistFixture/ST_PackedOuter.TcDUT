@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4026.18">
+  <DUT Name="ST_PackedOuter" Id="{c0de1a70-0000-4000-8000-000000000005}">
+    <Declaration><![CDATA[// Layout checklist: does pack_mode reach into a nested struct type?
+// CODESYS says it does not - the nested value is placed at a byte boundary
+// but keeps its own padding, so trailer sits at 9. Were the pragma to
+// inherit, the nested value would be 5 bytes wide and trailer would sit at 6.
+{attribute 'pack_mode' := '1'}
+TYPE ST_PackedOuter :
+STRUCT
+	leadIn : BYTE;
+	nested : ST_NestedNatural;
+	trailer : BYTE;
+END_STRUCT
+END_TYPE
+]]></Declaration>
+  </DUT>
+</TcPlcObject>

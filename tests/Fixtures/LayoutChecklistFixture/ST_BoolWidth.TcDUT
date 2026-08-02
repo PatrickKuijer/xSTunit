@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4026.18">
+  <DUT Name="ST_BoolWidth" Id="{c0de1a70-0000-4000-8000-00000000000d}">
+    <Declaration><![CDATA[// Layout checklist: a BOOL member is a byte, not a bit.
+// Two adjacent BOOLs are the case a bit-packing compiler would fold into one
+// byte, which the guard byte's offset would report.
+TYPE ST_BoolWidth :
+STRUCT
+	first : BOOL;
+	second : BOOL;
+	guard : BYTE;
+END_STRUCT
+END_TYPE
+]]></Declaration>
+  </DUT>
+</TcPlcObject>

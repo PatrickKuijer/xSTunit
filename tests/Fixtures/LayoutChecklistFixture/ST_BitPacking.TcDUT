@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4026.18">
+  <DUT Name="ST_BitPacking" Id="{c0de1a70-0000-4000-8000-00000000000e}">
+    <Declaration><![CDATA[// Layout checklist: BIT, the struct-only type whose members carry sub-byte
+// offsets. Paired with ST_BoolWidth so that the same shape is declared twice,
+// once in BOOL and once in BIT, and the two layouts can be read side by side.
+TYPE ST_BitPacking :
+STRUCT
+	firstBit : BIT;
+	secondBit : BIT;
+	guard : BYTE;
+END_STRUCT
+END_TYPE
+]]></Declaration>
+  </DUT>
+</TcPlcObject>

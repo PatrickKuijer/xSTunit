@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4026.18">
+  <DUT Name="E_DintBase" Id="{c0de1a70-0000-4000-8000-00000000000b}">
+    <Declaration><![CDATA[// Layout checklist: an enum widened above the default by its declared base
+// type. The member value needs the full 32 bits, so a compiler that ignored
+// the declared base would have to reject the DUT rather than silently narrow
+// it.
+TYPE E_DintBase :
+(
+	Low := 0,
+	High := 16#7FFFFFFF
+) DINT;
+END_TYPE
+]]></Declaration>
+  </DUT>
+</TcPlcObject>

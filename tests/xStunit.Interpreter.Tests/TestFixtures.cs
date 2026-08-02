@@ -11,9 +11,15 @@ namespace xStunit.Interpreter.Tests
     internal static class TestFixtures
     {
         public static string FbCounterFixtureDir([CallerFilePath] string callerFile = "") =>
-            Path.GetFullPath(Path.Combine(Path.GetDirectoryName(callerFile)!, "..", "..", "Fixtures", "FbCounterFixture"));
+            FixtureDir("FbCounterFixture", callerFile);
+
+        public static string LayoutChecklistFixtureDir([CallerFilePath] string callerFile = "") =>
+            FixtureDir("LayoutChecklistFixture", callerFile);
 
         public static string LayoutOracleFixtureDir([CallerFilePath] string callerFile = "") =>
-            Path.GetFullPath(Path.Combine(Path.GetDirectoryName(callerFile)!, "..", "..", "Fixtures", "LayoutOracleFixture"));
+            FixtureDir("LayoutOracleFixture", callerFile);
+
+        private static string FixtureDir(string name, string callerFile) =>
+            Path.GetFullPath(Path.Combine(Path.GetDirectoryName(callerFile)!, "..", "..", "Fixtures", name));
     }
 }

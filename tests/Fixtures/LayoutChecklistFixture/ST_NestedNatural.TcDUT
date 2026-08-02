@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4026.18">
+  <DUT Name="ST_NestedNatural" Id="{c0de1a70-0000-4000-8000-000000000004}">
+    <Declaration><![CDATA[// Layout checklist: the naturally aligned half of the pack_mode inheritance
+// question. Carries three bytes of internal padding, which is what a packed
+// outer struct would have to remove for the pragma to be said to inherit.
+TYPE ST_NestedNatural :
+STRUCT
+	small : BYTE;
+	wide : DINT;
+END_STRUCT
+END_TYPE
+]]></Declaration>
+  </DUT>
+</TcPlcObject>

@@ -124,11 +124,8 @@ namespace xStunit.Interpreter
         {
             var resolved = _registry.ResolveAlias(typeName);
 
-            if (resolved == "BOOL")
-            {
-                buffer[offset] = (byte)((bool)value ? 1 : 0);
+            if (LayoutFor(frame).TryPackScalar(buffer, offset, value, resolved))
                 return;
-            }
 
             var structAst = _registry.GetStruct(resolved);
             if (structAst != null)
@@ -191,55 +188,8 @@ namespace xStunit.Interpreter
                 return;
             }
 
-            switch (resolved)
-            {
-                case "SINT":
-                    buffer[offset] = unchecked((byte)(sbyte)(int)value);
-                    return;
-                case "USINT":
-                case "BYTE":
-                    buffer[offset] = (byte)(int)value;
-                    return;
-                case "INT":
-                    BitConverter.GetBytes((short)(int)value).CopyTo(buffer, offset);
-                    return;
-                case "UINT":
-                case "WORD":
-                    BitConverter.GetBytes((ushort)(int)value).CopyTo(buffer, offset);
-                    return;
-                case "DINT":
-                    BitConverter.GetBytes((int)value).CopyTo(buffer, offset);
-                    return;
-                case "UDINT":
-                case "DWORD":
-                    BitConverter.GetBytes((uint)(long)value).CopyTo(buffer, offset);
-                    return;
-                case "TIME":
-                case "DATE":
-                case "DATE_AND_TIME":
-                case "TIME_OF_DAY":
-                    BitConverter.GetBytes((uint)value).CopyTo(buffer, offset);
-                    return;
-                case "LINT":
-                    BitConverter.GetBytes((long)value).CopyTo(buffer, offset);
-                    return;
-                case "ULINT":
-                case "LWORD":
-                    BitConverter.GetBytes((ulong)value).CopyTo(buffer, offset);
-                    return;
-                case "LTIME":
-                    BitConverter.GetBytes((ulong)value).CopyTo(buffer, offset);
-                    return;
-                case "REAL":
-                    BitConverter.GetBytes((float)value).CopyTo(buffer, offset);
-                    return;
-                case "LREAL":
-                    BitConverter.GetBytes((double)value).CopyTo(buffer, offset);
-                    return;
-                default:
-                    throw new NotSupportedException(
-                        $"MEMCPY/MEMSET/MEMMOVE byte-packing doesn't support type '{resolved}' yet");
-            }
+            throw new NotSupportedException(
+                $"MEMCPY/MEMSET/MEMMOVE byte-packing doesn't support type '{resolved}' yet");
         }
 
         private static char ReadStringChar(byte[] buffer, int offset, int charWidth) =>
@@ -254,8 +204,8 @@ namespace xStunit.Interpreter
         {
             var resolved = _registry.ResolveAlias(typeName);
 
-            if (resolved == "BOOL")
-                return buffer[offset] != 0;
+            if (LayoutFor(frame).TryUnpackScalar(buffer, offset, resolved, out var scalar))
+                return scalar;
 
             var structAst = _registry.GetStruct(resolved);
             if (structAst != null)
@@ -304,43 +254,8 @@ namespace xStunit.Interpreter
                 return new string(chars);
             }
 
-            switch (resolved)
-            {
-                case "SINT":
-                    return (int)unchecked((sbyte)buffer[offset]);
-                case "USINT":
-                case "BYTE":
-                    return (int)buffer[offset];
-                case "INT":
-                    return (int)BitConverter.ToInt16(buffer, offset);
-                case "UINT":
-                case "WORD":
-                    return (int)BitConverter.ToUInt16(buffer, offset);
-                case "DINT":
-                    return BitConverter.ToInt32(buffer, offset);
-                case "UDINT":
-                case "DWORD":
-                    return (long)BitConverter.ToUInt32(buffer, offset);
-                case "TIME":
-                case "DATE":
-                case "DATE_AND_TIME":
-                case "TIME_OF_DAY":
-                    return BitConverter.ToUInt32(buffer, offset);
-                case "LINT":
-                    return BitConverter.ToInt64(buffer, offset);
-                case "ULINT":
-                case "LWORD":
-                    return BitConverter.ToUInt64(buffer, offset);
-                case "LTIME":
-                    return BitConverter.ToUInt64(buffer, offset);
-                case "REAL":
-                    return BitConverter.ToSingle(buffer, offset);
-                case "LREAL":
-                    return BitConverter.ToDouble(buffer, offset);
-                default:
-                    throw new NotSupportedException(
-                        $"MEMCPY/MEMSET/MEMMOVE byte-unpacking doesn't support type '{resolved}' yet");
-            }
+            throw new NotSupportedException(
+                $"MEMCPY/MEMSET/MEMMOVE byte-unpacking doesn't support type '{resolved}' yet");
         }
     }
 }

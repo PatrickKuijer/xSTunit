@@ -39,28 +39,101 @@ namespace xStunit.Interpreter
     // PackBound below.
     internal sealed class TypeLayout
     {
-        private static readonly IReadOnlyDictionary<string, int> ScalarByteSizes = new Dictionary<string, int>
+        // A scalar's byte width and the codec that reads and writes those
+        // bytes, held together so that a type this table sizes is a type it can
+        // also pack: splitting them lets a scalar size correctly and then be
+        // refused at pack time.
+        //
+        // Pack and Unpack move the CLR shape IecNumericType and DefaultValue
+        // use for the type, not an arbitrary boxed number - Unpack's result
+        // goes straight into a Cell.
+        private readonly struct ScalarShape
         {
-            ["SINT"] = 1,
-            ["USINT"] = 1,
-            ["BYTE"] = 1,
-            ["INT"] = 2,
-            ["UINT"] = 2,
-            ["WORD"] = 2,
-            ["DINT"] = 4,
-            ["UDINT"] = 4,
-            ["DWORD"] = 4,
-            ["REAL"] = 4,
-            ["TIME"] = 4,
-            ["DATE"] = 4,
-            ["DATE_AND_TIME"] = 4,
-            ["TIME_OF_DAY"] = 4,
-            ["LINT"] = 8,
-            ["ULINT"] = 8,
-            ["LWORD"] = 8,
-            ["LREAL"] = 8,
-            ["LTIME"] = 8,
-        };
+            public ScalarShape(int size, Action<byte[], int, object> pack, Func<byte[], int, object> unpack)
+            {
+                Size = size;
+                Pack = pack;
+                Unpack = unpack;
+            }
+
+            public int Size { get; }
+
+            public Action<byte[], int, object> Pack { get; }
+
+            public Func<byte[], int, object> Unpack { get; }
+        }
+
+        private static readonly IReadOnlyDictionary<string, ScalarShape> Scalars = BuildScalars();
+
+        // Types that differ only in signedness or in the domain they name share
+        // one shape instance, so the width is stated once per wire format
+        // rather than once per spelling.
+        private static IReadOnlyDictionary<string, ScalarShape> BuildScalars()
+        {
+            var boolean = new ScalarShape(1,
+                (buffer, offset, value) => buffer[offset] = (byte)((bool)value ? 1 : 0),
+                (buffer, offset) => buffer[offset] != 0);
+            var signed8 = new ScalarShape(1,
+                (buffer, offset, value) => buffer[offset] = unchecked((byte)(sbyte)(int)value),
+                (buffer, offset) => (int)unchecked((sbyte)buffer[offset]));
+            var unsigned8 = new ScalarShape(1,
+                (buffer, offset, value) => buffer[offset] = (byte)(int)value,
+                (buffer, offset) => (int)buffer[offset]);
+            var signed16 = new ScalarShape(2,
+                (buffer, offset, value) => BitConverter.GetBytes((short)(int)value).CopyTo(buffer, offset),
+                (buffer, offset) => (int)BitConverter.ToInt16(buffer, offset));
+            var unsigned16 = new ScalarShape(2,
+                (buffer, offset, value) => BitConverter.GetBytes((ushort)(int)value).CopyTo(buffer, offset),
+                (buffer, offset) => (int)BitConverter.ToUInt16(buffer, offset));
+            var signed32 = new ScalarShape(4,
+                (buffer, offset, value) => BitConverter.GetBytes((int)value).CopyTo(buffer, offset),
+                (buffer, offset) => BitConverter.ToInt32(buffer, offset));
+            var unsigned32 = new ScalarShape(4,
+                (buffer, offset, value) => BitConverter.GetBytes((uint)(long)value).CopyTo(buffer, offset),
+                (buffer, offset) => (long)BitConverter.ToUInt32(buffer, offset));
+
+            // The duration and calendar types are the one unsigned 32-bit
+            // family carried as a CLR uint rather than widened to long.
+            var duration32 = new ScalarShape(4,
+                (buffer, offset, value) => BitConverter.GetBytes((uint)value).CopyTo(buffer, offset),
+                (buffer, offset) => BitConverter.ToUInt32(buffer, offset));
+            var signed64 = new ScalarShape(8,
+                (buffer, offset, value) => BitConverter.GetBytes((long)value).CopyTo(buffer, offset),
+                (buffer, offset) => BitConverter.ToInt64(buffer, offset));
+            var unsigned64 = new ScalarShape(8,
+                (buffer, offset, value) => BitConverter.GetBytes((ulong)value).CopyTo(buffer, offset),
+                (buffer, offset) => BitConverter.ToUInt64(buffer, offset));
+            var single = new ScalarShape(4,
+                (buffer, offset, value) => BitConverter.GetBytes((float)value).CopyTo(buffer, offset),
+                (buffer, offset) => BitConverter.ToSingle(buffer, offset));
+            var real64 = new ScalarShape(8,
+                (buffer, offset, value) => BitConverter.GetBytes((double)value).CopyTo(buffer, offset),
+                (buffer, offset) => BitConverter.ToDouble(buffer, offset));
+
+            return new Dictionary<string, ScalarShape>
+            {
+                ["BOOL"] = boolean,
+                ["SINT"] = signed8,
+                ["USINT"] = unsigned8,
+                ["BYTE"] = unsigned8,
+                ["INT"] = signed16,
+                ["UINT"] = unsigned16,
+                ["WORD"] = unsigned16,
+                ["DINT"] = signed32,
+                ["UDINT"] = unsigned32,
+                ["DWORD"] = unsigned32,
+                ["REAL"] = single,
+                ["TIME"] = duration32,
+                ["DATE"] = duration32,
+                ["DATE_AND_TIME"] = duration32,
+                ["TIME_OF_DAY"] = duration32,
+                ["LINT"] = signed64,
+                ["ULINT"] = unsigned64,
+                ["LWORD"] = unsigned64,
+                ["LREAL"] = real64,
+                ["LTIME"] = unsigned64,
+            };
+        }
 
         private readonly TypeRegistry _registry;
         private readonly Func<string, int> _resolveBound;
@@ -110,13 +183,37 @@ namespace xStunit.Interpreter
                 return (charWidth * (length + 1), charWidth);
             }
 
-            if (resolved == "BOOL")
-                return (1, 1);
-
-            if (ScalarByteSizes.TryGetValue(resolved, out var scalarSize))
-                return (scalarSize, scalarSize);
+            if (Scalars.TryGetValue(resolved, out var scalar))
+                return (scalar.Size, scalar.Size);
 
             throw new NotSupportedException($"SIZEOF() doesn't know the byte size of type '{typeName}'");
+        }
+
+        // Writes value into buffer at offset when typeName is a scalar (BOOL
+        // included) and reports whether it was; a false leaves the composite
+        // shapes - STRUCT, ARRAY, STRING - to the caller, which owns how their
+        // parts are reached.
+        public bool TryPackScalar(byte[] buffer, int offset, object value, string typeName)
+        {
+            if (!Scalars.TryGetValue(_registry.ResolveAlias(typeName), out var scalar))
+                return false;
+
+            scalar.Pack(buffer, offset, value);
+            return true;
+        }
+
+        // Inverse of TryPackScalar, with the same false meaning: not a scalar,
+        // so not this class's to reconstruct.
+        public bool TryUnpackScalar(byte[] buffer, int offset, string typeName, out object value)
+        {
+            if (!Scalars.TryGetValue(_registry.ResolveAlias(typeName), out var scalar))
+            {
+                value = null;
+                return false;
+            }
+
+            value = scalar.Unpack(buffer, offset);
+            return true;
         }
 
         // Each field's placement inside structAst, in declaration order.

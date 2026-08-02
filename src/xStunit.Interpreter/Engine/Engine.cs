@@ -234,10 +234,25 @@ namespace xStunit.Interpreter
         // non-recursing native-stub path instead.
         private Cell CreateFieldCell(VarDecl decl, FbInstance owningInstance)
         {
-            if (_registry.Get(_registry.ResolveAlias(decl.TypeName)) != null)
+            if (IsDeferredFieldType(decl.TypeName))
                 return new LazyCell(() => DefaultValue(decl, owningInstance), decl.TypeName);
 
             return NewDeclaredCell(DefaultValue(decl, owningInstance), decl.TypeName, owningInstance);
+        }
+
+        // An ARRAY OF an FB type pays that same construction cost once per
+        // element, so it defers too - as one cell over the whole array, not one
+        // per element: ArrayValue.Elements is a plain object[] that every index,
+        // iteration and byte-model site reads straight out of, and per-element
+        // cells would have to be honoured at all of them.
+        private bool IsDeferredFieldType(string typeName)
+        {
+            var resolved = _registry.ResolveAlias(typeName);
+            if (ArrayTypeInfo.IsArrayType(resolved))
+                return ArrayTypeInfo.TryGetElementTypeName(resolved, out var elementTypeName) &&
+                    IsDeferredFieldType(elementTypeName);
+
+            return _registry.Get(resolved) != null;
         }
 
         // The sections materialized as instance Fields at NewInstance() time,

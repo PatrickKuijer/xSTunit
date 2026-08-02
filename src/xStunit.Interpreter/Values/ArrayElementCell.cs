@@ -14,12 +14,13 @@ namespace xStunit.Interpreter
         {
             Array = array;
             Index = index;
+            StringCapacity = array.ElementStringCapacity;
         }
 
         public override object Value
         {
             get => Array.Elements[Index];
-            set => Array.Elements[Index] = value;
+            set => Array.SetElement(Index, value);
         }
     }
 }

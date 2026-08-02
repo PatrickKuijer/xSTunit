@@ -79,7 +79,7 @@ namespace xStunit.Interpreter
             for (var i = 0; i < totalSize; i++)
                 elements[i] = (int)bytes[i];
 
-            var view = new ArrayValue(new[] { (0, totalSize - 1) }, "BYTE", elements);
+            var view = new ArrayValue(new[] { (0, totalSize - 1) }, "BYTE", elements, Cell.Unbounded);
 
             void Commit()
             {
@@ -111,7 +111,7 @@ namespace xStunit.Interpreter
             for (var i = 0; i < size; i++)
                 elements[i] = (int)bytes[i];
 
-            return (new ArrayValue(new[] { (0, size - 1) }, "BYTE", elements), size);
+            return (new ArrayValue(new[] { (0, size - 1) }, "BYTE", elements, Cell.Unbounded), size);
         }
 
         // Writes value (already known to be of IEC type typeName) into
@@ -271,11 +271,10 @@ namespace xStunit.Interpreter
                 {
                     var (fieldSize, fieldAlign) = SizeOfType(field.TypeName, frame);
                     fieldOffset = RoundUp(fieldOffset, Math.Min(fieldAlign, packBound));
-                    instance.Fields[field.Name] = new Cell
-                    {
-                        Value = UnpackValue(buffer, offset + fieldOffset, field.TypeName, frame),
-                        DeclaredTypeName = field.TypeName,
-                    };
+                    instance.Fields[field.Name] = NewDeclaredCell(
+                        UnpackValue(buffer, offset + fieldOffset, field.TypeName, frame),
+                        field.TypeName,
+                        frame.Instance);
                     fieldOffset += fieldSize;
                 }
                 return instance;
@@ -290,7 +289,8 @@ namespace xStunit.Interpreter
                 var elements = new object[count];
                 for (var i = 0; i < count; i++)
                     elements[i] = UnpackValue(buffer, offset + i * elementSize, elementTypeName, frame);
-                return new ArrayValue(dimensions, elementTypeName, elements);
+                return new ArrayValue(
+                    dimensions, elementTypeName, elements, ResolveStringCapacity(elementTypeName, frame.Instance));
             }
 
             if (StringTypeInfo.IsStringType(resolved))

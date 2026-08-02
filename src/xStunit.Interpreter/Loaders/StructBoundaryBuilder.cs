@@ -39,7 +39,10 @@ namespace xStunit.Interpreter
                 {
                     Value = overrideMap.TryGetValue(field.Name, out var boundary)
                         ? BoundaryValue(field, boundary)
-                        : InRangeDefault(field)
+                        : InRangeDefault(field),
+                    DeclaredTypeName = field.TypeName,
+                    StringCapacity = StringTypeInfo.ResolveCapacity(
+                        _registry.ResolveAlias(field.TypeName), ResolveArrayBound),
                 };
             }
 
@@ -109,7 +112,11 @@ namespace xStunit.Interpreter
             for (var i = 0; i < count; i++)
                 elements[i] = InRangeDefault(elementDecl);
 
-            return new ArrayValue(dimensions, elementTypeName, elements);
+            return new ArrayValue(
+                dimensions,
+                elementTypeName,
+                elements,
+                StringTypeInfo.ResolveCapacity(_registry.ResolveAlias(elementTypeName), ResolveArrayBound));
         }
 
         // Resolves a non-literal ARRAY bound (e.g. a GVL-qualified constant

@@ -16,8 +16,16 @@ namespace xStunit.Interpreter
         // that expression text through verbatim. StringTypeInfo/
         // StructBoundaryBuilder resolve it later, the same way ARRAY bounds
         // are resolved.
+        //
+        // An ARRAY element type reuses that same sized-string alternative. A
+        // line this pattern fails to match is skipped silently, so an element
+        // type it cannot spell costs a variable rather than a parse error:
+        // every later use of the name reports "Unknown variable" instead.
+        private const string SizedStringPattern = @"W?STRING\s*\(\s*[^()]+\s*\)";
+
         private static readonly Regex VarLinePattern = new Regex(
-            @"^(?<name>\w+)\s*:\s*(?<type>POINTER TO \w+|REFERENCE TO \w+|ARRAY\s*\[[^\]]+\]\s*OF\s*\w+|W?STRING\s*\(\s*[^()]+\s*\)|\w+)\s*(:=\s*(?<default>.+?))?;$",
+            @"^(?<name>\w+)\s*:\s*(?<type>POINTER TO \w+|REFERENCE TO \w+|ARRAY\s*\[[^\]]+\]\s*OF\s*(?:"
+            + SizedStringPattern + @"|\w+)|" + SizedStringPattern + @"|\w+)\s*(:=\s*(?<default>.+?))?;$",
             RegexOptions.Compiled);
 
         public static IReadOnlyList<VarDecl> Parse(string declarationText)

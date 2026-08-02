@@ -64,26 +64,23 @@ namespace xStunit.Interpreter
                 $"STRING/WSTRING size '{exprText}' is not an integer literal; " +
                 "use the ParseLength(typeName, resolveExpr) overload to resolve constant expressions."));
 
-        // The declared character capacity, for a caller with no expression
-        // evaluator to hand. False for a type that is not a STRING/WSTRING and
-        // for a constant-expression size (e.g. STRING(cConstants.MAX)), which
-        // only ParseLength's resolveExpr overload can settle.
-        public static bool TryParseLength(string typeName, out int length)
+        // The capacity a declaration of this type imposes on assignment:
+        // ParseLength for a STRING/WSTRING, Cell.Unbounded for everything else,
+        // so a caller can ask about any declared type without classifying it
+        // first. Pass an alias-resolved type name - this does not resolve ALIAS
+        // DUTs, having no registry to resolve them with.
+        //
+        // A size that resolves to zero or less is reported as Unbounded rather
+        // than as a capacity: it means a constant in the size expression has no
+        // value yet, and a zero capacity would silently empty every string
+        // assigned to the declaration.
+        public static int ResolveCapacity(string resolvedTypeName, Func<string, int> resolveExpr)
         {
-            length = 0;
-            if (typeName == null)
-                return false;
+            if (!IsStringType(resolvedTypeName))
+                return Cell.Unbounded;
 
-            var trimmed = typeName.Trim();
-            if (string.Equals(trimmed, "STRING", System.StringComparison.OrdinalIgnoreCase)
-                || string.Equals(trimmed, "WSTRING", System.StringComparison.OrdinalIgnoreCase))
-            {
-                length = DefaultLength;
-                return true;
-            }
-
-            var match = SizedPattern.Match(trimmed);
-            return match.Success && int.TryParse(match.Groups["n"].Value.Trim(), out length);
+            var length = ParseLength(resolvedTypeName, resolveExpr);
+            return length > 0 ? length : Cell.Unbounded;
         }
 
         public static int ParseLength(string typeName, Func<string, int> resolveExpr)

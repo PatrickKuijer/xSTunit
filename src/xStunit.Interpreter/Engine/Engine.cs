@@ -83,7 +83,14 @@ namespace xStunit.Interpreter
                 {
                     try
                     {
-                        _globals[gvlName][decl.Name].Value = DefaultValue(decl, null);
+                        // Capacity is re-resolved on every pass for the same
+                        // reason the value is: a STRING sized by another GVL's
+                        // constant cannot be settled until that constant has
+                        // one, and the allocation pass above deliberately ran
+                        // before any of them did.
+                        var cell = _globals[gvlName][decl.Name];
+                        cell.StringCapacity = ResolveStringCapacity(decl.TypeName, null);
+                        cell.Value = DefaultValue(decl, null);
                     }
                     catch (Exception)
                     {
@@ -230,7 +237,7 @@ namespace xStunit.Interpreter
             if (_registry.Get(_registry.ResolveAlias(decl.TypeName)) != null)
                 return new LazyCell(() => DefaultValue(decl, owningInstance), decl.TypeName);
 
-            return new Cell { Value = DefaultValue(decl, owningInstance), DeclaredTypeName = decl.TypeName };
+            return NewDeclaredCell(DefaultValue(decl, owningInstance), decl.TypeName, owningInstance);
         }
 
         // The sections materialized as instance Fields at NewInstance() time,

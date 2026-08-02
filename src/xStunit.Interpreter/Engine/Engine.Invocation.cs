@@ -338,7 +338,7 @@ namespace xStunit.Interpreter
             if (!IecElementaryDefault.TryGetDefault(resolvedType, out var value))
                 return;
 
-            frame.Locals[name] = new Cell { Value = value, DeclaredTypeName = declaredType };
+            frame.Locals[name] = NewDeclaredCell(value, declaredType, frame.Instance);
             frame.LocalTypeNames[name] = declaredType;
         }
 
@@ -552,7 +552,7 @@ namespace xStunit.Interpreter
                         newFrame);
                 }
 
-                newFrame.Locals[decl.Name] = new Cell { Value = value, DeclaredTypeName = decl.TypeName };
+                newFrame.Locals[decl.Name] = NewDeclaredCell(value, decl.TypeName, newFrame.Instance);
                 newFrame.LocalTypeNames[decl.Name] = decl.TypeName;
             }
         }

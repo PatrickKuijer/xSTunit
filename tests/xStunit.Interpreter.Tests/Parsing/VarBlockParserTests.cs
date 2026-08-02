@@ -40,6 +40,22 @@ END_VAR";
             Assert.Equal("1", delta.DefaultValueText);
         }
 
+        // An unmatched declaration line is skipped silently, so a sized STRING
+        // element type the pattern cannot spell does not fail loudly - the
+        // variable simply never exists, and every use of it reports "Unknown
+        // variable" from somewhere else entirely.
+        [Theory]
+        [InlineData("labels : ARRAY[0..3] OF STRING(4);", "ARRAY[0..3] OF STRING(4)")]
+        [InlineData("labels : ARRAY[0..3] OF WSTRING(cConsts.MAX);", "ARRAY[0..3] OF WSTRING(cConsts.MAX)")]
+        public void Parse_ArrayOfSizedString_ReadsTheWholeElementType(string line, string expectedTypeName)
+        {
+            var vars = VarBlockParser.Parse($"VAR\n\t{line}\nEND_VAR");
+
+            var labels = Assert.Single(vars);
+            Assert.Equal("labels", labels.Name);
+            Assert.Equal(expectedTypeName, labels.TypeName);
+        }
+
         [Fact]
         public void Parse_PointerAndReferenceTypes_ReadsFullTypeName()
         {

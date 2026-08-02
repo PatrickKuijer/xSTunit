@@ -123,7 +123,8 @@ namespace xStunit.Interpreter
                     // dimension sized to the literal - BuildArrayDefault is
                     // the typed path that overlays onto declared bounds.
                     var elements = arrayLit.Elements.Select(e => Evaluate(e, frame)).ToArray();
-                    return new ArrayValue(new List<(int, int)> { (0, elements.Length - 1) }, null, elements);
+                    return new ArrayValue(
+                        new List<(int, int)> { (0, elements.Length - 1) }, null, elements, Cell.Unbounded);
                 }
                 case BinaryExpr binary:
                     return EvaluateBinary(binary, frame);

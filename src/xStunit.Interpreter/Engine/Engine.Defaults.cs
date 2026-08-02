@@ -64,7 +64,7 @@ namespace xStunit.Interpreter
             var instance = new StructInstance(structAst.Name);
             foreach (var field in structAst.Fields)
             {
-                instance.Fields[field.Name] = new Cell { Value = DefaultValue(field, owningInstance), DeclaredTypeName = field.TypeName };
+                instance.Fields[field.Name] = NewDeclaredCell(DefaultValue(field, owningInstance), field.TypeName, owningInstance);
                 instance.FieldTypeNames[field.Name] = field.TypeName;
             }
 
@@ -89,7 +89,8 @@ namespace xStunit.Interpreter
             for (var i = 0; i < count; i++)
                 elements[i] = DefaultValue(elementDecl, owningInstance);
 
-            var array = new ArrayValue(dimensions, elementTypeName, elements);
+            var array = new ArrayValue(
+                dimensions, elementTypeName, elements, ResolveStringCapacity(elementTypeName, owningInstance));
 
             if (decl.DefaultValueText != null && Parser.ParseExpression(decl.DefaultValueText) is ArrayLiteralExpr lit)
                 OverlayArray(array, lit, new Frame(owningInstance, elementTypeName));
@@ -111,6 +112,44 @@ namespace xStunit.Interpreter
             var value = Evaluate(Parser.ParseExpression(boundText), new Frame(owningInstance, null));
             return Convert.ToInt32(value);
         }
+
+        // Resolves a declaration's STRING/WSTRING capacity through ALIAS DUTs
+        // and through a constant-expression size, neither of which a Cell could
+        // settle from the type text it holds. Every VarDecl-driven Cell and
+        // every ARRAY gets its capacity from here, so Cell.StringCapacity and
+        // PackValue's own truncation cannot disagree about a declaration.
+        //
+        // A size naming an identifier that does not resolve leaves the cell
+        // Unbounded instead of sinking the declaration: GVL cells are allocated
+        // before any GVL constant has a value, so a size expression referring
+        // to one is genuinely unresolvable on the first pass, and the Engine
+        // constructor re-resolves it once the constants converge. Anything else
+        // the evaluator throws - an overflowing or non-numeric size - is left
+        // to surface.
+        private int ResolveStringCapacity(string declaredTypeName, FbInstance owningInstance)
+        {
+            try
+            {
+                return StringTypeInfo.ResolveCapacity(
+                    _registry.ResolveAlias(declaredTypeName),
+                    sizeText => ResolveArrayBound(sizeText, owningInstance));
+            }
+            catch (InvalidOperationException)
+            {
+                return Cell.Unbounded;
+            }
+        }
+
+        // Every VarDecl-driven Cell construction goes through here, so no
+        // declaration site can forget to resolve its capacity and silently
+        // reintroduce a string that outgrows its declaration.
+        private Cell NewDeclaredCell(object value, string declaredTypeName, FbInstance owningInstance) =>
+            new Cell
+            {
+                Value = value,
+                DeclaredTypeName = declaredTypeName,
+                StringCapacity = ResolveStringCapacity(declaredTypeName, owningInstance),
+            };
 
         // Applies a struct/array literal's per-field/per-element expression
         // on top of an already-defaulted value: nested struct/array fields
@@ -147,7 +186,7 @@ namespace xStunit.Interpreter
         private void OverlayArray(ArrayValue array, ArrayLiteralExpr lit, Frame frame)
         {
             for (var i = 0; i < lit.Elements.Count && i < array.Elements.Length; i++)
-                array.Elements[i] = OverlayOrEvaluate(array.Elements[i], lit.Elements[i], frame);
+                array.SetElement(i, OverlayOrEvaluate(array.Elements[i], lit.Elements[i], frame));
         }
     }
 }

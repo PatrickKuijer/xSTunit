@@ -224,7 +224,7 @@ namespace xStunit.Interpreter
 
                     var array = (ArrayValue)receiverValue;
                     var flat = FlattenIndex(array, index.Indices, frame);
-                    array.Elements[flat] = CoerceForAssignment(array.Elements[flat], value);
+                    array.SetElement(flat, CoerceForAssignment(array.Elements[flat], value));
                     break;
                 }
                 default:
@@ -291,7 +291,7 @@ namespace xStunit.Interpreter
                 {
                     var array = (ArrayValue)Evaluate(index.Receiver, frame);
                     var flat = FlattenIndex(array, index.Indices, frame);
-                    array.Elements[flat] = sourceCell.Value;
+                    array.SetElement(flat, sourceCell.Value);
                     break;
                 }
 

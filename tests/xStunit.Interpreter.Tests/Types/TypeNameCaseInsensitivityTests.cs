@@ -105,5 +105,58 @@ namespace xStunit.Interpreter.Tests
 
             Assert.Equal(1.5d, result);
         }
+
+        // The POINTER TO/REFERENCE TO prefix rule is one predicate for the same
+        // reason as the rest of this file: an ordinal comparison at one of its
+        // call sites and an ignore-case comparison at another let a single
+        // declaration be a pointer to one part of the interpreter and an
+        // unknown scalar to the next.
+        [Theory]
+        [InlineData("POINTER TO BYTE")]
+        [InlineData("pointer to BYTE")]
+        [InlineData("Pointer To BYTE")]
+        [InlineData("REFERENCE TO INT")]
+        [InlineData("reference to INT")]
+        [InlineData("Reference To INT")]
+        public void IsAddressType_AnySpellingOfThePrefix_IsRecognised(string typeName)
+        {
+            Assert.True(AddressTypeInfo.IsAddressType(typeName));
+        }
+
+        [Theory]
+        [InlineData(null)]
+        [InlineData("")]
+        [InlineData("INT")]
+        [InlineData("POINTER")]
+        [InlineData("ST_Reference")]
+        public void IsAddressType_TypeWithoutThePrefix_IsNotRecognised(string typeName)
+        {
+            Assert.False(AddressTypeInfo.IsAddressType(typeName));
+        }
+
+        // An ALIAS DUT is the one place a lower-case POINTER TO reaches the
+        // interpreter today, and it used to reach the two call sites with
+        // different answers: a null default from Engine.Defaults, and a refusal
+        // to size the very same variable from TypeLayout.
+        [Fact]
+        public void LowercasePointerAlias_SizesAsAPointerAndDefaultsToNull()
+        {
+            var fb = new PouAst(
+                "FB_Holder",
+                null,
+                "VAR\n\tpData : PT_Byte;\nEND_VAR",
+                "",
+                new List<MethodAst>());
+            var registry = new TypeRegistry(
+                new[] { fb },
+                aliases: new[] { new KeyValuePair<string, string>("PT_Byte", "pointer to BYTE") });
+
+            var engine = new Engine(registry);
+            var instance = engine.NewInstance("FB_Holder");
+            var frame = new Frame(instance, "FB_Holder");
+
+            Assert.Null(instance.Fields["pData"].Value);
+            Assert.Equal(4, engine.Evaluate(Parser.ParseExpression("SIZEOF(pData)"), frame));
+        }
     }
 }

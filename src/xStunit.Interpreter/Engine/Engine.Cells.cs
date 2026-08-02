@@ -117,8 +117,7 @@ namespace xStunit.Interpreter
         {
             var cell = ResolveCellForLValue(expr, frame);
             var typeName = ResolveDeclaredTypeName(expr, frame);
-            if (typeName == null ||
-                !(typeName.StartsWith("POINTER TO") || typeName.StartsWith("REFERENCE TO")))
+            if (!AddressTypeInfo.IsAddressType(typeName))
             {
                 throw new InvalidOperationException(
                     $"__ISVALIDREF requires a POINTER TO or REFERENCE TO variable, but got " +

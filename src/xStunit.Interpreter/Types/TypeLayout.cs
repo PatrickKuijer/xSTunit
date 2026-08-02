@@ -155,8 +155,7 @@ namespace xStunit.Interpreter
             if (resolved == null)
                 throw new NotSupportedException("SIZEOF() requires a type name");
 
-            if (resolved.StartsWith("POINTER TO", StringComparison.Ordinal) ||
-                resolved.StartsWith("REFERENCE TO", StringComparison.Ordinal))
+            if (AddressTypeInfo.IsAddressType(resolved))
                 return (4, 4);
 
             if (ArrayTypeInfo.IsArrayType(resolved))

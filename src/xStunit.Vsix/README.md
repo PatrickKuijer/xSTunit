@@ -64,6 +64,17 @@ it, so build it via `devenv.exe`/MSBuild with the VS SDK targets.
 
 ## Building on Windows
 
+Open the solution in **VS2017 only**. VS2019/VS2022 treat this project as one to
+migrate: they run the upgrade wizard (leaving an `UpgradeLog*.htm` at the repo
+root) and offer to install the components the project declares. That
+"install missing feature" flow resolves prerequisites against the *host*
+product, so on e.g. `Microsoft.VisualStudio.Product.Community,version=17.x` it
+reports a component it cannot find — including stale VS2017-era extension
+components left registered in the shell from earlier local deployments. Nothing
+in this repo is wrong when that happens; the solution is simply open in the
+wrong Visual Studio. Migrating the project is not an option: it must stay on the
+VS2017 SDK to load in XAE Shell.
+
 1. Open `xStunit.sln` in VS2017 (or the XAE Shell's own devenv). Restore
    NuGet packages (`packages.config` — pulls `Microsoft.VSSDK.BuildTools`
    etc.).

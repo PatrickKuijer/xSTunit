@@ -9,9 +9,17 @@
 bin/
 obj/
 
-# Classic packages.config restore output (src/TcXunit.Vsix)
+# Classic packages.config restore output (src/xStunit.Vsix)
 packages/
 .nuget/
 
 # Visual Studio
 .vs/
+
+# Upgrade-wizard droppings. Opening xStunit.sln in a Visual Studio newer than
+# 2017 offers to "upgrade" src/xStunit.Vsix, which must stay on the VS2017 SDK
+# to load in XAE Shell -- see src/xStunit.Vsix/README.md. Declining still leaves
+# these behind, and they were nearly committed once.
+UpgradeLog*.htm
+_UpgradeReport_Files/
+Backup/

@@ -79,17 +79,14 @@ namespace xStunit.Interpreter.Tests.Conformance
             });
         }
 
-        // A union's members all sit at offset 0, which xStunit has no model
-        // for. Reported as out of scope rather than as a wall of offset
-        // mismatches that would drown the real findings.
+        // A union's members all sit at offset 0, and a .tmc marks one no
+        // differently from a struct - shared offsets are the only tell. Reading
+        // this one as a struct would report a wall of offset mismatches that
+        // all say the same thing.
         [Fact]
-        public void Compare_Union_IsReportedAsNotCompared()
+        public void Compare_Union_IsComparedWithEveryMemberOverlaid()
         {
-            var finding = Assert.Single(
-                Compare(X86Module).Findings, f => f.TypeName == "U_ExpectedOrActual");
-
-            Assert.Equal(LayoutFindingKind.NotCompared, finding.Kind);
-            Assert.Contains("union", finding.Detail);
+            Assert.DoesNotContain(Compare(X86Module).Findings, f => f.TypeName == "U_ExpectedOrActual");
         }
 
         // A function block's members start past an instance header the compiler

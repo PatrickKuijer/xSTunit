@@ -28,10 +28,9 @@ and diffed against those numbers by `LayoutOracle`.
 | `BIT` members carry sub-byte offsets | `ST_BitPacking` | same shape as `ST_BoolWidth`, declared in `BIT` |
 | Union layout | `U_OverlaidScalars` + `ST_UnionHolder` | every member at offset 0, size 8; `trailer` at 16 reports the alignment it imposes |
 
-`ST_BitPacking` and `ST_UnionHolder` are gaps rather than disagreements —
-xStunit refuses to size either, and the tests pin the refusal. They are here so
-the compiler states an answer that can be read when a model for them is
-written.
+`ST_BitPacking` is a gap rather than a disagreement — xStunit refuses to size a
+`BIT` member of a struct, and the tests pin the refusal. It is here so the
+compiler states an answer that can be read when a model for it is written.
 
 ## What the .tmc cannot settle
 
@@ -65,7 +64,7 @@ type is added here, add it to that list too — a test enforces this.
 
 ## What the compiler settled
 
-Every rule above came back as xStunit already had it, over 53 types and 145
+Every rule above came back as xStunit already had it, over 58 types and 180
 members with zero disagreements on the x86 module. On x64 the only
 disagreements are address widths, `POINTER TO` and `REFERENCE TO` alike:
 xStunit hardcodes four bytes.
@@ -79,11 +78,13 @@ to guess the other way:
 - `pack_mode` caps a field's alignment rather than flattening it, and does not
   reach into a nested struct type, which keeps its own internal padding.
 
-Two fixtures are gaps rather than agreements — xStunit refuses to size either,
-and the compiler's answer is now on record for whoever writes the model:
+`U_OverlaidScalars` came back at 8 bytes, every member at offset 0, imposing
+that 8-byte alignment on `ST_UnionHolder`, which is 24 bytes with its trailer
+at 16 — the answer the union model is now built to, along with the byte a `BIT`
+member of a union carries where the same member inside a struct would not.
+
+One fixture stays a gap rather than an agreement — xStunit refuses to size it,
+and the compiler's answer is on record for whoever writes the model:
 
 - `ST_BitPacking` — `BIT` members carry sub-byte offsets, at bits 0 and 1, with
   the guard byte at bit 8 and the type 2 bytes wide.
-- `U_OverlaidScalars` — 8 bytes, every member at offset 0, and it imposes that
-  8-byte alignment on `ST_UnionHolder`, which is 24 bytes with its trailer at
-  16.

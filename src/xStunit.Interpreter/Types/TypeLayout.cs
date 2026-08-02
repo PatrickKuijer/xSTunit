@@ -216,7 +216,10 @@ namespace xStunit.Interpreter
         }
 
         // Each field's placement inside structAst, in declaration order.
-        public IEnumerable<FieldPlacement> Fields(StructAst structAst)
+        public IEnumerable<FieldPlacement> Fields(StructAst structAst) =>
+            structAst.IsUnion ? OverlaidFields(structAst) : SequentialFields(structAst);
+
+        private IEnumerable<FieldPlacement> SequentialFields(StructAst structAst)
         {
             var packBound = PackBound(structAst);
             var offset = 0;
@@ -229,6 +232,29 @@ namespace xStunit.Interpreter
                 offset += size;
             }
         }
+
+        // A UNION's fields all start at offset 0, so none of them displaces
+        // another and the alignment each imposes is still its own.
+        private IEnumerable<FieldPlacement> OverlaidFields(StructAst unionAst)
+        {
+            var packBound = PackBound(unionAst);
+            foreach (var field in unionAst.Fields)
+            {
+                var (size, align) = SizeOfOverlaidField(field.TypeName);
+                yield return new FieldPlacement(field, 0, size, Math.Min(align, packBound));
+            }
+        }
+
+        // BIT is the one member type with no byte width of its own, and what
+        // makes it sub-byte is sharing a byte with the members around it. A
+        // union field has no neighbours to share with - every field starts at
+        // offset 0 - so it gets a whole byte, which is what the compiler
+        // declares for the BIT member of TcUnit's U_ExpectedOrActual on both
+        // targets. Inside a STRUCT, BIT stays unmodeled and SizeOf refuses it.
+        private (int Size, int Align) SizeOfOverlaidField(string typeName) =>
+            string.Equals(_registry.ResolveAlias(typeName?.Trim()), "BIT", StringComparison.OrdinalIgnoreCase)
+                ? (1, 1)
+                : SizeOf(typeName);
 
         // The length may be a non-literal constant expression (e.g. a
         // GVL-qualified constant), so it goes through _resolveBound rather than
@@ -245,7 +271,10 @@ namespace xStunit.Interpreter
             var maxAlign = 1;
             foreach (var placement in Fields(structAst))
             {
-                end = placement.Offset + placement.Size;
+                // The furthest field reached, not the last one placed: a UNION
+                // overlays every field at offset 0, so its widest field is what
+                // the type has to be able to hold.
+                end = Math.Max(end, placement.Offset + placement.Size);
                 maxAlign = Math.Max(maxAlign, placement.Align);
             }
 

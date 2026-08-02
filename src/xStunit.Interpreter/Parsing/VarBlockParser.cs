@@ -6,7 +6,8 @@ namespace xStunit.Interpreter
     // Turns the raw VAR/VAR_INPUT/VAR_OUTPUT/VAR_IN_OUT/VAR_TEMP declaration
     // text a FUNCTION_BLOCK or METHOD carries in its Declaration CDATA into
     // typed VarDecl entries. Also doubles as StructDeclParser's field-list
-    // parser: STRUCT/END_STRUCT toggle the same section state as VAR/END_VAR.
+    // parser: STRUCT/UNION and their END_ keywords toggle the same section
+    // state as VAR/END_VAR.
     // Scoped to the fixtures' grammar - one name per line, no comma lists.
     public static class VarBlockParser
     {
@@ -65,9 +66,11 @@ namespace xStunit.Interpreter
                         currentSection = null;
                         continue;
                     case "STRUCT":
+                    case "UNION":
                         currentSection = VarSection.Local;
                         continue;
                     case "END_STRUCT":
+                    case "END_UNION":
                         currentSection = null;
                         continue;
                 }

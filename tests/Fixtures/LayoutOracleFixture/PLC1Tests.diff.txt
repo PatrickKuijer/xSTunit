@@ -1,5 +1,5 @@
 module PLC1Tests target TwinCAT RT (x86)
-compared 36 of 71 declared types, 79 members
+compared 39 of 71 declared types, 109 members
 sizes and offsets in bits
 Unsupported T_Arg.pData SIZEOF() doesn't know the byte size of type 'PVOID'
 NotCompared TOF function block instance layout is not modeled
@@ -17,9 +17,6 @@ NotCompared FB_Test function block instance layout is not modeled
 NotCompared FW_GetCurTaskIndex function block instance layout is not modeled
 NotCompared GETCURTASKINDEX function block instance layout is not modeled
 NotCompared FB_FormatString function block instance layout is not modeled
-NotCompared U_ExpectedOrActual union layout is not modeled
-Unsupported ST_AssertResult.Expected SIZEOF() doesn't know the byte size of type 'U_ExpectedOrActual'
-Unsupported ST_AssertResultInstances.AssertResult SIZEOF() doesn't know the byte size of type 'U_ExpectedOrActual'
 NotCompared FB_AssertResultStatic function block instance layout is not modeled
 NotCompared FB_AssertArrayResultStatic function block instance layout is not modeled
 NotCompared I_AssertMessageFormatter neither members nor a base type declared

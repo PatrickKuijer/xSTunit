@@ -167,5 +167,47 @@ END_TYPE";
                 Directory.Delete(tempDir.FullName, recursive: true);
             }
         }
+
+        // A UNION DUT loads alongside the STRUCT DUTs, carrying the flag that
+        // separates the two layouts. Skip it and every type holding one is
+        // unsizable, which is how TcUnit's own ST_AssertResult was reachable
+        // only as an unsupported construct.
+        [Fact]
+        public void Load_UnionDut_IsRegisteredAndMarkedAUnion()
+        {
+            var tempDir = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "tcxunit-union-" + Guid.NewGuid()));
+            try
+            {
+                const string declaration = "TYPE U_Overlaid :\nUNION\n\tasWord : WORD;\n\tasLong : LWORD;\nEND_UNION\nEND_TYPE";
+                File.WriteAllText(Path.Combine(tempDir.FullName, "U_Overlaid.TcDUT"), DutXml("U_Overlaid", declaration));
+
+                var structTypes = DutStructLoader.Load(new[] { tempDir.FullName }, out var skipped);
+
+                Assert.Empty(skipped);
+                var unionAst = Assert.Single(structTypes);
+                Assert.Equal("U_Overlaid", unionAst.Name);
+                Assert.True(unionAst.IsUnion);
+                Assert.Equal(new[] { "asWord", "asLong" }, unionAst.Fields.Select(f => f.Name));
+            }
+            finally
+            {
+                Directory.Delete(tempDir.FullName, recursive: true);
+            }
+        }
+
+        // The STRUCT filter stays a STRUCT filter: DutAliasLoader consults it to
+        // decide a DUT is not an alias, and a union answering true there would
+        // change what that means.
+        [Fact]
+        public void IsStructDeclaration_UnionDeclaration_ReturnsFalse()
+        {
+            const string declaration = @"TYPE U_Overlaid :
+UNION
+	asWord : WORD;
+END_UNION
+END_TYPE";
+
+            Assert.False(DutStructLoader.IsStructDeclaration(declaration));
+        }
     }
 }

@@ -300,5 +300,50 @@ END_TYPE");
             // it at offset 2..3, total 4 bytes.
             Assert.Equal(4, result);
         }
+
+        // A union is as wide as its widest member, not as wide as its members
+        // laid end to end: reading it as a struct would make this 14 bytes.
+        [Fact]
+        public void SizeOf_Union_IsItsWidestMemberRatherThanTheSumOfThem()
+        {
+            var unionType = StructDeclParser.Parse(UnionDeclaration);
+            var (engine, _, frame) = NewHolder("VAR\n\tu : U_Overlaid;\nEND_VAR", new[] { unionType });
+
+            var result = engine.Evaluate(Parser.ParseExpression("SIZEOF(u)"), frame);
+
+            Assert.Equal(8, result);
+        }
+
+        // A union imposes its widest member's alignment on whatever holds it,
+        // which nothing about its own size reveals: an 8-byte union that
+        // aligned to 1 would put the trailer at 9 and make the holder 10 bytes.
+        [Fact]
+        public void SizeOf_StructHoldingAUnion_AlignsItToItsWidestMember()
+        {
+            var unionType = StructDeclParser.Parse(UnionDeclaration);
+            var holderType = StructDeclParser.Parse(@"TYPE ST_Holder :
+STRUCT
+	leadIn : BYTE;
+	overlay : U_Overlaid;
+	trailer : BYTE;
+END_STRUCT
+END_TYPE");
+            var (engine, _, frame) = NewHolder(
+                "VAR\n\th : ST_Holder;\nEND_VAR", new[] { unionType, holderType });
+
+            var result = engine.Evaluate(Parser.ParseExpression("SIZEOF(h)"), frame);
+
+            Assert.Equal(24, result);
+        }
+
+        // Three deliberately different widths: all-same-width members would
+        // leave "widest member" indistinguishable from "first" or "last".
+        private const string UnionDeclaration = @"TYPE U_Overlaid :
+UNION
+	asWord : WORD;
+	asBytes : ARRAY[0..3] OF BYTE;
+	asLong : LWORD;
+END_UNION
+END_TYPE";
     }
 }

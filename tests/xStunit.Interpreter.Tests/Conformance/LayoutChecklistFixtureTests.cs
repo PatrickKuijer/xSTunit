@@ -195,27 +195,34 @@ namespace xStunit.Interpreter.Tests.Conformance
         }
 
         // A union's members all start at offset 0 and its size is its widest
-        // member, neither of which xStunit models. Refusing to size the holder
-        // is the honest answer; reading the union as a struct would place the
-        // members end to end and report a layout nothing in TwinCAT produces.
+        // member: 8 bytes from the LWORD, not the 2 of the first member, the 4
+        // of the middle one, or the 14 that laying them end to end would give.
+        // The holder is what reports the alignment the union imposes - a union
+        // aligned to 1 would put the trailer at 9 rather than 16.
         [Fact]
-        public void UnionHolder_IsRefusedBecauseThereIsNoUnionModel()
+        public void UnionLayout_OverlaysEveryMemberAndImposesItsWidestAlignment()
         {
-            var ex = Assert.Throws<NotSupportedException>(() => Placements("ST_UnionHolder"));
+            AssertLayout("U_OverlaidScalars", 8,
+                ("asWord", 0, 2),
+                ("asBytes", 0, 4),
+                ("asLong", 0, 8));
 
-            Assert.Contains("U_OverlaidScalars", ex.Message);
+            AssertLayout("ST_UnionHolder", 24,
+                ("leadIn", 0, 1),
+                ("overlay", 8, 8),
+                ("trailer", 16, 1));
         }
 
         // VarBlockParser skips a declaration line it cannot spell instead of
         // failing, so a fixture written in a shape it does not accept would
-        // still load - as a struct silently missing a member, quietly measuring
-        // a layout no one authored. Every line inside a STRUCT body must
-        // therefore survive as a field.
+        // still load - as a type silently missing a member, quietly measuring
+        // a layout no one authored. Every line inside a STRUCT or UNION body
+        // must therefore survive as a field.
         [Fact]
         public void EveryDeclaredStructField_SurvivesParsing()
         {
             foreach (var (file, declarationText) in DutDeclarations()
-                         .Where(d => DutStructLoader.IsStructDeclaration(d.DeclarationText)))
+                         .Where(d => StructDeclParser.DeclaredBody(d.DeclarationText) != null))
             {
                 var declared = CountDeclaredFields(declarationText);
                 var parsed = StructDeclParser.Parse(declarationText).Fields.Count;
@@ -283,9 +290,9 @@ namespace xStunit.Interpreter.Tests.Conformance
             foreach (var rawLine in declarationText.Replace("\r\n", "\n").Split('\n'))
             {
                 var line = rawLine.Trim();
-                if (line == "STRUCT")
+                if (line == "STRUCT" || line == "UNION")
                     inBody = true;
-                else if (line == "END_STRUCT")
+                else if (line == "END_STRUCT" || line == "END_UNION")
                     inBody = false;
                 else if (inBody && FieldLinePattern.IsMatch(line))
                     count++;

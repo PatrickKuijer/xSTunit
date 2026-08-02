@@ -279,11 +279,29 @@ namespace xStunit.Interpreter.Tests.Conformance
                 ("overlay", 8, 8),
                 ("trailer", 16, 1));
 
-            var report = Compare(X86Module);
-            Assert.Contains(report.Findings,
-                f => f.TypeName == "U_OverlaidScalars" && f.Kind == LayoutFindingKind.NotCompared);
-            Assert.Contains(report.Findings,
-                f => f.Subject == "ST_UnionHolder.overlay" && f.Kind == LayoutFindingKind.Unsupported);
+            Assert.DoesNotContain(Compare(X86Module).Findings,
+                f => f.TypeName == "U_OverlaidScalars" || f.TypeName == "ST_UnionHolder");
+        }
+
+        // The union gap was never confined to the fixtures: TcUnit's own
+        // assertion record holds two U_ExpectedOrActual members, so every type
+        // on that path was unsizable while unions were. Its BIT member is the
+        // one place a BIT carries a byte of its own - no neighbour to share
+        // one with - which is why this type is reachable while ST_BitPacking
+        // stays unsupported.
+        [Theory]
+        [InlineData(X86Module)]
+        [InlineData(X64Module)]
+        public void AssertResultPath_IsSizedOnceUnionsAre(string module)
+        {
+            AssertDeclaredLayout(module, "ST_AssertResult", 1536,
+                ("Expected", 0, 512),
+                ("Actual", 512, 512),
+                ("Message", 1024, 256),
+                ("TestInstancePath", 1280, 256));
+
+            Assert.DoesNotContain(Compare(module).Findings,
+                f => f.TypeName == "U_ExpectedOrActual" || f.TypeName == "ST_AssertResult");
         }
 
         // Offsets and sizes are asserted in bytes so that this file and

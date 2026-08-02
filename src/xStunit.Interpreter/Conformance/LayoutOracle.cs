@@ -197,7 +197,8 @@ namespace xStunit.Interpreter.Conformance
                         null,
                         VarSection.Local))
                     .ToList(),
-                type.PackMode);
+                type.PackMode,
+                IsUnion(type));
 
         // The .tmc splits a declared type across a type name, a PointerTo or
         // ReferenceTo attribute and any number of ArrayInfo blocks - the same
@@ -242,15 +243,12 @@ namespace xStunit.Interpreter.Conformance
                 return "static members - a program or global variable list, not an instance layout";
             if (type.Members.Any(m => m.BitOffset == null))
                 return "a member declares no offset";
-            if (IsUnion(type))
-                return "union layout is not modeled";
             return null;
         }
 
         // A .tmc marks a UNION no differently from a STRUCT; what gives it away
-        // is every member starting at the same offset. xStunit has no union
-        // model at all, so reading one as a struct would report a wall of
-        // offset mismatches that all say the same thing.
+        // is every member starting at the same offset. Read one as a struct and
+        // it reports a wall of offset mismatches that all say the same thing.
         private static bool IsUnion(DeclaredTypeLayout type) =>
             type.Members.Count > 1 && type.Members.All(m => m.BitOffset == 0);
 

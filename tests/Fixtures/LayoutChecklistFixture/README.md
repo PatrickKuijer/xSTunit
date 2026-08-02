@@ -40,26 +40,50 @@ wide a type is, not whether a packing write touches the padding bytes inside
 it. That half is a `MEMCPY` question, and getting it wrong is a buffer overrun
 rather than a wrong value — it needs a runtime comparison, not a layout one.
 
-A `.tmc` also records the layout a struct ended up with and never the
-`{attribute 'pack_mode'}` pragma that produced it. The two packed fixtures are
-therefore only readable as packed if the oracle is given this source alongside
-the `.tmc`; measured against the `.tmc` alone they will be compared as if
-naturally aligned, and reported as disagreements where xStunit is right.
+The `{attribute 'pack_mode'}` pragma does survive, as a `pack_mode` property on
+the type, so the packed fixtures are measured under the cap the compiler
+applied without the oracle ever seeing this source.
 
-## Building the golden .tmc
+## The golden .tmc
 
-The measurement step needs TwinCAT XAE once:
+`LayoutChecklist.x86.tmc` and `LayoutChecklist.x64.tmc` are one TwinCAT build
+of the source in this folder, once per target platform. Two targets is what
+makes an address width visible at all: identical source, different bytes.
+`LayoutChecklistOracleTests` reads them and needs no TwinCAT.
 
-1. New TwinCAT XAE project, one standard PLC project inside it.
-2. Copy every `.TcDUT` here into the project's `DUTs` folder and
-   `LayoutChecklistInstances.TcGVL` into `GVLs`, then include them in the
-   project so they compile.
-3. Build for **x86**, save the generated `.tmc`, then switch the target
-   platform to **x64** and build again. The pointer-width rules are only
-   visible as the difference between the two.
-4. Commit both `.tmc` files here.
+Regenerating them does. The fixtures are built inside the XAE solution at
+`C:\Git\p_twincat_test_project\XAE-TestSolution`, whose PLC project carries
+them as `DUTs`/`GVLs` entries, by `build-layout-tmc.ps1` in that repository —
+a scripted, headless XAE build over the automation interface that harvests both
+platforms back into this folder. It builds only, and never activates a
+configuration, so no runtime and no license are involved.
 
 The global variable list carries `{attribute 'linkalways'}` and instantiates
 every type on purpose: a DUT nothing references can be dropped from the symbol
 set, which would quietly remove a checklist rule from the comparison. If a
 type is added here, add it to that list too — a test enforces this.
+
+## What the compiler settled
+
+Every rule above came back as xStunit already had it, over 53 types and 145
+members with zero disagreements on the x86 module. On x64 the only
+disagreements are address widths, `POINTER TO` and `REFERENCE TO` alike:
+xStunit hardcodes four bytes.
+
+Two answers are worth stating outright, being the ones a reader is most likely
+to guess the other way:
+
+- `LREAL` and `LINT` align to 8 on **both** targets — a 32-bit build does not
+  drop them to 4 — and a type ending in a single byte behind them is padded out
+  to a multiple of 8.
+- `pack_mode` caps a field's alignment rather than flattening it, and does not
+  reach into a nested struct type, which keeps its own internal padding.
+
+Two fixtures are gaps rather than agreements — xStunit refuses to size either,
+and the compiler's answer is now on record for whoever writes the model:
+
+- `ST_BitPacking` — `BIT` members carry sub-byte offsets, at bits 0 and 1, with
+  the guard byte at bit 8 and the type 2 bytes wide.
+- `U_OverlaidScalars` — 8 bytes, every member at offset 0, and it imposes that
+  8-byte alignment on `ST_UnionHolder`, which is 24 bytes with its trailer at
+  16.

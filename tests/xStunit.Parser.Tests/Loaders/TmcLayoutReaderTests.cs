@@ -78,6 +78,51 @@ namespace xStunit.Parser.Tests
             Assert.Equal(4, dimension.ElementCount);
         }
 
+        // A REFERENCE TO member is marked with its own attribute rather than
+        // with PointerTo, and the element still names the referent. Read without
+        // it, the member is sized as that referent - two bytes for an INT - and
+        // silently agrees with nothing the compiler declared.
+        [Fact]
+        public void Parse_ReferenceMember_IsFlaggedApartFromAPointer()
+        {
+            const string xml = @"<?xml version=""1.0"" encoding=""utf-8""?>
+<TcModuleClass><DataTypes><DataType><Name>ST_ReferenceWidth</Name><BitSize>96</BitSize>
+<SubItem><Name>target</Name><Type ReferenceTo=""true"">INT</Type><BitSize>32</BitSize><BitOffs>32</BitOffs></SubItem>
+<SubItem><Name>owned</Name><Type PointerTo=""1"">INT</Type><BitSize>32</BitSize><BitOffs>64</BitOffs></SubItem>
+</DataType></DataTypes></TcModuleClass>";
+
+            var members = TmcLayoutReader.Parse(xml).Types.Single().Members;
+
+            Assert.True(members[0].IsReference);
+            Assert.False(members[0].IsPointer);
+            Assert.Equal("INT", members[0].TypeName);
+
+            Assert.True(members[1].IsPointer);
+            Assert.False(members[1].IsReference);
+        }
+
+        // The pragma survives compilation into the same DataType-level
+        // Properties block that carries PouType, so a packed type can be
+        // recognised as packed from the file alone.
+        [Fact]
+        public void Parse_PackedType_ReadsItsPackModeFromTheTypesOwnProperties()
+        {
+            const string xml = @"<?xml version=""1.0"" encoding=""utf-8""?>
+<TcModuleClass><DataTypes>
+<DataType><Name>ST_PackedToTwo</Name><BitSize>64</BitSize>
+<SubItem><Name>wide</Name><Type>DINT</Type><BitSize>32</BitSize><BitOffs>16</BitOffs></SubItem>
+<Properties><Property><Name>pack_mode</Name><Value>2</Value></Property></Properties></DataType>
+<DataType><Name>ST_Natural</Name><BitSize>64</BitSize>
+<SubItem><Name>wide</Name><Type>DINT</Type><BitSize>32</BitSize><BitOffs>32</BitOffs></SubItem>
+</DataType>
+</DataTypes></TcModuleClass>";
+
+            var types = TmcLayoutReader.Parse(xml).Types;
+
+            Assert.Equal(2, types[0].PackMode);
+            Assert.Equal(0, types[1].PackMode);
+        }
+
         // A handle type aliases a POINTER TO its base type, so dropping the
         // attribute would make it as wide as whatever it points at.
         [Fact]

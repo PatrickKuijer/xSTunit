@@ -66,6 +66,7 @@ namespace xStunit.Parser
                 baseType?.Attribute("PointerTo") != null,
                 dataType.Elements("ArrayInfo").Select(ParseDimension).ToList(),
                 HasProperty(dataType, "PouType", "FunctionBlock"),
+                ParseInt(PropertyValue(dataType, "pack_mode")) ?? 0,
                 dataType.Elements("SubItem").Select(ParseMember).ToList());
         }
 
@@ -79,6 +80,7 @@ namespace xStunit.Parser
                 name?.Value,
                 type?.Value,
                 type?.Attribute("PointerTo") != null,
+                type?.Attribute("ReferenceTo") != null,
                 name?.Attribute("Static")?.Value == "true",
                 subItem.Elements("ArrayInfo").Select(ParseDimension).ToList(),
                 ParseInt(bitSize),
@@ -94,8 +96,16 @@ namespace xStunit.Parser
         // A DataType's own Properties block, not to be confused with the
         // Property elements nested inside each SubItem.
         private static bool HasProperty(XElement dataType, string name, string value) =>
-            dataType.Element("Properties")?.Elements("Property")
-                .Any(p => p.Element("Name")?.Value == name && p.Element("Value")?.Value == value) ?? false;
+            Properties(dataType).Any(p =>
+                p.Element("Name")?.Value == name && p.Element("Value")?.Value == value);
+
+        private static string PropertyValue(XElement dataType, string name) =>
+            Properties(dataType)
+                .FirstOrDefault(p => p.Element("Name")?.Value == name)
+                ?.Element("Value")?.Value;
+
+        private static IEnumerable<XElement> Properties(XElement dataType) =>
+            dataType.Element("Properties")?.Elements("Property") ?? Enumerable.Empty<XElement>();
 
         private static int? ParseInt(XElement element) => ParseInt(element?.Value);
 

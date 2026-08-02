@@ -133,6 +133,7 @@ namespace xStunit.Interpreter.Tests.Conformance
                 "TComSrvPtr",
                 "ITComObjectServer",
                 isPointer: true,
+                isReference: false,
                 isStatic: false,
                 arrayDimensions: new DeclaredArrayDimension[0],
                 bitSize: 32,
@@ -145,6 +146,7 @@ namespace xStunit.Interpreter.Tests.Conformance
                 baseTypeIsPointer: false,
                 arrayDimensions: new DeclaredArrayDimension[0],
                 isFunctionBlock: false,
+                packMode: 0,
                 members: new[] { member });
 
             var report = LayoutOracle.Compare(new ModuleLayout("Synthetic", targetPlatform, new[] { type }));

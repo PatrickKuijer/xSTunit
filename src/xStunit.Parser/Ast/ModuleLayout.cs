@@ -35,6 +35,7 @@ namespace xStunit.Parser
             string name,
             string typeName,
             bool isPointer,
+            bool isReference,
             bool isStatic,
             IReadOnlyList<DeclaredArrayDimension> arrayDimensions,
             int? bitSize,
@@ -44,6 +45,7 @@ namespace xStunit.Parser
             Name = name;
             TypeName = typeName;
             IsPointer = isPointer;
+            IsReference = isReference;
             IsStatic = isStatic;
             ArrayDimensions = arrayDimensions;
             BitSize = bitSize;
@@ -56,13 +58,22 @@ namespace xStunit.Parser
         /// <summary>
         /// The member's type as the file spells it - an elementary type, a
         /// sized <c>STRING(n)</c>, or another declared type's name. For a
-        /// pointer or array member this is the pointed-to/element type;
-        /// <see cref="IsPointer"/> and <see cref="ArrayDimensions"/> carry the
-        /// rest.
+        /// pointer, reference or array member this is the
+        /// pointed-to/referred-to/element type; <see cref="IsPointer"/>,
+        /// <see cref="IsReference"/> and <see cref="ArrayDimensions"/> carry
+        /// the rest.
         /// </summary>
         public string TypeName { get; }
 
         public bool IsPointer { get; }
+
+        /// <summary>
+        /// True for a <c>REFERENCE TO</c> member. Laid out as an address, the
+        /// same as <see cref="IsPointer"/>, but kept apart from it because the
+        /// two are different declarations and only one of them is assignable
+        /// through in ST.
+        /// </summary>
+        public bool IsReference { get; }
 
         /// <summary>
         /// True for a member the compiler marked static - what a PROGRAM's or
@@ -106,6 +117,7 @@ namespace xStunit.Parser
             bool baseTypeIsPointer,
             IReadOnlyList<DeclaredArrayDimension> arrayDimensions,
             bool isFunctionBlock,
+            int packMode,
             IReadOnlyList<DeclaredMemberLayout> members)
         {
             Name = name;
@@ -114,6 +126,7 @@ namespace xStunit.Parser
             BaseTypeIsPointer = baseTypeIsPointer;
             ArrayDimensions = arrayDimensions;
             IsFunctionBlock = isFunctionBlock;
+            PackMode = packMode;
             Members = members;
         }
 
@@ -149,6 +162,19 @@ namespace xStunit.Parser
         /// puts at offset 0, which is not modeled anywhere in xStunit.
         /// </summary>
         public bool IsFunctionBlock { get; }
+
+        /// <summary>
+        /// The <c>{attribute 'pack_mode' := 'N'}</c> cap the type was compiled
+        /// with, in bytes; 0 when the type carries no pragma and every member
+        /// keeps its natural alignment.
+        /// </summary>
+        /// <remarks>
+        /// The compiler writes the pragma into the file alongside the layout it
+        /// produced, so a reader need not consult the ST source to know a type
+        /// was packed. Without it, a packed type read back as naturally aligned
+        /// disagrees with its own declared offsets.
+        /// </remarks>
+        public int PackMode { get; }
 
         public IReadOnlyList<DeclaredMemberLayout> Members { get; }
     }

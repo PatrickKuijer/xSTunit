@@ -14,11 +14,8 @@ namespace xStunit.Interpreter.Conformance
     // running PLC. Whatever types a project happens to contain is whatever the
     // run covers - see LayoutReport.ComparedMemberCount for how much that was.
     //
-    // One rule this cannot reach: a .tmc records the layout a struct ended up
-    // with, not the {attribute 'pack_mode'} pragma that produced it, so every
-    // type is compared as if it were naturally aligned. A packed struct would
-    // therefore be reported as a disagreement when xStunit is in fact right -
-    // checking pack_mode needs the ST source alongside the .tmc.
+    // Packed types are compared under the cap the compiler applied, which it
+    // records in the file - see DeclaredTypeLayout.PackMode.
     internal static class LayoutOracle
     {
         private const int BitsPerByte = 8;
@@ -185,25 +182,39 @@ namespace xStunit.Interpreter.Conformance
         // TwinCAT's handle types (RTS_IEC_HANDLE and friends) alias a pointer,
         // not the pointed-to type, so the pointer has to survive into the alias
         // text or the alias resolves to the width of whatever it points at.
+        // A base type is only ever marked PointerTo, never ReferenceTo: the
+        // reference spelling shows up on members and not on the alias itself.
         private static string AliasTarget(DeclaredTypeLayout type) =>
-            IecTypeName(type.BaseTypeName, type.BaseTypeIsPointer, type.ArrayDimensions);
+            IecTypeName(type.BaseTypeName, type.BaseTypeIsPointer, isReference: false, type.ArrayDimensions);
 
         private static StructAst ToStructAst(DeclaredTypeLayout type) =>
             new StructAst(
                 type.Name,
                 type.Members
                     .Select(m => new VarDecl(
-                        m.Name, IecTypeName(m.TypeName, m.IsPointer, m.ArrayDimensions), null, VarSection.Local))
-                    .ToList());
+                        m.Name,
+                        IecTypeName(m.TypeName, m.IsPointer, m.IsReference, m.ArrayDimensions),
+                        null,
+                        VarSection.Local))
+                    .ToList(),
+                type.PackMode);
 
-        // The .tmc splits a declared type across a type name, a PointerTo
-        // attribute and any number of ArrayInfo blocks - the same three pieces
-        // whether it is describing a member or an array/handle type alias;
-        // xStunit's layout math takes one piece of ST type text.
+        // The .tmc splits a declared type across a type name, a PointerTo or
+        // ReferenceTo attribute and any number of ArrayInfo blocks - the same
+        // pieces whether it is describing a member or an array/handle type
+        // alias; xStunit's layout math takes one piece of ST type text.
         private static string IecTypeName(
-            string baseTypeName, bool isPointer, IReadOnlyList<DeclaredArrayDimension> dimensions)
+            string baseTypeName,
+            bool isPointer,
+            bool isReference,
+            IReadOnlyList<DeclaredArrayDimension> dimensions)
         {
-            var typeName = isPointer ? $"POINTER TO {baseTypeName}" : baseTypeName;
+            var typeName = baseTypeName;
+            if (isPointer)
+                typeName = $"POINTER TO {baseTypeName}";
+            else if (isReference)
+                typeName = $"REFERENCE TO {baseTypeName}";
+
             if (dimensions.Count == 0)
                 return typeName;
 

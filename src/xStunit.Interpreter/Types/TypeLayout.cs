@@ -80,7 +80,7 @@ namespace xStunit.Interpreter
         {
             var resolved = _registry.ResolveAlias(typeName?.Trim());
             if (resolved == null)
-                throw new NotSupportedException("A byte size needs a type name");
+                throw new NotSupportedException("SIZEOF() requires a type name");
 
             if (resolved.StartsWith("POINTER TO", StringComparison.Ordinal) ||
                 resolved.StartsWith("REFERENCE TO", StringComparison.Ordinal))
@@ -116,7 +116,7 @@ namespace xStunit.Interpreter
             if (ScalarByteSizes.TryGetValue(resolved, out var scalarSize))
                 return (scalarSize, scalarSize);
 
-            throw new NotSupportedException($"No byte size is known for type '{typeName}'");
+            throw new NotSupportedException($"SIZEOF() doesn't know the byte size of type '{typeName}'");
         }
 
         // Each field's placement inside structAst, in declaration order.
@@ -136,13 +136,12 @@ namespace xStunit.Interpreter
 
         // The length may be a non-literal constant expression (e.g. a
         // GVL-qualified constant), so it goes through _resolveBound rather than
-        // a bare int.Parse, same as an ARRAY bound.
+        // a bare int.Parse, same as an ARRAY bound. With no resolver, the
+        // literal-only overload's own refusal is the honest error.
         private int ParseStringLength(string resolvedTypeName) =>
-            StringTypeInfo.ParseLength(
-                resolvedTypeName,
-                boundText => _resolveBound != null
-                    ? _resolveBound(boundText)
-                    : throw new FormatException($"The input string '{boundText}' was not in a correct format"));
+            _resolveBound == null
+                ? StringTypeInfo.ParseLength(resolvedTypeName)
+                : StringTypeInfo.ParseLength(resolvedTypeName, _resolveBound);
 
         private (int Size, int Align) SizeOfStruct(StructAst structAst)
         {

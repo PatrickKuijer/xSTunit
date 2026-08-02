@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using xStunit.Parser;
@@ -12,14 +12,14 @@ namespace xStunit.Interpreter.Conformance
     // size outright, so the declared types themselves supply the fixtures and
     // the comparison needs no TwinCAT installation, no ST source, and no
     // running PLC. Whatever types a project happens to contain is whatever the
-    // run covers - see LayoutReport.ComparedTypeCount for how much that was.
+    // run covers - see LayoutReport.ComparedMemberCount for how much that was.
     //
     // One rule this cannot reach: a .tmc records the layout a struct ended up
     // with, not the {attribute 'pack_mode'} pragma that produced it, so every
     // type is compared as if it were naturally aligned. A packed struct would
     // therefore be reported as a disagreement when xStunit is in fact right -
     // checking pack_mode needs the ST source alongside the .tmc.
-    public static class LayoutOracle
+    internal static class LayoutOracle
     {
         private const int BitsPerByte = 8;
 
@@ -33,32 +33,33 @@ namespace xStunit.Interpreter.Conformance
 
             var findings = new List<LayoutFinding>();
             var comparedTypes = 0;
+            var comparedMembers = 0;
 
             foreach (var type in module.Types)
             {
                 var skipReason = SkipReason(type);
                 if (skipReason != null)
                 {
-                    findings.Add(new LayoutFinding(
-                        LayoutFindingKind.NotCompared, type.Name, null, null, null, skipReason));
+                    findings.Add(LayoutFinding.NotCompared(type.Name, skipReason));
                     continue;
                 }
 
                 var compared = type.Members.Count == 0
                     ? CompareTypeSize(layout, type, findings)
                     : CompareStruct(layout, registry, type, useX64Widths, findings);
-                if (compared)
+                if (compared.Reached)
                     comparedTypes++;
+                comparedMembers += compared.Members;
             }
 
             return new LayoutReport(
-                module.ModuleName, module.TargetPlatform, module.Types.Count, comparedTypes, findings);
+                module.ModuleName, module.TargetPlatform, module.Types.Count, comparedTypes, comparedMembers, findings);
         }
 
         // Enums and aliases carry no members of their own, so all there is to
         // check is that resolving to the declared base type gives the compiler's
         // own size - which is the enum-base-width rule.
-        private static bool CompareTypeSize(TypeLayout layout, DeclaredTypeLayout type, List<LayoutFinding> findings)
+        private static Comparison CompareTypeSize(TypeLayout layout, DeclaredTypeLayout type, List<LayoutFinding> findings)
         {
             int computedBits;
             try
@@ -67,21 +68,17 @@ namespace xStunit.Interpreter.Conformance
             }
             catch (Exception ex) when (IsLayoutRefusal(ex))
             {
-                findings.Add(new LayoutFinding(
-                    LayoutFindingKind.Unsupported, type.Name, null, type.BitSize, null, ex.Message));
-                return false;
+                findings.Add(LayoutFinding.Unsupported(type.Name, null, ex.Message));
+                return new Comparison(false, 0);
             }
 
             if (type.BitSize != computedBits)
-            {
-                findings.Add(new LayoutFinding(
-                    LayoutFindingKind.TypeSize, type.Name, null, type.BitSize, computedBits, null));
-            }
+                findings.Add(LayoutFinding.TypeSize(type.Name, type.BitSize, computedBits));
 
-            return true;
+            return new Comparison(true, 0);
         }
 
-        private static bool CompareStruct(
+        private static Comparison CompareStruct(
             TypeLayout layout,
             TypeRegistry registry,
             DeclaredTypeLayout type,
@@ -99,18 +96,12 @@ namespace xStunit.Interpreter.Conformance
                 var declaredOffset = member.BitOffset;
                 var computedOffset = placement.Offset * BitsPerByte;
                 if (declaredOffset != computedOffset)
-                {
-                    findings.Add(new LayoutFinding(
-                        LayoutFindingKind.MemberOffset, type.Name, member.Name, declaredOffset, computedOffset, null));
-                }
+                    findings.Add(LayoutFinding.MemberOffset(type.Name, member.Name, declaredOffset, computedOffset));
 
                 var declaredSize = DeclaredBits(member, useX64Widths);
                 var computedSize = placement.Size * BitsPerByte;
                 if (declaredSize != computedSize)
-                {
-                    findings.Add(new LayoutFinding(
-                        LayoutFindingKind.MemberSize, type.Name, member.Name, declaredSize, computedSize, null));
-                }
+                    findings.Add(LayoutFinding.MemberSize(type.Name, member.Name, declaredSize, computedSize));
             }
 
             if (failedIndex >= 0)
@@ -119,19 +110,33 @@ namespace xStunit.Interpreter.Conformance
                 // offset derived from a size xStunit could not compute, so the
                 // type's remaining members and its overall size are not
                 // reported at all rather than reported wrongly.
-                findings.Add(new LayoutFinding(
-                    LayoutFindingKind.Unsupported, type.Name, type.Members[failedIndex].Name, null, null, failureDetail));
-                return false;
+                findings.Add(LayoutFinding.Unsupported(type.Name, type.Members[failedIndex].Name, failureDetail));
+                return new Comparison(false, placements.Count);
             }
 
             var computedTypeBits = layout.SizeOf(type.Name).Size * BitsPerByte;
             if (type.BitSize != computedTypeBits)
+                findings.Add(LayoutFinding.TypeSize(type.Name, type.BitSize, computedTypeBits));
+
+            return new Comparison(true, placements.Count);
+        }
+
+        // How much of a declared type the comparison actually got through:
+        // whether the type came out fully compared, and how many of its members
+        // were placed against the compiler's own offsets. Members are the
+        // honest denominator - a module's type count is inflated by aliases and
+        // enums, which are one size check each.
+        private readonly struct Comparison
+        {
+            public Comparison(bool reached, int members)
             {
-                findings.Add(new LayoutFinding(
-                    LayoutFindingKind.TypeSize, type.Name, null, type.BitSize, computedTypeBits, null));
+                Reached = reached;
+                Members = members;
             }
 
-            return true;
+            public bool Reached { get; }
+
+            public int Members { get; }
         }
 
         // Placements up to the first field the layout math refuses, plus which
@@ -181,25 +186,29 @@ namespace xStunit.Interpreter.Conformance
         // not the pointed-to type, so the pointer has to survive into the alias
         // text or the alias resolves to the width of whatever it points at.
         private static string AliasTarget(DeclaredTypeLayout type) =>
-            type.BaseTypeIsPointer ? $"POINTER TO {type.BaseTypeName}" : type.BaseTypeName;
+            IecTypeName(type.BaseTypeName, type.BaseTypeIsPointer, type.ArrayDimensions);
 
         private static StructAst ToStructAst(DeclaredTypeLayout type) =>
             new StructAst(
                 type.Name,
-                type.Members.Select(m => new VarDecl(m.Name, IecTypeName(m), null, VarSection.Local)).ToList());
+                type.Members
+                    .Select(m => new VarDecl(
+                        m.Name, IecTypeName(m.TypeName, m.IsPointer, m.ArrayDimensions), null, VarSection.Local))
+                    .ToList());
 
-        // The .tmc splits a member's declared type across the Type element, a
-        // PointerTo attribute and any number of ArrayInfo blocks; xStunit's
-        // layout math takes one piece of ST type text.
-        private static string IecTypeName(DeclaredMemberLayout member)
+        // The .tmc splits a declared type across a type name, a PointerTo
+        // attribute and any number of ArrayInfo blocks - the same three pieces
+        // whether it is describing a member or an array/handle type alias;
+        // xStunit's layout math takes one piece of ST type text.
+        private static string IecTypeName(
+            string baseTypeName, bool isPointer, IReadOnlyList<DeclaredArrayDimension> dimensions)
         {
-            var typeName = member.IsPointer ? $"POINTER TO {member.TypeName}" : member.TypeName;
-            if (member.ArrayDimensions.Count == 0)
+            var typeName = isPointer ? $"POINTER TO {baseTypeName}" : baseTypeName;
+            if (dimensions.Count == 0)
                 return typeName;
 
             var bounds = string.Join(
-                ",",
-                member.ArrayDimensions.Select(d => $"{d.LowerBound}..{d.LowerBound + d.ElementCount - 1}"));
+                ",", dimensions.Select(d => $"{d.LowerBound}..{d.LowerBound + d.ElementCount - 1}"));
             return $"ARRAY[{bounds}] OF {typeName}";
         }
 

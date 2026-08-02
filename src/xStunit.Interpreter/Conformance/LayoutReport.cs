@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 
@@ -7,19 +7,21 @@ namespace xStunit.Interpreter.Conformance
     // What LayoutOracle.Compare found: every disagreement between a .tmc's
     // declared layout and xStunit's, plus every declared type the comparison
     // could not reach and why.
-    public sealed class LayoutReport
+    internal sealed class LayoutReport
     {
         public LayoutReport(
             string moduleName,
             string targetPlatform,
             int declaredTypeCount,
             int comparedTypeCount,
+            int comparedMemberCount,
             IReadOnlyList<LayoutFinding> findings)
         {
             ModuleName = moduleName;
             TargetPlatform = targetPlatform;
             DeclaredTypeCount = declaredTypeCount;
             ComparedTypeCount = comparedTypeCount;
+            ComparedMemberCount = comparedMemberCount;
             Findings = findings;
         }
 
@@ -29,9 +31,14 @@ namespace xStunit.Interpreter.Conformance
 
         public int DeclaredTypeCount { get; }
 
-        // How many of them xStunit's layout math was actually run against - the
-        // denominator any conformance claim from this report has to quote.
+        // How many of them xStunit's layout math was actually run against.
         public int ComparedTypeCount { get; }
+
+        // How many members were placed against a compiler-declared offset - the
+        // denominator any conformance claim from this report has to quote. The
+        // type count flatters it: an alias or an enum is one size check, while
+        // only a struct exercises offsets and padding at all.
+        public int ComparedMemberCount { get; }
 
         public IReadOnlyList<LayoutFinding> Findings { get; }
 
@@ -50,7 +57,8 @@ namespace xStunit.Interpreter.Conformance
             text.Append("module ").Append(ModuleName ?? "(none)")
                 .Append(" target ").Append(TargetPlatform ?? "(none)").Append('\n');
             text.Append("compared ").Append(ComparedTypeCount)
-                .Append(" of ").Append(DeclaredTypeCount).Append(" declared types\n");
+                .Append(" of ").Append(DeclaredTypeCount).Append(" declared types, ")
+                .Append(ComparedMemberCount).Append(" members\n");
             text.Append("sizes and offsets in bits\n");
 
             foreach (var finding in Findings)

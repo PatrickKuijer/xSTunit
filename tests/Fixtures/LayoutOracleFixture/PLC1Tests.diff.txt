@@ -1,7 +1,7 @@
 module PLC1Tests target TwinCAT RT (x86)
-compared 36 of 71 declared types
+compared 36 of 71 declared types, 79 members
 sizes and offsets in bits
-Unsupported T_Arg.pData No byte size is known for type 'PVOID'
+Unsupported T_Arg.pData SIZEOF() doesn't know the byte size of type 'PVOID'
 NotCompared TOF function block instance layout is not modeled
 NotCompared I_TestResults neither members nor a base type declared
 NotCompared R_TRIG function block instance layout is not modeled
@@ -18,8 +18,8 @@ NotCompared FW_GetCurTaskIndex function block instance layout is not modeled
 NotCompared GETCURTASKINDEX function block instance layout is not modeled
 NotCompared FB_FormatString function block instance layout is not modeled
 NotCompared U_ExpectedOrActual union layout is not modeled
-Unsupported ST_AssertResult.Expected No byte size is known for type 'U_ExpectedOrActual'
-Unsupported ST_AssertResultInstances.AssertResult No byte size is known for type 'U_ExpectedOrActual'
+Unsupported ST_AssertResult.Expected SIZEOF() doesn't know the byte size of type 'U_ExpectedOrActual'
+Unsupported ST_AssertResultInstances.AssertResult SIZEOF() doesn't know the byte size of type 'U_ExpectedOrActual'
 NotCompared FB_AssertResultStatic function block instance layout is not modeled
 NotCompared FB_AssertArrayResultStatic function block instance layout is not modeled
 NotCompared I_AssertMessageFormatter neither members nor a base type declared
@@ -29,8 +29,8 @@ NotCompared FB_TestSuite function block instance layout is not modeled
 NotCompared FB_MemRingBuffer function block instance layout is not modeled
 NotCompared TON function block instance layout is not modeled
 NotCompared FB_AdsLogStringMessageFifoQueue function block instance layout is not modeled
-Unsupported PlcAppSystemInfo.ObjId No byte size is known for type 'OTCID'
-Unsupported PlcTaskSystemInfo.ObjId No byte size is known for type 'OTCID'
+Unsupported PlcAppSystemInfo.ObjId SIZEOF() doesn't know the byte size of type 'OTCID'
+Unsupported PlcTaskSystemInfo.ObjId SIZEOF() doesn't know the byte size of type 'OTCID'
 NotCompared Global_Variables static members - a program or global variable list, not an instance layout
 NotCompared Global_Variables static members - a program or global variable list, not an instance layout
 NotCompared GVL_Param_TcUnit static members - a program or global variable list, not an instance layout

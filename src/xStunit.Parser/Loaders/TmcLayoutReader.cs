@@ -24,14 +24,24 @@ namespace xStunit.Parser
     public static class TmcLayoutReader
     {
         /// <param name="path">Path to a <c>.tmc</c> file.</param>
+        /// <exception cref="System.IO.IOException">
+        /// The file cannot be read - it is missing, locked, or the path is
+        /// unreachable. Distinct from <see cref="System.Xml.XmlException"/>,
+        /// which means the file was read but is not well-formed XML.
+        /// </exception>
+        /// <exception cref="System.Xml.XmlException">See <see cref="Parse"/>.</exception>
         public static ModuleLayout ReadFile(string path) => Parse(File.ReadAllText(path));
 
         /// <param name="xml">The contents of a <c>.tmc</c> file.</param>
         /// <returns>
-        /// Every data type the file declares, in file order. A file declaring
-        /// none yields an empty <see cref="ModuleLayout.Types"/> rather than
-        /// null.
+        /// The module's declared types, in file order. A file declaring none
+        /// yields an empty <see cref="ModuleLayout.Types"/> rather than null.
         /// </returns>
+        /// <exception cref="System.Xml.XmlException">
+        /// <paramref name="xml"/> is not well-formed XML. Well-formed XML that
+        /// is not a <c>.tmc</c> does not throw - it reads as a module declaring
+        /// no types.
+        /// </exception>
         public static ModuleLayout Parse(string xml)
         {
             var root = XDocument.Parse(xml).Root;
@@ -54,7 +64,7 @@ namespace xStunit.Parser
                 ParseInt(dataType.Element("BitSize")),
                 baseType?.Value,
                 baseType?.Attribute("PointerTo") != null,
-                dataType.Element("EnumInfo") != null,
+                dataType.Elements("ArrayInfo").Select(ParseDimension).ToList(),
                 HasProperty(dataType, "PouType", "FunctionBlock"),
                 dataType.Elements("SubItem").Select(ParseMember).ToList());
         }

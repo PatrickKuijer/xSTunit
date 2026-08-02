@@ -1,6 +1,6 @@
-namespace xStunit.Interpreter.Conformance
+﻿namespace xStunit.Interpreter.Conformance
 {
-    public enum LayoutFindingKind
+    internal enum LayoutFindingKind
     {
         // The whole type's size differs.
         TypeSize,
@@ -24,9 +24,9 @@ namespace xStunit.Interpreter.Conformance
     // One disagreement between a compiler-declared layout and xStunit's own, or
     // one declared type the comparison could not reach. Sizes and offsets are
     // in BITS, the unit the .tmc states them in.
-    public sealed class LayoutFinding
+    internal sealed class LayoutFinding
     {
-        public LayoutFinding(
+        private LayoutFinding(
             LayoutFindingKind kind,
             string typeName,
             string memberName,
@@ -41,6 +41,24 @@ namespace xStunit.Interpreter.Conformance
             ComputedBits = computedBits;
             Detail = detail;
         }
+
+        // One factory per kind, because which of the six fields carry a value
+        // is fixed by the kind: a size disagreement has no detail, and a skip
+        // has nothing to compare.
+        public static LayoutFinding TypeSize(string typeName, int? declaredBits, int computedBits) =>
+            new LayoutFinding(LayoutFindingKind.TypeSize, typeName, null, declaredBits, computedBits, null);
+
+        public static LayoutFinding MemberOffset(string typeName, string memberName, int? declaredBits, int computedBits) =>
+            new LayoutFinding(LayoutFindingKind.MemberOffset, typeName, memberName, declaredBits, computedBits, null);
+
+        public static LayoutFinding MemberSize(string typeName, string memberName, int? declaredBits, int computedBits) =>
+            new LayoutFinding(LayoutFindingKind.MemberSize, typeName, memberName, declaredBits, computedBits, null);
+
+        public static LayoutFinding Unsupported(string typeName, string memberName, string detail) =>
+            new LayoutFinding(LayoutFindingKind.Unsupported, typeName, memberName, null, null, detail);
+
+        public static LayoutFinding NotCompared(string typeName, string reason) =>
+            new LayoutFinding(LayoutFindingKind.NotCompared, typeName, null, null, null, reason);
 
         public LayoutFindingKind Kind { get; }
 

@@ -38,16 +38,23 @@ namespace xStunit.Interpreter.Tests.Conformance
         }
 
         // On a 32-bit target every rule xStunit models agrees with the
-        // compiler, over every type in the module it can reach. This is the
-        // conformance claim itself; if it ever goes red, some layout rule is
-        // wrong rather than merely unimplemented.
+        // compiler, over every member of every type in the module it can reach.
+        // This is the conformance claim itself; if it ever goes red, some layout
+        // rule is wrong rather than merely unimplemented.
+        //
+        // Members, not types, are the denominator asserted here: two thirds of
+        // the compared types are aliases and enums, which are one size check
+        // each and exercise no offset or padding rule at all. What this module
+        // does NOT reach is alignment above 4 bytes - the library structs
+        // holding a LINT abort on a type name xStunit has no rule for, so the
+        // LREAL/LINT half of the checklist waits on the authored fixtures.
         [Fact]
-        public void Compare_X86Module_AgreesWithTheCompilerOnEveryComparedType()
+        public void Compare_X86Module_AgreesWithTheCompilerOnEveryComparedMember()
         {
             var report = Compare(X86Module);
 
             Assert.Empty(report.Mismatches);
-            Assert.True(report.ComparedTypeCount > 30, $"only {report.ComparedTypeCount} types were compared");
+            Assert.True(report.ComparedMemberCount > 50, $"only {report.ComparedMemberCount} members were compared");
         }
 
         // The same math on a 64-bit target does not: SizeOfType hardcodes a
@@ -79,7 +86,7 @@ namespace xStunit.Interpreter.Tests.Conformance
         public void Compare_Union_IsReportedAsNotCompared()
         {
             var finding = Assert.Single(
-                Compare(X86Module).Findings.Where(f => f.TypeName == "U_ExpectedOrActual"));
+                Compare(X86Module).Findings, f => f.TypeName == "U_ExpectedOrActual");
 
             Assert.Equal(LayoutFindingKind.NotCompared, finding.Kind);
             Assert.Contains("union", finding.Detail);
@@ -92,7 +99,7 @@ namespace xStunit.Interpreter.Tests.Conformance
         public void Compare_FunctionBlock_IsReportedAsNotCompared()
         {
             var finding = Assert.Single(
-                Compare(X64Module).Findings.Where(f => f.TypeName == "FB_AddLrealInt"));
+                Compare(X64Module).Findings, f => f.TypeName == "FB_AddLrealInt");
 
             Assert.Equal(LayoutFindingKind.NotCompared, finding.Kind);
             Assert.Contains("function block", finding.Detail);
@@ -105,10 +112,53 @@ namespace xStunit.Interpreter.Tests.Conformance
         public void Compare_UnknownTypeName_IsReportedAsUnsupported()
         {
             var finding = Assert.Single(
-                Compare(X64Module).Findings.Where(f => f.Subject == "PlcAppSystemInfo.ObjId"));
+                Compare(X64Module).Findings, f => f.Subject == "PlcAppSystemInfo.ObjId");
 
             Assert.Equal(LayoutFindingKind.Unsupported, finding.Kind);
             Assert.Contains("OTCID", finding.Detail);
+        }
+
+        // Neither committed .tmc reaches a member carrying both widths - the one
+        // that does sits behind a type name xStunit cannot size - so the choice
+        // between them is pinned against a hand-built module instead. Read the
+        // 32-bit value on a 64-bit target and every pointer silently "conforms"
+        // at half its real width, which is the one mistake this whole harness
+        // exists to make impossible.
+        [Theory]
+        [InlineData("TwinCAT RT (x64)", 64)]
+        [InlineData("TwinCAT RT (x86)", 32)]
+        public void Compare_MemberWithTwoWidths_ComparesTheOneTheTargetUses(string targetPlatform, int expectedDeclaredBits)
+        {
+            var member = new DeclaredMemberLayout(
+                "TComSrvPtr",
+                "ITComObjectServer",
+                isPointer: true,
+                isStatic: false,
+                arrayDimensions: new DeclaredArrayDimension[0],
+                bitSize: 32,
+                bitSizeX64: 64,
+                bitOffset: 0);
+            var type = new DeclaredTypeLayout(
+                "ST_Holder",
+                bitSize: 32,
+                baseTypeName: null,
+                baseTypeIsPointer: false,
+                arrayDimensions: new DeclaredArrayDimension[0],
+                isFunctionBlock: false,
+                members: new[] { member });
+
+            var report = LayoutOracle.Compare(new ModuleLayout("Synthetic", targetPlatform, new[] { type }));
+
+            var sizes = report.Mismatches.Where(f => f.Kind == LayoutFindingKind.MemberSize).ToList();
+            if (expectedDeclaredBits == 32)
+            {
+                Assert.Empty(sizes);
+                return;
+            }
+
+            var finding = Assert.Single(sizes);
+            Assert.Equal(expectedDeclaredBits, finding.DeclaredBits);
+            Assert.Equal(32, finding.ComputedBits);
         }
 
         private static string Normalize(string text) => text.Replace("\r\n", "\n");

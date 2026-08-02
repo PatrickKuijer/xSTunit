@@ -94,7 +94,7 @@ namespace xStunit.Parser.Tests
         }
 
         [Fact]
-        public void Parse_Enum_ReadsBaseTypeAndFlagsIt()
+        public void Parse_Enum_ReadsItsBaseType()
         {
             const string xml = @"<?xml version=""1.0"" encoding=""utf-8""?>
 <TcModuleClass><DataTypes><DataType><Name>EPlcPersistentStatus</Name><BitSize>8</BitSize><BaseType>USINT</BaseType>
@@ -102,9 +102,27 @@ namespace xStunit.Parser.Tests
 
             var type = TmcLayoutReader.Parse(xml).Types.Single();
 
-            Assert.True(type.IsEnum);
             Assert.Equal("USINT", type.BaseTypeName);
             Assert.False(type.BaseTypeIsPointer);
+            Assert.Empty(type.ArrayDimensions);
+        }
+
+        // An array type alias carries its ArrayInfo on the DataType itself
+        // rather than on a member. Reading only member-level ArrayInfo would
+        // size such a type as a single element.
+        [Fact]
+        public void Parse_ArrayAlias_ReadsTheTypesOwnDimensions()
+        {
+            const string xml = @"<?xml version=""1.0"" encoding=""utf-8""?>
+<TcModuleClass><DataTypes><DataType><Name>T_Slots</Name><BitSize>128</BitSize><BaseType>DINT</BaseType>
+<ArrayInfo><LBound>1</LBound><Elements>4</Elements></ArrayInfo></DataType></DataTypes></TcModuleClass>";
+
+            var type = TmcLayoutReader.Parse(xml).Types.Single();
+
+            Assert.Equal("DINT", type.BaseTypeName);
+            var dimension = Assert.Single(type.ArrayDimensions);
+            Assert.Equal(1, dimension.LowerBound);
+            Assert.Equal(4, dimension.ElementCount);
         }
 
         // PouType lives in the DataType's own Properties block, which is

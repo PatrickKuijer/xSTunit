@@ -104,7 +104,7 @@ namespace xStunit.Parser
             int? bitSize,
             string baseTypeName,
             bool baseTypeIsPointer,
-            bool isEnum,
+            IReadOnlyList<DeclaredArrayDimension> arrayDimensions,
             bool isFunctionBlock,
             IReadOnlyList<DeclaredMemberLayout> members)
         {
@@ -112,7 +112,7 @@ namespace xStunit.Parser
             BitSize = bitSize;
             BaseTypeName = baseTypeName;
             BaseTypeIsPointer = baseTypeIsPointer;
-            IsEnum = isEnum;
+            ArrayDimensions = arrayDimensions;
             IsFunctionBlock = isFunctionBlock;
             Members = members;
         }
@@ -124,7 +124,9 @@ namespace xStunit.Parser
 
         /// <summary>
         /// The underlying type this one is built on: an enum's base integer
-        /// type, or an alias's target. Null when the type stands alone.
+        /// type, or an alias's target. Null when the type stands alone. A type
+        /// declaring this and no members is one or the other - which of the two
+        /// makes no difference to its layout.
         /// </summary>
         public string BaseTypeName { get; }
 
@@ -135,7 +137,11 @@ namespace xStunit.Parser
         /// </summary>
         public bool BaseTypeIsPointer { get; }
 
-        public bool IsEnum { get; }
+        /// <summary>
+        /// Empty unless the type is an array OF <see cref="BaseTypeName"/> -
+        /// what an array type alias looks like; one entry per dimension.
+        /// </summary>
+        public IReadOnlyList<DeclaredArrayDimension> ArrayDimensions { get; }
 
         /// <summary>
         /// True when the type is a function block instance rather than a plain

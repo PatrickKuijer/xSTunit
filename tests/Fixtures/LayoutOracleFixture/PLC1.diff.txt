@@ -1,9 +1,9 @@
 module PLC1 target TwinCAT RT (x64)
-compared 5 of 10 declared types
+compared 5 of 10 declared types, 37 members
 sizes and offsets in bits
 NotCompared FB_AddLrealInt function block instance layout is not modeled
-Unsupported PlcAppSystemInfo.ObjId No byte size is known for type 'OTCID'
-Unsupported PlcTaskSystemInfo.ObjId No byte size is known for type 'OTCID'
+Unsupported PlcAppSystemInfo.ObjId SIZEOF() doesn't know the byte size of type 'OTCID'
+Unsupported PlcTaskSystemInfo.ObjId SIZEOF() doesn't know the byte size of type 'OTCID'
 MemberOffset _Implicit_Task_Info.pszName declared=64 computed=32
 MemberSize _Implicit_Task_Info.pszName declared=64 computed=32
 MemberOffset _Implicit_Task_Info.nPriority declared=128 computed=64

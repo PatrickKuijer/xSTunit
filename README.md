@@ -68,6 +68,18 @@ The three non-assertion kinds are separated **structurally**, not stylistically:
 
 Pass `--coverage` to additionally list every non-suite POU with the suites exercising it, in both formats. The entries with no suites are the useful ones — a next-task list ("write a suite for `F_ComputeChecksum`"). Association is by direct textual reference from a suite; it's a report, never a gate, and doesn't affect the exit code.
 
+## Limits
+
+xStunit buys "milliseconds, no runtime, no license" by giving things up, and stating them plainly is what makes the speed claim credible rather than glib. These aren't unimplemented features — they're outside the category of what source-level interpretation can establish.
+
+- **The clock is simulated.** A monotonic counter advanced only by explicit calls, read by the TON/TOF/TP hosts when they're invoked. A green suite establishes logical sequencing over simulated time. It says nothing about whether the real task completes inside its cycle budget.
+- **There is no scheduler.** `StepCycles(n)` is a loop re-invoking a body; ordering across instances is whatever order the caller invokes them in, and a cycle costs zero simulated time unless the test advances the clock. Task priorities, preemption, jitter and cross-task races are absent, not approximated.
+- **`Loopback` is a model of a transport, not a link.** It injects drops, delays, duplication and corruption so you can test how a POU reacts. Process-image mapping — inputs latched at task start, outputs written at task end — isn't modelled at all.
+- **Some target semantics are approximations**, and this is the one that can make a *green* run misleading rather than merely incomplete: narrowing casts don't model target-width truncation at the cast site, REAL/LREAL run on CLR floats rather than the target FPU, pointer arithmetic is an approximation for element types wider than a byte, and `_TO_STRING` doesn't attempt TwinCAT digit/exponent parity. The size of that gap is currently **unmeasured**.
+- **No amount of offline coverage removes the on-target run.** The floor is one execution on a real (or emulated) target, plus I/O and timing validation. A conformance oracle would collapse the *logic* half of that; the physical and temporal half doesn't shrink.
+
+Read this alongside `unsupported-construct`'s deliberate under-claiming above — the two limits work together. A limit here is a boundary that **stays**; an `unsupported-construct` is a gap that **closes** as the grammar grows. Full list, with which testing layer each question goes to instead: [`docs/spec/non-goals.md`](docs/spec/non-goals.md) and [`docs/spec/test-pyramid.md`](docs/spec/test-pyramid.md).
+
 ## Native-function plugins
 
 TwinCAT library functions (`Tc2_Utilities.F_CheckSum16`, `Tc2_Standard.F_ToUpper`, …) ship compiled-only — no `.TcPOU` to parse, so a suite that calls one can't resolve it from source. A native-function plugin supplies the behavior from outside the interpreter, so vendor/in-house library implementations don't have to live in this repo.

@@ -150,88 +150,18 @@ namespace xStunit.Cli
                 return 2;
             }
 
-            foreach (var path in args)
-            {
-                if (!Directory.Exists(path))
-                    return WriteError($"path does not exist: {path}");
-            }
+            // Skips are taken over before the error check, not after: a load
+            // that stopped on a usage error still reports the files it had
+            // already dropped on its way there.
+            var workspace = WorkspaceLoader.Load(args);
+            skipped.AddRange(workspace.Skipped);
+            if (workspace.Error != null)
+                return WriteError(workspace.Error);
 
-            // Parsed file by file rather than through
-            // MultiDirectoryPouLoader.Load, which propagates the first
-            // TcPouRejectedException and takes the whole run down with it: a
-            // real tree always contains POUs outside the parse subset
-            // (Tc2_System, __NEW, ...), and one of them must not make every
-            // other suite in the tree unrunnable. A suite that genuinely
-            // depends on a skipped POU still fails clearly at run time with an
-            // unresolved-type error.
-            var loaded = new List<LoadedPou>();
-            foreach (var file in MultiDirectoryPouLoader.FindPouFiles(args))
-            {
-                try
-                {
-                    if (StructuralParseGuard.TryParseOrSkip(
-                            file, () => TcPouParser.Parse(File.ReadAllText(file)), out var pou, out var skip))
-                        loaded.Add(new LoadedPou(pou, file));
-                    else
-                        skipped.Add(skip);
-                }
-                catch (TcPouRejectedException ex)
-                {
-                    skipped.Add(new SkippedFile(file, ex.Message));
-                }
-            }
-
-            // A duplicate type name across the merged directory set is a hard
-            // error, not a skip: it means the caller pointed the CLI at an
-            // inconsistent set of directories, which is usage, not an
-            // unsupported file. Every duplicate-name check below follows suit.
-            try
-            {
-                MultiDirectoryPouLoader.CheckForDuplicates(loaded);
-            }
-            catch (DuplicatePouTypeException ex)
-            {
-                return WriteError(ex.Message);
-            }
-
-            var types = loaded.Select(l => l.Pou).ToList();
-
-            IReadOnlyList<StructAst> structTypes;
-            try
-            {
-                structTypes = DutStructLoader.Load(args, out var dutSkipped);
-                skipped.AddRange(dutSkipped);
-            }
-            catch (DuplicateStructTypeException ex)
-            {
-                return WriteError(ex.Message);
-            }
-
-            var aliases = DutAliasLoader.Load(args, out var aliasSkipped).ToDictionary(kv => kv.Key, kv => kv.Value);
-            skipped.AddRange(aliasSkipped);
-
-            // Enum names are merged into the alias map so SIZEOF() and every
-            // other ResolveAlias call site resolves an enum to its underlying
-            // integer type without a second lookup path.
-            var enumAliases = DutEnumLoader.Load(args, out var enumSkipped, out var enumMembers);
-            skipped.AddRange(enumSkipped);
-            foreach (var enumAlias in enumAliases)
-                aliases[enumAlias.Key] = enumAlias.Value;
-
-            IReadOnlyList<GvlAst> gvls;
-            try
-            {
-                gvls = GvlLoader.Load(args, out var gvlSkipped);
-                skipped.AddRange(gvlSkipped);
-            }
-            catch (DuplicateGvlNameException ex)
-            {
-                return WriteError(ex.Message);
-            }
-
-            var registry = new TypeRegistry(types, structTypes, gvls, aliases, enumMembers);
+            var types = workspace.PouTypes;
+            var registry = workspace.Registry;
             var suiteNames = SuiteDiscovery.FindSuiteTypeNames(registry, types.Select(t => t.Name));
-            var suiteFilePaths = loaded.ToDictionary(l => l.Pou.Name, l => l.FilePath);
+            var suiteFilePaths = workspace.FilePathsByTypeName;
 
             if (suiteFilters.Count > 0)
             {

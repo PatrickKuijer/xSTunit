@@ -314,6 +314,14 @@ namespace xStunit.Cli
                     // Classified once, here, from the exception itself: the
                     // message is prose for a human and is never what a consumer
                     // switches on.
+                    //
+                    // FailureKind.Assertion is a legitimate answer here, not
+                    // only on the per-test path: an assertion that escapes the
+                    // TEST()/TEST_FINISHED() bracket has no test to charge and
+                    // lands as a suite-level error. Re-homing it as
+                    // FailureKind.PlcFault would claim the PLC faulted, which is
+                    // false, and would trade the assertion guidance for advice
+                    // to go fix code under test that is not what broke.
                     var errorKind = FailureClassifier.Classify(ex, out var errorConstruct);
                     // A parse error's body line comes from the front end's own
                     // structured field, never from re-parsing ex.Message.

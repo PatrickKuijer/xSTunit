@@ -307,6 +307,30 @@ namespace xStunit.Cli.Tests
             Assert.Contains(FailureKind.Guidance(FailureKind.Assertion), error);
         }
 
+        // Escaping the bracket changes WHERE the failure is reported, never WHAT
+        // it is: the assert still compared values that differed, so the message
+        // keeps the assertion guidance. Reporting it as plc-fault instead - the
+        // tempting re-home, since a suite-level error is usually a faulting body
+        // - would claim the PLC faulted, which is false, and would tell the
+        // consumer to go fix code under test that is not what broke. No kind
+        // opts out of guidance, and no path opts a kind out of it either.
+        [Fact]
+        public void Run_ConvergenceAssertionOutsideAnyTestBracket_KeepsTheAssertionGuidanceAndIsNotRehomedAsAPlcFault()
+        {
+            File.WriteAllText(Path.Combine(_tempDir, "FB_SuiteConvergenceTests.TcPOU"), SuiteLevelConvergenceSuiteXml);
+            File.WriteAllText(Path.Combine(_tempDir, "FB_ConvergenceMaster.TcPOU"), ConvergenceMasterXml);
+            File.WriteAllText(Path.Combine(_tempDir, "FB_ConvergenceRamp.TcPOU"), ConvergenceRampXml);
+            var output = new StringWriter();
+
+            CliRunner.Run(new[] { _tempDir, "--format", "json" }, output);
+
+            var suite = FirstSuite(output.ToString());
+            var error = suite.GetProperty("error").GetString();
+            Assert.Contains(FailureKind.Guidance(FailureKind.Assertion), error);
+            Assert.NotEqual(FailureKind.PlcFault, suite.GetProperty("kind").GetString());
+            Assert.DoesNotContain(FailureKind.Guidance(FailureKind.PlcFault), error);
+        }
+
         private static JsonElement FirstSuite(string json)
         {
             using var document = JsonDocument.Parse(json);

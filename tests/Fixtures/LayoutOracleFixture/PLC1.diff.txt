@@ -1,0 +1,41 @@
+module PLC1 target TwinCAT RT (x64)
+compared 5 of 10 declared types
+sizes and offsets in bits
+NotCompared FB_AddLrealInt function block instance layout is not modeled
+Unsupported PlcAppSystemInfo.ObjId No byte size is known for type 'OTCID'
+Unsupported PlcTaskSystemInfo.ObjId No byte size is known for type 'OTCID'
+MemberOffset _Implicit_Task_Info.pszName declared=64 computed=32
+MemberSize _Implicit_Task_Info.pszName declared=64 computed=32
+MemberOffset _Implicit_Task_Info.nPriority declared=128 computed=64
+MemberOffset _Implicit_Task_Info.KindOf declared=144 computed=80
+MemberOffset _Implicit_Task_Info.bWatchdog declared=160 computed=96
+MemberOffset _Implicit_Task_Info.bProfilingTask declared=168 computed=104
+MemberOffset _Implicit_Task_Info.dwEventFunctionPointer declared=192 computed=128
+MemberSize _Implicit_Task_Info.dwEventFunctionPointer declared=64 computed=32
+MemberOffset _Implicit_Task_Info.pszExternalEvent declared=256 computed=160
+MemberSize _Implicit_Task_Info.pszExternalEvent declared=64 computed=32
+MemberOffset _Implicit_Task_Info.dwTaskEntryFunctionPointer declared=320 computed=192
+MemberSize _Implicit_Task_Info.dwTaskEntryFunctionPointer declared=64 computed=32
+MemberOffset _Implicit_Task_Info.dwWatchdogSensitivity declared=384 computed=224
+MemberOffset _Implicit_Task_Info.dwInterval declared=416 computed=256
+MemberOffset _Implicit_Task_Info.dwWatchdogTime declared=448 computed=288
+MemberOffset _Implicit_Task_Info.dwLastCycleTime declared=480 computed=320
+MemberOffset _Implicit_Task_Info.dwAverageCycleTime declared=512 computed=352
+MemberOffset _Implicit_Task_Info.dwMaxCycleTime declared=544 computed=384
+MemberOffset _Implicit_Task_Info.dwMinCycleTime declared=576 computed=416
+MemberOffset _Implicit_Task_Info.diJitter declared=608 computed=448
+MemberOffset _Implicit_Task_Info.diJitterMin declared=640 computed=480
+MemberOffset _Implicit_Task_Info.diJitterMax declared=672 computed=512
+MemberOffset _Implicit_Task_Info.dwCycleCount declared=704 computed=544
+MemberOffset _Implicit_Task_Info.wTaskStatus declared=736 computed=576
+MemberOffset _Implicit_Task_Info.wNumOfJitterDistributions declared=752 computed=592
+MemberOffset _Implicit_Task_Info.pJitterDistribution declared=768 computed=608
+MemberSize _Implicit_Task_Info.pJitterDistribution declared=64 computed=32
+MemberOffset _Implicit_Task_Info.bWithinSPSTimeSlicing declared=832 computed=640
+MemberOffset _Implicit_Task_Info.byDummy declared=840 computed=648
+MemberOffset _Implicit_Task_Info.bShouldBlock declared=848 computed=656
+MemberOffset _Implicit_Task_Info.bActive declared=856 computed=664
+MemberOffset _Implicit_Task_Info.dwIECCycleCount declared=864 computed=672
+TypeSize _Implicit_Task_Info declared=896 computed=704
+NotCompared MAIN static members - a program or global variable list, not an instance layout
+NotCompared TwinCAT_PreventOnlineChangeGvl static members - a program or global variable list, not an instance layout

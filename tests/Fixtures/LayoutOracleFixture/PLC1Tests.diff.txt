@@ -1,0 +1,38 @@
+module PLC1Tests target TwinCAT RT (x86)
+compared 36 of 71 declared types
+sizes and offsets in bits
+Unsupported T_Arg.pData No byte size is known for type 'PVOID'
+NotCompared TOF function block instance layout is not modeled
+NotCompared I_TestResults neither members nor a base type declared
+NotCompared R_TRIG function block instance layout is not modeled
+NotCompared FB_TestResults function block instance layout is not modeled
+NotCompared I_TestResultLogger neither members nor a base type declared
+NotCompared FB_AdsTestResultLogger function block instance layout is not modeled
+NotCompared FB_FileControl function block instance layout is not modeled
+NotCompared FB_StreamBuffer function block instance layout is not modeled
+NotCompared FB_XmlControl function block instance layout is not modeled
+NotCompared FB_xUnitXmlPublisher function block instance layout is not modeled
+NotCompared FB_TcUnitRunner function block instance layout is not modeled
+NotCompared FB_Test function block instance layout is not modeled
+NotCompared FW_GetCurTaskIndex function block instance layout is not modeled
+NotCompared GETCURTASKINDEX function block instance layout is not modeled
+NotCompared FB_FormatString function block instance layout is not modeled
+NotCompared U_ExpectedOrActual union layout is not modeled
+Unsupported ST_AssertResult.Expected No byte size is known for type 'U_ExpectedOrActual'
+Unsupported ST_AssertResultInstances.AssertResult No byte size is known for type 'U_ExpectedOrActual'
+NotCompared FB_AssertResultStatic function block instance layout is not modeled
+NotCompared FB_AssertArrayResultStatic function block instance layout is not modeled
+NotCompared I_AssertMessageFormatter neither members nor a base type declared
+NotCompared FB_AdjustAssertFailureMessageToMax253CharLength function block instance layout is not modeled
+NotCompared FB_AdsAssertMessageFormatter function block instance layout is not modeled
+NotCompared FB_TestSuite function block instance layout is not modeled
+NotCompared FB_MemRingBuffer function block instance layout is not modeled
+NotCompared TON function block instance layout is not modeled
+NotCompared FB_AdsLogStringMessageFifoQueue function block instance layout is not modeled
+Unsupported PlcAppSystemInfo.ObjId No byte size is known for type 'OTCID'
+Unsupported PlcTaskSystemInfo.ObjId No byte size is known for type 'OTCID'
+NotCompared Global_Variables static members - a program or global variable list, not an instance layout
+NotCompared Global_Variables static members - a program or global variable list, not an instance layout
+NotCompared GVL_Param_TcUnit static members - a program or global variable list, not an instance layout
+NotCompared GVL_TcUnit static members - a program or global variable list, not an instance layout
+NotCompared TwinCAT_PreventOnlineChangeGvl static members - a program or global variable list, not an instance layout

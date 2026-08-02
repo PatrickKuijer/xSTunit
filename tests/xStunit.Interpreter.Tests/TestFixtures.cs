@@ -12,5 +12,8 @@ namespace xStunit.Interpreter.Tests
     {
         public static string FbCounterFixtureDir([CallerFilePath] string callerFile = "") =>
             Path.GetFullPath(Path.Combine(Path.GetDirectoryName(callerFile)!, "..", "..", "Fixtures", "FbCounterFixture"));
+
+        public static string LayoutOracleFixtureDir([CallerFilePath] string callerFile = "") =>
+            Path.GetFullPath(Path.Combine(Path.GetDirectoryName(callerFile)!, "..", "..", "Fixtures", "LayoutOracleFixture"));
     }
 }

@@ -134,14 +134,10 @@ namespace xStunit.Interpreter
             if (structAst != null)
             {
                 var instance = (StructInstance)value;
-                var packBound = PackBound(structAst);
-                var fieldOffset = 0;
-                foreach (var field in structAst.Fields)
+                foreach (var placement in LayoutFor(frame).Fields(structAst))
                 {
-                    var (fieldSize, fieldAlign) = SizeOfType(field.TypeName, frame);
-                    fieldOffset = RoundUp(fieldOffset, Math.Min(fieldAlign, packBound));
-                    PackValue(buffer, offset + fieldOffset, instance.Fields[field.Name].Value, field.TypeName, frame);
-                    fieldOffset += fieldSize;
+                    var field = placement.Field;
+                    PackValue(buffer, offset + placement.Offset, instance.Fields[field.Name].Value, field.TypeName, frame);
                 }
                 return;
             }
@@ -265,17 +261,13 @@ namespace xStunit.Interpreter
             if (structAst != null)
             {
                 var instance = new StructInstance(resolved);
-                var packBound = PackBound(structAst);
-                var fieldOffset = 0;
-                foreach (var field in structAst.Fields)
+                foreach (var placement in LayoutFor(frame).Fields(structAst))
                 {
-                    var (fieldSize, fieldAlign) = SizeOfType(field.TypeName, frame);
-                    fieldOffset = RoundUp(fieldOffset, Math.Min(fieldAlign, packBound));
+                    var field = placement.Field;
                     instance.Fields[field.Name] = NewDeclaredCell(
-                        UnpackValue(buffer, offset + fieldOffset, field.TypeName, frame),
+                        UnpackValue(buffer, offset + placement.Offset, field.TypeName, frame),
                         field.TypeName,
                         frame.Instance);
-                    fieldOffset += fieldSize;
                 }
                 return instance;
             }

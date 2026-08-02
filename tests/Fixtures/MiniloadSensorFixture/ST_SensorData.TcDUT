@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4026.18">
+  <DUT Name="ST_SensorData" Id="{5e4501d0-0002-4d19-9a41-000000000001}">
+    <Declaration><![CDATA[(*
+    One sensor's published state as a value, so a station can hold an
+    ARRAY[1..n] OF ST_SensorData and hand the whole picture to an HMI or a
+    trace line without reaching into a function block per point.
+
+    RawLevel is the selected source BEFORE polarity and debounce - the wire as
+    the block saw it this cycle - which is what commissioning needs when Active
+    and the field device disagree.
+*)
+TYPE ST_SensorData :
+STRUCT
+	Active : BOOL;
+	RawLevel : BOOL;
+	Inverted : BOOL;
+	Simulated : BOOL;
+	DebounceTime : TIME;
+	TimeActive : TIME;
+	TimeInactive : TIME;
+END_STRUCT
+END_TYPE
+]]></Declaration>
+  </DUT>
+</TcPlcObject>

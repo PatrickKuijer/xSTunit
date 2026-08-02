@@ -1,0 +1,177 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4026.18">
+  <POU Name="FB_DigitalInput" Id="{5e4501d0-0003-4d19-9a41-000000000001}" SpecialFunc="None">
+    <Declaration><![CDATA[(*
+    Control module for one discrete sensor point: the leaf every miniload
+    equipment module reads its world through.
+
+    Three stages, in this order, and the order is the contract:
+
+      1. source select - SimulatedInput replaces HardwareInput while Simulation
+         is set, so a mock feeds the SAME filter the field bit does;
+      2. polarity     - Inverted negates the selected level, so a normally
+         closed device debounces on what the signal MEANS;
+      3. debounce     - a symmetric on-delay/off-delay pair. Active may only
+         rise once the level has held high for DebounceTime, and may only fall
+         once it has held low for DebounceTime. Between those two windows
+         Active holds its previous value, which is what makes a chattering
+         photo-eye a no-op instead of a burst of transitions.
+
+    TimeActive and TimeInactive meter the settled state, not the wire, and each
+    resets when Active moves. A conveyor asks TimeInactive "has the lane been
+    clear long enough to hand over"; a diagnostic asks TimeActive "has this
+    photo-eye been blocked too long".
+*)
+FUNCTION_BLOCK FB_DigitalInput IMPLEMENTS I_DigitalInput
+VAR_INPUT
+	// The field bit, wired to a terminal channel on a real machine.
+	HardwareInput : BOOL;
+END_VAR
+VAR_OUTPUT
+	Data : ST_SensorData;
+END_VAR
+VAR
+	sourceLevel : BOOL;
+	signalLevel : BOOL;
+	settled : BOOL;
+	invert : BOOL;
+	simulate : BOOL;
+	simulatedLevel : BOOL;
+	debounce : TIME;
+	riseFilter : TON;
+	fallFilter : TOF;
+	activeMeter : TON;
+	inactiveMeter : TON;
+	// The elapsed meters are on-delays that are never meant to fire: their PT
+	// only has to outlast any stretch worth measuring, because ET is capped at
+	// PT. Well inside TIME's 49-day range, so no wrap.
+	MeterCeiling : TIME := T#24d;
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[// Source select
+IF simulate THEN
+	sourceLevel := simulatedLevel;
+ELSE
+	sourceLevel := HardwareInput;
+END_IF
+
+// Polarity
+signalLevel := sourceLevel XOR invert;
+
+// Debounce. riseFilter.Q means "high, continuously, for at least DebounceTime";
+// fallFilter.Q stays TRUE until the level has been low that same span, so
+// NOT fallFilter.Q is its mirror. Neither true means the level is still inside
+// a settling window and the last settled value stands.
+riseFilter(IN := signalLevel, PT := debounce);
+fallFilter(IN := signalLevel, PT := debounce);
+
+IF riseFilter.Q THEN
+	settled := TRUE;
+ELSIF NOT fallFilter.Q THEN
+	settled := FALSE;
+END_IF
+
+// Elapsed meters. Driven by the settled state rather than signalLevel, so a
+// bounce that never reached Active never disturbs them either.
+activeMeter(IN := settled, PT := MeterCeiling);
+inactiveMeter(IN := NOT settled, PT := MeterCeiling);
+
+// Status
+Data.Active := settled;
+Data.RawLevel := sourceLevel;
+Data.Inverted := invert;
+Data.Simulated := simulate;
+Data.DebounceTime := debounce;
+Data.TimeActive := activeMeter.ET;
+Data.TimeInactive := inactiveMeter.ET;]]></ST>
+    </Implementation>
+    <Property Name="Active" Id="{5e4501d0-0003-4d19-9a41-000000000002}">
+      <Declaration><![CDATA[PROPERTY Active : BOOL]]></Declaration>
+      <Get Name="Get" Id="{5e4501d0-0003-4d19-9a41-000000000003}">
+        <Declaration><![CDATA[]]></Declaration>
+        <Implementation>
+          <ST><![CDATA[Active := settled;]]></ST>
+        </Implementation>
+      </Get>
+    </Property>
+    <Property Name="DebounceTime" Id="{5e4501d0-0003-4d19-9a41-000000000004}">
+      <Declaration><![CDATA[PROPERTY DebounceTime : TIME]]></Declaration>
+      <Get Name="Get" Id="{5e4501d0-0003-4d19-9a41-000000000005}">
+        <Declaration><![CDATA[]]></Declaration>
+        <Implementation>
+          <ST><![CDATA[DebounceTime := debounce;]]></ST>
+        </Implementation>
+      </Get>
+      <Set Name="Set" Id="{5e4501d0-0003-4d19-9a41-000000000006}">
+        <Declaration><![CDATA[]]></Declaration>
+        <Implementation>
+          <ST><![CDATA[debounce := DebounceTime;]]></ST>
+        </Implementation>
+      </Set>
+    </Property>
+    <Property Name="Inverted" Id="{5e4501d0-0003-4d19-9a41-000000000007}">
+      <Declaration><![CDATA[PROPERTY Inverted : BOOL]]></Declaration>
+      <Get Name="Get" Id="{5e4501d0-0003-4d19-9a41-000000000008}">
+        <Declaration><![CDATA[]]></Declaration>
+        <Implementation>
+          <ST><![CDATA[Inverted := invert;]]></ST>
+        </Implementation>
+      </Get>
+      <Set Name="Set" Id="{5e4501d0-0003-4d19-9a41-000000000009}">
+        <Declaration><![CDATA[]]></Declaration>
+        <Implementation>
+          <ST><![CDATA[invert := Inverted;]]></ST>
+        </Implementation>
+      </Set>
+    </Property>
+    <Property Name="Simulation" Id="{5e4501d0-0003-4d19-9a41-00000000000a}">
+      <Declaration><![CDATA[PROPERTY Simulation : BOOL]]></Declaration>
+      <Get Name="Get" Id="{5e4501d0-0003-4d19-9a41-00000000000b}">
+        <Declaration><![CDATA[]]></Declaration>
+        <Implementation>
+          <ST><![CDATA[Simulation := simulate;]]></ST>
+        </Implementation>
+      </Get>
+      <Set Name="Set" Id="{5e4501d0-0003-4d19-9a41-00000000000c}">
+        <Declaration><![CDATA[]]></Declaration>
+        <Implementation>
+          <ST><![CDATA[simulate := Simulation;]]></ST>
+        </Implementation>
+      </Set>
+    </Property>
+    <Property Name="SimulatedInput" Id="{5e4501d0-0003-4d19-9a41-00000000000d}">
+      <Declaration><![CDATA[PROPERTY SimulatedInput : BOOL]]></Declaration>
+      <Get Name="Get" Id="{5e4501d0-0003-4d19-9a41-00000000000e}">
+        <Declaration><![CDATA[]]></Declaration>
+        <Implementation>
+          <ST><![CDATA[SimulatedInput := simulatedLevel;]]></ST>
+        </Implementation>
+      </Get>
+      <Set Name="Set" Id="{5e4501d0-0003-4d19-9a41-00000000000f}">
+        <Declaration><![CDATA[]]></Declaration>
+        <Implementation>
+          <ST><![CDATA[simulatedLevel := SimulatedInput;]]></ST>
+        </Implementation>
+      </Set>
+    </Property>
+    <Property Name="TimeActive" Id="{5e4501d0-0003-4d19-9a41-000000000010}">
+      <Declaration><![CDATA[PROPERTY TimeActive : TIME]]></Declaration>
+      <Get Name="Get" Id="{5e4501d0-0003-4d19-9a41-000000000011}">
+        <Declaration><![CDATA[]]></Declaration>
+        <Implementation>
+          <ST><![CDATA[TimeActive := activeMeter.ET;]]></ST>
+        </Implementation>
+      </Get>
+    </Property>
+    <Property Name="TimeInactive" Id="{5e4501d0-0003-4d19-9a41-000000000012}">
+      <Declaration><![CDATA[PROPERTY TimeInactive : TIME]]></Declaration>
+      <Get Name="Get" Id="{5e4501d0-0003-4d19-9a41-000000000013}">
+        <Declaration><![CDATA[]]></Declaration>
+        <Implementation>
+          <ST><![CDATA[TimeInactive := inactiveMeter.ET;]]></ST>
+        </Implementation>
+      </Get>
+    </Property>
+  </POU>
+</TcPlcObject>

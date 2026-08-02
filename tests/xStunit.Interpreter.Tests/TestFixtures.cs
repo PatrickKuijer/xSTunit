@@ -19,6 +19,9 @@ namespace xStunit.Interpreter.Tests
         public static string LayoutOracleFixtureDir([CallerFilePath] string callerFile = "") =>
             FixtureDir("LayoutOracleFixture", callerFile);
 
+        public static string MiniloadSensorFixtureDir([CallerFilePath] string callerFile = "") =>
+            FixtureDir("MiniloadSensorFixture", callerFile);
+
         private static string FixtureDir(string name, string callerFile) =>
             Path.GetFullPath(Path.Combine(Path.GetDirectoryName(callerFile)!, "..", "..", "Fixtures", name));
     }

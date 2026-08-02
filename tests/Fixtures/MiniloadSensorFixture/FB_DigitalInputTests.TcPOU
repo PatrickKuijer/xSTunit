@@ -1,0 +1,295 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4026.18">
+  <POU Name="FB_DigitalInputTests" Id="{5e4501d0-0004-4d19-9a41-000000000001}" SpecialFunc="None">
+    <Declaration><![CDATA[(*
+    Suite over FB_DigitalInput: the source-select / polarity / debounce chain,
+    the published ST_SensorData snapshot, and the two boundaries of the
+    debounce filter.
+
+    Every case here is decided by CALLS, not by elapsed time. xStunit's
+    simulated clock is driven from the C# harness and there is no ST-visible
+    way to advance it, so a suite sees time frozen at zero. That still pins
+    both ends of the filter exactly: at DebounceTime := T#0ms the settling
+    windows are empty and Active tracks the level cycle for cycle, and at any
+    non-zero DebounceTime no window can ever close, so Active must not move at
+    all. What happens strictly between those two - and the elapsed meters,
+    which need a moving clock to say anything - is pinned in
+    tests/xStunit.Interpreter.Tests/Miniload/DigitalInputTimingTests.cs.
+*)
+FUNCTION_BLOCK FB_DigitalInputTests EXTENDS TcUnit.FB_TestSuite]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[SensorStartsInactiveWithBothMetersAtZero();
+UnfilteredSensorFollowsTheHardwareLevel();
+InvertedSensorReadsTheHardwareLevelBackwards();
+SimulationReplacesTheHardwareLevel();
+ClearingSimulationReturnsToTheHardwareLevel();
+SimulationIsFilteredAndInvertedLikeTheFieldBit();
+DebounceHoldsARisingEdgeUntilItsWindowCloses();
+DebounceHoldsAFallingEdgeUntilItsWindowCloses();
+SnapshotMirrorsThePublishedState();]]></ST>
+    </Implementation>
+    <Method Name="SensorStartsInactiveWithBothMetersAtZero" Id="{5e4501d0-0004-4d19-9a41-000000000002}">
+      <Declaration><![CDATA[// A sensor nobody has cycled yet must not claim to have seen anything.
+// The inactive meter reading zero rather than "since power-on" is what lets
+// a station distinguish "never had a container" from "just lost one".
+METHOD PRIVATE SensorStartsInactiveWithBothMetersAtZero
+VAR
+	sensor : FB_DigitalInput;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('SensorStartsInactiveWithBothMetersAtZero');
+
+AssertFalse(Condition := sensor.Active,
+            Message := 'fresh sensor reported Active');
+
+AssertEquals_TIME(Expected := T#0ms,
+                  Actual := sensor.TimeActive,
+                  Message := 'fresh sensor TimeActive');
+
+AssertEquals_TIME(Expected := T#0ms,
+                  Actual := sensor.TimeInactive,
+                  Message := 'fresh sensor TimeInactive');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="UnfilteredSensorFollowsTheHardwareLevel" Id="{5e4501d0-0004-4d19-9a41-000000000003}">
+      <Declaration><![CDATA[// DebounceTime zero must mean no filtering whatsoever, in BOTH directions.
+// If either settling window were treated as open at zero, an unfiltered
+// sensor would lag the field bit by a cycle and every downstream handshake
+// built on it would be off by one.
+METHOD PRIVATE UnfilteredSensorFollowsTheHardwareLevel
+VAR
+	sensor : FB_DigitalInput;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('UnfilteredSensorFollowsTheHardwareLevel');
+
+sensor.DebounceTime := T#0ms;
+
+sensor(HardwareInput := TRUE);
+AssertTrue(Condition := sensor.Active,
+           Message := 'unfiltered sensor did not follow the level up');
+
+sensor(HardwareInput := FALSE);
+AssertFalse(Condition := sensor.Active,
+            Message := 'unfiltered sensor did not follow the level down');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="InvertedSensorReadsTheHardwareLevelBackwards" Id="{5e4501d0-0004-4d19-9a41-000000000004}">
+      <Declaration><![CDATA[// Inverted is what makes a normally closed device usable without a second
+// code path. Active is the MEANING of the signal, so a normally closed sensor
+// with nothing in front of it must read inactive.
+METHOD PRIVATE InvertedSensorReadsTheHardwareLevelBackwards
+VAR
+	sensor : FB_DigitalInput;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('InvertedSensorReadsTheHardwareLevelBackwards');
+
+sensor.DebounceTime := T#0ms;
+sensor.Inverted := TRUE;
+
+sensor(HardwareInput := TRUE);
+AssertFalse(Condition := sensor.Active,
+            Message := 'inverted sensor stayed active on a high level');
+
+sensor(HardwareInput := FALSE);
+AssertTrue(Condition := sensor.Active,
+           Message := 'inverted sensor stayed inactive on a low level');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="SimulationReplacesTheHardwareLevel" Id="{5e4501d0-0004-4d19-9a41-000000000005}">
+      <Declaration><![CDATA[// The mock seam. With Simulation set the field bit must be ignored outright,
+// not merged with it - a test rig that has to also hold HardwareInput low is
+// no longer a substitute for the hardware.
+METHOD PRIVATE SimulationReplacesTheHardwareLevel
+VAR
+	sensor : FB_DigitalInput;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('SimulationReplacesTheHardwareLevel');
+
+sensor.DebounceTime := T#0ms;
+sensor.Simulation := TRUE;
+sensor.SimulatedInput := TRUE;
+
+sensor(HardwareInput := FALSE);
+
+AssertTrue(Condition := sensor.Active,
+           Message := 'simulated level did not reach Active');
+
+sensor.SimulatedInput := FALSE;
+sensor(HardwareInput := TRUE);
+
+AssertFalse(Condition := sensor.Active,
+            Message := 'hardware level leaked through while simulating');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="ClearingSimulationReturnsToTheHardwareLevel" Id="{5e4501d0-0004-4d19-9a41-000000000006}">
+      <Declaration><![CDATA[// Simulation has to be reversible in place: chapter 06 arms a mock, runs a
+// scenario, and hands the same instance back to the field. A stale simulated
+// level surviving the handback would silently fake a live machine.
+METHOD PRIVATE ClearingSimulationReturnsToTheHardwareLevel
+VAR
+	sensor : FB_DigitalInput;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('ClearingSimulationReturnsToTheHardwareLevel');
+
+sensor.DebounceTime := T#0ms;
+sensor.Simulation := TRUE;
+sensor.SimulatedInput := TRUE;
+sensor(HardwareInput := FALSE);
+
+sensor.Simulation := FALSE;
+sensor(HardwareInput := FALSE);
+
+AssertFalse(Condition := sensor.Active,
+            Message := 'simulated level survived clearing Simulation');
+
+sensor(HardwareInput := TRUE);
+AssertTrue(Condition := sensor.Active,
+           Message := 'hardware level did not resume after simulation');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="SimulationIsFilteredAndInvertedLikeTheFieldBit" Id="{5e4501d0-0004-4d19-9a41-000000000007}">
+      <Declaration><![CDATA[// The simulated level enters at the SOURCE, ahead of polarity and debounce,
+// so a mock exercises the same chain the hardware does. Were it injected
+// after inversion, a normally closed sensor would behave one way on the bench
+// and the opposite way on the machine.
+METHOD PRIVATE SimulationIsFilteredAndInvertedLikeTheFieldBit
+VAR
+	sensor : FB_DigitalInput;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('SimulationIsFilteredAndInvertedLikeTheFieldBit');
+
+sensor.DebounceTime := T#0ms;
+sensor.Inverted := TRUE;
+sensor.Simulation := TRUE;
+sensor.SimulatedInput := TRUE;
+
+sensor(HardwareInput := FALSE);
+
+AssertFalse(Condition := sensor.Active,
+            Message := 'simulated level bypassed the inversion stage');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="DebounceHoldsARisingEdgeUntilItsWindowCloses" Id="{5e4501d0-0004-4d19-9a41-000000000008}">
+      <Declaration><![CDATA[// The whole point of the block. A level that has not yet held for
+// DebounceTime must not reach Active no matter how many cycles it is
+// presented for - the filter is a duration, not a cycle count. Repeated
+// cycling with the clock stopped is exactly the shape of a bounce.
+METHOD PRIVATE DebounceHoldsARisingEdgeUntilItsWindowCloses
+VAR
+	sensor : FB_DigitalInput;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('DebounceHoldsARisingEdgeUntilItsWindowCloses');
+
+sensor.DebounceTime := T#20ms;
+
+sensor(HardwareInput := TRUE);
+sensor(HardwareInput := TRUE);
+sensor(HardwareInput := TRUE);
+
+AssertFalse(Condition := sensor.Active,
+            Message := 'rising edge passed the debounce filter early');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="DebounceHoldsAFallingEdgeUntilItsWindowCloses" Id="{5e4501d0-0004-4d19-9a41-000000000009}">
+      <Declaration><![CDATA[// The filter is symmetric: releasing is delayed on exactly the same terms as
+// engaging. An asymmetric filter would let a container "disappear" mid-handover
+// on a single noisy sample even though it could not have "appeared" that way.
+METHOD PRIVATE DebounceHoldsAFallingEdgeUntilItsWindowCloses
+VAR
+	sensor : FB_DigitalInput;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('DebounceHoldsAFallingEdgeUntilItsWindowCloses');
+
+sensor.DebounceTime := T#0ms;
+sensor(HardwareInput := TRUE);
+
+sensor.DebounceTime := T#20ms;
+sensor(HardwareInput := FALSE);
+sensor(HardwareInput := FALSE);
+
+AssertTrue(Condition := sensor.Active,
+           Message := 'falling edge passed the debounce filter early');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="SnapshotMirrorsThePublishedState" Id="{5e4501d0-0004-4d19-9a41-00000000000a}">
+      <Declaration><![CDATA[// ST_SensorData is what an array-of-stations, an HMI or a trace line reads
+// instead of reaching into the function block. It has to agree with the
+// properties on the same cycle, and RawLevel has to report the SELECTED
+// source before polarity - the number commissioning compares against the
+// terminal LED.
+METHOD PRIVATE SnapshotMirrorsThePublishedState
+VAR
+	sensor : FB_DigitalInput;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('SnapshotMirrorsThePublishedState');
+
+sensor.DebounceTime := T#5ms;
+sensor.Inverted := TRUE;
+sensor.Simulation := TRUE;
+sensor.SimulatedInput := TRUE;
+
+sensor(HardwareInput := FALSE);
+
+AssertEquals_BOOL(Expected := sensor.Active,
+                  Actual := sensor.Data.Active,
+                  Message := 'snapshot Active');
+
+AssertTrue(Condition := sensor.Data.RawLevel,
+           Message := 'snapshot RawLevel did not report the simulated source');
+
+AssertTrue(Condition := sensor.Data.Inverted,
+           Message := 'snapshot Inverted');
+
+AssertTrue(Condition := sensor.Data.Simulated,
+           Message := 'snapshot Simulated');
+
+AssertEquals_TIME(Expected := T#5ms,
+                  Actual := sensor.Data.DebounceTime,
+                  Message := 'snapshot DebounceTime');
+
+AssertEquals_TIME(Expected := sensor.TimeActive,
+                  Actual := sensor.Data.TimeActive,
+                  Message := 'snapshot TimeActive');
+
+AssertEquals_TIME(Expected := sensor.TimeInactive,
+                  Actual := sensor.Data.TimeInactive,
+                  Message := 'snapshot TimeInactive');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+  </POU>
+</TcPlcObject>

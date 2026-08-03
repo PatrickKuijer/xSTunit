@@ -41,7 +41,15 @@ rather than a wrong value — it needs a runtime comparison, not a layout one.
 
 The `{attribute 'pack_mode'}` pragma does survive, as a `pack_mode` property on
 the type, so the packed fixtures are measured under the cap the compiler
-applied without the oracle ever seeing this source.
+applied without the oracle having to read the pragma out of this source.
+
+One thing the `.tmc` deliberately does not settle is which of these types is a
+`UNION`. It marks a union no differently from a struct — shared offsets are the
+only tell, and those are the outcome the layout math exists to predict, so the
+oracle would be scoring its own answer. `LayoutChecklistOracleTests` hands the
+oracle the `.TcDUT` declarations in this folder instead and lets
+`StructDeclParser` decide, which is what puts xStunit's own `UNION` recognition
+inside the conformance run.
 
 ## The golden .tmc
 

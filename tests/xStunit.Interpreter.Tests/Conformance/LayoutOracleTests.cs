@@ -92,9 +92,14 @@ namespace xStunit.Interpreter.Tests.Conformance
         }
 
         // A union's members all sit at offset 0, and a .tmc marks one no
-        // differently from a struct - shared offsets are the only tell. Reading
-        // this one as a struct would report a wall of offset mismatches that
-        // all say the same thing.
+        // differently from a struct - shared offsets are the only tell.
+        //
+        // This module is a borrowed project whose ST source is not committed
+        // alongside it, so the oracle has nothing to ask about U_ExpectedOrActual
+        // and reads it as a union by that shape. What this pins is therefore the
+        // layout math over a union - its size, its offsets, its alignment - and
+        // not that xStunit recognises UNION in source; that claim is scored in
+        // LayoutChecklistOracleTests, whose fixtures ship their .TcDUT files.
         [Fact]
         public void Compare_Union_IsComparedWithEveryMemberOverlaid()
         {

@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
@@ -32,8 +33,29 @@ namespace xStunit.Interpreter.Tests.Conformance
             ParsedModules.GetOrAdd(moduleName, name => TmcLayoutReader.ReadFile(
                 Path.Combine(TestFixtures.LayoutChecklistFixtureDir(), name + ".tmc")));
 
+        // The .TcDUT files both .tmc files were built from, keyed by the name
+        // the DUT file itself carries. Keyed that way on purpose: which source
+        // belongs to which declared type must not depend on the declaration
+        // parser whose UNION reading these runs are scoring.
+        private static readonly IReadOnlyDictionary<string, string> ChecklistSource = ReadChecklistSource();
+
+        private static IReadOnlyDictionary<string, string> ReadChecklistSource()
+        {
+            var source = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var file in Directory.GetFiles(TestFixtures.LayoutChecklistFixtureDir(), "*.TcDUT"))
+            {
+                var dut = TcDutParser.Parse(File.ReadAllText(file));
+                source[dut.Name] = dut.DeclarationText;
+            }
+
+            return source;
+        }
+
+        // Every comparison below is handed the ST source, so the run scores
+        // xStunit's own reading of a UNION declaration rather than assuming it
+        // from the offsets the compiler produced.
         private static LayoutReport Compare(string moduleName) =>
-            LayoutOracle.Compare(ParsedModule(moduleName));
+            LayoutOracle.Compare(ParsedModule(moduleName), ChecklistSource);
 
         // PlcTaskSystemInfo is described with a hole. Its declared members stop
         // at byte 32 and TaskName is declared at byte 64, the 32 bytes between
@@ -293,6 +315,25 @@ namespace xStunit.Interpreter.Tests.Conformance
 
             Assert.DoesNotContain(Compare(X86Module).Findings,
                 f => f.TypeName == "U_OverlaidScalars" || f.TypeName == "ST_UnionHolder");
+        }
+
+        // What the union rows above are worth. Shared offsets are the outcome
+        // the layout math is supposed to predict, so a run that read union-ness
+        // out of the .tmc could never catch xStunit and the compiler disagreeing
+        // about whether a type is a union at all. Hand the same module a source
+        // xStunit no longer reads as a UNION and the rows turn red, which is
+        // what makes UNION recognition part of the score rather than an
+        // assumption the answer key supplied.
+        [Fact]
+        public void UnionRecognition_ComesFromTheParsedSourceAndNotFromTheSharedOffsets()
+        {
+            var readAsAStruct = ChecklistSource.ToDictionary(e => e.Key, e => e.Value, StringComparer.OrdinalIgnoreCase);
+            readAsAStruct["U_OverlaidScalars"] = readAsAStruct["U_OverlaidScalars"].Replace("UNION", "STRUCT");
+
+            Assert.DoesNotContain(Compare(X86Module).Mismatches, f => f.TypeName == "U_OverlaidScalars");
+            Assert.Contains(
+                LayoutOracle.Compare(ParsedModule(X86Module), readAsAStruct).Mismatches,
+                f => f.TypeName == "U_OverlaidScalars");
         }
 
         // The union gap was never confined to the fixtures: TcUnit's own

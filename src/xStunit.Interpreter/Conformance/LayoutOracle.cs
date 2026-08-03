@@ -10,9 +10,12 @@ namespace xStunit.Interpreter.Conformance
     //
     // The .tmc is the measuring device: it states every member's offset and
     // size outright, so the declared types themselves supply the fixtures and
-    // the comparison needs no TwinCAT installation, no ST source, and no
-    // running PLC. Whatever types a project happens to contain is whatever the
-    // run covers - see LayoutReport.ComparedMemberCount for how much that was.
+    // the comparison needs no TwinCAT installation and no running PLC.
+    // Whatever types a project happens to contain is whatever the run covers -
+    // see LayoutReport.ComparedMemberCount for how much that was.
+    //
+    // The ST source those types were compiled from is optional, and supplying
+    // it is what decides whether UNION recognition is scored - see IsUnion.
     //
     // Packed types are compared under the cap the compiler applied, which it
     // records in the file - see DeclaredTypeLayout.PackMode.
@@ -20,12 +23,20 @@ namespace xStunit.Interpreter.Conformance
     {
         private const int BitsPerByte = 8;
 
-        public static LayoutReport Compare(ModuleLayout module)
+        private static readonly IReadOnlyDictionary<string, string> NoSource =
+            new Dictionary<string, string>();
+
+        public static LayoutReport Compare(ModuleLayout module) => Compare(module, NoSource);
+
+        // sourceDeclarations holds the .TcDUT declaration text of as many of
+        // the module's types as the caller has, keyed by type name.
+        public static LayoutReport Compare(
+            ModuleLayout module, IReadOnlyDictionary<string, string> sourceDeclarations)
         {
             var useX64Widths = module.TargetPlatform != null &&
                 module.TargetPlatform.IndexOf("x64", StringComparison.OrdinalIgnoreCase) >= 0;
 
-            var registry = BuildRegistry(module);
+            var registry = BuildRegistry(module, sourceDeclarations);
             var layout = new TypeLayout(registry);
 
             var findings = new List<LayoutFinding>();
@@ -163,11 +174,12 @@ namespace xStunit.Interpreter.Conformance
             }
         }
 
-        private static TypeRegistry BuildRegistry(ModuleLayout module)
+        private static TypeRegistry BuildRegistry(
+            ModuleLayout module, IReadOnlyDictionary<string, string> sourceDeclarations)
         {
             var structs = module.Types
                 .Where(type => SkipReason(type) == null && type.Members.Count > 0)
-                .Select(ToStructAst);
+                .Select(type => ToStructAst(type, sourceDeclarations));
 
             // Enums and aliases go in as ALIAS entries, which is how the
             // interpreter's own loaders register them: every layout lookup
@@ -187,7 +199,8 @@ namespace xStunit.Interpreter.Conformance
         private static string AliasTarget(DeclaredTypeLayout type) =>
             IecTypeName(type.BaseTypeName, type.BaseTypeIsPointer, isReference: false, type.ArrayDimensions);
 
-        private static StructAst ToStructAst(DeclaredTypeLayout type) =>
+        private static StructAst ToStructAst(
+            DeclaredTypeLayout type, IReadOnlyDictionary<string, string> sourceDeclarations) =>
             new StructAst(
                 type.Name,
                 type.Members
@@ -198,7 +211,7 @@ namespace xStunit.Interpreter.Conformance
                         VarSection.Local))
                     .ToList(),
                 type.PackMode,
-                IsUnion(type));
+                IsUnion(type, sourceDeclarations));
 
         // The .tmc splits a declared type across a type name, a PointerTo or
         // ReferenceTo attribute and any number of ArrayInfo blocks - the same
@@ -246,10 +259,28 @@ namespace xStunit.Interpreter.Conformance
             return null;
         }
 
-        // A .tmc marks a UNION no differently from a STRUCT; what gives it away
-        // is every member starting at the same offset. Read one as a struct and
-        // it reports a wall of offset mismatches that all say the same thing.
-        private static bool IsUnion(DeclaredTypeLayout type) =>
+        // Union-ness comes from xStunit reading the type's own ST declaration,
+        // never from the .tmc. Member names and types are imported from the
+        // .tmc freely - those are declarations, and the comparison is exactly
+        // "given this declared shape, does the layout math agree". Every member
+        // sharing offset 0 is not a declaration but the outcome that math is
+        // meant to predict, so importing it back as an input would leave union
+        // the one shape xStunit and the compiler can never be caught
+        // disagreeing about.
+        //
+        // A type the caller has no source for - a library type the module was
+        // built against - falls back to that outcome. Its size, offsets and
+        // alignment are still scored against the compiler; its UNION
+        // recognition is not, because nothing here asked the parser.
+        private static bool IsUnion(
+            DeclaredTypeLayout type, IReadOnlyDictionary<string, string> sourceDeclarations) =>
+            sourceDeclarations.TryGetValue(type.Name, out var declarationText)
+                ? StructDeclParser.DeclaredBody(declarationText) == StructDeclParser.UnionBody
+                : ShapedLikeAUnion(type);
+
+        // Read a union as a struct and it reports a wall of offset mismatches
+        // that all say the same thing.
+        private static bool ShapedLikeAUnion(DeclaredTypeLayout type) =>
             type.Members.Count > 1 && type.Members.All(m => m.BitOffset == 0);
 
         // The layout math refuses a type it has no rule for by throwing, and an

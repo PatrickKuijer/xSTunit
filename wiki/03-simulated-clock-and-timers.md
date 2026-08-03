@@ -12,11 +12,21 @@ monotonic absolute running total in **nanoseconds**; nothing rewinds it.
 `AdvanceMs(ms)` and `AdvanceNs(ns)` accumulate into that same total, and
 `TotalMs` is the truncating ms view of it.
 
-There's no direct ST syntax to call `Engine.Clock.AdvanceMs` shown in the
-current fixtures (it's driven from the C# test harness in today's tests).
-If your fixture needs to advance simulated time, do it the same way the
-existing interpreter tests do — advance the shared clock between
-`StepCycles` calls, not inside the ST body.
+`AdvanceClock(dt)` is the ST-visible counterpart, callable from any
+interpreted body (a suite's test case, a plain FB's own method, ...) the
+same way `SIZEOF`/`CONCAT` are — no receiver, just a call. `dt`'s CLR shape
+picks the unit: a `TIME` literal (or a bare integer) advances milliseconds,
+an `LTIME` literal advances nanoseconds:
+
+```
+AdvanceClock(T#100ms);
+AdvanceClock(LTIME#1us500ns);
+```
+
+A suite can therefore advance time and observe a TON/TOF fire without a C#
+harness stepping in between `StepCycles` calls — see
+`FB_DigitalInputTests.TcPOU`'s `RisingEdgeSettlesExactlyAtDebounceTime` and
+neighbors.
 
 ## TON / TOF / TP (`FB_Pulse`) and LTON / LTOF / LTP
 

@@ -385,6 +385,24 @@ namespace xStunit.Interpreter
         private static readonly string[] ConcatParamNames =
             { "STR1", "STR2", "STR3", "STR4", "STR5", "STR6", "STR7", "STR8", "STR9", "STR10" };
 
+        private static readonly string[] AdvanceClockParamNames = { "Duration" };
+
+        // The one ST-visible way to move the shared Clock: a suite (or any
+        // other interpreted body) calls AdvanceClock(T#100ms) the same way it
+        // calls SIZEOF/CONCAT, rather than needing a C# harness between
+        // StepCycles calls. Duration's CLR shape already says which unit it
+        // is in - TimeLiteral parses TIME to uint (ms) and LTIME to ulong
+        // (ns, Clock's own base unit) - so a ulong means nanoseconds and
+        // anything else (a TIME literal or a bare integer cycle-style count)
+        // means milliseconds.
+        private void AdvanceClock(object duration)
+        {
+            if (duration is ulong ns)
+                Clock.AdvanceNs((long)ns);
+            else
+                Clock.AdvanceMs(Convert.ToInt64(duration));
+        }
+
         private static Expr RequireIntrinsicArg(string methodName, string paramName, IReadOnlyDictionary<string, Expr> args)
         {
             if (args.TryGetValue(paramName, out var value))
@@ -661,6 +679,14 @@ namespace xStunit.Interpreter
                         Evaluate(RequireIntrinsicArg(call.MethodName, "value", args), frame),
                         Convert.ToInt32(Evaluate(RequireIntrinsicArg(call.MethodName, "n", args), frame)),
                         frame);
+                }
+
+                if (call.MethodName == "AdvanceClock")
+                {
+                    var args = ResolveIntrinsicArgs(AdvanceClockParamNames, call.PositionalArgs, call.NamedArgs);
+                    var duration = Evaluate(RequireIntrinsicArg("AdvanceClock", "Duration", args), frame);
+                    AdvanceClock(duration);
+                    return null;
                 }
 
                 if (call.MethodName == "SIZEOF")

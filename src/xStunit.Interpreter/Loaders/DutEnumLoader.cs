@@ -29,13 +29,6 @@ namespace xStunit.Interpreter
             @"^TYPE\s+(?<name>\w+)\s*:\s*\((?<body>[^)]*)\)\s*(?<base>[A-Za-z_]\w*)?\s*;",
             RegexOptions.Compiled);
 
-        // TwinCAT emits "{attribute '...'}" pragma lines and declaration
-        // comments before the "TYPE Name :" header. Neither is part of the
-        // enum's declaration shape, so they are stripped before EnumPattern -
-        // which is anchored at the start of the text - is tried.
-        private static readonly Regex LeadingPragmaOrCommentLine = new Regex(
-            @"\A\s*(\{[^\n\}]*\}|//[^\n]*)\s*", RegexOptions.Compiled);
-
         // Extracts (name, underlyingTypeName, members) from an ENUM DUT's
         // declaration text - e.g. "E_Color" / "INT" from "TYPE E_Color :
         // (Red, Green, Blue); END_TYPE", or "eWidgetValueKind" / "DINT" when
@@ -48,11 +41,9 @@ namespace xStunit.Interpreter
             underlyingTypeName = null;
             members = null;
 
-            var text = declarationText.Replace("\r\n", "\n").Trim();
-            for (var lead = LeadingPragmaOrCommentLine.Match(text); lead.Success; lead = LeadingPragmaOrCommentLine.Match(text))
-                text = text.Substring(lead.Length);
-
-            var match = EnumPattern.Match(text);
+            // EnumPattern is anchored at the start of the text, so the leading
+            // pragmas and comments have to go first.
+            var match = EnumPattern.Match(DutDeclarationPreamble.Strip(declarationText));
             if (!match.Success)
                 return false;
 

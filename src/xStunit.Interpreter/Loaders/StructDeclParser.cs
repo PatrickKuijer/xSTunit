@@ -16,8 +16,8 @@ namespace xStunit.Interpreter
             @"^TYPE\s+(?<name>\w+)\s*:", RegexOptions.Compiled);
 
         // TwinCAT emits "{attribute 'pack_mode' := 'N'}" before the
-        // "TYPE Name :" header, so the scan below stops at that header - past
-        // it there is nowhere the pragma can legally appear.
+        // "TYPE Name :" header, so it is read out of the preamble - past that
+        // header there is nowhere the pragma can legally appear.
         private static readonly Regex PackModeAttributePattern = new Regex(
             @"^\{attribute\s+'pack_mode'\s*:=\s*'(?<value>\d+)'\}$", RegexOptions.Compiled);
 
@@ -38,7 +38,7 @@ namespace xStunit.Interpreter
         // *)") or inside an identifier like "STRUCTURED".
         public static string DeclaredBody(string declarationText)
         {
-            var lines = declarationText.Replace("\r\n", "\n").Split('\n');
+            var lines = DutDeclarationPreamble.Strip(declarationText).Split('\n');
             for (var i = 0; i < lines.Length; i++)
             {
                 var trimmed = lines[i].Trim();
@@ -67,29 +67,39 @@ namespace xStunit.Interpreter
 
         public static StructAst Parse(string declarationText)
         {
-            string name = null;
-            var packMode = 0;
-            foreach (var rawLine in declarationText.Split('\n'))
+            var fields = VarBlockParser.Parse(declarationText);
+            return new StructAst(
+                DeclaredName(declarationText),
+                fields,
+                PackMode(declarationText),
+                DeclaredBody(declarationText) == UnionBody);
+        }
+
+        // Taken from the header rather than from the first "TYPE Name :" text
+        // anywhere in the declaration, so prose in the header comment that
+        // quotes a TYPE line cannot name the type.
+        private static string DeclaredName(string declarationText)
+        {
+            foreach (var rawLine in DutDeclarationPreamble.Strip(declarationText).Split('\n'))
             {
-                var line = rawLine.Trim();
-
-                var packModeMatch = PackModeAttributePattern.Match(line);
-                if (packModeMatch.Success)
-                {
-                    packMode = int.Parse(packModeMatch.Groups["value"].Value);
-                    continue;
-                }
-
-                var match = TypeNamePattern.Match(line);
+                var match = TypeNamePattern.Match(rawLine.Trim());
                 if (match.Success)
-                {
-                    name = match.Groups["name"].Value;
-                    break;
-                }
+                    return match.Groups["name"].Value;
             }
 
-            var fields = VarBlockParser.Parse(declarationText);
-            return new StructAst(name, fields, packMode, DeclaredBody(declarationText) == UnionBody);
+            return null;
+        }
+
+        private static int PackMode(string declarationText)
+        {
+            foreach (var rawLine in DutDeclarationPreamble.LeadingText(declarationText).Split('\n'))
+            {
+                var match = PackModeAttributePattern.Match(rawLine.Trim());
+                if (match.Success)
+                    return int.Parse(match.Groups["value"].Value);
+            }
+
+            return 0;
         }
     }
 }

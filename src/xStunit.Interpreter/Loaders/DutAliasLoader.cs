@@ -40,7 +40,7 @@ namespace xStunit.Interpreter
             name = null;
             underlyingTypeName = null;
 
-            var lines = declarationText.Replace("\r\n", "\n").Split('\n');
+            var lines = DutDeclarationPreamble.Strip(declarationText).Split('\n');
             for (var i = 0; i < lines.Length; i++)
             {
                 var trimmed = lines[i].Trim();

@@ -51,6 +51,27 @@ END_TYPE");
             Assert.Equal("uGadgetSettingValue", structAst.Name);
         }
 
+        [Fact]
+        public void Parse_PackModeAttributeBehindBlockCommentHeader_IsStillCaptured()
+        {
+            // The pragma shares the header comment's territory, so whatever
+            // skips a "(* ... *)" header on the way to the TYPE line must not
+            // take the layout attribute with it.
+            var structAst = StructDeclParser.Parse(@"(*
+    Wire record handed to the HMI, packed to match the published layout.
+*)
+{attribute 'pack_mode' := '1'}
+TYPE uGadgetSettingValue :
+STRUCT
+	nIndex : UINT;
+	rValue : LREAL;
+END_STRUCT
+END_TYPE");
+
+            Assert.Equal(1, structAst.PackMode);
+            Assert.Equal("uGadgetSettingValue", structAst.Name);
+        }
+
         // The UNION keyword is the only thing separating a type whose fields
         // are laid end to end from one whose fields are all at offset 0, and it
         // survives nowhere else - a .tmc records the layout, never the keyword.

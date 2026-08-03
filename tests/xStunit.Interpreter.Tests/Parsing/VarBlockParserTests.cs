@@ -78,6 +78,42 @@ END_VAR";
             Assert.Equal("POINTER TO INT", vars[2].TypeName);
         }
 
+        // IEC 61131-3 type names are case-insensitive, and every downstream
+        // consumer of the declared type text already agrees on that. A line
+        // this parser fails to match is skipped without a word, so if these go
+        // red a directly-declared 'pointer to BYTE' produces no VarDecl at all
+        // and every later use of the name reports "Unknown variable" from
+        // somewhere else entirely. The spelling is passed through verbatim
+        // because the declared text is what FbInstance and Cell record.
+        [Theory]
+        [InlineData("p : pointer to BYTE;", "pointer to BYTE")]
+        [InlineData("p : Pointer To BYTE;", "Pointer To BYTE")]
+        [InlineData("r : reference to INT;", "reference to INT")]
+        [InlineData("r : Reference To INT;", "Reference To INT")]
+        public void Parse_AddressTypeInAnyCase_ReadsFullTypeName(string line, string expectedTypeName)
+        {
+            var vars = VarBlockParser.Parse($"VAR\n\t{line}\nEND_VAR");
+
+            var declared = Assert.Single(vars);
+            Assert.Equal(expectedTypeName, declared.TypeName);
+        }
+
+        // The same case-insensitivity, on the composite type arms: ArrayTypeInfo
+        // and StringTypeInfo both already match ARRAY/OF/STRING/WSTRING without
+        // regard to case, so a spelling they would accept must not be dropped
+        // one layer earlier.
+        [Theory]
+        [InlineData("labels : array[0..3] of INT;", "array[0..3] of INT")]
+        [InlineData("labels : Array[0..3] Of string(4);", "Array[0..3] Of string(4)")]
+        [InlineData("label : wstring(8);", "wstring(8)")]
+        public void Parse_CompositeTypeInAnyCase_ReadsFullTypeName(string line, string expectedTypeName)
+        {
+            var vars = VarBlockParser.Parse($"VAR\n\t{line}\nEND_VAR");
+
+            var declared = Assert.Single(vars);
+            Assert.Equal(expectedTypeName, declared.TypeName);
+        }
+
         [Fact]
         public void Parse_FbInitParams_IncludesStandardAndCustomInputs()
         {

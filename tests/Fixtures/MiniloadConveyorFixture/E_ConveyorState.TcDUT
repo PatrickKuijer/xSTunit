@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4026.18">
+  <DUT Name="E_ConveyorState" Id="{5e4501d0-0021-4d19-9a41-000000000001}">
+    <Declaration><![CDATA[// The six states a conveyor equipment module holds, in the order the drawn
+// state machine walks them. PROCES_CONTAINER carries a single S: that is the
+// spelling the source it is drafted from uses, and it is kept rather than
+// quietly corrected, because the name is already an identifier elsewhere.
+//
+// INIT is zero deliberately: a conveyor that nobody has configured powers up
+// stopped, without an initialiser to forget.
+TYPE E_ConveyorState :
+(
+	INIT := 0,
+	STARTING := 1,
+	WAIT_CONTAINER := 2,
+	WAIT_DOWNSTREAM_READY := 3,
+	PROCES_CONTAINER := 4,
+	STOPPING := 5
+);
+END_TYPE
+]]></Declaration>
+  </DUT>
+</TcPlcObject>

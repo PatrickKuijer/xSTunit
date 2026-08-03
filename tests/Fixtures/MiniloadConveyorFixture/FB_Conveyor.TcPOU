@@ -1,0 +1,230 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4026.18">
+  <POU Name="FB_Conveyor" Id="{5e4501d0-0025-4d19-9a41-000000000001}" SpecialFunc="None">
+    <Declaration><![CDATA[(*
+    The conveyor equipment module: one belt run, its detection point and its
+    drive, as a six-state machine. Every conveyor in the miniload is an
+    instance of this block handed a different ST_ConveyorControl and a
+    different pair of dependencies - infeed, transport, outfeed and the shuttle
+    receiver are the same code with a different recipe.
+
+    The state model, in the order it walks:
+
+      INIT                  stopped, waiting to be started;
+      STARTING              coming up to speed, for AccelTime;
+      WAIT_CONTAINER        at speed, belt running, nothing on the eye;
+      WAIT_DOWNSTREAM_READY a container is ON the eye and the belt is held
+                            until the next station will take it;
+      PROCES_CONTAINER      handing the container over, belt running;
+      STOPPING              coming to rest, for DecelTime, then INIT.
+
+    The module does not SHAPE the acceleration - the demand is applied in full
+    the moment STARTING is entered and dropped in full on STOPPING, and the
+    drive does the rest. AccelTime and DecelTime are how long this run allows
+    for that, not a profile it drives, which is why they are per-instance
+    recipe rather than drive settings.
+
+    Two things end a run from wherever it is rather than through the state
+    model - a Stop command and a latched motor fault - and they are decided
+    above the CASE for that reason.
+
+    Both dependencies are injected as levels on every call: the module holds an
+    I_DigitalInput and an I_AxisBase, never a concrete sensor or drive, which
+    is what lets chapter 06 run the identical block against a mock.
+*)
+FUNCTION_BLOCK FB_Conveyor
+VAR_INPUT
+	// The container detection point - the photo-eye at the hand-over end of
+	// this run. Read for what the signal MEANS; the module never debounces or
+	// inverts on its own behalf.
+	caseDetectionSensor : I_DigitalInput;
+	// The belt drive. Commanded every scan, never pulsed.
+	conveyorAxis : I_AxisBase;
+	Control : ST_ConveyorControl;
+	Start : BOOL;
+	Stop : BOOL;
+	// The PackML Reset. Acknowledges the drive and releases the motor fault -
+	// the single point at which a tripped run becomes startable again.
+	Reset : BOOL;
+	// The next station will accept a container. A level, not a handshake: it
+	// may withdraw again mid-hand-over and the module has to cope.
+	DownstreamReady : BOOL;
+END_VAR
+VAR_OUTPUT
+	CurrentState : E_ConveyorState;
+	// The belt is turning. Not the same as "the state machine wants it to":
+	// the run-on keeps it true for MotorRunOn after the demand drops.
+	MotorRunning : BOOL;
+	CommandedVelocity : LREAL;
+	MotorFault : BOOL;
+	ContainersPassed : UINT;
+	// One published value per detection point on this run. Slot 1 is the case
+	// detection sensor; the rest are reserved so the runs that carry more
+	// points publish the same shape.
+	Sensors : ARRAY[1..5] OF ST_SensorData;
+END_VAR
+VAR
+	motorDemand : BOOL;
+	runOnTime : TIME;
+	containerPassed : BOOL;
+	accelRamp : TON;
+	decelRamp : TON;
+	handoverTimer : TON;
+	runOnTimer : TOF;
+	containerCounter : CTU;
+	faultLatch : RS;
+	// The drive's rated speed in drive units, which SpeedPercentage is a
+	// percentage OF. A property of the hardware on this run rather than of the
+	// recipe, so it does not live in ST_ConveyorControl.
+	RatedVelocity : LREAL := 1000.0;
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[// Drive
+// Power is re-requested every scan rather than once, so a drive that comes up
+// late - or comes back after a trip has been acknowledged - is live again
+// without needing a second Start.
+conveyorAxis.Enable();
+
+IF Reset THEN
+	conveyorAxis.Reset();
+END_IF
+
+// Statemachine
+// The transition timers are driven ahead of the CASE so that each one is
+// called on EVERY scan. A TON called only from inside its own arm is not
+// called at all on the scans the machine spends elsewhere, so its IN is never
+// seen to drop: the next visit to that state would find the timer still
+// running from the previous visit and take the arc immediately.
+accelRamp(IN := CurrentState = E_ConveyorState.STARTING, PT := Control.AccelTime);
+decelRamp(IN := CurrentState = E_ConveyorState.STOPPING, PT := Control.DecelTime);
+handoverTimer(IN := CurrentState = E_ConveyorState.PROCES_CONTAINER
+	AND NOT caseDetectionSensor.Active, PT := Control.HandoverDelay);
+
+// The trip is latched here rather than read off the axis where it is used: a
+// drive drops Error the moment its own cause goes away, and a conveyor that
+// resumed on a fault nobody acknowledged would be a machine that restarts by
+// itself. Reset-dominant, so a drive stuck reporting a fault cannot make the
+// module permanently unclearable - it re-latches on the next scan through the
+// axis, which is the drive's answer rather than the latch's.
+faultLatch(SET := conveyorAxis.Error, RESET1 := Reset);
+MotorFault := faultLatch.Q1;
+
+containerPassed := FALSE;
+
+// Both overrides end a run from wherever it is rather than through the state
+// model, and the fault is tested first: an operator Stop arriving in the same
+// scan as a trip must not be able to present the stop as the reason the run
+// ended. INIT and STOPPING are excluded from both because they are already
+// where an override would send it.
+IF MotorFault
+	AND CurrentState <> E_ConveyorState.INIT
+	AND CurrentState <> E_ConveyorState.STOPPING THEN
+	CurrentState := E_ConveyorState.STOPPING;
+ELSIF Stop
+	AND CurrentState <> E_ConveyorState.INIT
+	AND CurrentState <> E_ConveyorState.STOPPING THEN
+	CurrentState := E_ConveyorState.STOPPING;
+ELSE
+	CASE CurrentState OF
+		E_ConveyorState.INIT:
+			IF Start AND NOT MotorFault THEN
+				CurrentState := E_ConveyorState.STARTING;
+			END_IF
+
+		E_ConveyorState.STARTING:
+			// Up to speed is an ALLOWANCE, not a measurement: the module
+			// never asks the drive whether it got there. Two runs sharing a
+			// drive type still need different allowances, which is why it is
+			// recipe rather than a drive setting.
+			IF accelRamp.Q THEN
+				CurrentState := E_ConveyorState.WAIT_CONTAINER;
+			END_IF
+
+		E_ConveyorState.WAIT_CONTAINER:
+			IF caseDetectionSensor.Active THEN
+				CurrentState := E_ConveyorState.WAIT_DOWNSTREAM_READY;
+			END_IF
+
+		E_ConveyorState.WAIT_DOWNSTREAM_READY:
+			// A container held here can also simply be gone - lifted off by
+			// hand while a jam upstream was cleared. Tested BEFORE the
+			// hand-over, because releasing an empty transfer would hand the
+			// next station a container that no longer exists and count it.
+			IF NOT caseDetectionSensor.Active THEN
+				CurrentState := E_ConveyorState.WAIT_CONTAINER;
+			ELSIF DownstreamReady THEN
+				CurrentState := E_ConveyorState.PROCES_CONTAINER;
+			END_IF
+
+		E_ConveyorState.PROCES_CONTAINER:
+			// handoverTimer.Q means "the eye has been clear, continuously, for
+			// the whole delay" - the negation is in what drives the timer, so
+			// a container that comes back onto the eye restarts the window
+			// rather than resuming it. The level alone would read the gap
+			// between two closely spaced containers as a completed hand-over.
+			IF handoverTimer.Q THEN
+				containerPassed := TRUE;
+				CurrentState := E_ConveyorState.WAIT_CONTAINER;
+			ELSIF NOT DownstreamReady AND caseDetectionSensor.Active THEN
+				// The next station withdrew while the container was still on
+				// the eye, so it goes back to being held. Once the eye is
+				// clear the container is physically gone and a withdrawal
+				// downstream can no longer call it back.
+				CurrentState := E_ConveyorState.WAIT_DOWNSTREAM_READY;
+			END_IF
+
+		E_ConveyorState.STOPPING:
+			IF decelRamp.Q THEN
+				CurrentState := E_ConveyorState.INIT;
+			END_IF
+	END_CASE
+END_IF
+
+// Feedback
+motorDemand := CurrentState = E_ConveyorState.STARTING
+	OR CurrentState = E_ConveyorState.WAIT_CONTAINER
+	OR CurrentState = E_ConveyorState.PROCES_CONTAINER;
+
+// A trip is not a hand-over. The run-on exists so a released container coasts
+// fully clear of the transfer, and collapsing its window on a fault is what
+// stops it from doubling as a reason for a faulted belt to keep turning.
+IF MotorFault THEN
+	runOnTime := T#0ms;
+ELSE
+	runOnTime := Control.MotorRunOn;
+END_IF
+
+runOnTimer(IN := motorDemand AND NOT MotorFault, PT := runOnTime);
+MotorRunning := runOnTimer.Q;
+
+IF MotorRunning THEN
+	CommandedVelocity := Control.SpeedPercentage / 100.0 * RatedVelocity;
+ELSE
+	CommandedVelocity := 0.0;
+END_IF
+
+conveyorAxis.MoveVelocity(Velocity := CommandedVelocity);
+
+// The run's lifetime throughput. RESET is wired low rather than to anything
+// the state machine decides, so no transition can quietly zero a production
+// count; there is deliberately no clear input yet, because who is allowed to
+// zero it is a supervisory question this module does not answer. PV is
+// irrelevant either way - nothing reads the counter's own Q.
+containerCounter(CU := containerPassed, RESET := FALSE, PV := 0);
+
+// Status
+// RawLevel is left at its default on purpose: I_DigitalInput publishes what a
+// signal MEANS and never what the wire is doing, so an equipment module
+// reading through the interface has nothing truthful to put there.
+Sensors[1].Active := caseDetectionSensor.Active;
+Sensors[1].Inverted := caseDetectionSensor.Inverted;
+Sensors[1].Simulated := caseDetectionSensor.Simulation;
+Sensors[1].DebounceTime := caseDetectionSensor.DebounceTime;
+Sensors[1].TimeActive := caseDetectionSensor.TimeActive;
+Sensors[1].TimeInactive := caseDetectionSensor.TimeInactive;
+
+ContainersPassed := containerCounter.CV;]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

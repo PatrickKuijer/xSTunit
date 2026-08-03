@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4026.18">
+  <POU Name="FB_InfeedConveyor" Id="{5e4501d0-0027-4d19-9a41-000000000001}" SpecialFunc="None">
+    <Declaration><![CDATA[(*
+    The operator load point: the first equipment module a container meets, and
+    the first instance of FB_Conveyor.
+
+    It contributes no state model of its own. Everything an infeed run does
+    differently from a transport or an outfeed run is here and nowhere else -
+    which terminal channel the detection point is wired to, which drive turns
+    the belt, and the recipe the shared state machine walks. That separation is
+    the reason FB_Conveyor is worth having: the seven other runs are this file
+    again with three answers changed.
+
+    The tuning is deliberately unlike the other runs. An infeed is loaded by
+    hand, so it accelerates gently, gives the operator's container a long
+    hand-over window, and debounces its photo-eye against a hand passing over
+    it.
+*)
+FUNCTION_BLOCK FB_InfeedConveyor
+VAR_INPUT
+	Start : BOOL;
+	Stop : BOOL;
+	Reset : BOOL;
+	DownstreamReady : BOOL;
+	// The photo-eye's terminal channel.
+	CaseDetected : BOOL;
+	// The belt drive's fault line.
+	BeltDriveFault : BOOL;
+END_VAR
+VAR_OUTPUT
+	CurrentState : E_ConveyorState;
+	MotorRunning : BOOL;
+	MotorFault : BOOL;
+	ContainersPassed : UINT;
+END_VAR
+VAR
+	run : FB_Conveyor;
+	caseDetection : FB_DigitalInput;
+	beltDrive : FB_AxisBase;
+	recipe : ST_ConveyorControl;
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[// Recipe
+// Written every scan rather than once, so nothing that gets a reference to
+// this instance can retune a running conveyor behind the unit above it.
+recipe.SpeedPercentage := 40.0;
+recipe.AccelTime := T#800ms;
+recipe.DecelTime := T#1200ms;
+recipe.HandoverDelay := T#250ms;
+recipe.MotorRunOn := T#400ms;
+
+caseDetection.DebounceTime := T#25ms;
+
+// Control modules
+caseDetection(HardwareInput := CaseDetected);
+beltDrive(DriveFault := BeltDriveFault);
+
+// Equipment module
+run(caseDetectionSensor := caseDetection,
+	conveyorAxis := beltDrive,
+	Control := recipe,
+	Start := Start,
+	Stop := Stop,
+	Reset := Reset,
+	DownstreamReady := DownstreamReady);
+
+// Status
+CurrentState := run.CurrentState;
+MotorRunning := run.MotorRunning;
+MotorFault := run.MotorFault;
+ContainersPassed := run.ContainersPassed;]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

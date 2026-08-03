@@ -16,7 +16,7 @@ namespace xStunit.Cli.Tests
 
         public CliRunnerCoverageTests()
         {
-            _tempDir = Path.Combine(Path.GetTempPath(), "TcXunitCliCoverageFixture_" + Guid.NewGuid());
+            _tempDir = Path.Combine(Path.GetTempPath(), "xStunitCliCoverageFixture_" + Guid.NewGuid());
             Directory.CreateDirectory(_tempDir);
             foreach (var file in Directory.GetFiles(TestFixtures.FbCounterFixtureDir(), "*.TcPOU"))
                 File.Copy(file, Path.Combine(_tempDir, Path.GetFileName(file)));

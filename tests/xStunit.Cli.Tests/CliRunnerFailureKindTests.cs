@@ -23,7 +23,7 @@ namespace xStunit.Cli.Tests
 
         public CliRunnerFailureKindTests()
         {
-            _tempDir = Path.Combine(Path.GetTempPath(), "TcXunitCliFailureKindFixture_" + Guid.NewGuid());
+            _tempDir = Path.Combine(Path.GetTempPath(), "xStunitCliFailureKindFixture_" + Guid.NewGuid());
             Directory.CreateDirectory(_tempDir);
         }
 

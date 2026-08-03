@@ -15,7 +15,7 @@ namespace xStunit.Cli.Tests
 
         public CliRunnerFailureLocationTests()
         {
-            _tempDir = Path.Combine(Path.GetTempPath(), "TcXunitCliFailureLocationFixture_" + Guid.NewGuid());
+            _tempDir = Path.Combine(Path.GetTempPath(), "xStunitCliFailureLocationFixture_" + Guid.NewGuid());
             Directory.CreateDirectory(_tempDir);
             File.WriteAllText(Path.Combine(_tempDir, "FB_DeepHelper.TcPOU"), DeepHelperXml);
             File.WriteAllText(Path.Combine(_tempDir, "FB_NestedThrowTests.TcPOU"), NestedThrowSuiteXml);

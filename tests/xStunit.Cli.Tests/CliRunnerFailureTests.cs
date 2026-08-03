@@ -13,7 +13,7 @@ namespace xStunit.Cli.Tests
 
         public CliRunnerFailureTests()
         {
-            _tempDir = Path.Combine(Path.GetTempPath(), "TcXunitCliFailureFixture_" + Guid.NewGuid());
+            _tempDir = Path.Combine(Path.GetTempPath(), "xStunitCliFailureFixture_" + Guid.NewGuid());
             Directory.CreateDirectory(_tempDir);
             File.WriteAllText(Path.Combine(_tempDir, "FB_AlwaysFailsTests.TcPOU"), AlwaysFailsSuiteXml);
         }

@@ -18,7 +18,7 @@ namespace xStunit.Cli.Tests
 
         public CliRunnerSkippedPouTests()
         {
-            _tempDir = Path.Combine(Path.GetTempPath(), "TcXunitCliSkipFixture_" + Guid.NewGuid());
+            _tempDir = Path.Combine(Path.GetTempPath(), "xStunitCliSkipFixture_" + Guid.NewGuid());
             Directory.CreateDirectory(_tempDir);
             File.WriteAllText(Path.Combine(_tempDir, "FB_UsesTc2System.TcPOU"), UnsupportedPouXml);
             File.WriteAllText(Path.Combine(_tempDir, "FB_PassingTests.TcPOU"), PassingSuiteXml);

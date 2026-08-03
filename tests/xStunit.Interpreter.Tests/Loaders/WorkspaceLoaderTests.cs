@@ -1,10 +1,10 @@
 using System;
 using System.IO;
 using System.Linq;
-using xStunit.Cli;
+using xStunit.Interpreter;
 using Xunit;
 
-namespace xStunit.Cli.Tests
+namespace xStunit.Interpreter.Tests
 {
     // The load half of a run, exercised without the CLI: a directory set in, a
     // TypeRegistry and a skip list out. The rule these pin is that a file the

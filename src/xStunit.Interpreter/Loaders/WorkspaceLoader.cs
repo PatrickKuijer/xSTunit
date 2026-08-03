@@ -2,14 +2,13 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using xStunit.Interpreter;
 using xStunit.Parser;
 
-namespace xStunit.Cli
+namespace xStunit.Interpreter
 {
-    // Turns the directories named on the command line into the type universe a
-    // run executes against: every .TcPOU, .TcDUT and .TcGVL under them, merged
-    // into one TypeRegistry, plus the list of files that could not be read.
+    // Turns the directories a run is pointed at into the type universe it
+    // executes against: every .TcPOU, .TcDUT and .TcGVL under them, merged into
+    // one TypeRegistry, plus the list of files that could not be read.
     public static class WorkspaceLoader
     {
         public static LoadedWorkspace Load(IReadOnlyList<string> directories)

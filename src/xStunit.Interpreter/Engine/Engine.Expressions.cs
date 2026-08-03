@@ -745,12 +745,17 @@ namespace xStunit.Interpreter
             var toType = call.MethodName.Substring(separator + 4);
             var value = Evaluate(call.PositionalArgs[0], frame);
 
+            // Explicit InvariantCulture provider: Convert.ToXXX(object) without
+            // one parses string sources (e.g. STRING_TO_LREAL) against
+            // CurrentCulture, which under a culture using '.' as the group
+            // separator (e.g. de-DE) drops the decimal point instead of
+            // erroring or parsing it correctly.
             if (toType == "REAL")
-                result = Convert.ToSingle(value);
+                result = Convert.ToSingle(value, System.Globalization.CultureInfo.InvariantCulture);
             else if (toType == "LREAL")
-                result = Convert.ToDouble(value);
+                result = Convert.ToDouble(value, System.Globalization.CultureInfo.InvariantCulture);
             else if (IntegerCastTargets.Contains(toType))
-                result = Convert.ToInt32(value);
+                result = Convert.ToInt32(value, System.Globalization.CultureInfo.InvariantCulture);
             // _TO_STRING is deliberately scoped to numeric source types only:
             // a non-numeric prefix like BOOL_TO_STRING or TIME_TO_STRING falls
             // through to CallMethod/native-bridge dispatch and keeps its

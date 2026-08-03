@@ -13,6 +13,10 @@ namespace xStunit.Interpreter
             {
                 case IntLiteralExpr i:
                     return i.Value;
+                case LintLiteralExpr l:
+                    return l.Value;
+                case UlintLiteralExpr ul:
+                    return ul.Value;
                 case RealLiteralExpr r:
                     return r.Value;
                 case LrealLiteralExpr lr:
@@ -156,6 +160,12 @@ namespace xStunit.Interpreter
                 switch (value)
                 {
                     case int i: return -i;
+                    case long l: return -l;
+                    // The one negatable ulong: long.MinValue's magnitude is
+                    // one past long.MaxValue, so a literal can only spell it
+                    // unsigned, and '-9223372036854775808' would otherwise be
+                    // the single LINT value no source text could produce.
+                    case ulong u when u == (ulong)long.MaxValue + 1: return long.MinValue;
                     case float f: return -f;
                     case double d: return -d;
                     default:

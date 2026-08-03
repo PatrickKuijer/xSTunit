@@ -17,6 +17,22 @@ namespace xStunit.Interpreter
         public IntLiteralExpr(int value) => Value = value;
     }
 
+    // The two wider integer literals, produced only for a value that will not
+    // fit the box above them - see the width rule at Parser's
+    // ParseIntegerLiteral. They box the way LINT and ULINT/LWORD cells do, so
+    // a 64-bit initializer reaches its cell without a widening step.
+    public sealed class LintLiteralExpr : Expr
+    {
+        public long Value { get; }
+        public LintLiteralExpr(long value) => Value = value;
+    }
+
+    public sealed class UlintLiteralExpr : Expr
+    {
+        public ulong Value { get; }
+        public UlintLiteralExpr(ulong value) => Value = value;
+    }
+
     public sealed class RealLiteralExpr : Expr
     {
         public float Value { get; }

@@ -10,6 +10,14 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- The wire-format report types are internal: nothing outside this
+         executable constructs them (the VSIX shells out and parses stdout), and
+         the tests that pin the JSON they serialize to need to build one
+         directly. -->
+    <InternalsVisibleTo Include="xStunit.Cli.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\xStunit.Parser\xStunit.Parser.csproj" />
     <ProjectReference Include="..\xStunit.Interpreter\xStunit.Interpreter.csproj" />
   </ItemGroup>

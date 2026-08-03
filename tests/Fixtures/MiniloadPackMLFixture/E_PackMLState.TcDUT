@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4026.18">
+  <DUT Name="E_PackMLState" Id="{5e4501d0-0011-4d19-9a41-000000000001}">
+    <Declaration><![CDATA[// The PackML unit state model: seventeen states, split into six WAIT states
+// that sit until an operator or a supervisor commands something - Stopped,
+// Idle, Suspended, Held, Complete, Aborted - and eleven ACTING states the unit
+// leaves by itself once the equipment logic reports the work done.
+//
+// The ordinals are the published PackML numbering and are pinned explicitly
+// rather than left to declaration order, because they are exchanged with the
+// HMI and the MES: renumbering them silently would relabel every historical
+// state record.
+TYPE E_PackMLState :
+(
+	CLEARING := 1,
+	STOPPED := 2,
+	STARTING := 3,
+	IDLE := 4,
+	SUSPENDED := 5,
+	EXECUTE := 6,
+	STOPPING := 7,
+	ABORTING := 8,
+	ABORTED := 9,
+	HOLDING := 10,
+	HELD := 11,
+	UNHOLDING := 12,
+	SUSPENDING := 13,
+	UNSUSPENDING := 14,
+	RESETTING := 15,
+	COMPLETING := 16,
+	COMPLETE := 17
+);
+END_TYPE
+]]></Declaration>
+  </DUT>
+</TcPlcObject>

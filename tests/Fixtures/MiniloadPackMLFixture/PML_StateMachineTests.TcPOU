@@ -1,0 +1,686 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4026.18">
+  <POU Name="PML_StateMachineTests" Id="{5e4501d0-0015-4d19-9a41-000000000001}" SpecialFunc="None">
+    <Declaration><![CDATA[(*
+    Suite over PML_StateMachine: the seventeen states, the command priority
+    that overrides them, and the Abort/Clear fault latch.
+
+    Every case here is decided by CALLS, not by elapsed time. xStunit's
+    simulated clock is driven from the C# harness and there is no ST-visible
+    way to advance it, so a suite sees time frozen at zero. That reaches the
+    whole state model - a PackML state is left on a command or on a completion
+    flag, never on a timeout - but it cannot say anything about
+    StateElapsedTime or TotalRunTime beyond "a unit that has not run has not
+    accumulated any". What those two meters do as time passes is pinned in
+    tests/xStunit.Interpreter.Tests/Miniload/PackMLStateMachineTimingTests.cs.
+
+    Commands and completion flags are levels, so each case raises one, runs a
+    scan, and drops it again. Leaving one raised is itself a case - see
+    AStaleAbortLevelCannotHoldTheUnitFaulted.
+*)
+FUNCTION_BLOCK PML_StateMachineTests EXTENDS TcUnit.FB_TestSuite]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[UnitPowersUpStoppedAndUnfaulted();
+EveryPackMLStateHasItsPublishedOrdinal();
+ResetAndStartWalkTheProductionPath();
+HoldAndUnholdReturnTheUnitToExecute();
+SuspendAndUnsuspendReturnTheUnitToExecute();
+StopFromExecuteEndsAtStopped();
+AbortLatchesTheFaultBeforeTheUnitReachesAborted();
+ClearFromAbortedReleasesTheLatchAndReturnsToStopped();
+ClearIsIgnoredUnlessTheUnitIsAborted();
+AbortOutranksEveryOtherCommand();
+StopOutranksThePerStateCommands();
+AStaleAbortLevelCannotHoldTheUnitFaulted();
+ACompletionFlagOnlyCompletesItsOwnState();
+CountsAreLifetimeTotals();]]></ST>
+    </Implementation>
+    <Method Name="UnitPowersUpStoppedAndUnfaulted" Id="{5e4501d0-0015-4d19-9a41-000000000002}">
+      <Declaration><![CDATA[// A unit that has never been scanned must already publish a valid state.
+// Zero is not a member of E_PackMLState, so a manager that left CurrentState
+// at its numeric default would hand the HMI and the MES a state that does not
+// exist - and Stopped is the state the model itself starts in.
+METHOD PRIVATE UnitPowersUpStoppedAndUnfaulted
+VAR
+	unit : PML_StateMachine;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('UnitPowersUpStoppedAndUnfaulted');
+
+AssertEquals_INT(Expected := E_PackMLState.STOPPED,
+                 Actual := unit.CurrentState,
+                 Message := 'fresh unit state');
+
+AssertFalse(Condition := unit.Faulted,
+            Message := 'fresh unit reported a fault');
+
+AssertEquals_UINT(Expected := 0,
+                  Actual := unit.ProductCount,
+                  Message := 'fresh unit ProductCount');
+
+AssertEquals_UINT(Expected := 0,
+                  Actual := unit.ErrorCount,
+                  Message := 'fresh unit ErrorCount');
+
+AssertEquals_TIME(Expected := T#0ms,
+                  Actual := unit.TotalRunTime,
+                  Message := 'fresh unit TotalRunTime');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="EveryPackMLStateHasItsPublishedOrdinal" Id="{5e4501d0-0015-4d19-9a41-000000000003}">
+      <Declaration><![CDATA[// The seventeen ordinals are exchanged with the HMI and the MES, so they are
+// an external contract rather than an internal detail. Reordering the enum or
+// inserting a state would silently relabel every historical state record; this
+// is what makes that a red test instead of a support call.
+METHOD PRIVATE EveryPackMLStateHasItsPublishedOrdinal
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('EveryPackMLStateHasItsPublishedOrdinal');
+
+AssertEquals_INT(Expected := 1, Actual := E_PackMLState.CLEARING, Message := 'CLEARING');
+AssertEquals_INT(Expected := 2, Actual := E_PackMLState.STOPPED, Message := 'STOPPED');
+AssertEquals_INT(Expected := 3, Actual := E_PackMLState.STARTING, Message := 'STARTING');
+AssertEquals_INT(Expected := 4, Actual := E_PackMLState.IDLE, Message := 'IDLE');
+AssertEquals_INT(Expected := 5, Actual := E_PackMLState.SUSPENDED, Message := 'SUSPENDED');
+AssertEquals_INT(Expected := 6, Actual := E_PackMLState.EXECUTE, Message := 'EXECUTE');
+AssertEquals_INT(Expected := 7, Actual := E_PackMLState.STOPPING, Message := 'STOPPING');
+AssertEquals_INT(Expected := 8, Actual := E_PackMLState.ABORTING, Message := 'ABORTING');
+AssertEquals_INT(Expected := 9, Actual := E_PackMLState.ABORTED, Message := 'ABORTED');
+AssertEquals_INT(Expected := 10, Actual := E_PackMLState.HOLDING, Message := 'HOLDING');
+AssertEquals_INT(Expected := 11, Actual := E_PackMLState.HELD, Message := 'HELD');
+AssertEquals_INT(Expected := 12, Actual := E_PackMLState.UNHOLDING, Message := 'UNHOLDING');
+AssertEquals_INT(Expected := 13, Actual := E_PackMLState.SUSPENDING, Message := 'SUSPENDING');
+AssertEquals_INT(Expected := 14, Actual := E_PackMLState.UNSUSPENDING, Message := 'UNSUSPENDING');
+AssertEquals_INT(Expected := 15, Actual := E_PackMLState.RESETTING, Message := 'RESETTING');
+AssertEquals_INT(Expected := 16, Actual := E_PackMLState.COMPLETING, Message := 'COMPLETING');
+AssertEquals_INT(Expected := 17, Actual := E_PackMLState.COMPLETE, Message := 'COMPLETE');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="ResetAndStartWalkTheProductionPath" Id="{5e4501d0-0015-4d19-9a41-000000000004}">
+      <Declaration><![CDATA[// The path a unit takes on a good day, end to end. Each acting state must wait
+// for its own completion flag and each wait state for its own command: a
+// manager that ran two transitions in one scan, or that let Reset carry
+// through Resetting into Idle, would start production the operator never asked
+// for.
+METHOD PRIVATE ResetAndStartWalkTheProductionPath
+VAR
+	unit : PML_StateMachine;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('ResetAndStartWalkTheProductionPath');
+
+unit.Commands.Reset := TRUE;
+unit();
+unit.Commands.Reset := FALSE;
+AssertEquals_INT(Expected := E_PackMLState.RESETTING,
+                 Actual := unit.CurrentState,
+                 Message := 'Reset from Stopped');
+
+unit();
+AssertEquals_INT(Expected := E_PackMLState.RESETTING,
+                 Actual := unit.CurrentState,
+                 Message := 'Resetting left without its completion flag');
+
+unit.StateComplete.Resetting := TRUE;
+unit();
+unit.StateComplete.Resetting := FALSE;
+AssertEquals_INT(Expected := E_PackMLState.IDLE,
+                 Actual := unit.CurrentState,
+                 Message := 'Resetting complete');
+
+unit.Commands.Start := TRUE;
+unit();
+unit.Commands.Start := FALSE;
+AssertEquals_INT(Expected := E_PackMLState.STARTING,
+                 Actual := unit.CurrentState,
+                 Message := 'Start from Idle');
+
+unit.StateComplete.Starting := TRUE;
+unit();
+unit.StateComplete.Starting := FALSE;
+AssertEquals_INT(Expected := E_PackMLState.EXECUTE,
+                 Actual := unit.CurrentState,
+                 Message := 'Starting complete');
+
+unit.StateComplete.Execute := TRUE;
+unit();
+unit.StateComplete.Execute := FALSE;
+AssertEquals_INT(Expected := E_PackMLState.COMPLETING,
+                 Actual := unit.CurrentState,
+                 Message := 'Execute complete');
+
+unit.StateComplete.Completing := TRUE;
+unit();
+unit.StateComplete.Completing := FALSE;
+AssertEquals_INT(Expected := E_PackMLState.COMPLETE,
+                 Actual := unit.CurrentState,
+                 Message := 'Completing complete');
+
+unit.Commands.Reset := TRUE;
+unit();
+unit.Commands.Reset := FALSE;
+AssertEquals_INT(Expected := E_PackMLState.RESETTING,
+                 Actual := unit.CurrentState,
+                 Message := 'Reset from Complete');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="HoldAndUnholdReturnTheUnitToExecute" Id="{5e4501d0-0015-4d19-9a41-000000000005}">
+      <Declaration><![CDATA[// Hold is the unit's own problem - a jam, a missing container - and it must be
+// a round trip: Unholding rejoins Execute rather than dropping to Idle, or
+// every recoverable stoppage would cost a full restart and the product in the
+// machine would be abandoned.
+METHOD PRIVATE HoldAndUnholdReturnTheUnitToExecute
+VAR
+	unit : PML_StateMachine;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('HoldAndUnholdReturnTheUnitToExecute');
+
+DriveToExecute(unit := unit);
+
+unit.Commands.Hold := TRUE;
+unit();
+unit.Commands.Hold := FALSE;
+AssertEquals_INT(Expected := E_PackMLState.HOLDING,
+                 Actual := unit.CurrentState,
+                 Message := 'Hold from Execute');
+
+unit.StateComplete.Holding := TRUE;
+unit();
+unit.StateComplete.Holding := FALSE;
+AssertEquals_INT(Expected := E_PackMLState.HELD,
+                 Actual := unit.CurrentState,
+                 Message := 'Holding complete');
+
+unit.Commands.Unhold := TRUE;
+unit();
+unit.Commands.Unhold := FALSE;
+AssertEquals_INT(Expected := E_PackMLState.UNHOLDING,
+                 Actual := unit.CurrentState,
+                 Message := 'Unhold from Held');
+
+unit.StateComplete.Unholding := TRUE;
+unit();
+unit.StateComplete.Unholding := FALSE;
+AssertEquals_INT(Expected := E_PackMLState.EXECUTE,
+                 Actual := unit.CurrentState,
+                 Message := 'Unholding complete');
+
+AssertFalse(Condition := unit.Faulted,
+            Message := 'a hold was reported as a fault');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="SuspendAndUnsuspendReturnTheUnitToExecute" Id="{5e4501d0-0015-4d19-9a41-000000000006}">
+      <Declaration><![CDATA[// Suspend is the mirror of Hold for a problem the unit does not own - starved
+// of containers by an upstream conveyor, blocked by a downstream one. Same
+// round trip back into Execute, and it must stay a separate branch from Hold:
+// OEE counts a suspension against the neighbour, not against this unit.
+METHOD PRIVATE SuspendAndUnsuspendReturnTheUnitToExecute
+VAR
+	unit : PML_StateMachine;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('SuspendAndUnsuspendReturnTheUnitToExecute');
+
+DriveToExecute(unit := unit);
+
+unit.Commands.Suspend := TRUE;
+unit();
+unit.Commands.Suspend := FALSE;
+AssertEquals_INT(Expected := E_PackMLState.SUSPENDING,
+                 Actual := unit.CurrentState,
+                 Message := 'Suspend from Execute');
+
+unit.StateComplete.Suspending := TRUE;
+unit();
+unit.StateComplete.Suspending := FALSE;
+AssertEquals_INT(Expected := E_PackMLState.SUSPENDED,
+                 Actual := unit.CurrentState,
+                 Message := 'Suspending complete');
+
+unit.Commands.Unsuspend := TRUE;
+unit();
+unit.Commands.Unsuspend := FALSE;
+AssertEquals_INT(Expected := E_PackMLState.UNSUSPENDING,
+                 Actual := unit.CurrentState,
+                 Message := 'Unsuspend from Suspended');
+
+unit.StateComplete.Unsuspending := TRUE;
+unit();
+unit.StateComplete.Unsuspending := FALSE;
+AssertEquals_INT(Expected := E_PackMLState.EXECUTE,
+                 Actual := unit.CurrentState,
+                 Message := 'Unsuspending complete');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="StopFromExecuteEndsAtStopped" Id="{5e4501d0-0015-4d19-9a41-000000000007}">
+      <Declaration><![CDATA[// Stopping is an acting state, not an instant one: the unit gets its scan to
+// bring axes down and release product before it is Stopped. A manager that
+// jumped straight to Stopped would leave the equipment logic no scan to act
+// in.
+METHOD PRIVATE StopFromExecuteEndsAtStopped
+VAR
+	unit : PML_StateMachine;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('StopFromExecuteEndsAtStopped');
+
+DriveToExecute(unit := unit);
+
+unit.Commands.Stop := TRUE;
+unit();
+unit.Commands.Stop := FALSE;
+AssertEquals_INT(Expected := E_PackMLState.STOPPING,
+                 Actual := unit.CurrentState,
+                 Message := 'Stop from Execute');
+
+unit.StateComplete.Stopping := TRUE;
+unit();
+unit.StateComplete.Stopping := FALSE;
+AssertEquals_INT(Expected := E_PackMLState.STOPPED,
+                 Actual := unit.CurrentState,
+                 Message := 'Stopping complete');
+
+AssertFalse(Condition := unit.Faulted,
+            Message := 'a commanded stop was reported as a fault');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="AbortLatchesTheFaultBeforeTheUnitReachesAborted" Id="{5e4501d0-0015-4d19-9a41-000000000008}">
+      <Declaration><![CDATA[// The set half of the Abort/Clear latch, and the reason it is a latch at all:
+// Faulted has to be true from the scan the abort is accepted, throughout
+// Aborting, and not only once the unit has settled in Aborted. A stack light
+// or an alarm driven off "state = ABORTED" would stay dark for the whole
+// aborting sequence.
+METHOD PRIVATE AbortLatchesTheFaultBeforeTheUnitReachesAborted
+VAR
+	unit : PML_StateMachine;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('AbortLatchesTheFaultBeforeTheUnitReachesAborted');
+
+DriveToExecute(unit := unit);
+
+unit.Commands.Abort := TRUE;
+unit();
+unit.Commands.Abort := FALSE;
+AssertEquals_INT(Expected := E_PackMLState.ABORTING,
+                 Actual := unit.CurrentState,
+                 Message := 'Abort from Execute');
+AssertTrue(Condition := unit.Faulted,
+           Message := 'fault did not latch on the aborting scan');
+
+unit();
+AssertTrue(Condition := unit.Faulted,
+           Message := 'fault did not survive dropping the abort command');
+
+unit.StateComplete.Aborting := TRUE;
+unit();
+unit.StateComplete.Aborting := FALSE;
+AssertEquals_INT(Expected := E_PackMLState.ABORTED,
+                 Actual := unit.CurrentState,
+                 Message := 'Aborting complete');
+AssertTrue(Condition := unit.Faulted,
+           Message := 'fault cleared itself on reaching Aborted');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="ClearFromAbortedReleasesTheLatchAndReturnsToStopped" Id="{5e4501d0-0015-4d19-9a41-000000000009}">
+      <Declaration><![CDATA[// The reset half of the Abort/Clear latch. Clear is the only command that
+// releases the fault, and it lands in Clearing rather than in Stopped so the
+// equipment logic gets its scan to acknowledge drives and drop alarms before
+// the unit is offered back to the operator.
+METHOD PRIVATE ClearFromAbortedReleasesTheLatchAndReturnsToStopped
+VAR
+	unit : PML_StateMachine;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('ClearFromAbortedReleasesTheLatchAndReturnsToStopped');
+
+DriveToAborted(unit := unit);
+
+unit.Commands.Clear := TRUE;
+unit();
+unit.Commands.Clear := FALSE;
+AssertEquals_INT(Expected := E_PackMLState.CLEARING,
+                 Actual := unit.CurrentState,
+                 Message := 'Clear from Aborted');
+AssertFalse(Condition := unit.Faulted,
+            Message := 'fault survived an accepted Clear');
+
+unit.StateComplete.Clearing := TRUE;
+unit();
+unit.StateComplete.Clearing := FALSE;
+AssertEquals_INT(Expected := E_PackMLState.STOPPED,
+                 Actual := unit.CurrentState,
+                 Message := 'Clearing complete');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="ClearIsIgnoredUnlessTheUnitIsAborted" Id="{5e4501d0-0015-4d19-9a41-00000000000a}">
+      <Declaration><![CDATA[// Clear means "acknowledge the abort", so it must be inert everywhere else. If
+// it were accepted from Aborting the unit would skip the sequence that brings
+// the equipment to a safe condition, and an operator leaning on the clear
+// button would abort-and-clear in a loop without the machine ever settling.
+METHOD PRIVATE ClearIsIgnoredUnlessTheUnitIsAborted
+VAR
+	unit : PML_StateMachine;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('ClearIsIgnoredUnlessTheUnitIsAborted');
+
+DriveToExecute(unit := unit);
+
+unit.Commands.Clear := TRUE;
+unit();
+AssertEquals_INT(Expected := E_PackMLState.EXECUTE,
+                 Actual := unit.CurrentState,
+                 Message := 'Clear moved a running unit');
+
+unit.Commands.Abort := TRUE;
+unit();
+unit.Commands.Abort := FALSE;
+AssertEquals_INT(Expected := E_PackMLState.ABORTING,
+                 Actual := unit.CurrentState,
+                 Message := 'Abort from Execute');
+AssertTrue(Condition := unit.Faulted,
+           Message := 'a held Clear pre-emptied the fault latch');
+
+unit();
+AssertEquals_INT(Expected := E_PackMLState.ABORTING,
+                 Actual := unit.CurrentState,
+                 Message := 'Clear cut Aborting short');
+AssertTrue(Condition := unit.Faulted,
+           Message := 'Clear released the fault before the unit had aborted');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="AbortOutranksEveryOtherCommand" Id="{5e4501d0-0015-4d19-9a41-00000000000b}">
+      <Declaration><![CDATA[// An abort a state could refuse would not be an abort. Presented together with
+// every other command at once - including the Start that would otherwise win
+// in Idle - the abort is the one that lands.
+METHOD PRIVATE AbortOutranksEveryOtherCommand
+VAR
+	unit : PML_StateMachine;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('AbortOutranksEveryOtherCommand');
+
+DriveToIdle(unit := unit);
+
+unit.Commands.Start := TRUE;
+unit.Commands.Stop := TRUE;
+unit.Commands.Clear := TRUE;
+unit.Commands.Abort := TRUE;
+unit();
+
+AssertEquals_INT(Expected := E_PackMLState.ABORTING,
+                 Actual := unit.CurrentState,
+                 Message := 'Abort lost to another command');
+AssertTrue(Condition := unit.Faulted,
+           Message := 'fault did not latch on a contested abort');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="StopOutranksThePerStateCommands" Id="{5e4501d0-0015-4d19-9a41-00000000000c}">
+      <Declaration><![CDATA[// Stop sits above the state model but below Abort. Racing a Start in Idle it
+// has to win, or an operator hitting stop on a unit an MES order is starting
+// at the same moment would watch it start anyway.
+METHOD PRIVATE StopOutranksThePerStateCommands
+VAR
+	unit : PML_StateMachine;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('StopOutranksThePerStateCommands');
+
+DriveToIdle(unit := unit);
+
+unit.Commands.Start := TRUE;
+unit.Commands.Stop := TRUE;
+unit();
+unit.Commands.Start := FALSE;
+unit.Commands.Stop := FALSE;
+
+AssertEquals_INT(Expected := E_PackMLState.STOPPING,
+                 Actual := unit.CurrentState,
+                 Message := 'Stop lost to Start');
+AssertFalse(Condition := unit.Faulted,
+            Message := 'a contested stop was reported as a fault');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="AStaleAbortLevelCannotHoldTheUnitFaulted" Id="{5e4501d0-0015-4d19-9a41-00000000000d}">
+      <Declaration><![CDATA[// Why the fault latch is RS and not SR. The abort input is a level, and an HMI
+// or a supervising unit that never drops it would, under a set-dominant latch,
+// make the unit unclearable - the operator's Clear would be overruled forever
+// by a signal describing an abort that already happened. Reset-dominance hands
+// the decision back to the state model, which re-aborts on the very next scan
+// because the abort is still there.
+METHOD PRIVATE AStaleAbortLevelCannotHoldTheUnitFaulted
+VAR
+	unit : PML_StateMachine;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('AStaleAbortLevelCannotHoldTheUnitFaulted');
+
+DriveToExecute(unit := unit);
+
+unit.Commands.Abort := TRUE;
+unit();
+unit.StateComplete.Aborting := TRUE;
+unit();
+unit.StateComplete.Aborting := FALSE;
+AssertEquals_INT(Expected := E_PackMLState.ABORTED,
+                 Actual := unit.CurrentState,
+                 Message := 'held abort did not settle in Aborted');
+
+unit.Commands.Clear := TRUE;
+unit();
+unit.Commands.Clear := FALSE;
+AssertEquals_INT(Expected := E_PackMLState.CLEARING,
+                 Actual := unit.CurrentState,
+                 Message := 'a stale abort blocked the Clear');
+AssertFalse(Condition := unit.Faulted,
+            Message := 'a stale abort level held the fault latch set');
+
+unit();
+AssertEquals_INT(Expected := E_PackMLState.ABORTING,
+                 Actual := unit.CurrentState,
+                 Message := 'the still-present abort did not re-abort');
+AssertTrue(Condition := unit.Faulted,
+           Message := 'the re-accepted abort did not re-latch the fault');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="ACompletionFlagOnlyCompletesItsOwnState" Id="{5e4501d0-0015-4d19-9a41-00000000000e}">
+      <Declaration><![CDATA[// The completion flags are per-state rather than one shared flag, and this is
+// what that buys. A caller that finished Starting and left the flag raised
+// must not thereby complete Execute as well - a unit would run through the
+// whole production path in three scans without ever moving a container.
+METHOD PRIVATE ACompletionFlagOnlyCompletesItsOwnState
+VAR
+	unit : PML_StateMachine;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('ACompletionFlagOnlyCompletesItsOwnState');
+
+unit.Commands.Reset := TRUE;
+unit();
+unit.Commands.Reset := FALSE;
+
+unit.StateComplete.Starting := TRUE;
+unit.StateComplete.Execute := TRUE;
+unit.StateComplete.Completing := TRUE;
+unit();
+AssertEquals_INT(Expected := E_PackMLState.RESETTING,
+                 Actual := unit.CurrentState,
+                 Message := 'a foreign completion flag left Resetting');
+
+unit.StateComplete.Resetting := TRUE;
+unit();
+AssertEquals_INT(Expected := E_PackMLState.IDLE,
+                 Actual := unit.CurrentState,
+                 Message := 'Resetting complete');
+
+unit();
+AssertEquals_INT(Expected := E_PackMLState.IDLE,
+                 Actual := unit.CurrentState,
+                 Message := 'completion flags started a unit nobody started');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="CountsAreLifetimeTotals" Id="{5e4501d0-0015-4d19-9a41-00000000000f}">
+      <Declaration><![CDATA[// Both counters count a state, not a scan: Complete and a latched fault are
+// levels that persist, so counting them per scan would inflate every figure
+// the OEE calculator is built on. They are also lifetime totals - nothing in
+// the state model may quietly zero them, or a shift's production would vanish
+// on the first reset.
+METHOD PRIVATE CountsAreLifetimeTotals
+VAR
+	unit : PML_StateMachine;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('CountsAreLifetimeTotals');
+
+DriveToComplete(unit := unit);
+AssertEquals_UINT(Expected := 1,
+                  Actual := unit.ProductCount,
+                  Message := 'reaching Complete did not count a product');
+
+unit();
+unit();
+AssertEquals_UINT(Expected := 1,
+                  Actual := unit.ProductCount,
+                  Message := 'sitting in Complete counted more products');
+
+unit.Commands.Abort := TRUE;
+unit();
+unit.Commands.Abort := FALSE;
+AssertEquals_UINT(Expected := 1,
+                  Actual := unit.ErrorCount,
+                  Message := 'a latched fault did not count an error');
+
+unit.StateComplete.Aborting := TRUE;
+unit();
+unit.StateComplete.Aborting := FALSE;
+unit.Commands.Clear := TRUE;
+unit();
+unit.Commands.Clear := FALSE;
+AssertFalse(Condition := unit.Faulted,
+            Message := 'fault survived the Clear');
+AssertEquals_UINT(Expected := 1,
+                  Actual := unit.ErrorCount,
+                  Message := 'clearing the fault disturbed the error total');
+AssertEquals_UINT(Expected := 1,
+                  Actual := unit.ProductCount,
+                  Message := 'an abort discarded the product total');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="DriveToIdle" Id="{5e4501d0-0015-4d19-9a41-000000000010}">
+      <Declaration><![CDATA[// Arrangement shared by the cases that start from a unit which is ready but
+// not running. Every command and completion flag it raises is dropped again,
+// so the caller inherits a unit with nothing held.
+METHOD PRIVATE DriveToIdle
+VAR_IN_OUT
+	unit : PML_StateMachine;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[unit.Commands.Reset := TRUE;
+unit();
+unit.Commands.Reset := FALSE;
+
+unit.StateComplete.Resetting := TRUE;
+unit();
+unit.StateComplete.Resetting := FALSE;]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="DriveToExecute" Id="{5e4501d0-0015-4d19-9a41-000000000011}">
+      <Declaration><![CDATA[METHOD PRIVATE DriveToExecute
+VAR_IN_OUT
+	unit : PML_StateMachine;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[DriveToIdle(unit := unit);
+
+unit.Commands.Start := TRUE;
+unit();
+unit.Commands.Start := FALSE;
+
+unit.StateComplete.Starting := TRUE;
+unit();
+unit.StateComplete.Starting := FALSE;]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="DriveToComplete" Id="{5e4501d0-0015-4d19-9a41-000000000012}">
+      <Declaration><![CDATA[METHOD PRIVATE DriveToComplete
+VAR_IN_OUT
+	unit : PML_StateMachine;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[DriveToExecute(unit := unit);
+
+unit.StateComplete.Execute := TRUE;
+unit();
+unit.StateComplete.Execute := FALSE;
+
+unit.StateComplete.Completing := TRUE;
+unit();
+unit.StateComplete.Completing := FALSE;]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="DriveToAborted" Id="{5e4501d0-0015-4d19-9a41-000000000013}">
+      <Declaration><![CDATA[METHOD PRIVATE DriveToAborted
+VAR_IN_OUT
+	unit : PML_StateMachine;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[DriveToExecute(unit := unit);
+
+unit.Commands.Abort := TRUE;
+unit();
+unit.Commands.Abort := FALSE;
+
+unit.StateComplete.Aborting := TRUE;
+unit();
+unit.StateComplete.Aborting := FALSE;]]></ST>
+      </Implementation>
+    </Method>
+  </POU>
+</TcPlcObject>

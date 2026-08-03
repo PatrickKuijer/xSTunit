@@ -92,7 +92,7 @@ namespace xStunit.Interpreter
             {
                 for (var i = from; step > 0 ? i <= to : i >= to; i += step)
                 {
-                    SetVariable(stmt.VarName, i, frame);
+                    SetLValue(stmt.Var, i, frame);
                     ExecuteStatements(stmt.Body, frame);
                 }
             }

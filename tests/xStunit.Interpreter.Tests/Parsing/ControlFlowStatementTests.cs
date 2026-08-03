@@ -27,7 +27,8 @@ namespace xStunit.Interpreter.Tests
             var stmts = Parser.ParseStatements("FOR i := 1 TO 5 DO\n\tsum := sum + i;\nEND_FOR");
 
             var forStmt = Assert.IsType<ForStmt>(Assert.Single(stmts));
-            Assert.Equal("i", forStmt.VarName);
+            var loopVar = Assert.IsType<IdentifierExpr>(forStmt.Var);
+            Assert.Equal("i", loopVar.Name);
             Assert.Null(forStmt.Step);
             Assert.Single(forStmt.Body);
         }
@@ -39,6 +40,18 @@ namespace xStunit.Interpreter.Tests
 
             var forStmt = Assert.IsType<ForStmt>(Assert.Single(stmts));
             Assert.NotNull(forStmt.Step);
+        }
+
+        [Fact]
+        public void ParseStatements_ForWithFieldAccessControlVariable_ProducesForStmtWithFieldAccessVar()
+        {
+            var stmts = Parser.ParseStatements(
+                "FOR tPage.nPageIndex := 1 TO 5 DO\n\tsum := sum + 1;\nEND_FOR");
+
+            var forStmt = Assert.IsType<ForStmt>(Assert.Single(stmts));
+            var loopVar = Assert.IsType<FieldAccessExpr>(forStmt.Var);
+            Assert.Equal("nPageIndex", loopVar.FieldName);
+            Assert.Equal("tPage", Assert.IsType<IdentifierExpr>(loopVar.Receiver).Name);
         }
 
         [Fact]
@@ -202,6 +215,30 @@ namespace xStunit.Interpreter.Tests
         {
             var count = RunAndReadInt("count := 0;\nFOR i := 5 TO 1 DO\n\tcount := count + 1;\nEND_FOR", "count");
             Assert.Equal(0, count);
+        }
+
+        [Fact]
+        public void ExecuteFor_FieldAccessControlVariable_MutatesStructFieldAcrossIterations()
+        {
+            var stPage = StructDeclParser.Parse(
+                "TYPE ST_Page :\nSTRUCT\n\tnPageIndex : INT;\nEND_STRUCT\nEND_TYPE");
+
+            var method = new MethodAst("Run", "METHOD Run", "FOR tPage.nPageIndex := 1 TO 3 DO\nEND_FOR");
+
+            var pou = new PouAst(
+                "FB_PageFixture",
+                null,
+                "VAR\n\ttPage : ST_Page;\nEND_VAR",
+                "",
+                new System.Collections.Generic.List<MethodAst> { method });
+
+            var engine = new Engine(new TypeRegistry(new[] { pou }, new[] { stPage }));
+            var instance = engine.NewInstance("FB_PageFixture");
+
+            engine.CallMethod(instance, "Run", new Expr[0], new NamedArg[0], null, null);
+
+            var tPage = Assert.IsType<StructInstance>(instance.Fields["tPage"].Value);
+            Assert.Equal(3, tPage.Fields["nPageIndex"].Value); // the last iterated value, not one past the bound
         }
 
         [Fact]

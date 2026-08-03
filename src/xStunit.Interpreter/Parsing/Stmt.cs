@@ -58,14 +58,14 @@ namespace xStunit.Interpreter
 
     public sealed class ForStmt : Stmt
     {
-        public string VarName { get; }
+        public Expr Var { get; }
         public Expr From { get; }
         public Expr To { get; }
         public Expr Step { get; }
         public IReadOnlyList<Stmt> Body { get; }
-        public ForStmt(string varName, Expr from, Expr to, Expr step, IReadOnlyList<Stmt> body)
+        public ForStmt(Expr var, Expr from, Expr to, Expr step, IReadOnlyList<Stmt> body)
         {
-            VarName = varName;
+            Var = var;
             From = from;
             To = to;
             Step = step;

@@ -230,7 +230,7 @@ namespace xStunit.Interpreter
         private Stmt ParseFor()
         {
             Advance(); // FOR
-            var varName = Expect(TokenType.Identifier).Text;
+            var loopVar = RequireLValue(ParsePostfix(ParsePrimary()));
             Expect(TokenType.Assign);
             var from = ParseExpr();
 
@@ -257,7 +257,7 @@ namespace xStunit.Interpreter
             Advance();
             SkipOptionalSemicolon();
 
-            return new ForStmt(varName, from, to, step, body);
+            return new ForStmt(loopVar, from, to, step, body);
         }
 
         private Stmt ParseWhile()

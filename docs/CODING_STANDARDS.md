@@ -62,14 +62,24 @@ confusion. If a new type needs to reference a TwinCAT/Beckhoff concept, name it
 after the IEC 61131-3 or domain concept instead (e.g. `BistableLatchHost`, not
 `TcBistableHost`).
 
-One deliberate exception, so it is not "fixed" by a later sweep: the
-`.TcPOU`/`.TcDUT`/`.TcGVL` **file-format** parsers keep their `Tc` prefix —
-`TcPouParser`, `TcDutParser`, `TcGvlParser`, `TcPouRejectedException`. They
-parse TwinCAT's specific XML wrapper and cannot read portable ST, so `Tc` names
-what they actually are; a name like `PouParser` would promise format-agnostic
-parsing they do not deliver. The prohibition targets *branding*, not accurate
-description of a format-specific adapter. Types that are ours rather than
-Beckhoff's take the `Xstunit` token instead (`XstunitLog`,
+One deliberate exception, so it is not "fixed" by a later sweep: **TwinCAT's
+own file-format extensions**, and the parsers and fixtures named after them.
+The extension is Beckhoff's name for a format, not an identifier we coin, so a
+file that really is in that format keeps it — `.TcPOU`, `.TcDUT`, `.TcGVL`,
+`.TcIO`, and any other `.Tc*` extension TwinCAT defines. This is stated by
+category on purpose: a fixture in a format not listed here is still covered,
+and no one has to extend a list to add one.
+
+The adapters that read those formats keep the matching `Tc` prefix for the same
+reason — `TcPouParser`, `TcDutParser`, `TcGvlParser`, `TcPouRejectedException`.
+They parse TwinCAT's specific XML wrapper and cannot read portable ST, so `Tc`
+names what they actually are; a name like `PouParser` would promise
+format-agnostic parsing they do not deliver. The prohibition targets
+*branding*, not accurate description of a format-specific adapter. It does not
+extend past the format boundary: a type that merely works with data loaded from
+a `.Tc*` file, rather than parsing the format itself, takes a domain name.
+Types that are ours rather than Beckhoff's take the `Xstunit` token instead
+(`XstunitLog`,
 `IXstunitNativeFunction`) — capital `X` in PascalCase identifiers, the
 stylized lowercase `xStunit` only in namespaces and the CLI name.
 

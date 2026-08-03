@@ -63,6 +63,49 @@ namespace xStunit.Interpreter
             public Func<byte[], int, object> Unpack { get; }
         }
 
+        // The wire format of one declared STRING/WSTRING: a fixed buffer of
+        // Length characters followed by the terminator that always trails them,
+        // CharWidth bytes apiece. Size states that trailing terminator once, so
+        // sizing a string and packing one cannot disagree about how many bytes
+        // the declaration occupies.
+        private readonly struct StringShape
+        {
+            public StringShape(int length, int charWidth)
+            {
+                Length = length;
+                CharWidth = charWidth;
+            }
+
+            // A character count, not a byte count: a WSTRING(80) holds 80
+            // characters in 162 bytes.
+            public int Length { get; }
+
+            public int CharWidth { get; }
+
+            public int Size => (Length + 1) * CharWidth;
+
+            // A narrow STRING is one Latin-1 byte per character - FromChar
+            // refuses anything outside it - and a WSTRING is little-endian
+            // UCS-2, matching TwinCAT on x86.
+            public void WriteChar(byte[] buffer, int offset, char ch)
+            {
+                if (CharWidth == 2)
+                {
+                    buffer[offset] = (byte)(ch & 0xFF);
+                    buffer[offset + 1] = (byte)(ch >> 8);
+                }
+                else
+                {
+                    buffer[offset] = NarrowStringByte.FromChar(ch);
+                }
+            }
+
+            public char ReadChar(byte[] buffer, int offset) =>
+                CharWidth == 2
+                    ? (char)(buffer[offset] | (buffer[offset + 1] << 8))
+                    : NarrowStringByte.ToChar(buffer[offset]);
+        }
+
         private static readonly IReadOnlyDictionary<string, ScalarShape> Scalars = BuildScalars();
 
         // Types that differ only in signedness or in the domain they name share
@@ -172,14 +215,10 @@ namespace xStunit.Interpreter
 
             if (StringTypeInfo.IsStringType(resolved))
             {
-                var length = ParseStringLength(resolved);
-
-                // Latin-1 narrow STRING is one byte per character plus a
-                // one-byte terminator; UCS-2 WSTRING is two bytes per character
-                // plus a two-byte terminator, and its elements are WORD-aligned,
-                // so a WSTRING member pads itself and everything after it.
-                var charWidth = StringTypeInfo.CharWidth(resolved);
-                return (charWidth * (length + 1), charWidth);
+                // A string's characters are CharWidth-aligned, so a WSTRING
+                // member pads itself and everything after it.
+                var shape = ShapeOfString(resolved);
+                return (shape.Size, shape.CharWidth);
             }
 
             if (Scalars.TryGetValue(resolved, out var scalar))
@@ -214,6 +253,70 @@ namespace xStunit.Interpreter
             value = scalar.Unpack(buffer, offset);
             return true;
         }
+
+        // Writes value into the fixed buffer typeName declares, when typeName is
+        // a STRING or WSTRING, and reports whether it was: the text truncated to
+        // the declared character count, then null-padded to the end of the
+        // buffer so no byte of a previous value survives.
+        //
+        // Throws UnsupportedConstructException for text this encoding cannot
+        // hold - above Latin-1 narrow, above the BMP wide - including text that
+        // truncation would have dropped, because a value the interpreter cannot
+        // represent is an error rather than something to quietly cut away.
+        public bool TryPackString(byte[] buffer, int offset, object value, string typeName)
+        {
+            var resolved = _registry.ResolveAlias(typeName);
+            if (!StringTypeInfo.IsStringType(resolved))
+                return false;
+
+            var shape = ShapeOfString(resolved);
+            var text = (string)value ?? string.Empty;
+            if (shape.CharWidth == 2)
+                WideStringUnit.RequireRepresentable(text);
+
+            // A CLR char is exactly one character on the wire in both encodings
+            // once the surrogate case is excluded, so counting code units counts
+            // characters. The narrow half needs no equivalent guard: Latin-1 has
+            // no multi-unit character, and WriteChar rejects anything outside it.
+            var charCount = Math.Min(text.Length, shape.Length);
+            for (var i = 0; i < charCount; i++)
+                shape.WriteChar(buffer, offset + i * shape.CharWidth, text[i]);
+
+            for (var i = charCount * shape.CharWidth; i < shape.Size; i++)
+                buffer[offset + i] = 0;
+
+            return true;
+        }
+
+        // Inverse of TryPackString, with the same false meaning: not a string,
+        // so not this class's to reconstruct. Reads up to the declared length,
+        // stopping early at the terminator - one byte wide for a narrow STRING,
+        // a whole zero WORD for a WSTRING, where a lone zero byte is the high
+        // half of a legitimate Latin-1 character.
+        public bool TryUnpackString(byte[] buffer, int offset, string typeName, out string text)
+        {
+            var resolved = _registry.ResolveAlias(typeName);
+            if (!StringTypeInfo.IsStringType(resolved))
+            {
+                text = null;
+                return false;
+            }
+
+            var shape = ShapeOfString(resolved);
+            var count = 0;
+            while (count < shape.Length && shape.ReadChar(buffer, offset + count * shape.CharWidth) != 0)
+                count++;
+
+            var chars = new char[count];
+            for (var i = 0; i < count; i++)
+                chars[i] = shape.ReadChar(buffer, offset + i * shape.CharWidth);
+
+            text = new string(chars);
+            return true;
+        }
+
+        private StringShape ShapeOfString(string resolvedTypeName) =>
+            new StringShape(ParseStringLength(resolvedTypeName), StringTypeInfo.CharWidth(resolvedTypeName));
 
         // Each field's placement inside structAst, in declaration order.
         public IEnumerable<FieldPlacement> Fields(StructAst structAst) =>

@@ -151,51 +151,12 @@ namespace xStunit.Interpreter
                 return;
             }
 
-            if (StringTypeInfo.IsStringType(resolved))
-            {
-                // Wire format is the fixed buffer SizeOfType computes for the
-                // declared length, null-terminated: truncate to length
-                // characters, then null-pad (and terminate) the rest. A narrow
-                // STRING is one Latin-1 byte per character; a WSTRING is
-                // little-endian UCS-2, matching TwinCAT on x86.
-                var length = StringTypeInfo.ParseLength(
-                    resolved, boundText => Convert.ToInt32(Evaluate(Parser.ParseExpression(boundText), frame)));
-                var text = (string)value ?? string.Empty;
-                var charWidth = StringTypeInfo.CharWidth(resolved);
-                if (charWidth == 2)
-                    WideStringUnit.RequireRepresentable(text);
-
-                // A CLR char is exactly one character on the wire in both
-                // encodings once the surrogate case is excluded, so counting
-                // code units counts characters. The narrow half needs no
-                // equivalent guard: Latin-1 has no multi-unit character, and
-                // FromChar below rejects anything outside it.
-                var charCount = Math.Min(text.Length, length);
-                for (var i = 0; i < charCount; i++)
-                {
-                    if (charWidth == 2)
-                    {
-                        buffer[offset + 2 * i] = (byte)(text[i] & 0xFF);
-                        buffer[offset + 2 * i + 1] = (byte)(text[i] >> 8);
-                    }
-                    else
-                    {
-                        buffer[offset + i] = NarrowStringByte.FromChar(text[i]);
-                    }
-                }
-                for (var i = charCount * charWidth; i < (length + 1) * charWidth; i++)
-                    buffer[offset + i] = 0;
+            if (LayoutFor(frame).TryPackString(buffer, offset, value, resolved))
                 return;
-            }
 
             throw new NotSupportedException(
                 $"MEMCPY/MEMSET/MEMMOVE byte-packing doesn't support type '{resolved}' yet");
         }
-
-        private static char ReadStringChar(byte[] buffer, int offset, int charWidth) =>
-            charWidth == 2
-                ? (char)(buffer[offset] | (buffer[offset + 1] << 8))
-                : NarrowStringByte.ToChar(buffer[offset]);
 
         // Inverse of PackValue: reconstructs a CLR value of the CLR shape
         // IecNumericType/DefaultValue use for typeName from buffer at
@@ -235,24 +196,8 @@ namespace xStunit.Interpreter
                     dimensions, elementTypeName, elements, ResolveStringCapacity(elementTypeName, frame.Instance));
             }
 
-            if (StringTypeInfo.IsStringType(resolved))
-            {
-                // Inverse of the PackValue case above: read up to the
-                // declared length, stopping early at the null terminator - one
-                // byte wide for a narrow STRING, a whole zero WORD for a
-                // WSTRING, where a lone zero byte is the high half of a
-                // legitimate Latin-1 character.
-                var length = StringTypeInfo.ParseLength(
-                    resolved, boundText => Convert.ToInt32(Evaluate(Parser.ParseExpression(boundText), frame)));
-                var charWidth = StringTypeInfo.CharWidth(resolved);
-                var count = 0;
-                while (count < length && ReadStringChar(buffer, offset + count * charWidth, charWidth) != 0)
-                    count++;
-                var chars = new char[count];
-                for (var i = 0; i < count; i++)
-                    chars[i] = ReadStringChar(buffer, offset + i * charWidth, charWidth);
-                return new string(chars);
-            }
+            if (LayoutFor(frame).TryUnpackString(buffer, offset, resolved, out var text))
+                return text;
 
             throw new NotSupportedException(
                 $"MEMCPY/MEMSET/MEMMOVE byte-unpacking doesn't support type '{resolved}' yet");

@@ -71,7 +71,7 @@ END_TYPE";
         [Fact]
         public void Load_EnumDutWithStructSubstringInComment_IsSkippedNotRegisteredAsStruct()
         {
-            var tempDir = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "tcxunit-enumcomment-" + Guid.NewGuid()));
+            var tempDir = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "xstunit-enumcomment-" + Guid.NewGuid()));
             try
             {
                 const string declaration = @"(* replaces the old STRUCT-based version *)
@@ -98,7 +98,7 @@ END_TYPE";
         [Fact]
         public void Load_AliasDutWithStructSubstringIdentifier_IsSkippedNotRegisteredAsStruct()
         {
-            var tempDir = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "tcxunit-aliasstruct-" + Guid.NewGuid()));
+            var tempDir = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "xstunit-aliasstruct-" + Guid.NewGuid()));
             try
             {
                 const string declaration = "TYPE ST_STRUCTURED_ALIAS : INT;\nEND_TYPE";
@@ -126,7 +126,7 @@ END_TYPE";
             // cannot match past the EXTENDS clause and leaves StructAst.Name
             // null. Move the rejection to the filter and the mid-test assertion
             // is what fails.
-            var tempDir = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "tcxunit-extendsstruct-" + Guid.NewGuid()));
+            var tempDir = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "xstunit-extendsstruct-" + Guid.NewGuid()));
             try
             {
                 const string declaration = "TYPE FB_ExtendedThing EXTENDS FB_Base :\nSTRUCT\n\tx : REAL;\nEND_STRUCT\nEND_TYPE";
@@ -149,7 +149,7 @@ END_TYPE";
         [Fact]
         public void Load_ActualStructDut_IsRegistered()
         {
-            var tempDir = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "tcxunit-realstruct-" + Guid.NewGuid()));
+            var tempDir = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "xstunit-realstruct-" + Guid.NewGuid()));
             try
             {
                 const string declaration = "TYPE ST_Point :\nSTRUCT\n\tx : REAL;\nEND_STRUCT\nEND_TYPE";
@@ -175,7 +175,7 @@ END_TYPE";
         [Fact]
         public void Load_UnionDut_IsRegisteredAndMarkedAUnion()
         {
-            var tempDir = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "tcxunit-union-" + Guid.NewGuid()));
+            var tempDir = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "xstunit-union-" + Guid.NewGuid()));
             try
             {
                 const string declaration = "TYPE U_Overlaid :\nUNION\n\tasWord : WORD;\n\tasLong : LWORD;\nEND_UNION\nEND_TYPE";

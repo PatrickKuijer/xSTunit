@@ -74,7 +74,7 @@ namespace xStunit.Interpreter.Tests
         [Fact]
         public void Load_AliasDut_IsRegisteredWithUnderlyingType()
         {
-            var tempDir = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "tcxunit-alias-" + Guid.NewGuid()));
+            var tempDir = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "xstunit-alias-" + Guid.NewGuid()));
             try
             {
                 const string declaration = "TYPE T_MaxString : STRING(255);\nEND_TYPE";
@@ -98,7 +98,7 @@ namespace xStunit.Interpreter.Tests
             // ever ships a .TcDUT for it and scanning alone can never find it.
             // It has to be resolvable anyway or every POU declaring one fails
             // type resolution.
-            var tempDir = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "tcxunit-alias-wellknown-" + Guid.NewGuid()));
+            var tempDir = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "xstunit-alias-wellknown-" + Guid.NewGuid()));
             try
             {
                 var aliases = DutAliasLoader.Load(new[] { tempDir.FullName }, out var skipped);
@@ -115,7 +115,7 @@ namespace xStunit.Interpreter.Tests
         [Fact]
         public void Load_StructDut_IsNotRegisteredAsAlias()
         {
-            var tempDir = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "tcxunit-aliasstructskip-" + Guid.NewGuid()));
+            var tempDir = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "xstunit-aliasstructskip-" + Guid.NewGuid()));
             try
             {
                 const string declaration = "TYPE ST_Point :\nSTRUCT\n\tx : REAL;\nEND_STRUCT\nEND_TYPE";

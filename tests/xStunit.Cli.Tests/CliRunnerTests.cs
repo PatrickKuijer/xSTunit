@@ -91,8 +91,8 @@ namespace xStunit.Cli.Tests
         [Fact]
         public void Run_SourceAndTestsInSeparateDirectories_UnionsAndPassesAllFour()
         {
-            var sourceDir = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "tcxunit-cli-source-" + Guid.NewGuid()));
-            var testsDir = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "tcxunit-cli-tests-" + Guid.NewGuid()));
+            var sourceDir = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "xstunit-cli-source-" + Guid.NewGuid()));
+            var testsDir = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "xstunit-cli-tests-" + Guid.NewGuid()));
             try
             {
                 CopyFixtureFile(sourceDir.FullName, "FB_Counter.TcPOU");
@@ -118,8 +118,8 @@ namespace xStunit.Cli.Tests
         [Fact]
         public void Run_DuplicateTypeNameAcrossDirectories_ReturnsTwoAndPrintsClearError()
         {
-            var dirA = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "tcxunit-cli-dupA-" + Guid.NewGuid()));
-            var dirB = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "tcxunit-cli-dupB-" + Guid.NewGuid()));
+            var dirA = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "xstunit-cli-dupA-" + Guid.NewGuid()));
+            var dirB = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "xstunit-cli-dupB-" + Guid.NewGuid()));
             try
             {
                 CopyFixtureFile(dirA.FullName, "FB_Counter.TcPOU");
@@ -145,7 +145,7 @@ namespace xStunit.Cli.Tests
             // Every input path is checked, not just the first: with one
             // argument a "check args[0] only" implementation is
             // indistinguishable from a correct one.
-            var missingPath = Path.Combine(Path.GetTempPath(), "tcxunit-cli-missing-" + Guid.NewGuid());
+            var missingPath = Path.Combine(Path.GetTempPath(), "xstunit-cli-missing-" + Guid.NewGuid());
 
             var output = new StringWriter();
 
@@ -180,7 +180,7 @@ namespace xStunit.Cli.Tests
             // The CLI builds its own TypeRegistry; if that registry omits
             // STRUCTs declared in .TcDUT files, a suite depending on one fails
             // to resolve here while Test Explorer discovery still works.
-            var dir = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "tcxunit-cli-struct-" + Guid.NewGuid()));
+            var dir = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "xstunit-cli-struct-" + Guid.NewGuid()));
             try
             {
                 File.WriteAllText(Path.Combine(dir.FullName, "ST_Msg.TcDUT"), StructDutXml);
@@ -204,7 +204,7 @@ namespace xStunit.Cli.Tests
         [Fact]
         public void Run_PouOutsideParseSubset_ReturnsTwoAndPrintsClearError()
         {
-            var dir = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "tcxunit-cli-rejected-" + Guid.NewGuid()));
+            var dir = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "xstunit-cli-rejected-" + Guid.NewGuid()));
             try
             {
                 File.WriteAllText(Path.Combine(dir.FullName, "FB_UsesTc2System.TcPOU"), RejectedPouXml);

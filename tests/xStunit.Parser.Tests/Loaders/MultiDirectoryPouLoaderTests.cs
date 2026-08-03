@@ -151,7 +151,7 @@ namespace xStunit.Parser.Tests
         }
 
         private static string CreateTempDir() =>
-            Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "tcxunit-multidir-" + Guid.NewGuid())).FullName;
+            Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "xstunit-multidir-" + Guid.NewGuid())).FullName;
 
         private static string WritePou(string dir, string fileName, string typeName)
         {

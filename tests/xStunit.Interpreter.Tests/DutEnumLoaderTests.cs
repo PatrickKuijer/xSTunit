@@ -180,7 +180,7 @@ namespace xStunit.Interpreter.Tests
         [Fact]
         public void Load_EnumDut_IsRegisteredWithUnderlyingType()
         {
-            var tempDir = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "tcxunit-enum-" + Guid.NewGuid()));
+            var tempDir = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "xstunit-enum-" + Guid.NewGuid()));
             try
             {
                 const string declaration = "TYPE E_Color :\n(\n\tRed,\n\tGreen,\n\tBlue\n);\nEND_TYPE";
@@ -203,7 +203,7 @@ namespace xStunit.Interpreter.Tests
         [Fact]
         public void Load_StructDut_IsNotRegisteredAsEnum()
         {
-            var tempDir = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "tcxunit-enumstructskip-" + Guid.NewGuid()));
+            var tempDir = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "xstunit-enumstructskip-" + Guid.NewGuid()));
             try
             {
                 const string declaration = "TYPE ST_Point :\nSTRUCT\n\tx : REAL;\nEND_STRUCT\nEND_TYPE";

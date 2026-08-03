@@ -1,0 +1,919 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4026.18">
+  <POU Name="FB_ConveyorTests" Id="{5e4501d0-0026-4d19-9a41-000000000001}" SpecialFunc="None">
+    <Declaration><![CDATA[(*
+    Suite over FB_Conveyor: every arc of the drawn six-state machine, the two
+    overrides that end a run from wherever it is, and everything the module
+    publishes while it walks them.
+
+    WHERE EACH ARC IS PINNED, AND WHY IT IS SPLIT AT ALL
+
+    xStunit's simulated clock is driven from the C# harness and has no
+    ST-visible advance, so a suite written in ST sees time frozen. Four arcs of
+    this machine are gated on a timer, and each one is covered from BOTH sides:
+
+      Start -> STARTING -> WAIT_CONTAINER          gated on AccelTime
+      STOPPING -> INIT                             gated on DecelTime
+      PROCES_CONTAINER -> WAIT_CONTAINER           gated on the drawn Delay
+      the belt run-on after the demand drops       gated on MotorRunOn
+
+    From here, with the clock stopped, both ENDS of each of those gates are
+    exact and need no clock at all. At zero the gate is transparent and the arc
+    is taken on the scan it becomes available, which is what lets this suite
+    walk the whole machine; at any non-zero setting no window can ever close,
+    so the arc must not be taken however many cycles are run. What happens
+    strictly BETWEEN those ends - the boundary scan a window actually closes on,
+    and a window restarting rather than resuming - is pinned in
+    tests/xStunit.Interpreter.Tests/Miniload/ConveyorTimingTests.cs, against
+    these same fixture files with the harness moving the clock.
+
+    Everything else here - detection, the downstream handshake in both
+    directions, the Stop override, the fault latch, the counter, the speed
+    scaling and the published sensor snapshot - is decided by CALLS rather than
+    by elapsed time and lives wholly in ST.
+
+    The detection point is a real FB_DigitalInput from the sensor fixture
+    directory, running in simulation with its debounce off, rather than a
+    stand-in written for this suite: an equipment module that only works
+    against a mock of its own leaf is not evidence about the machine.
+
+    The dependencies and the recipe are bound on the FIRST call of each case
+    and left standing; a later bare conveyor() is therefore one more scan with
+    nothing changed, and a named argument in a later call is the one level that
+    case is moving.
+*)
+FUNCTION_BLOCK FB_ConveyorTests EXTENDS TcUnit.FB_TestSuite]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[ConveyorPowersUpStoppedWithNothingCounted();
+StartRampsTheConveyorUpToWaitingForAContainer();
+ANonZeroAccelTimeHoldsTheConveyorInStarting();
+DetectionHoldsTheContainerUntilDownstreamIsReady();
+DownstreamReadyReleasesTheContainerIntoTheHandover();
+AWithdrawnDownstreamPutsTheContainerBackOnHold();
+AContainerLiftedOffTheEyeReleasesTheHold();
+AClearedEyeCompletesTheHandoverAndCountsTheContainer();
+AContainerStillOnTheEyeCannotCompleteTheHandover();
+ANonZeroHandoverDelayHoldsTheHandoverOpen();
+StopEndsTheRunFromWhereverItIs();
+ANonZeroDecelTimeHoldsTheConveyorInStopping();
+ADriveTripStopsTheBeltAtOnceAndLatchesTheFault();
+AFaultedConveyorCannotBeStarted();
+ResetReleasesTheLatchAndMakesTheRunStartableAgain();
+AStandingDriveFaultCannotBeAcknowledgedAway();
+SpeedPercentageScalesTheCommandedVelocity();
+MotorRunOnKeepsTheBeltTurningAfterTheDemandDrops();
+ContainersPassedIsALifetimeTotal();
+SensorSnapshotPublishesTheDetectionPoint();
+TheInfeedInstanceRunsTheSharedMachineOnItsOwnRecipe();]]></ST>
+    </Implementation>
+    <Method Name="ConveyorPowersUpStoppedWithNothingCounted" Id="{5e4501d0-0026-4d19-9a41-000000000002}">
+      <Declaration><![CDATA[// A run nobody has started must be stopped, unfaulted and claiming no
+// history. INIT being ordinal zero is what makes that true without an
+// initialiser, so an instance that is never configured still powers up safe
+// rather than in whichever state happens to be first in the enum.
+METHOD PRIVATE ConveyorPowersUpStoppedWithNothingCounted
+VAR
+	conveyor : FB_Conveyor;
+	sensor : FB_DigitalInput;
+	axis : FB_AxisBase;
+	recipe : ST_ConveyorControl;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('ConveyorPowersUpStoppedWithNothingCounted');
+
+conveyor(caseDetectionSensor := sensor, conveyorAxis := axis, Control := recipe);
+
+AssertEquals_INT(Expected := E_ConveyorState.INIT,
+                 Actual := conveyor.CurrentState,
+                 Message := 'fresh conveyor state');
+
+AssertFalse(Condition := conveyor.MotorRunning,
+            Message := 'fresh conveyor reported a turning belt');
+
+AssertFalse(Condition := conveyor.MotorFault,
+            Message := 'fresh conveyor reported a motor fault');
+
+AssertEquals_UINT(Expected := 0,
+                  Actual := conveyor.ContainersPassed,
+                  Message := 'fresh conveyor ContainersPassed');
+
+AssertEquals_LREAL(Expected := 0.0,
+                   Actual := conveyor.CommandedVelocity,
+                   Delta := 0.001,
+                   Message := 'fresh conveyor CommandedVelocity');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="StartRampsTheConveyorUpToWaitingForAContainer" Id="{5e4501d0-0026-4d19-9a41-000000000003}">
+      <Declaration><![CDATA[// The drawn Start and "Drive at speed" arcs. STARTING is a state of its own
+// rather than a jump straight to WAIT_CONTAINER, so a detection that arrives
+// while the belt is still coming up to speed cannot be treated as a container
+// that has been transported.
+METHOD PRIVATE StartRampsTheConveyorUpToWaitingForAContainer
+VAR
+	conveyor : FB_Conveyor;
+	sensor : FB_DigitalInput;
+	axis : FB_AxisBase;
+	recipe : ST_ConveyorControl;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('StartRampsTheConveyorUpToWaitingForAContainer');
+
+conveyor(caseDetectionSensor := sensor, conveyorAxis := axis, Control := recipe, Start := TRUE);
+AssertEquals_INT(Expected := E_ConveyorState.STARTING,
+                 Actual := conveyor.CurrentState,
+                 Message := 'Start did not reach STARTING');
+
+AssertTrue(Condition := conveyor.MotorRunning,
+           Message := 'the belt was not driven while ramping up');
+
+conveyor();
+AssertEquals_INT(Expected := E_ConveyorState.WAIT_CONTAINER,
+                 Actual := conveyor.CurrentState,
+                 Message := 'a zero AccelTime ramp did not complete');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="ANonZeroAccelTimeHoldsTheConveyorInStarting" Id="{5e4501d0-0026-4d19-9a41-000000000004}">
+      <Declaration><![CDATA[// The far end of the AccelTime gate. The ramp is a DURATION, not a cycle
+// count: no number of scans may complete it while the clock stands still, or
+// a fast task would declare a heavy belt up to speed sooner than a slow one.
+METHOD PRIVATE ANonZeroAccelTimeHoldsTheConveyorInStarting
+VAR
+	conveyor : FB_Conveyor;
+	sensor : FB_DigitalInput;
+	axis : FB_AxisBase;
+	recipe : ST_ConveyorControl;
+	i : INT;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('ANonZeroAccelTimeHoldsTheConveyorInStarting');
+
+recipe.AccelTime := T#500ms;
+conveyor(caseDetectionSensor := sensor, conveyorAxis := axis, Control := recipe, Start := TRUE);
+
+FOR i := 1 TO 10 DO
+	conveyor();
+END_FOR
+
+AssertEquals_INT(Expected := E_ConveyorState.STARTING,
+                 Actual := conveyor.CurrentState,
+                 Message := 'the ramp completed on scan count rather than on time');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="DetectionHoldsTheContainerUntilDownstreamIsReady" Id="{5e4501d0-0026-4d19-9a41-000000000005}">
+      <Declaration><![CDATA[// The drawn Detection arc, and the not(downstream ready) self-loop after it.
+// The belt is DROPPED here on purpose: a container held against a station
+// that will not take it must stop rather than be pushed into it.
+METHOD PRIVATE DetectionHoldsTheContainerUntilDownstreamIsReady
+VAR
+	conveyor : FB_Conveyor;
+	sensor : FB_DigitalInput;
+	axis : FB_AxisBase;
+	recipe : ST_ConveyorControl;
+	i : INT;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('DetectionHoldsTheContainerUntilDownstreamIsReady');
+
+DriveToWaitContainer(conveyor := conveyor, sensor := sensor, axis := axis, recipe := recipe);
+
+BlockTheEye(sensor := sensor);
+conveyor();
+AssertEquals_INT(Expected := E_ConveyorState.WAIT_DOWNSTREAM_READY,
+                 Actual := conveyor.CurrentState,
+                 Message := 'a detected container did not reach WAIT_DOWNSTREAM_READY');
+
+FOR i := 1 TO 5 DO
+	conveyor();
+END_FOR
+
+AssertEquals_INT(Expected := E_ConveyorState.WAIT_DOWNSTREAM_READY,
+                 Actual := conveyor.CurrentState,
+                 Message := 'the container left without downstream ever going ready');
+
+AssertFalse(Condition := conveyor.MotorRunning,
+            Message := 'the belt kept turning against a station that was not ready');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="DownstreamReadyReleasesTheContainerIntoTheHandover" Id="{5e4501d0-0026-4d19-9a41-000000000006}">
+      <Declaration><![CDATA[// The drawn "downstream ready" arc. Entering PROCES_CONTAINER has to start
+// the belt again in the same scan, or the container would sit still through a
+// hand-over the next station believes is under way.
+METHOD PRIVATE DownstreamReadyReleasesTheContainerIntoTheHandover
+VAR
+	conveyor : FB_Conveyor;
+	sensor : FB_DigitalInput;
+	axis : FB_AxisBase;
+	recipe : ST_ConveyorControl;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('DownstreamReadyReleasesTheContainerIntoTheHandover');
+
+DriveToHandover(conveyor := conveyor, sensor := sensor, axis := axis, recipe := recipe);
+
+AssertEquals_INT(Expected := E_ConveyorState.PROCES_CONTAINER,
+                 Actual := conveyor.CurrentState,
+                 Message := 'a ready station did not release the container');
+
+AssertTrue(Condition := conveyor.MotorRunning,
+           Message := 'the belt was not restarted for the hand-over');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="AWithdrawnDownstreamPutsTheContainerBackOnHold" Id="{5e4501d0-0026-4d19-9a41-000000000007}">
+      <Declaration><![CDATA[// The drawn not(downstream ready) arc as a retreat out of the hand-over.
+// DownstreamReady is a level and the next station may drop it at any moment;
+// a container that is still on the eye when that happens has not gone
+// anywhere yet, so it goes back to being held rather than being pushed into a
+// station that has stopped taking.
+METHOD PRIVATE AWithdrawnDownstreamPutsTheContainerBackOnHold
+VAR
+	conveyor : FB_Conveyor;
+	sensor : FB_DigitalInput;
+	axis : FB_AxisBase;
+	recipe : ST_ConveyorControl;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('AWithdrawnDownstreamPutsTheContainerBackOnHold');
+
+DriveToHandover(conveyor := conveyor, sensor := sensor, axis := axis, recipe := recipe);
+
+conveyor(DownstreamReady := FALSE);
+
+AssertEquals_INT(Expected := E_ConveyorState.WAIT_DOWNSTREAM_READY,
+                 Actual := conveyor.CurrentState,
+                 Message := 'a withdrawn station did not put the container back on hold');
+
+AssertEquals_UINT(Expected := 0,
+                  Actual := conveyor.ContainersPassed,
+                  Message := 'an abandoned hand-over counted a container');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="AClearedEyeCompletesTheHandoverAndCountsTheContainer" Id="{5e4501d0-0026-4d19-9a41-000000000008}">
+      <Declaration><![CDATA[// The drawn "Container received" and "Conveyor cleared" labels, which are one
+// arc here: the next station has it AND this run is empty are the same
+// observation from the two ends of the transfer, and the module only knows
+// either of them through the eye going clear. It is also the only place a
+// container is ever counted. Counting on the completed hand-over rather
+// than on the detection is what makes ContainersPassed mean "handed to the
+// next station" instead of "seen at some point".
+METHOD PRIVATE AClearedEyeCompletesTheHandoverAndCountsTheContainer
+VAR
+	conveyor : FB_Conveyor;
+	sensor : FB_DigitalInput;
+	axis : FB_AxisBase;
+	recipe : ST_ConveyorControl;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('AClearedEyeCompletesTheHandoverAndCountsTheContainer');
+
+DriveToHandover(conveyor := conveyor, sensor := sensor, axis := axis, recipe := recipe);
+
+ClearTheEye(sensor := sensor);
+conveyor();
+
+AssertEquals_INT(Expected := E_ConveyorState.WAIT_CONTAINER,
+                 Actual := conveyor.CurrentState,
+                 Message := 'a completed hand-over did not return to WAIT_CONTAINER');
+
+AssertEquals_UINT(Expected := 1,
+                  Actual := conveyor.ContainersPassed,
+                  Message := 'the handed-over container was not counted');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="AContainerStillOnTheEyeCannotCompleteTheHandover" Id="{5e4501d0-0026-4d19-9a41-000000000009}">
+      <Declaration><![CDATA[// The negation in the hand-over guard, pinned from the failing side. A
+// hand-over that could complete with the container still breaking the eye
+// would count containers that never left the run, and the count is what the
+// unit above reports as throughput.
+METHOD PRIVATE AContainerStillOnTheEyeCannotCompleteTheHandover
+VAR
+	conveyor : FB_Conveyor;
+	sensor : FB_DigitalInput;
+	axis : FB_AxisBase;
+	recipe : ST_ConveyorControl;
+	i : INT;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('AContainerStillOnTheEyeCannotCompleteTheHandover');
+
+DriveToHandover(conveyor := conveyor, sensor := sensor, axis := axis, recipe := recipe);
+
+FOR i := 1 TO 5 DO
+	conveyor();
+END_FOR
+
+AssertEquals_INT(Expected := E_ConveyorState.PROCES_CONTAINER,
+                 Actual := conveyor.CurrentState,
+                 Message := 'the hand-over completed with the container still on the eye');
+
+AssertEquals_UINT(Expected := 0,
+                  Actual := conveyor.ContainersPassed,
+                  Message := 'a container still on the eye was counted');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="ANonZeroHandoverDelayHoldsTheHandoverOpen" Id="{5e4501d0-0026-4d19-9a41-00000000000a}">
+      <Declaration><![CDATA[// The far end of the drawn Delay gate. With the eye clear and the delay
+// running, no number of scans may finish the hand-over while the clock stands
+// still - otherwise the gap between two closely spaced containers would read
+// as a completed hand-over on a fast enough task.
+METHOD PRIVATE ANonZeroHandoverDelayHoldsTheHandoverOpen
+VAR
+	conveyor : FB_Conveyor;
+	sensor : FB_DigitalInput;
+	axis : FB_AxisBase;
+	recipe : ST_ConveyorControl;
+	i : INT;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('ANonZeroHandoverDelayHoldsTheHandoverOpen');
+
+recipe.HandoverDelay := T#200ms;
+DriveToHandover(conveyor := conveyor, sensor := sensor, axis := axis, recipe := recipe);
+
+ClearTheEye(sensor := sensor);
+FOR i := 1 TO 10 DO
+	conveyor();
+END_FOR
+
+AssertEquals_INT(Expected := E_ConveyorState.PROCES_CONTAINER,
+                 Actual := conveyor.CurrentState,
+                 Message := 'the hand-over delay expired on scan count rather than on time');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="StopEndsTheRunFromWhereverItIs" Id="{5e4501d0-0026-4d19-9a41-00000000000b}">
+      <Declaration><![CDATA[// The drawn Stop arc, which leaves every state rather than one. It is decided
+// above the CASE for that reason: a Stop that any single state could decline
+// would not be a Stop, and the state holding a container mid-hand-over is
+// exactly the one that would be tempted to decline it.
+METHOD PRIVATE StopEndsTheRunFromWhereverItIs
+VAR
+	conveyor : FB_Conveyor;
+	sensor : FB_DigitalInput;
+	axis : FB_AxisBase;
+	recipe : ST_ConveyorControl;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('StopEndsTheRunFromWhereverItIs');
+
+DriveToHandover(conveyor := conveyor, sensor := sensor, axis := axis, recipe := recipe);
+AssertEquals_INT(Expected := E_ConveyorState.PROCES_CONTAINER,
+                 Actual := conveyor.CurrentState,
+                 Message := 'setup did not reach the hand-over');
+
+conveyor(Start := FALSE, Stop := TRUE);
+AssertEquals_INT(Expected := E_ConveyorState.STOPPING,
+                 Actual := conveyor.CurrentState,
+                 Message := 'Stop was declined mid-hand-over');
+
+conveyor();
+AssertEquals_INT(Expected := E_ConveyorState.INIT,
+                 Actual := conveyor.CurrentState,
+                 Message := 'a zero DecelTime ramp did not complete');
+
+AssertFalse(Condition := conveyor.MotorRunning,
+            Message := 'the belt was still turning after the run had stopped');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="ANonZeroDecelTimeHoldsTheConveyorInStopping" Id="{5e4501d0-0026-4d19-9a41-00000000000c}">
+      <Declaration><![CDATA[// The far end of the DecelTime gate, and the reason STOPPING is a state at
+// all. A run that reached INIT before the belt had actually stopped could be
+// restarted into a drive that was still coasting the other way.
+METHOD PRIVATE ANonZeroDecelTimeHoldsTheConveyorInStopping
+VAR
+	conveyor : FB_Conveyor;
+	sensor : FB_DigitalInput;
+	axis : FB_AxisBase;
+	recipe : ST_ConveyorControl;
+	i : INT;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('ANonZeroDecelTimeHoldsTheConveyorInStopping');
+
+recipe.DecelTime := T#800ms;
+DriveToWaitContainer(conveyor := conveyor, sensor := sensor, axis := axis, recipe := recipe);
+
+conveyor(Start := FALSE, Stop := TRUE);
+FOR i := 1 TO 10 DO
+	conveyor();
+END_FOR
+
+AssertEquals_INT(Expected := E_ConveyorState.STOPPING,
+                 Actual := conveyor.CurrentState,
+                 Message := 'the stop ramp completed on scan count rather than on time');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="ADriveTripStopsTheBeltAtOnceAndLatchesTheFault" Id="{5e4501d0-0026-4d19-9a41-00000000000d}">
+      <Declaration><![CDATA[// A trip is not a hand-over. The belt has to drop in the same scan the fault
+// is seen - the run-on that lets a released container coast clear must not
+// double as a reason for a faulted belt to keep turning - and the fault has
+// to outlive the drive-side condition that raised it, or a run would restart
+// itself after a trip nobody ever saw.
+METHOD PRIVATE ADriveTripStopsTheBeltAtOnceAndLatchesTheFault
+VAR
+	conveyor : FB_Conveyor;
+	sensor : FB_DigitalInput;
+	axis : FB_AxisBase;
+	recipe : ST_ConveyorControl;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('ADriveTripStopsTheBeltAtOnceAndLatchesTheFault');
+
+recipe.MotorRunOn := T#500ms;
+DriveToWaitContainer(conveyor := conveyor, sensor := sensor, axis := axis, recipe := recipe);
+AssertTrue(Condition := conveyor.MotorRunning,
+           Message := 'setup did not get the belt turning');
+
+axis(DriveFault := TRUE);
+conveyor();
+
+AssertTrue(Condition := conveyor.MotorFault,
+           Message := 'a drive trip did not raise MotorFault');
+
+AssertEquals_INT(Expected := E_ConveyorState.STOPPING,
+                 Actual := conveyor.CurrentState,
+                 Message := 'a drive trip did not end the run');
+
+AssertFalse(Condition := conveyor.MotorRunning,
+            Message := 'the run-on kept a faulted belt turning');
+
+AssertEquals_LREAL(Expected := 0.0,
+                   Actual := conveyor.CommandedVelocity,
+                   Delta := 0.001,
+                   Message := 'a faulted conveyor still commanded a speed');
+
+axis(DriveFault := FALSE);
+conveyor();
+AssertTrue(Condition := conveyor.MotorFault,
+           Message := 'the fault cleared itself when the drive condition went away');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="AFaultedConveyorCannotBeStarted" Id="{5e4501d0-0026-4d19-9a41-00000000000e}">
+      <Declaration><![CDATA[// The latch has to gate the Start arc as well as force the stop, or a run
+// that had tripped and settled in INIT would take the next Start as if
+// nothing had happened - which is the same restart-by-itself the latch exists
+// to prevent, one state later.
+METHOD PRIVATE AFaultedConveyorCannotBeStarted
+VAR
+	conveyor : FB_Conveyor;
+	sensor : FB_DigitalInput;
+	axis : FB_AxisBase;
+	recipe : ST_ConveyorControl;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('AFaultedConveyorCannotBeStarted');
+
+axis(DriveFault := TRUE);
+conveyor(caseDetectionSensor := sensor, conveyorAxis := axis, Control := recipe);
+axis(DriveFault := FALSE);
+
+conveyor(Start := TRUE);
+conveyor();
+
+AssertEquals_INT(Expected := E_ConveyorState.INIT,
+                 Actual := conveyor.CurrentState,
+                 Message := 'a faulted conveyor accepted a Start');
+
+AssertFalse(Condition := conveyor.MotorRunning,
+            Message := 'a faulted conveyor drove its belt');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="ResetReleasesTheLatchAndMakesTheRunStartableAgain" Id="{5e4501d0-0026-4d19-9a41-00000000000f}">
+      <Declaration><![CDATA[// The PackML Reset is the single point at which a tripped run becomes usable
+// again, and it has to reach the drive as well as the latch: releasing the
+// latch alone would leave the module willing to start against an axis still
+// refusing to move.
+METHOD PRIVATE ResetReleasesTheLatchAndMakesTheRunStartableAgain
+VAR
+	conveyor : FB_Conveyor;
+	sensor : FB_DigitalInput;
+	axis : FB_AxisBase;
+	recipe : ST_ConveyorControl;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('ResetReleasesTheLatchAndMakesTheRunStartableAgain');
+
+recipe.SpeedPercentage := 100.0;
+axis(DriveFault := TRUE);
+conveyor(caseDetectionSensor := sensor, conveyorAxis := axis, Control := recipe);
+axis(DriveFault := FALSE);
+
+conveyor(Reset := TRUE);
+AssertFalse(Condition := conveyor.MotorFault,
+            Message := 'Reset did not release the motor fault');
+
+conveyor(Reset := FALSE, Start := TRUE);
+conveyor();
+
+AssertEquals_INT(Expected := E_ConveyorState.WAIT_CONTAINER,
+                 Actual := conveyor.CurrentState,
+                 Message := 'a reset conveyor did not start');
+
+AssertEquals_LREAL(Expected := 1000.0,
+                   Actual := axis.ActualVelocity,
+                   Delta := 0.001,
+                   Message := 'the drive was never acknowledged, so it did not move');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="AStandingDriveFaultCannotBeAcknowledgedAway" Id="{5e4501d0-0026-4d19-9a41-000000000010}">
+      <Declaration><![CDATA[// The latch is reset-dominant, so a Reset held against a fault that is still
+// standing does release it - for exactly as long as the Reset is held. The
+// moment the operator lets go, the drive re-raises it and the latch takes it
+// back. That is the drive's answer rather than the latch's, and it is what
+// stops an acknowledgement from being mistaken for a repair.
+METHOD PRIVATE AStandingDriveFaultCannotBeAcknowledgedAway
+VAR
+	conveyor : FB_Conveyor;
+	sensor : FB_DigitalInput;
+	axis : FB_AxisBase;
+	recipe : ST_ConveyorControl;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('AStandingDriveFaultCannotBeAcknowledgedAway');
+
+axis(DriveFault := TRUE);
+conveyor(caseDetectionSensor := sensor, conveyorAxis := axis, Control := recipe);
+AssertTrue(Condition := conveyor.MotorFault,
+           Message := 'setup did not latch the fault');
+
+conveyor(Reset := TRUE);
+AssertFalse(Condition := conveyor.MotorFault,
+            Message := 'the reset-dominant latch did not release while Reset was held');
+
+axis(DriveFault := TRUE);
+conveyor(Reset := FALSE);
+AssertTrue(Condition := conveyor.MotorFault,
+           Message := 'a standing drive fault did not come back after the acknowledgement');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="SpeedPercentageScalesTheCommandedVelocity" Id="{5e4501d0-0026-4d19-9a41-000000000011}">
+      <Declaration><![CDATA[// The recipe carries a PERCENTAGE rather than drive units, so a run that is
+// re-geared during commissioning keeps its recipe and only its rated velocity
+// changes. The scaling therefore has to happen inside the module and reach
+// the axis, not be pre-computed by whoever fills in the recipe.
+METHOD PRIVATE SpeedPercentageScalesTheCommandedVelocity
+VAR
+	conveyor : FB_Conveyor;
+	sensor : FB_DigitalInput;
+	axis : FB_AxisBase;
+	recipe : ST_ConveyorControl;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('SpeedPercentageScalesTheCommandedVelocity');
+
+recipe.SpeedPercentage := 37.5;
+conveyor(caseDetectionSensor := sensor, conveyorAxis := axis, Control := recipe, Start := TRUE);
+
+AssertEquals_LREAL(Expected := 375.0,
+                   Actual := conveyor.CommandedVelocity,
+                   Delta := 0.001,
+                   Message := 'CommandedVelocity did not scale the rated velocity');
+
+AssertEquals_LREAL(Expected := 375.0,
+                   Actual := axis.ActualVelocity,
+                   Delta := 0.001,
+                   Message := 'the commanded velocity never reached the drive');
+
+conveyor(Start := FALSE, Stop := TRUE);
+AssertEquals_LREAL(Expected := 0.0,
+                   Actual := axis.ActualVelocity,
+                   Delta := 0.001,
+                   Message := 'the drive kept its demand after the run stopped');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="MotorRunOnKeepsTheBeltTurningAfterTheDemandDrops" Id="{5e4501d0-0026-4d19-9a41-000000000012}">
+      <Declaration><![CDATA[// The engaged side of the run-on, which needs no clock: while the window is
+// open the belt must stay driven however many scans pass. Without it a
+// container released on the last scan of a hand-over would stop half on the
+// transfer, which is the jam the run-on exists to prevent.
+METHOD PRIVATE MotorRunOnKeepsTheBeltTurningAfterTheDemandDrops
+VAR
+	conveyor : FB_Conveyor;
+	sensor : FB_DigitalInput;
+	axis : FB_AxisBase;
+	recipe : ST_ConveyorControl;
+	i : INT;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('MotorRunOnKeepsTheBeltTurningAfterTheDemandDrops');
+
+recipe.SpeedPercentage := 80.0;
+recipe.MotorRunOn := T#300ms;
+DriveToWaitContainer(conveyor := conveyor, sensor := sensor, axis := axis, recipe := recipe);
+
+// Detection drops the demand: the container is held for the next station.
+BlockTheEye(sensor := sensor);
+conveyor();
+
+FOR i := 1 TO 10 DO
+	conveyor();
+END_FOR
+
+AssertTrue(Condition := conveyor.MotorRunning,
+           Message := 'the run-on window closed on scan count rather than on time');
+
+AssertEquals_LREAL(Expected := 800.0,
+                   Actual := axis.ActualVelocity,
+                   Delta := 0.001,
+                   Message := 'the belt was still called running but no longer driven');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="ContainersPassedIsALifetimeTotal" Id="{5e4501d0-0026-4d19-9a41-000000000013}">
+      <Declaration><![CDATA[// The count is the run's lifetime throughput, not a per-cycle flag: it
+// survives every return to WAIT_CONTAINER, and clearing it is a supervisory
+// action rather than something a state change may do quietly.
+METHOD PRIVATE ContainersPassedIsALifetimeTotal
+VAR
+	conveyor : FB_Conveyor;
+	sensor : FB_DigitalInput;
+	axis : FB_AxisBase;
+	recipe : ST_ConveyorControl;
+	i : INT;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('ContainersPassedIsALifetimeTotal');
+
+DriveToWaitContainer(conveyor := conveyor, sensor := sensor, axis := axis, recipe := recipe);
+
+FOR i := 1 TO 3 DO
+	BlockTheEye(sensor := sensor);
+	conveyor(DownstreamReady := TRUE);
+	conveyor();
+
+	ClearTheEye(sensor := sensor);
+	conveyor();
+END_FOR
+
+AssertEquals_UINT(Expected := 3,
+                  Actual := conveyor.ContainersPassed,
+                  Message := 'three hand-overs did not add up to three containers');
+
+AssertEquals_INT(Expected := E_ConveyorState.WAIT_CONTAINER,
+                 Actual := conveyor.CurrentState,
+                 Message := 'the run did not settle back on WAIT_CONTAINER');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="SensorSnapshotPublishesTheDetectionPoint" Id="{5e4501d0-0026-4d19-9a41-000000000014}">
+      <Declaration><![CDATA[// Sensors is what an HMI or a trace line reads instead of reaching through
+// the equipment module into a sensor block. Slot 1 has to agree with the
+// injected sensor on the same scan, and the reserved slots have to stay at
+// their defaults - a run that filled all five from its one point would report
+// four containers that do not exist.
+METHOD PRIVATE SensorSnapshotPublishesTheDetectionPoint
+VAR
+	conveyor : FB_Conveyor;
+	sensor : FB_DigitalInput;
+	axis : FB_AxisBase;
+	recipe : ST_ConveyorControl;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('SensorSnapshotPublishesTheDetectionPoint');
+
+sensor.Simulation := TRUE;
+sensor.Inverted := TRUE;
+sensor.DebounceTime := T#5ms;
+sensor(HardwareInput := FALSE);
+
+conveyor(caseDetectionSensor := sensor, conveyorAxis := axis, Control := recipe);
+
+AssertEquals_BOOL(Expected := sensor.Active,
+                  Actual := conveyor.Sensors[1].Active,
+                  Message := 'snapshot slot 1 Active');
+
+AssertTrue(Condition := conveyor.Sensors[1].Inverted,
+           Message := 'snapshot slot 1 Inverted');
+
+AssertTrue(Condition := conveyor.Sensors[1].Simulated,
+           Message := 'snapshot slot 1 Simulated');
+
+AssertEquals_TIME(Expected := T#5ms,
+                  Actual := conveyor.Sensors[1].DebounceTime,
+                  Message := 'snapshot slot 1 DebounceTime');
+
+AssertFalse(Condition := conveyor.Sensors[2].Inverted,
+            Message := 'a reserved slot was filled from the detection point');
+
+AssertEquals_TIME(Expected := T#0ms,
+                  Actual := conveyor.Sensors[5].DebounceTime,
+                  Message := 'a reserved slot was filled from the detection point');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="AContainerLiftedOffTheEyeReleasesTheHold" Id="{5e4501d0-0026-4d19-9a41-000000000019}">
+      <Declaration><![CDATA[// A container held for a station that will not take it can also simply stop
+// existing - an operator lifts it off while clearing a jam. The hold has to
+// end when it does, or the run would wait forever for a hand-over of nothing
+// and the next real container would be counted as this one.
+METHOD PRIVATE AContainerLiftedOffTheEyeReleasesTheHold
+VAR
+	conveyor : FB_Conveyor;
+	sensor : FB_DigitalInput;
+	axis : FB_AxisBase;
+	recipe : ST_ConveyorControl;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('AContainerLiftedOffTheEyeReleasesTheHold');
+
+DriveToWaitContainer(conveyor := conveyor, sensor := sensor, axis := axis, recipe := recipe);
+
+BlockTheEye(sensor := sensor);
+conveyor();
+AssertEquals_INT(Expected := E_ConveyorState.WAIT_DOWNSTREAM_READY,
+                 Actual := conveyor.CurrentState,
+                 Message := 'setup did not put a container on hold');
+
+ClearTheEye(sensor := sensor);
+conveyor();
+
+AssertEquals_INT(Expected := E_ConveyorState.WAIT_CONTAINER,
+                 Actual := conveyor.CurrentState,
+                 Message := 'the hold outlived the container that caused it');
+
+AssertEquals_UINT(Expected := 0,
+                  Actual := conveyor.ContainersPassed,
+                  Message := 'a container that was never handed over was counted');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="TheInfeedInstanceRunsTheSharedMachineOnItsOwnRecipe" Id="{5e4501d0-0026-4d19-9a41-00000000001a}">
+      <Declaration><![CDATA[// FB_Conveyor only earns its place if an instance of it is a whole equipment
+// module, so this pins the one thing FB_InfeedConveyor is: the shared state
+// machine wired to this run's own sensor, drive and tuning. Its AccelTime is
+// what proves the recipe is the instance's rather than the block's - the run
+// stays in STARTING here where a default-tuned conveyor would already be
+// waiting for a container.
+METHOD PRIVATE TheInfeedInstanceRunsTheSharedMachineOnItsOwnRecipe
+VAR
+	infeed : FB_InfeedConveyor;
+	i : INT;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('TheInfeedInstanceRunsTheSharedMachineOnItsOwnRecipe');
+
+infeed();
+AssertEquals_INT(Expected := E_ConveyorState.INIT,
+                 Actual := infeed.CurrentState,
+                 Message := 'the infeed run did not power up stopped');
+
+infeed(Start := TRUE);
+AssertEquals_INT(Expected := E_ConveyorState.STARTING,
+                 Actual := infeed.CurrentState,
+                 Message := 'the infeed run did not accept a Start');
+
+FOR i := 1 TO 10 DO
+	infeed();
+END_FOR
+
+AssertEquals_INT(Expected := E_ConveyorState.STARTING,
+                 Actual := infeed.CurrentState,
+                 Message := 'the infeed run ignored its own AccelTime');
+
+AssertTrue(Condition := infeed.MotorRunning,
+           Message := 'the infeed belt was not driven while coming up to speed');
+
+infeed(BeltDriveFault := TRUE);
+AssertTrue(Condition := infeed.MotorFault,
+           Message := 'the infeed drive fault line never reached the state machine');
+
+AssertEquals_INT(Expected := E_ConveyorState.STOPPING,
+                 Actual := infeed.CurrentState,
+                 Message := 'a fault on the infeed drive did not end the run');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="DriveToWaitContainer" Id="{5e4501d0-0026-4d19-9a41-000000000015}">
+      <Declaration><![CDATA[// Arrangement shared by the cases that start from a belt already running with
+// nothing on it. Binds both dependencies and the recipe, so a caller sets any
+// recipe field it cares about BEFORE calling this, and holds Start - the run
+// is meant to stay up until the case takes it down.
+//
+// The detection point is put into simulation with no debounce: this suite is
+// exercising the CONVEYOR, and a filter window on the sensor would put a
+// second timer between the level a case sets and the arc it is asserting.
+METHOD PRIVATE DriveToWaitContainer
+VAR_IN_OUT
+	conveyor : FB_Conveyor;
+	sensor : FB_DigitalInput;
+	axis : FB_AxisBase;
+END_VAR
+VAR_INPUT
+	recipe : ST_ConveyorControl;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[sensor.Simulation := TRUE;
+sensor.DebounceTime := T#0ms;
+sensor(HardwareInput := FALSE);
+
+conveyor(caseDetectionSensor := sensor, conveyorAxis := axis, Control := recipe, Start := TRUE);
+conveyor();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="DriveToHandover" Id="{5e4501d0-0026-4d19-9a41-000000000016}">
+      <Declaration><![CDATA[// Arrangement shared by the cases about the hand-over itself: a container is
+// on the eye and the next station has said it will take it, so the run is in
+// PROCES_CONTAINER with DownstreamReady still held.
+METHOD PRIVATE DriveToHandover
+VAR_IN_OUT
+	conveyor : FB_Conveyor;
+	sensor : FB_DigitalInput;
+	axis : FB_AxisBase;
+END_VAR
+VAR_INPUT
+	recipe : ST_ConveyorControl;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[DriveToWaitContainer(conveyor := conveyor, sensor := sensor, axis := axis, recipe := recipe);
+
+BlockTheEye(sensor := sensor);
+conveyor();
+conveyor(DownstreamReady := TRUE);]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="BlockTheEye" Id="{5e4501d0-0026-4d19-9a41-000000000017}">
+      <Declaration><![CDATA[// Puts a container in front of the detection point. Only the SENSOR is
+// cycled: whether the conveyor gets to see the new level on this scan or the
+// next is the sort of thing a case is often asserting, so it stays the
+// caller's decision.
+METHOD PRIVATE BlockTheEye
+VAR_IN_OUT
+	sensor : FB_DigitalInput;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[sensor.SimulatedInput := TRUE;
+sensor(HardwareInput := FALSE);]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="ClearTheEye" Id="{5e4501d0-0026-4d19-9a41-000000000018}">
+      <Declaration><![CDATA[METHOD PRIVATE ClearTheEye
+VAR_IN_OUT
+	sensor : FB_DigitalInput;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[sensor.SimulatedInput := FALSE;
+sensor(HardwareInput := FALSE);]]></ST>
+      </Implementation>
+    </Method>
+  </POU>
+</TcPlcObject>

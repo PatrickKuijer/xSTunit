@@ -1,5 +1,5 @@
 module PLC target TwinCAT RT (x86)
-compared 59 of 94 declared types, 199 members
+compared 60 of 94 declared types, 200 members
 sizes and offsets in bits
 NotCompared TOF function block instance layout is not modeled
 NotCompared I_TestResults neither members nor a base type declared
@@ -15,7 +15,6 @@ NotCompared FB_TcUnitRunner function block instance layout is not modeled
 NotCompared FB_Test function block instance layout is not modeled
 NotCompared FW_GetCurTaskIndex function block instance layout is not modeled
 NotCompared GETCURTASKINDEX function block instance layout is not modeled
-Unsupported T_Arg.pData SIZEOF() doesn't know the byte size of type 'PVOID'
 NotCompared FB_FormatString function block instance layout is not modeled
 NotCompared FB_AssertResultStatic function block instance layout is not modeled
 NotCompared FB_AssertArrayResultStatic function block instance layout is not modeled

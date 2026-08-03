@@ -59,7 +59,7 @@ namespace xStunit.Cli.Tests
             Assert.Equal(0, exitCode);
             var text = output.ToString();
             Assert.Contains("Usage:", text);
-            foreach (var flag in new[] { "--format", "--suite", "--plugins", "--coverage", "--stream", "--help" })
+            foreach (var flag in new[] { "--format", "--suite", "--plugins", "--target", "--coverage", "--stream", "--help" })
                 Assert.Contains(flag, text);
             Assert.Contains("Examples:", text);
         }

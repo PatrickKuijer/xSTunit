@@ -209,16 +209,22 @@ namespace xStunit.Interpreter
         }
 
         private readonly TypeRegistry _registry;
+        private readonly TargetPlatform _target;
         private readonly Func<string, int> _resolveBound;
 
+        // target settles the one width that is not the same on every machine -
+        // an address - and is required rather than defaulted, so no layout is
+        // ever computed without a caller having said which machine it is for.
+        //
         // resolveBound evaluates an ARRAY bound or STRING size that is not an
         // integer literal - a GVL-qualified constant, say - which only an
         // Engine holding a Frame can do. A caller with no such constants in
         // play may pass null and get literal-only bounds, with a
         // FormatException on anything else.
-        public TypeLayout(TypeRegistry registry, Func<string, int> resolveBound = null)
+        public TypeLayout(TypeRegistry registry, TargetPlatform target, Func<string, int> resolveBound = null)
         {
             _registry = registry;
+            _target = target;
             _resolveBound = resolveBound;
         }
 
@@ -229,7 +235,7 @@ namespace xStunit.Interpreter
                 throw new NotSupportedException("SIZEOF() requires a type name");
 
             if (AddressTypeInfo.IsAddressType(resolved))
-                return (4, 4);
+                return (_target.AddressSize, _target.AddressSize);
 
             if (ArrayTypeInfo.IsArrayType(resolved))
             {

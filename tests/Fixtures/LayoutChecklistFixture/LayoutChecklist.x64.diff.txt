@@ -1,5 +1,5 @@
 module PLC target TwinCAT RT (x64)
-compared 59 of 94 declared types, 199 members
+compared 60 of 94 declared types, 200 members
 sizes and offsets in bits
 NotCompared TOF function block instance layout is not modeled
 NotCompared I_TestResults neither members nor a base type declared
@@ -7,21 +7,14 @@ NotCompared R_TRIG function block instance layout is not modeled
 NotCompared FB_TestResults function block instance layout is not modeled
 NotCompared I_TestResultLogger neither members nor a base type declared
 NotCompared FB_AdsTestResultLogger function block instance layout is not modeled
-TypeSize RTS_IEC_SIZE declared=64 computed=32
-TypeSize RTS_IEC_HANDLE declared=64 computed=32
 NotCompared FB_FileControl function block instance layout is not modeled
 NotCompared FB_StreamBuffer function block instance layout is not modeled
 NotCompared FB_XmlControl function block instance layout is not modeled
 NotCompared FB_xUnitXmlPublisher function block instance layout is not modeled
 NotCompared FB_TcUnitRunner function block instance layout is not modeled
 NotCompared FB_Test function block instance layout is not modeled
-MemberSize AnyType.pValue declared=64 computed=32
-MemberOffset AnyType.diSize declared=64 computed=32
-MemberOffset AnyType.TypeClass declared=96 computed=64
-TypeSize AnyType declared=128 computed=96
 NotCompared FW_GetCurTaskIndex function block instance layout is not modeled
 NotCompared GETCURTASKINDEX function block instance layout is not modeled
-Unsupported T_Arg.pData SIZEOF() doesn't know the byte size of type 'PVOID'
 NotCompared FB_FormatString function block instance layout is not modeled
 NotCompared FB_AssertResultStatic function block instance layout is not modeled
 NotCompared FB_AssertArrayResultStatic function block instance layout is not modeled
@@ -33,51 +26,10 @@ NotCompared FB_MemRingBuffer function block instance layout is not modeled
 NotCompared TON function block instance layout is not modeled
 NotCompared FB_AdsLogStringMessageFifoQueue function block instance layout is not modeled
 NotCompared FB_AddLrealInt function block instance layout is not modeled
-MemberOffset ST_PointerWidth.target declared=64 computed=32
-MemberSize ST_PointerWidth.target declared=64 computed=32
-MemberOffset ST_PointerWidth.trailer declared=128 computed=64
-TypeSize ST_PointerWidth declared=192 computed=96
-MemberOffset ST_ReferenceWidth.target declared=64 computed=32
-MemberSize ST_ReferenceWidth.target declared=64 computed=32
-MemberOffset ST_ReferenceWidth.trailer declared=128 computed=64
-TypeSize ST_ReferenceWidth declared=192 computed=96
 Unsupported ST_BitPacking.firstBit SIZEOF() doesn't know the byte size of type 'BIT'
 Unsupported PlcAppSystemInfo.AppTimestamp SIZEOF() doesn't know the byte size of type 'DT'
 MemberOffset PlcTaskSystemInfo.TaskName declared=512 computed=256
 TypeSize PlcTaskSystemInfo declared=1024 computed=768
-MemberOffset _Implicit_Task_Info.pszName declared=64 computed=32
-MemberSize _Implicit_Task_Info.pszName declared=64 computed=32
-MemberOffset _Implicit_Task_Info.nPriority declared=128 computed=64
-MemberOffset _Implicit_Task_Info.KindOf declared=144 computed=80
-MemberOffset _Implicit_Task_Info.bWatchdog declared=160 computed=96
-MemberOffset _Implicit_Task_Info.bProfilingTask declared=168 computed=104
-MemberOffset _Implicit_Task_Info.dwEventFunctionPointer declared=192 computed=128
-MemberSize _Implicit_Task_Info.dwEventFunctionPointer declared=64 computed=32
-MemberOffset _Implicit_Task_Info.pszExternalEvent declared=256 computed=160
-MemberSize _Implicit_Task_Info.pszExternalEvent declared=64 computed=32
-MemberOffset _Implicit_Task_Info.dwTaskEntryFunctionPointer declared=320 computed=192
-MemberSize _Implicit_Task_Info.dwTaskEntryFunctionPointer declared=64 computed=32
-MemberOffset _Implicit_Task_Info.dwWatchdogSensitivity declared=384 computed=224
-MemberOffset _Implicit_Task_Info.dwInterval declared=416 computed=256
-MemberOffset _Implicit_Task_Info.dwWatchdogTime declared=448 computed=288
-MemberOffset _Implicit_Task_Info.dwLastCycleTime declared=480 computed=320
-MemberOffset _Implicit_Task_Info.dwAverageCycleTime declared=512 computed=352
-MemberOffset _Implicit_Task_Info.dwMaxCycleTime declared=544 computed=384
-MemberOffset _Implicit_Task_Info.dwMinCycleTime declared=576 computed=416
-MemberOffset _Implicit_Task_Info.diJitter declared=608 computed=448
-MemberOffset _Implicit_Task_Info.diJitterMin declared=640 computed=480
-MemberOffset _Implicit_Task_Info.diJitterMax declared=672 computed=512
-MemberOffset _Implicit_Task_Info.dwCycleCount declared=704 computed=544
-MemberOffset _Implicit_Task_Info.wTaskStatus declared=736 computed=576
-MemberOffset _Implicit_Task_Info.wNumOfJitterDistributions declared=752 computed=592
-MemberOffset _Implicit_Task_Info.pJitterDistribution declared=768 computed=608
-MemberSize _Implicit_Task_Info.pJitterDistribution declared=64 computed=32
-MemberOffset _Implicit_Task_Info.bWithinSPSTimeSlicing declared=832 computed=640
-MemberOffset _Implicit_Task_Info.byDummy declared=840 computed=648
-MemberOffset _Implicit_Task_Info.bShouldBlock declared=848 computed=656
-MemberOffset _Implicit_Task_Info.bActive declared=856 computed=664
-MemberOffset _Implicit_Task_Info.dwIECCycleCount declared=864 computed=672
-TypeSize _Implicit_Task_Info declared=896 computed=704
 NotCompared Global_Variables static members - a program or global variable list, not an instance layout
 NotCompared GVL_Param_TcUnit static members - a program or global variable list, not an instance layout
 NotCompared GVL_TcUnit static members - a program or global variable list, not an instance layout

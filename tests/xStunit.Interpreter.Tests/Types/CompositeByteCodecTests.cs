@@ -201,7 +201,7 @@ namespace xStunit.Interpreter.Tests
         public void Unpack_StructWithStringField_SeatsTheFieldInACellBoundedByItsDeclaration()
         {
             var registry = NewRegistry(Struct("ST_Labelled", ("label", "STRING(4)")));
-            var layout = new TypeLayout(registry);
+            var layout = new TypeLayout(registry, TargetPlatform.Default);
             var buffer = new byte[layout.SizeOf("ST_Labelled").Size];
 
             var instance = (StructInstance)layout.Unpack(buffer, 0, "ST_Labelled");
@@ -222,7 +222,7 @@ namespace xStunit.Interpreter.Tests
         public void Pack_UnsupportedShape_RefusesNamingTheShapeItCannotWrite(string typeName)
         {
             var registry = NewRegistry(Struct("ST_Unpackable", ("handle", "POINTER TO INT")));
-            var layout = new TypeLayout(registry);
+            var layout = new TypeLayout(registry, TargetPlatform.Default);
 
             var packing = Assert.Throws<NotSupportedException>(
                 () => layout.Pack(new byte[16], 0, DefaultOf(typeName), typeName));
@@ -279,7 +279,7 @@ namespace xStunit.Interpreter.Tests
                 fields.Select(f => new VarDecl(f.Name, f.TypeName, null, VarSection.Local)).ToList());
 
         private static TypeLayout NewLayout(Func<string, int> resolveBound = null) =>
-            new TypeLayout(NewRegistry(PaddedStruct, NestedStruct), resolveBound);
+            new TypeLayout(NewRegistry(PaddedStruct, NestedStruct), TargetPlatform.Default, resolveBound);
 
         private static TypeRegistry NewRegistry(params StructAst[] structTypes) =>
             new TypeRegistry(Array.Empty<PouAst>(), structTypes);

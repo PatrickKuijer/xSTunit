@@ -13,7 +13,7 @@ namespace xStunit.Interpreter.Tests
     // rules have leaked back into the interpreter they were pulled out of.
     public class StringByteCodecTests
     {
-        private static readonly TypeLayout Layout = new TypeLayout(new TypeRegistry(Array.Empty<PouAst>()));
+        private static readonly TypeLayout Layout = new TypeLayout(new TypeRegistry(Array.Empty<PouAst>()), TargetPlatform.Default);
 
         // Text survives a pack/unpack round trip in both encodings, including
         // the non-ASCII characters each one is meant to reach: Latin-1 for a
@@ -197,6 +197,7 @@ namespace xStunit.Interpreter.Tests
         {
             var resolved = new TypeLayout(
                 new TypeRegistry(Array.Empty<PouAst>()),
+                TargetPlatform.Default,
                 boundText => boundText == "cLimits.MAX_NAME" ? 4 : throw new InvalidOperationException(boundText));
             const string typeName = "STRING(cLimits.MAX_NAME)";
 

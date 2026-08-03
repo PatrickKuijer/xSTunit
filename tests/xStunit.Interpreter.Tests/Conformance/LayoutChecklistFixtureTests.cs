@@ -25,7 +25,7 @@ namespace xStunit.Interpreter.Tests.Conformance
         // hand, so a fixture line these loaders silently drop shows up as a
         // wrong offset here instead of as a fixture that measures nothing.
         private static readonly TypeRegistry Registry = BuildRegistry();
-        private static readonly TypeLayout Layout = new TypeLayout(Registry);
+        private static readonly TypeLayout Layout = new TypeLayout(Registry, TargetPlatform.X86);
 
         private static TypeRegistry BuildRegistry()
         {
@@ -42,26 +42,46 @@ namespace xStunit.Interpreter.Tests.Conformance
 
         // A 32-bit address leaves the trailer at byte 8; the 64-bit target the
         // same source also builds for puts it at 16. That gap is the whole
-        // pointer-width rule, and this type exists to make it a single number.
-        [Fact]
-        public void PointerWidth_PlacesTheTrailerBehindAFourByteAddress()
+        // pointer-width rule, and this type exists to make it a single number -
+        // one that follows the target rather than being fixed at either answer.
+        [Theory]
+        [InlineData("x86", 4, 12)]
+        [InlineData("x64", 8, 24)]
+        public void PointerWidth_PlacesTheTrailerBehindTheTargetsAddress(
+            string targetName, int addressSize, int typeSize)
         {
-            AssertLayout("ST_PointerWidth", 12,
+            AssertLayout(Target(targetName), "ST_PointerWidth", typeSize,
                 ("leadIn", 0, 1),
-                ("target", 4, 4),
-                ("trailer", 8, 1));
+                ("target", addressSize, addressSize),
+                ("trailer", addressSize * 2, 1));
         }
 
         // REFERENCE TO is sized as an address in its own right rather than
         // inheriting the referent's width - INT here, which would put the
-        // trailer at 4 instead of 8.
-        [Fact]
-        public void ReferenceWidth_IsSizedAsAnAddressNotAsTheReferent()
+        // trailer at 4 on both targets and make the type immune to the one
+        // rule it exists to measure.
+        [Theory]
+        [InlineData("x86", 4, 12)]
+        [InlineData("x64", 8, 24)]
+        public void ReferenceWidth_IsSizedAsAnAddressNotAsTheReferent(
+            string targetName, int addressSize, int typeSize)
         {
-            AssertLayout("ST_ReferenceWidth", 12,
+            AssertLayout(Target(targetName), "ST_ReferenceWidth", typeSize,
                 ("leadIn", 0, 1),
-                ("target", 4, 4),
-                ("trailer", 8, 1));
+                ("target", addressSize, addressSize),
+                ("trailer", addressSize * 2, 1));
+        }
+
+        // A void pointer names no referent at all, which is exactly why it is
+        // an address and not an alias of some fixed-width type: it is as wide
+        // as the target's other addresses, and refusing to size it would leave
+        // TwinCAT's own T_Arg unmeasurable.
+        [Theory]
+        [InlineData("x86", 4)]
+        [InlineData("x64", 8)]
+        public void VoidPointer_IsSizedAsAnAddressOnEitherTarget(string targetName, int addressSize)
+        {
+            Assert.Equal(addressSize, new TypeLayout(Registry, Target(targetName)).SizeOf("PVOID").Size);
         }
 
         // The 8-byte scalars align to 8, not to the 4 bytes that would suffice
@@ -254,22 +274,38 @@ namespace xStunit.Interpreter.Tests.Conformance
                 Assert.True(instantiated.Contains(type), $"{type} is declared but never instantiated"));
         }
 
+        // The bare overload measures the 32-bit target, which is what every
+        // fixture whose numbers do not contain an address is measuring anyway.
         private static void AssertLayout(
-            string typeName, int expectedSize, params (string Field, int Offset, int Size)[] expectedFields)
+            string typeName, int expectedSize, params (string Field, int Offset, int Size)[] expectedFields) =>
+            AssertLayout(TargetPlatform.X86, typeName, expectedSize, expectedFields);
+
+        private static void AssertLayout(
+            TargetPlatform target,
+            string typeName,
+            int expectedSize,
+            params (string Field, int Offset, int Size)[] expectedFields)
         {
-            var actual = Placements(typeName)
+            var layout = new TypeLayout(Registry, target);
+            var actual = Placements(typeName, layout)
                 .Select(p => (p.Field.Name, p.Offset, p.Size))
                 .ToArray();
 
             Assert.Equal(expectedFields, actual);
-            Assert.Equal(expectedSize, Layout.SizeOf(typeName).Size);
+            Assert.Equal(expectedSize, layout.SizeOf(typeName).Size);
         }
 
-        private static IReadOnlyList<FieldPlacement> Placements(string typeName)
+        private static IReadOnlyList<FieldPlacement> Placements(string typeName, TypeLayout layout = null)
         {
             var structAst = Registry.GetStruct(typeName);
             Assert.NotNull(structAst);
-            return Layout.Fields(structAst).ToList();
+            return (layout ?? Layout).Fields(structAst).ToList();
+        }
+
+        private static TargetPlatform Target(string name)
+        {
+            Assert.True(TargetPlatform.TryParse(name, out var target), $"'{name}' is not a target platform");
+            return target;
         }
 
         private static IEnumerable<(string File, string DeclarationText)> DutDeclarations() =>

@@ -33,11 +33,14 @@ namespace xStunit.Interpreter.Conformance
         public static LayoutReport Compare(
             ModuleLayout module, IReadOnlyDictionary<string, string> sourceDeclarations)
         {
-            var useX64Widths = module.TargetPlatform != null &&
-                module.TargetPlatform.IndexOf("x64", StringComparison.OrdinalIgnoreCase) >= 0;
+            // The module names the machine it was compiled for, so a
+            // conformance run needs nothing from the user to compare like with
+            // like: the same target picks the declared width to read and the
+            // width xStunit computes.
+            var target = TargetPlatform.FromModuleTarget(module.TargetPlatform);
 
             var registry = BuildRegistry(module, sourceDeclarations);
-            var layout = new TypeLayout(registry);
+            var layout = new TypeLayout(registry, target);
 
             var findings = new List<LayoutFinding>();
             var comparedTypes = 0;
@@ -54,7 +57,7 @@ namespace xStunit.Interpreter.Conformance
 
                 var compared = type.Members.Count == 0
                     ? CompareTypeSize(layout, type, findings)
-                    : CompareStruct(layout, registry, type, useX64Widths, findings);
+                    : CompareStruct(layout, registry, type, target, findings);
                 if (compared.Reached)
                     comparedTypes++;
                 comparedMembers += compared.Members;
@@ -90,7 +93,7 @@ namespace xStunit.Interpreter.Conformance
             TypeLayout layout,
             TypeRegistry registry,
             DeclaredTypeLayout type,
-            bool useX64Widths,
+            TargetPlatform target,
             List<LayoutFinding> findings)
         {
             var structAst = registry.GetStruct(type.Name);
@@ -106,7 +109,7 @@ namespace xStunit.Interpreter.Conformance
                 if (declaredOffset != computedOffset)
                     findings.Add(LayoutFinding.MemberOffset(type.Name, member.Name, declaredOffset, computedOffset));
 
-                var declaredSize = DeclaredBits(member, useX64Widths);
+                var declaredSize = DeclaredBits(member, target);
                 var computedSize = placement.Size * BitsPerByte;
                 if (declaredSize != computedSize)
                     findings.Add(LayoutFinding.MemberSize(type.Name, member.Name, declaredSize, computedSize));
@@ -239,8 +242,8 @@ namespace xStunit.Interpreter.Conformance
 
         // A member whose width differs between targets carries both; which one
         // is real depends on what the module was compiled for.
-        private static int? DeclaredBits(DeclaredMemberLayout member, bool useX64Widths) =>
-            useX64Widths && member.BitSizeX64.HasValue ? member.BitSizeX64 : member.BitSize;
+        private static int? DeclaredBits(DeclaredMemberLayout member, TargetPlatform target) =>
+            target == TargetPlatform.X64 && member.BitSizeX64.HasValue ? member.BitSizeX64 : member.BitSize;
 
         // Why a declared type is outside what this comparison can say anything
         // about; null when it is fair game.

@@ -25,8 +25,8 @@ namespace xStunit.Cli
         public static int Run(string[] args, TextWriter output)
         {
             // A whole-array pre-scan rather than a branch in the parse loop
-            // below: --plugins, --format and --suite each consume the next
-            // token unconditionally as their value, so "xstunit --plugins
+            // below: --plugins, --format, --target and --suite each consume the
+            // next token unconditionally as their value, so "xstunit --plugins
             // --help" would swallow --help as a directory name. Exit 0 - an
             // explicitly requested action that succeeded, not a usage error.
             if (args.Any(a => string.Equals(a, "--help", StringComparison.OrdinalIgnoreCase) ||
@@ -37,6 +37,12 @@ namespace xStunit.Cli
             }
 
             var format = "text";
+            // The machine the code under test is built for, which decides how
+            // wide an address is wherever SIZEOF or a byte image sees one.
+            // Named rather than sniffed from the host running xstunit: the two
+            // are unrelated, and a run's answers must not change with the
+            // developer's laptop.
+            var targetName = TargetPlatform.Default.Name;
             var paths = new List<string>();
             var suiteFilters = new List<string>();
             string pluginDirectory = null;
@@ -80,6 +86,19 @@ namespace xStunit.Cli
                     }
                     format = args[++i];
                 }
+                else if (arg.StartsWith("--target=", StringComparison.OrdinalIgnoreCase))
+                {
+                    targetName = arg.Substring("--target=".Length);
+                }
+                else if (string.Equals(arg, "--target", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (i + 1 >= args.Length)
+                    {
+                        output.WriteLine("error: --target requires a value (x86|x64)");
+                        return 2;
+                    }
+                    targetName = args[++i];
+                }
                 else if (arg.StartsWith("--suite=", StringComparison.OrdinalIgnoreCase))
                 {
                     suiteFilters.Add(arg.Substring("--suite=".Length));
@@ -106,6 +125,12 @@ namespace xStunit.Cli
                 return 2;
             }
 
+            if (!TargetPlatform.TryParse(targetName, out var target))
+            {
+                output.WriteLine($"error: unknown --target value '{targetName}' (expected x86|x64)");
+                return 2;
+            }
+
             var asJson = string.Equals(format, "json", StringComparison.OrdinalIgnoreCase);
             args = paths.ToArray();
 
@@ -113,7 +138,7 @@ namespace xStunit.Cli
             {
                 // Flag names only: the descriptions live in --help rather than
                 // being duplicated on this error path.
-                output.WriteLine("usage: xstunit <path-to-POUs-directory> [<path-to-POUs-directory> ...] [--format text|json] [--suite <name>] [--plugins <dir>] [--coverage] [--stream]");
+                output.WriteLine("usage: xstunit <path-to-POUs-directory> [<path-to-POUs-directory> ...] [--format text|json] [--suite <name>] [--plugins <dir>] [--target x86|x64] [--coverage] [--stream]");
                 output.WriteLine("Run 'xstunit --help' for flag descriptions and examples.");
                 return 2;
             }
@@ -200,7 +225,7 @@ namespace xStunit.Cli
                     output.WriteLine($"plugin: {plugin}");
             }
 
-            var engine = new Engine(registry, nativeFunctions);
+            var engine = new Engine(registry, nativeFunctions, target);
             var anyFailed = false;
             var passCount = 0;
             var failCount = 0;
@@ -475,6 +500,11 @@ Options:
                         IXstunitNativeFunction, for compiled-only TwinCAT
                         library functions with no .TcPOU source (e.g.
                         Tc2_Utilities.F_CheckSum16).
+  --target x86|x64      Machine the code under test is compiled for, which
+                        is what makes a POINTER TO / REFERENCE TO 4 bytes or
+                        8 wherever SIZEOF or a byte image sees one. x86 is
+                        the default; nothing else in the layout rules differs
+                        between the two.
   --coverage            Additionally report which non-suite POUs are
                         exercised by a suite, and which have none. A work
                         list, not a gate - never affects the exit code.
@@ -501,6 +531,10 @@ Examples:
 
   xstunit ./Plc/POUs --plugins ./plugins/bin/Release/netstandard2.0
       Resolve compiled-only library calls via native-function plugins.
+
+  xstunit ./Plc/POUs --target x64
+      Size addresses as the 8 bytes a 64-bit runtime uses, for suites whose
+      results depend on a pointer's width.
 
   xstunit ./Plc/POUs --coverage
       List every non-suite POU with the suites exercising it; ""(none)""

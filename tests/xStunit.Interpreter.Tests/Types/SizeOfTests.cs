@@ -13,10 +13,14 @@ namespace xStunit.Interpreter.Tests
         private static (Engine Engine, FbInstance Instance, Frame Frame) NewHolder(
             string varBlock,
             IEnumerable<StructAst> structTypes = null,
-            IEnumerable<KeyValuePair<string, string>> aliases = null)
+            IEnumerable<KeyValuePair<string, string>> aliases = null,
+            TargetPlatform target = null)
         {
             var fb = new PouAst("FB_Holder", null, varBlock, "", new List<MethodAst>());
-            var engine = new Engine(new TypeRegistry(new[] { fb }, structTypes, aliases: aliases));
+            var engine = new Engine(
+                new TypeRegistry(new[] { fb }, structTypes, aliases: aliases),
+                null,
+                target ?? TargetPlatform.Default);
             var instance = engine.NewInstance("FB_Holder");
             return (engine, instance, new Frame(instance, "FB_Holder"));
         }
@@ -258,19 +262,39 @@ END_TYPE");
             Assert.Equal(4, result);
         }
 
-        // The void-pointer alias is the case the id above is not: the golden
-        // .tmc pair disagrees about its width, 32 bits on x86 and 64 on x64.
-        // Any fixed width would be right on one target and wrong on the other,
-        // so it is refused by name until a target platform can be picked.
-        [Fact]
-        public void SizeOf_VoidPointerAlias_IsRefusedRatherThanSizedAtOneTargetsWidth()
+        // The addresses are the case the id above is not: the golden .tmc pair
+        // disagrees about their width, 32 bits on x86 and 64 on x64, so any
+        // fixed answer would be right on one target and wrong on the other.
+        // The void pointer sizes with the spelled-out addresses beside it -
+        // naming no referent is what makes it an address, not something
+        // narrower.
+        [Theory]
+        [InlineData("x86", 4)]
+        [InlineData("x64", 8)]
+        public void SizeOf_AddressDeclarations_AreTheSelectedTargetsAddressWidth(
+            string targetName, int expectedBytes)
         {
-            var (engine, _, frame) = NewHolder("VAR\n\tp : PVOID;\nEND_VAR");
+            Assert.True(TargetPlatform.TryParse(targetName, out var target));
+            var (engine, _, frame) = NewHolder(
+                "VAR\n\tp : PVOID;\n\tq : POINTER TO LREAL;\n\tr : REFERENCE TO INT;\nEND_VAR", target: target);
 
-            var ex = Assert.Throws<NotSupportedException>(
-                () => engine.Evaluate(Parser.ParseExpression("SIZEOF(p)"), frame));
+            Assert.Equal(expectedBytes, engine.Evaluate(Parser.ParseExpression("SIZEOF(p)"), frame));
+            Assert.Equal(expectedBytes, engine.Evaluate(Parser.ParseExpression("SIZEOF(q)"), frame));
+            Assert.Equal(expectedBytes, engine.Evaluate(Parser.ParseExpression("SIZEOF(r)"), frame));
+        }
 
-            Assert.Contains("PVOID", ex.Message);
+        // An Engine built without a target is the one every other test here
+        // uses, so what it assumes is part of the layout contract rather than
+        // an implementation detail: 4-byte addresses, the width every SIZEOF
+        // answer xStunit has given so far was computed at.
+        [Fact]
+        public void SizeOf_AddressWithNoTargetSelected_IsTheDefaultTargetsAddressWidth()
+        {
+            var (engine, _, frame) = NewHolder("VAR\n\tp : POINTER TO LREAL;\nEND_VAR");
+
+            Assert.Equal(
+                TargetPlatform.Default.AddressSize,
+                engine.Evaluate(Parser.ParseExpression("SIZEOF(p)"), frame));
         }
 
         // {attribute 'pack_mode' := '1'} byte-packs a struct: no per-field

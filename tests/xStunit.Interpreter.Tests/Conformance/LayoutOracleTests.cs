@@ -69,26 +69,18 @@ namespace xStunit.Interpreter.Tests.Conformance
             Assert.True(report.ComparedMemberCount > 50, $"only {report.ComparedMemberCount} members were compared");
         }
 
-        // The same math on a 64-bit target does not: SizeOfType hardcodes a
-        // 4-byte pointer, so every pointer member is half the declared width
-        // and everything after it slides. Pinned as a known non-conformance -
-        // when a target-platform concept lands, this test is the one that
-        // should change.
+        // The same claim on the 64-bit build of the same solution, where every
+        // address is 8 bytes and displaces every member behind it. This module
+        // is where a 32-bit assumption left behind in the layout math surfaces:
+        // TwinCAT's own _Implicit_Task_Info alone carries four addresses and
+        // twenty members that slide if any one of them is sized at half width.
         [Fact]
-        public void Compare_X64Module_ReportsPointerMembersAsHalfWidth()
+        public void Compare_X64Module_AgreesWithTheCompilerOnEveryComparedMember()
         {
             var report = Compare(X64Module);
 
-            var pointerSizes = report.Mismatches
-                .Where(f => f.Kind == LayoutFindingKind.MemberSize)
-                .ToList();
-
-            Assert.NotEmpty(pointerSizes);
-            Assert.All(pointerSizes, f =>
-            {
-                Assert.Equal(64, f.DeclaredBits);
-                Assert.Equal(32, f.ComputedBits);
-            });
+            Assert.Empty(MismatchesAboutALayoutRule(report));
+            Assert.True(report.ComparedMemberCount > 50, $"only {report.ComparedMemberCount} members were compared");
         }
 
         // A union's members all sit at offset 0, and a .tmc marks one no
@@ -136,14 +128,16 @@ namespace xStunit.Interpreter.Tests.Conformance
 
         // Neither committed .tmc reaches a member carrying both widths - the one
         // that does sits behind a type name xStunit cannot size - so the choice
-        // between them is pinned against a hand-built module instead. Read the
-        // 32-bit value on a 64-bit target and every pointer silently "conforms"
-        // at half its real width, which is the one mistake this whole harness
-        // exists to make impossible.
+        // between them is pinned against a hand-built module instead. The
+        // module states a pointer at its target's own width, and so does the
+        // layout math, so reading the wrong one of the two declared widths
+        // reports a disagreement in either direction: read 32 on the 64-bit
+        // target and every pointer "conforms" at half its real width, which is
+        // the one mistake this whole harness exists to make impossible.
         [Theory]
         [InlineData("TwinCAT RT (x64)", 64)]
         [InlineData("TwinCAT RT (x86)", 32)]
-        public void Compare_MemberWithTwoWidths_ComparesTheOneTheTargetUses(string targetPlatform, int expectedDeclaredBits)
+        public void Compare_MemberWithTwoWidths_ComparesTheOneTheTargetUses(string targetPlatform, int declaredBits)
         {
             var member = new DeclaredMemberLayout(
                 "TComSrvPtr",
@@ -157,7 +151,7 @@ namespace xStunit.Interpreter.Tests.Conformance
                 bitOffset: 0);
             var type = new DeclaredTypeLayout(
                 "ST_Holder",
-                bitSize: 32,
+                bitSize: declaredBits,
                 baseTypeName: null,
                 baseTypeIsPointer: false,
                 arrayDimensions: new DeclaredArrayDimension[0],
@@ -167,16 +161,7 @@ namespace xStunit.Interpreter.Tests.Conformance
 
             var report = LayoutOracle.Compare(new ModuleLayout("Synthetic", targetPlatform, new[] { type }));
 
-            var sizes = report.Mismatches.Where(f => f.Kind == LayoutFindingKind.MemberSize).ToList();
-            if (expectedDeclaredBits == 32)
-            {
-                Assert.Empty(sizes);
-                return;
-            }
-
-            var finding = Assert.Single(sizes);
-            Assert.Equal(expectedDeclaredBits, finding.DeclaredBits);
-            Assert.Equal(32, finding.ComputedBits);
+            Assert.Empty(report.Mismatches);
         }
 
         private static string Normalize(string text) => text.Replace("\r\n", "\n");

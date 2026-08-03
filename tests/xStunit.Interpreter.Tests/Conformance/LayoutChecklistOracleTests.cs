@@ -97,32 +97,25 @@ namespace xStunit.Interpreter.Tests.Conformance
             Assert.True(report.ComparedMemberCount > 100, $"only {report.ComparedMemberCount} members were compared");
         }
 
-        // On a 64-bit target the only disagreements left are address widths -
-        // SizeOfType hardcodes 4 bytes - and every one of them is that same
-        // mistake rather than a second rule hiding behind it. Pinned as a known
-        // non-conformance: when a target-platform concept lands, this test is
-        // the one that should change.
-        //
-        // Every mismatched size is checked to be the half-width itself, and
-        // every mismatched type to be one that declares an address at all -
-        // without the second half, a genuinely new x64 disagreement arriving as
-        // a shifted offset or an inflated type size would pass unnoticed.
+        // The same claim on the 64-bit target, where every address is twice as
+        // wide and displaces everything behind it. The types carrying one are
+        // named rather than counted: they are the whole difference between the
+        // two modules, so a run that agreed everywhere except on them would
+        // still be agreeing about nothing this module was built to measure.
         [Fact]
-        public void Compare_X64Module_DisagreesOnlyAboutAddressWidth()
+        public void Compare_X64Module_AgreesWithTheCompilerOnEveryComparedMember()
         {
-            var mismatches = MismatchesAboutALayoutRule(Compare(X64Module)).ToList();
+            var report = Compare(X64Module);
             var typesDeclaringAnAddress = ParsedModule(X64Module).Types
                 .Where(t => t.BaseTypeIsPointer || t.Members.Any(m => m.IsPointer || m.IsReference))
                 .Select(t => t.Name)
-                .ToHashSet();
+                .ToList();
 
-            Assert.NotEmpty(mismatches);
-            Assert.All(mismatches, f => Assert.Contains(f.TypeName, typesDeclaringAnAddress));
-            Assert.All(mismatches.Where(f => f.Kind == LayoutFindingKind.MemberSize), f =>
-            {
-                Assert.Equal(64, f.DeclaredBits);
-                Assert.Equal(32, f.ComputedBits);
-            });
+            Assert.Empty(MismatchesAboutALayoutRule(report));
+            Assert.True(report.ComparedMemberCount > 100, $"only {report.ComparedMemberCount} members were compared");
+            Assert.All(
+                new[] { "ST_PointerWidth", "ST_ReferenceWidth", "AnyType", "_Implicit_Task_Info", "RTS_IEC_HANDLE" },
+                name => Assert.Contains(name, typesDeclaringAnAddress));
         }
 
         // The whole pointer-width rule as a single number, from identical
@@ -355,6 +348,27 @@ namespace xStunit.Interpreter.Tests.Conformance
 
             Assert.DoesNotContain(Compare(module).Findings,
                 f => f.TypeName == "U_ExpectedOrActual" || f.TypeName == "ST_AssertResult");
+        }
+
+        // TwinCAT's own argument record carries a void pointer, so refusing to
+        // size PVOID left T_Arg - and any code reading one - outside the
+        // comparison entirely. The compiler declares that member 32 bits on
+        // x86 and 64 on x64, which is what makes it an address rather than an
+        // alias of some fixed-width type, and what the whole record's size
+        // follows.
+        [Theory]
+        [InlineData(X86Module, 4, 12)]
+        [InlineData(X64Module, 8, 16)]
+        public void VoidPointer_IsTheTargetsAddressWidthRatherThanRefused(
+            string module, int addressSize, int typeSize)
+        {
+            AssertDeclaredLayout(module, "T_Arg", typeSize,
+                ("eType", 0, 2),
+                ("cbLen", 4, 4),
+                ("pData", 8, addressSize));
+
+            Assert.DoesNotContain(
+                Compare(module).Findings, f => f.Detail != null && f.Detail.Contains("PVOID"));
         }
 
         // The system-info types are TwinCAT's own, so a member of one that

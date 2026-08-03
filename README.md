@@ -66,6 +66,8 @@ The three non-assertion kinds are separated **structurally**, not stylistically:
 
 `unsupported-construct` is therefore deliberately **conservative**: it is claimed only where the throw site says so explicitly, never inferred from an exception's base type. The engine raises plain `NotSupportedException` for genuine defects in the code under test too (`Operator '<' is not supported between Int32 and String`), so anything that hasn't opted in reports as `plc-fault`. `parse-error` is the shrinking residue of that rule: the hand-rolled ST front end cannot tell syntax it doesn't implement from syntax that is simply wrong, so it claims neither and says so out loud. As the parser learns to recognize a construct by name, that construct is *promoted* out of `parse-error` into `unsupported-construct` — construct by construct, rather than by building a superset grammar up front.
 
+Pass `--target x86|x64` to say which machine the code under test is compiled for. It changes exactly one thing: how wide a `POINTER TO`, `REFERENCE TO` or `PVOID` is — 4 bytes or 8 — and so what `SIZEOF` reports for it and where every member behind one sits. The default is `x86`; a run whose results never touch an address is unaffected either way. Nothing sniffs the machine running `xstunit`: the host and the PLC target are unrelated, and a run's answers must not change with the developer's laptop.
+
 Pass `--coverage` to additionally list every non-suite POU with the suites exercising it, in both formats. The entries with no suites are the useful ones — a next-task list ("write a suite for `F_ComputeChecksum`"). Association is by direct textual reference from a suite; it's a report, never a gate, and doesn't affect the exit code.
 
 ## Limits

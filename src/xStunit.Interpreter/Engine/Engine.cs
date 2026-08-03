@@ -35,14 +35,28 @@ namespace xStunit.Interpreter
         // constructor, so the dispatch site needs no null check of its own.
         private readonly Extensibility.NativeFunctionRegistry _nativeFunctions;
 
+        // The machine the code under test is compiled for, which only the
+        // layout rules read: it is what makes an address 4 bytes or 8, and so
+        // what SIZEOF and the MEMCPY byte image answer.
+        private readonly TargetPlatform _target;
+
         public Engine(TypeRegistry registry)
-            : this(registry, null)
+            : this(registry, null, TargetPlatform.Default)
         {
         }
 
+        // Leaves the target at TargetPlatform.Default; a caller that knows
+        // which machine the code is for says so through the overload below.
         public Engine(TypeRegistry registry, Extensibility.NativeFunctionRegistry nativeFunctions)
+            : this(registry, nativeFunctions, TargetPlatform.Default)
+        {
+        }
+
+        public Engine(
+            TypeRegistry registry, Extensibility.NativeFunctionRegistry nativeFunctions, TargetPlatform target)
         {
             _registry = registry;
+            _target = target;
             _nativeFunctions = nativeFunctions ?? new Extensibility.NativeFunctionRegistry();
 
             // Every GVL's Cells are allocated and registered in _globals

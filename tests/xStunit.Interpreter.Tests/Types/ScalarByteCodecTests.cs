@@ -10,7 +10,7 @@ namespace xStunit.Interpreter.Tests
     // rules have leaked back into the interpreter they were pulled out of.
     public class ScalarByteCodecTests
     {
-        private static readonly TypeLayout Layout = new TypeLayout(new TypeRegistry(Array.Empty<PouAst>()));
+        private static readonly TypeLayout Layout = new TypeLayout(new TypeRegistry(Array.Empty<PouAst>()), TargetPlatform.Default);
 
         // A value pack writes and unpack reads back unchanged, in the CLR shape
         // the rest of the interpreter holds that IEC type in. Widening or

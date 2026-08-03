@@ -79,8 +79,8 @@ format-agnostic parsing they do not deliver. The prohibition targets
 extend past the format boundary: a type that merely works with data loaded from
 a `.Tc*` file, rather than parsing the format itself, takes a domain name.
 Types that are ours rather than Beckhoff's take the `Xstunit` token instead
-(`XstunitLog`,
-`IXstunitNativeFunction`) — capital `X` in PascalCase identifiers, the
+(`XstunitLog`, `IXstunitNativeFunction`) — capital `X` in PascalCase
+identifiers, the
 stylized lowercase `xStunit` only in namespaces and the CLI name.
 
 This section is the full rule. `CLAUDE.md` and `AGENTS.md` carry the

@@ -6,8 +6,8 @@
     in for compiled-only TwinCAT library functions, across the three call
     shapes that matter:
 
-      - through a global FUNCTION wrapper, whose frame has no FB instance
-        (the shape that used to throw a bare NullReferenceException)
+      - through a global FUNCTION wrapper, whose frame has no FB instance,
+        so an unresolved call there has nothing to dereference
       - called directly from a METHOD body, where the frame does have one
       - a non-pointer signature, to show the boundary isn't checksum-specific
 

@@ -19,9 +19,11 @@ must obey it:
 **Do NOT reuse the `Tc`/`TC` namespace or Beckhoff's naming conventions
 (`Tc2_*`, `TcPOU`, `Tc*` prefixes) in any NEW identifier** — namespace, project,
 class, file, CLI flag, or config key. Name after the IEC 61131-3 or domain
-concept instead (`BistableLatchHost`, not `TcBistableHost`). The `.TcPOU`
-file-format parsers (`TcPouParser` and siblings) keep their prefix by decision
-and are not to be renamed. Full rule and reasoning:
+concept instead (`BistableLatchHost`, not `TcBistableHost`). TwinCAT's own
+file-format extensions are exempt — `.TcPOU`, `.TcDUT`, `.TcGVL`, `.TcIO` and
+any other `.Tc*` extension TwinCAT defines — as are the parsers that read them
+(`TcPouParser` and siblings), which are not to be renamed. Full rule and
+reasoning:
 [docs/CODING_STANDARDS.md](docs/CODING_STANDARDS.md#naming).
 
 ## Non-Interactive Shell Commands

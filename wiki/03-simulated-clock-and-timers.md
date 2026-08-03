@@ -25,8 +25,14 @@ AdvanceClock(LTIME#1us500ns);
 
 A suite can therefore advance time and observe a TON/TOF fire without a C#
 harness stepping in between `StepCycles` calls — see
-`FB_DigitalInputTests.TcPOU`'s `RisingEdgeSettlesExactlyAtDebounceTime` and
-neighbors.
+`FB_DigitalInputTimingTests.TcPOU`'s `RisingEdgeSettlesExactlyAtDebounceTime`
+and neighbors.
+
+TwinCAT has no `AdvanceClock`, so a suite that calls it no longer compiles on
+the target. Any fixture whose verdicts are meant to be diffed against a real
+TwinCAT run therefore has to keep clear of it — that is why the miniload
+sensor fixture carries two suites, `FB_DigitalInputTests` (portable) and
+`FB_DigitalInputTimingTests` (xStunit only).
 
 ## TON / TOF / TP (`FB_Pulse`) and LTON / LTOF / LTP
 

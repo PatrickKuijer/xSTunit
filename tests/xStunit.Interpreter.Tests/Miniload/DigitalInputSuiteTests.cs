@@ -32,11 +32,6 @@ namespace xStunit.Interpreter.Tests
                     "DebounceHoldsARisingEdgeUntilItsWindowCloses",
                     "DebounceHoldsAFallingEdgeUntilItsWindowCloses",
                     "SnapshotMirrorsThePublishedState",
-                    "RisingEdgeSettlesExactlyAtDebounceTime",
-                    "FallingEdgeReleasesExactlyAtDebounceTime",
-                    "GlitchShorterThanDebounceTimeNeverSettlesAndRestartsTheWindow",
-                    "TimeActiveMetersTheCurrentStretchAndBothMetersSwapOnATransition",
-                    "ElapsedMetersFollowTheSettledStateNotTheUnfilteredLevel",
                 },
                 results.Select(r => r.Name));
         }

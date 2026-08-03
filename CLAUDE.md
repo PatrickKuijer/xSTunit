@@ -118,11 +118,17 @@ stale comment is worse than no comment, and a deleted one can't rot.
 **`///` is for the public API surface; everything else stays `//`.** A type or
 member ships XML doc when code outside its own project can call it: the plugin
 contract in `xStunit.Interpreter/Extensibility`, the native-stub boundary in
-`xStunit.Runner`, the loader entry points in `xStunit.Parser`. Internals of
-those projects — and all of `xStunit.Interpreter` outside `Extensibility/` —
-keep `//` and are not converted. `Directory.Build.props` suppresses CS1591 so
-that partial coverage is the intended state, not a warning wall to chip away
-at. Never mass-promote `//` to `///` to close the gap.
+`xStunit.Runner`, the loader entry points in `xStunit.Parser`, and
+`src/xStunit.Vsix/TestRunner` — those types cross into
+`tests/xStunit.Vsix.Tests` by source-link, a real consumer outside the file,
+and they carry the CLI wire contract the VSIX parses out-of-process. The rest
+of `src/xStunit.Vsix` is not named here and stays on `//`. Internals of those
+projects — and all of `xStunit.Interpreter` outside `Extensibility/` — keep
+`//` and are not converted. `Directory.Build.props` suppresses CS1591 so that
+partial coverage is the intended state, not a warning wall to chip away at.
+Never mass-promote `//` to `///` to close the gap — and never mass-demote an
+established folder back either; that is the same churn in the other
+direction.
 
 **XML doc `<summary>` only when it adds information beyond the signature.**
 Skip it entirely for a member whose name and type already say everything (a

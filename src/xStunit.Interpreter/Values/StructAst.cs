@@ -14,7 +14,7 @@ namespace xStunit.Interpreter
         // header: a cap, in bytes, on the alignment any field may impose, so
         // pack_mode 1 byte-packs the struct entirely. 0 means no pragma was
         // present and each field keeps its natural alignment. Consumed by
-        // Engine.SizeOf.cs and Engine.ByteLayout.cs.
+        // TypeLayout.PackBound.
         public int PackMode { get; }
 
         // A UNION overlays its fields: every one starts at offset 0, and the

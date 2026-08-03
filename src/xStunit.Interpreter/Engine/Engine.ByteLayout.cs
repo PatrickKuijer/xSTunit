@@ -1,5 +1,4 @@
 using System;
-using System.Linq;
 
 namespace xStunit.Interpreter
 {
@@ -49,15 +48,15 @@ namespace xStunit.Interpreter
                 var outBytes = new byte[size];
                 for (var i = 0; i < size; i++)
                     outBytes[i] = (byte)(int)view.Elements[i];
-                cell.Value = UnpackValue(outBytes, 0, typeName, frame);
+                cell.Value = LayoutFor(frame).Unpack(outBytes, 0, typeName);
             }
 
             return (view, 0, Commit);
         }
 
         // Packs aec's whole underlying ArrayValue into a fresh BYTE-array view,
-        // elements laid a uniform elementSize apart to match PackValue's own
-        // ARRAY branch - no inter-element padding, only intra-element
+        // elements laid a uniform elementSize apart to match the layout module's
+        // own ARRAY stride - no inter-element padding, only intra-element
         // struct-field alignment - and maps aec.Index from an element index to
         // the byte offset of that element's first byte.
         //
@@ -66,14 +65,15 @@ namespace xStunit.Interpreter
         // still have to get the mutated bytes back into the real elements.
         private (ArrayValue Array, int Index, Action Commit) ResolveArrayByteTarget(ArrayElementCell aec, Frame frame)
         {
+            var layout = LayoutFor(frame);
             var elementTypeName = aec.Array.ElementTypeName;
-            var (elementSize, _) = SizeOfType(elementTypeName, frame);
+            var (elementSize, _) = layout.SizeOf(elementTypeName);
             var elementCount = aec.Array.Elements.Length;
             var totalSize = elementCount * elementSize;
 
             var bytes = new byte[totalSize];
             for (var i = 0; i < elementCount; i++)
-                PackValue(bytes, i * elementSize, aec.Array.Elements[i], elementTypeName, frame);
+                layout.Pack(bytes, i * elementSize, aec.Array.Elements[i], elementTypeName);
 
             var elements = new object[totalSize];
             for (var i = 0; i < totalSize; i++)
@@ -87,7 +87,7 @@ namespace xStunit.Interpreter
                 for (var i = 0; i < totalSize; i++)
                     outBytes[i] = (byte)(int)elements[i];
                 for (var i = 0; i < elementCount; i++)
-                    aec.Array.Elements[i] = UnpackValue(outBytes, i * elementSize, elementTypeName, frame);
+                    aec.Array.Elements[i] = layout.Unpack(outBytes, i * elementSize, elementTypeName);
             }
 
             return (view, aec.Index * elementSize, Commit);
@@ -102,105 +102,17 @@ namespace xStunit.Interpreter
         // always reflects x's current live value instead of a stale snapshot.
         private (ArrayValue View, int Size) PackCellToByteView(Cell cell, string typeName, Frame frame)
         {
-            var (size, _) = SizeOfType(typeName, frame);
+            var layout = LayoutFor(frame);
+            var (size, _) = layout.SizeOf(typeName);
 
             var bytes = new byte[size];
-            PackValue(bytes, 0, cell.Value, typeName, frame);
+            layout.Pack(bytes, 0, cell.Value, typeName);
 
             var elements = new object[size];
             for (var i = 0; i < size; i++)
                 elements[i] = (int)bytes[i];
 
             return (new ArrayValue(new[] { (0, size - 1) }, "BYTE", elements, Cell.Unbounded), size);
-        }
-
-        // Writes value (already known to be of IEC type typeName) into
-        // buffer at offset, byte-for-byte, using the same natural-alignment
-        // struct/array layout SizeOfType computes. Grow-on-demand: only the
-        // scalar/STRUCT/ARRAY/STRING shapes SizeOfType itself understands are
-        // supported here; POINTER/REFERENCE byte-packing isn't modeled yet
-        // (no fixture needs it).
-        private void PackValue(byte[] buffer, int offset, object value, string typeName, Frame frame)
-        {
-            var resolved = _registry.ResolveAlias(typeName);
-
-            if (LayoutFor(frame).TryPackScalar(buffer, offset, value, resolved))
-                return;
-
-            var structAst = _registry.GetStruct(resolved);
-            if (structAst != null)
-            {
-                var instance = (StructInstance)value;
-                foreach (var placement in LayoutFor(frame).Fields(structAst))
-                {
-                    var field = placement.Field;
-                    PackValue(buffer, offset + placement.Offset, instance.Fields[field.Name].Value, field.TypeName, frame);
-                }
-                return;
-            }
-
-            if (ArrayTypeInfo.IsArrayType(resolved))
-            {
-                var (dimensions, elementTypeName) = ArrayTypeInfo.Parse(
-                    resolved, boundText => Convert.ToInt32(Evaluate(Parser.ParseExpression(boundText), frame)));
-                var count = dimensions.Aggregate(1, (acc, d) => acc * (d.Hi - d.Lo + 1));
-                var (elementSize, _) = SizeOfType(elementTypeName, frame);
-                var array = (ArrayValue)value;
-                for (var i = 0; i < count; i++)
-                    PackValue(buffer, offset + i * elementSize, array.Elements[i], elementTypeName, frame);
-                return;
-            }
-
-            if (LayoutFor(frame).TryPackString(buffer, offset, value, resolved))
-                return;
-
-            throw new NotSupportedException(
-                $"MEMCPY/MEMSET/MEMMOVE byte-packing doesn't support type '{resolved}' yet");
-        }
-
-        // Inverse of PackValue: reconstructs a CLR value of the CLR shape
-        // IecNumericType/DefaultValue use for typeName from buffer at
-        // offset.
-        private object UnpackValue(byte[] buffer, int offset, string typeName, Frame frame)
-        {
-            var resolved = _registry.ResolveAlias(typeName);
-
-            if (LayoutFor(frame).TryUnpackScalar(buffer, offset, resolved, out var scalar))
-                return scalar;
-
-            var structAst = _registry.GetStruct(resolved);
-            if (structAst != null)
-            {
-                var instance = new StructInstance(resolved);
-                foreach (var placement in LayoutFor(frame).Fields(structAst))
-                {
-                    var field = placement.Field;
-                    instance.Fields[field.Name] = NewDeclaredCell(
-                        UnpackValue(buffer, offset + placement.Offset, field.TypeName, frame),
-                        field.TypeName,
-                        frame.Instance);
-                }
-                return instance;
-            }
-
-            if (ArrayTypeInfo.IsArrayType(resolved))
-            {
-                var (dimensions, elementTypeName) = ArrayTypeInfo.Parse(
-                    resolved, boundText => Convert.ToInt32(Evaluate(Parser.ParseExpression(boundText), frame)));
-                var count = dimensions.Aggregate(1, (acc, d) => acc * (d.Hi - d.Lo + 1));
-                var (elementSize, _) = SizeOfType(elementTypeName, frame);
-                var elements = new object[count];
-                for (var i = 0; i < count; i++)
-                    elements[i] = UnpackValue(buffer, offset + i * elementSize, elementTypeName, frame);
-                return new ArrayValue(
-                    dimensions, elementTypeName, elements, ResolveStringCapacity(elementTypeName, frame.Instance));
-            }
-
-            if (LayoutFor(frame).TryUnpackString(buffer, offset, resolved, out var text))
-                return text;
-
-            throw new NotSupportedException(
-                $"MEMCPY/MEMSET/MEMMOVE byte-unpacking doesn't support type '{resolved}' yet");
         }
     }
 }

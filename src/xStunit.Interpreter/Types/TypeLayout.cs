@@ -106,6 +106,36 @@ namespace xStunit.Interpreter
                     : NarrowStringByte.ToChar(buffer[offset]);
         }
 
+        // The wire format of one declared ARRAY: how many elements its
+        // dimensions span and how far apart consecutive elements sit. Count
+        // states the fold over the declared spans once, so sizing an array and
+        // walking its elements cannot disagree about how many there are, and
+        // the stride is the element's whole declared size - an element's own
+        // trailing padding lies inside the array, never between its elements.
+        private readonly struct ArrayShape
+        {
+            public ArrayShape(
+                IReadOnlyList<(int Lo, int Hi)> dimensions, string elementTypeName, int elementSize, int elementAlign)
+            {
+                Dimensions = dimensions;
+                ElementTypeName = elementTypeName;
+                ElementSize = elementSize;
+                ElementAlign = elementAlign;
+            }
+
+            public IReadOnlyList<(int Lo, int Hi)> Dimensions { get; }
+
+            public string ElementTypeName { get; }
+
+            public int ElementSize { get; }
+
+            public int ElementAlign { get; }
+
+            public int Count => Dimensions.Aggregate(1, (acc, d) => acc * (d.Hi - d.Lo + 1));
+
+            public int OffsetOf(int index) => index * ElementSize;
+        }
+
         private static readonly IReadOnlyDictionary<string, ScalarShape> Scalars = BuildScalars();
 
         // Types that differ only in signedness or in the domain they name share
@@ -203,10 +233,8 @@ namespace xStunit.Interpreter
 
             if (ArrayTypeInfo.IsArrayType(resolved))
             {
-                var (dimensions, elementTypeName) = ArrayTypeInfo.Parse(resolved, _resolveBound);
-                var count = dimensions.Aggregate(1, (acc, d) => acc * (d.Hi - d.Lo + 1));
-                var (elementSize, elementAlign) = SizeOf(elementTypeName);
-                return (count * elementSize, elementAlign);
+                var shape = ShapeOfArray(resolved);
+                return (shape.Count * shape.ElementSize, shape.ElementAlign);
             }
 
             var structAst = _registry.GetStruct(resolved);
@@ -225,6 +253,102 @@ namespace xStunit.Interpreter
                 return (scalar.Size, scalar.Size);
 
             throw new NotSupportedException($"SIZEOF() doesn't know the byte size of type '{typeName}'");
+        }
+
+        // Writes value, already known to be of IEC type typeName, into buffer at
+        // offset in the layout SizeOf measures - recursing into a STRUCT's
+        // fields and an ARRAY's elements, and reaching the scalar and string
+        // codecs at the leaves.
+        //
+        // Only the declared fields and elements are written. A struct's padding
+        // has no storage behind it, so those bytes keep whatever the buffer
+        // already held; callers wanting a whole-type image start from a zeroed
+        // buffer.
+        //
+        // Grow-on-demand: POINTER/REFERENCE byte-packing is not modeled (no
+        // fixture needs it), and a shape with no wire format is refused by name
+        // rather than skipped, so an unpackable field cannot leave a
+        // half-written image behind.
+        public void Pack(byte[] buffer, int offset, object value, string typeName)
+        {
+            var resolved = _registry.ResolveAlias(typeName);
+
+            if (TryPackScalar(buffer, offset, value, resolved))
+                return;
+
+            var structAst = _registry.GetStruct(resolved);
+            if (structAst != null)
+            {
+                var instance = (StructInstance)value;
+                foreach (var placement in Fields(structAst))
+                {
+                    var field = placement.Field;
+                    Pack(buffer, offset + placement.Offset, instance.Fields[field.Name].Value, field.TypeName);
+                }
+                return;
+            }
+
+            if (ArrayTypeInfo.IsArrayType(resolved))
+            {
+                var shape = ShapeOfArray(resolved);
+                var array = (ArrayValue)value;
+                for (var i = 0; i < shape.Count; i++)
+                    Pack(buffer, offset + shape.OffsetOf(i), array.Elements[i], shape.ElementTypeName);
+                return;
+            }
+
+            if (TryPackString(buffer, offset, value, resolved))
+                return;
+
+            throw new NotSupportedException(
+                $"MEMCPY/MEMSET/MEMMOVE byte-packing doesn't support type '{resolved}' yet");
+        }
+
+        // Inverse of Pack: reconstructs a CLR value of the CLR shape
+        // IecNumericType/DefaultValue use for typeName from buffer at offset.
+        // The Cells and ArrayValue a composite is rebuilt into carry the
+        // declared type and its STRING capacity, so a value that survives a byte
+        // round trip is still as bounded as its declaration made it.
+        public object Unpack(byte[] buffer, int offset, string typeName)
+        {
+            var resolved = _registry.ResolveAlias(typeName);
+
+            if (TryUnpackScalar(buffer, offset, resolved, out var scalar))
+                return scalar;
+
+            var structAst = _registry.GetStruct(resolved);
+            if (structAst != null)
+            {
+                var instance = new StructInstance(resolved);
+                foreach (var placement in Fields(structAst))
+                {
+                    var field = placement.Field;
+                    instance.Fields[field.Name] = new Cell
+                    {
+                        Value = Unpack(buffer, offset + placement.Offset, field.TypeName),
+                        DeclaredTypeName = field.TypeName,
+                        StringCapacity = StringCapacityOf(field.TypeName),
+                    };
+                }
+                return instance;
+            }
+
+            if (ArrayTypeInfo.IsArrayType(resolved))
+            {
+                var shape = ShapeOfArray(resolved);
+                var elements = new object[shape.Count];
+                for (var i = 0; i < elements.Length; i++)
+                    elements[i] = Unpack(buffer, offset + shape.OffsetOf(i), shape.ElementTypeName);
+
+                return new ArrayValue(
+                    shape.Dimensions, shape.ElementTypeName, elements, StringCapacityOf(shape.ElementTypeName));
+            }
+
+            if (TryUnpackString(buffer, offset, resolved, out var text))
+                return text;
+
+            throw new NotSupportedException(
+                $"MEMCPY/MEMSET/MEMMOVE byte-unpacking doesn't support type '{resolved}' yet");
         }
 
         // Writes value into buffer at offset when typeName is a scalar (BOOL
@@ -317,6 +441,34 @@ namespace xStunit.Interpreter
 
         private StringShape ShapeOfString(string resolvedTypeName) =>
             new StringShape(ParseStringLength(resolvedTypeName), StringTypeInfo.CharWidth(resolvedTypeName));
+
+        private ArrayShape ShapeOfArray(string resolvedTypeName)
+        {
+            var (dimensions, elementTypeName) = ArrayTypeInfo.Parse(resolvedTypeName, _resolveBound);
+            var (elementSize, elementAlign) = SizeOf(elementTypeName);
+            return new ArrayShape(dimensions, elementTypeName, elementSize, elementAlign);
+        }
+
+        // The capacity a STRING/WSTRING declaration imposes on the slot its
+        // value is unpacked back into. A size whose constants have no value yet
+        // leaves the slot unbounded rather than sinking the unpack, for the same
+        // reason the declaration itself was seated unbounded: a GVL constant has
+        // no value until the constants converge.
+        private int StringCapacityOf(string typeName)
+        {
+            var resolved = _registry.ResolveAlias(typeName);
+            if (!StringTypeInfo.IsStringType(resolved))
+                return Cell.Unbounded;
+
+            try
+            {
+                return StringTypeInfo.CapacityOf(ParseStringLength(resolved));
+            }
+            catch (InvalidOperationException)
+            {
+                return Cell.Unbounded;
+            }
+        }
 
         // Each field's placement inside structAst, in declaration order.
         public IEnumerable<FieldPlacement> Fields(StructAst structAst) =>

@@ -1,5 +1,5 @@
 module PLC target TwinCAT RT (x64)
-compared 58 of 94 declared types, 180 members
+compared 59 of 94 declared types, 199 members
 sizes and offsets in bits
 NotCompared TOF function block instance layout is not modeled
 NotCompared I_TestResults neither members nor a base type declared
@@ -42,8 +42,9 @@ MemberSize ST_ReferenceWidth.target declared=64 computed=32
 MemberOffset ST_ReferenceWidth.trailer declared=128 computed=64
 TypeSize ST_ReferenceWidth declared=192 computed=96
 Unsupported ST_BitPacking.firstBit SIZEOF() doesn't know the byte size of type 'BIT'
-Unsupported PlcAppSystemInfo.ObjId SIZEOF() doesn't know the byte size of type 'OTCID'
-Unsupported PlcTaskSystemInfo.ObjId SIZEOF() doesn't know the byte size of type 'OTCID'
+Unsupported PlcAppSystemInfo.AppTimestamp SIZEOF() doesn't know the byte size of type 'DT'
+MemberOffset PlcTaskSystemInfo.TaskName declared=512 computed=256
+TypeSize PlcTaskSystemInfo declared=1024 computed=768
 MemberOffset _Implicit_Task_Info.pszName declared=64 computed=32
 MemberSize _Implicit_Task_Info.pszName declared=64 computed=32
 MemberOffset _Implicit_Task_Info.nPriority declared=128 computed=64

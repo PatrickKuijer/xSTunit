@@ -82,13 +82,20 @@ namespace xStunit.Interpreter
             var current = typeName;
             for (var i = 0; i < MaxAliasChainDepth; i++)
             {
-                if (current == null || !_aliases.TryGetValue(current, out var underlying))
+                if (current == null || !TryResolveOneStep(current, out var underlying))
                     return current;
                 current = underlying;
             }
 
             return current;
         }
+
+        // A parsed ALIAS outranks a vendor one of the same name: sources we
+        // loaded describe the code under test, the builtin table only fills in
+        // for a library we never see.
+        private bool TryResolveOneStep(string typeName, out string underlying) =>
+            _aliases.TryGetValue(typeName, out underlying)
+            || BuiltinAliases.TryGetUnderlyingType(typeName, out underlying);
 
         public StructAst GetStruct(string name) => _structTypes.TryGetValue(name, out var structType) ? structType : null;
 

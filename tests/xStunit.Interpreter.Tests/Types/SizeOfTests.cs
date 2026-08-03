@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using xStunit.Interpreter;
 using xStunit.Parser;
@@ -239,6 +240,37 @@ END_TYPE");
             var result = engine.Evaluate(Parser.ParseExpression("SIZEOF(d)"), frame);
 
             Assert.Equal(4, result);
+        }
+
+        // An object-type-class id is four bytes on every target - both golden
+        // .tmc modules declare PlcAppSystemInfo.ObjId at 32 bits, the x86 build
+        // and the x64 one alike - so it is sizable without knowing which target
+        // the code is built for, unlike the void pointer below.
+        [Theory]
+        [InlineData("SIZEOF(id)")]
+        [InlineData("SIZEOF(OTCID)")]
+        public void SizeOf_ObjectTypeClassId_IsFourBytesWithoutKnowingTheTarget(string expression)
+        {
+            var (engine, _, frame) = NewHolder("VAR\n\tid : OTCID;\nEND_VAR");
+
+            var result = engine.Evaluate(Parser.ParseExpression(expression), frame);
+
+            Assert.Equal(4, result);
+        }
+
+        // The void-pointer alias is the case the id above is not: the golden
+        // .tmc pair disagrees about its width, 32 bits on x86 and 64 on x64.
+        // Any fixed width would be right on one target and wrong on the other,
+        // so it is refused by name until a target platform can be picked.
+        [Fact]
+        public void SizeOf_VoidPointerAlias_IsRefusedRatherThanSizedAtOneTargetsWidth()
+        {
+            var (engine, _, frame) = NewHolder("VAR\n\tp : PVOID;\nEND_VAR");
+
+            var ex = Assert.Throws<NotSupportedException>(
+                () => engine.Evaluate(Parser.ParseExpression("SIZEOF(p)"), frame));
+
+            Assert.Contains("PVOID", ex.Message);
         }
 
         // {attribute 'pack_mode' := '1'} byte-packs a struct: no per-field

@@ -34,6 +34,10 @@ TwinCAT run therefore has to keep clear of it — that is why the miniload
 sensor fixture carries two suites, `FB_DigitalInputTests` (portable) and
 `FB_DigitalInputTimingTests` (xStunit only).
 
+`PilotSetPortabilityTests` enforces that split: it scans every `.TcPOU` in the
+miniload fixtures for a call to an intrinsic with no TwinCAT counterpart and
+fails if one turns up outside a POU declared xStunit-only.
+
 ## TON / TOF / TP (`FB_Pulse`) and LTON / LTOF / LTP
 
 Declared and called exactly like a real TwinCAT timer FB — no special

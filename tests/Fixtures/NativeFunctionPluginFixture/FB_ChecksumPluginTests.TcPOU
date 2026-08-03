@@ -2,13 +2,12 @@
 <TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4026.18">
   <POU Name="FB_ChecksumPluginTests" Id="{a1b2c3d4-6k20-4a1a-8b1b-000000000010}" SpecialFunc="None">
     <Declaration><![CDATA[(*
-    TcXunit interpreter fixture (TcXunit-6k2). Exercises host-registered
-    native functions standing in for compiled-only TwinCAT library functions,
-    across the three call shapes that matter:
+    Interpreter fixture. Exercises host-registered native functions standing
+    in for compiled-only TwinCAT library functions, across the three call
+    shapes that matter:
 
       - through a global FUNCTION wrapper, whose frame has no FB instance
-        (the shape that used to throw a bare NullReferenceException,
-        TcXunit-kii)
+        (the shape that used to throw a bare NullReferenceException)
       - called directly from a METHOD body, where the frame does have one
       - a non-pointer signature, to show the boundary isn't checksum-specific
 

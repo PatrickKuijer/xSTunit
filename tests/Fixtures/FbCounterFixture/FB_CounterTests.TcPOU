@@ -2,10 +2,9 @@
 <TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4026.18">
   <POU Name="FB_CounterTests" Id="{a1b2c3d4-0003-4a1a-8b1b-000000000001}" SpecialFunc="None">
     <Declaration><![CDATA[(*
-    TcXunit interpreter fixture (TcXunit-w5x.8). TcUnit-style suite exercising
-    the interpreter's native-stub TEST()/TEST_FINISHED()/AssertTrue/
-    AssertEquals_INT surface (TcXunit-w5x.7) against FB_Counter and
-    FB_ClampedCounter.
+    Interpreter fixture. TcUnit-style suite exercising the interpreter's
+    native-stub TEST()/TEST_FINISHED()/AssertTrue/AssertEquals_INT surface
+    against FB_Counter and FB_ClampedCounter.
 *)
 FUNCTION_BLOCK FB_CounterTests EXTENDS TcUnit.FB_TestSuite]]></Declaration>
     <Implementation>

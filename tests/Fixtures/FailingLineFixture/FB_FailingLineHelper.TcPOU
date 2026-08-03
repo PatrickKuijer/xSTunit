@@ -2,10 +2,10 @@
 <TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4026.18">
   <POU Name="FB_FailingLineHelper" Id="{c4d5e6f7-0004-4a1a-8b1b-000000000001}" SpecialFunc="None">
     <Declaration><![CDATA[(*
-    TcXunit interpreter fixture (TcXunit-p3t.4). Faults from a deliberately
-    NOT-first line of a METHOD body, several lines into a file whose ST
-    element is nowhere near line 1, so a failure log that forgets
-    BodyStartLine - or adds it naively and lands one line off - is caught.
+    Interpreter fixture. Faults from a deliberately NOT-first line of a
+    METHOD body, several lines into a file whose ST element is nowhere near
+    line 1, so a failure log that forgets BodyStartLine - or adds it naively
+    and lands one line off - is caught.
 *)
 FUNCTION_BLOCK FB_FailingLineHelper]]></Declaration>
     <Implementation>

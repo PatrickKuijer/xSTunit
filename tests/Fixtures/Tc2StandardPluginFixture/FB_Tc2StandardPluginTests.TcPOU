@@ -2,17 +2,15 @@
 <TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4026.18">
   <POU Name="FB_Tc2StandardPluginTests" Id="{a1b2c3d4-8po0-4a1a-8b1b-000000000010}" SpecialFunc="None">
     <Declaration><![CDATA[(*
-    TcXunit interpreter fixture (TcXunit-8po). Exercises the Tc2_Standard
-    string functions (DELETE, FIND, INSERT, LEFT, LEN, MID, REPLACE, RIGHT)
-    resolving through the native-function plugin/registry path
+    Interpreter fixture. Exercises the Tc2_Standard string functions (DELETE,
+    FIND, INSERT, LEFT, LEN, MID, REPLACE, RIGHT) resolving through the
+    native-function plugin/registry path
     (samples/xStunit.StandardStringPlugins), not a built-in intrinsic.
 
-    CONCAT is deliberately not covered here: TcXunit-3lt already added it as
-    an interpreter intrinsic (variadic STR1..STR10) two days before this epic
-    was filed, with its own test suite (ConcatIntrinsicTests.cs). TcXunit-8po.1
-    was closed as already-resolved rather than shadowed with an unreachable
-    plugin - native functions are consulted only as a last resort, after
-    intrinsics, so a plugin CONCAT would never fire.
+    CONCAT is deliberately not covered here: it is already an interpreter
+    intrinsic (variadic STR1..STR10) with its own test suite
+    (ConcatIntrinsicTests.cs). Native functions are consulted only as a last
+    resort, after intrinsics, so a plugin CONCAT would never fire.
 *)
 FUNCTION_BLOCK FB_Tc2StandardPluginTests EXTENDS TcUnit.FB_TestSuite]]></Declaration>
     <Implementation>

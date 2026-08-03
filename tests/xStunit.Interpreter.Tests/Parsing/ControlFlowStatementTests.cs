@@ -312,6 +312,38 @@ namespace xStunit.Interpreter.Tests
             Assert.Equal(0, frame.Locals["result"].Value);
         }
 
+        [Fact]
+        public void ParseStatements_BareSemicolonAsCaseElseBody_ProducesNoOpStmt()
+        {
+            var stmts = Parser.ParseStatements(
+                "CASE selector OF\n" +
+                "1: result := 10;\n" +
+                "ELSE\n" +
+                "; // intentionally not handled\n" +
+                "END_CASE");
+
+            var caseStmt = Assert.IsType<CaseStmt>(Assert.Single(stmts));
+            Assert.IsType<NoOpStmt>(Assert.Single(caseStmt.ElseBody));
+        }
+
+        [Fact]
+        public void ExecuteCase_BareSemicolonElseBody_RunsWithoutError()
+        {
+            var engine = NewEngine();
+            var frame = NewFrame();
+            frame.Locals["result"] = new Cell { Value = 0 };
+            frame.Locals["selector"] = new Cell { Value = 99 };
+
+            engine.ExecuteStatements(Parser.ParseStatements(
+                "CASE selector OF\n" +
+                "1: result := 10;\n" +
+                "ELSE\n" +
+                "; // intentionally not handled\n" +
+                "END_CASE"), frame);
+
+            Assert.Equal(0, frame.Locals["result"].Value);
+        }
+
         // --- EXIT execution ---------------------------------------------------
 
         [Fact]

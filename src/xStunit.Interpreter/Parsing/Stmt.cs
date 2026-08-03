@@ -15,6 +15,13 @@ namespace xStunit.Interpreter
         public int Line { get; set; }
     }
 
+    // A bare ";" - the no-op statement IEC 61131-3 allows anywhere a
+    // statement is expected, most often as an intentionally-empty CASE
+    // branch or ELSE arm.
+    public sealed class NoOpStmt : Stmt
+    {
+    }
+
     public sealed class AssignStmt : Stmt
     {
         public Expr Target { get; }

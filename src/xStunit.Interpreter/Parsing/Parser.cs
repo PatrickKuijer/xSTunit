@@ -94,6 +94,12 @@ namespace xStunit.Interpreter
 
         private Stmt ParseStatementCore()
         {
+            if (Current.Type == TokenType.Semicolon)
+            {
+                Advance();
+                return new NoOpStmt();
+            }
+
             if (IsKeyword("IF"))
                 return ParseIf();
 

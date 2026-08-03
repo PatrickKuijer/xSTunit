@@ -27,6 +27,8 @@ namespace xStunit.Interpreter
 
             switch (stmt)
             {
+                case NoOpStmt:
+                    break;
                 case AssignStmt assign:
                     SetLValue(assign.Target, Evaluate(assign.Value, frame), frame);
                     break;

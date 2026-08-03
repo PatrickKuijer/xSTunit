@@ -15,6 +15,18 @@ namespace xStunit.Interpreter.Tests
             Assert.Equal("Failed to find test '%s'", literal.Text);
         }
 
+        [Theory]
+        [InlineData("'$'s widget'", "'s widget")]
+        [InlineData("'the widget$'s heartbeat'", "the widget's heartbeat")]
+        [InlineData("'the widget heartbeat$''", "the widget heartbeat'")]
+        public void Tokenize_DollarEscapedQuote_AtStartMiddleAndEnd_ProducesEmbeddedSingleQuote(string source, string expected)
+        {
+            var tokens = Lexer.Tokenize(source);
+
+            var literal = Assert.Single(tokens, t => t.Type == TokenType.StringLiteral);
+            Assert.Equal(expected, literal.Text);
+        }
+
         [Fact]
         public void Tokenize_DoubleDollar_ProducesLiteralDollarSign()
         {

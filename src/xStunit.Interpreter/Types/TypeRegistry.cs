@@ -18,6 +18,12 @@ namespace xStunit.Interpreter
         private readonly Dictionary<string, IReadOnlyList<VarDecl>> _gvls = new Dictionary<string, IReadOnlyList<VarDecl>>(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, string> _aliases = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
+        // Kept out of _types on purpose. An interface is a contract, not a
+        // runnable body: sharing the POU map would let NewInstance build one,
+        // let DefaultValue seed a field with one, and offer it to
+        // SuiteDiscovery's ancestry walk.
+        private readonly Dictionary<string, InterfaceAst> _interfaceTypes = new Dictionary<string, InterfaceAst>(StringComparer.OrdinalIgnoreCase);
+
         // User-defined ENUM DUTs: enum name -> member name -> int value, the
         // source-defined counterpart to BuiltinEnums.Types. Kept apart from
         // _aliases so that resolving EnumType.Member does not disturb the
@@ -43,7 +49,8 @@ namespace xStunit.Interpreter
             IEnumerable<StructAst> structTypes = null,
             IEnumerable<GvlAst> gvls = null,
             IEnumerable<KeyValuePair<string, string>> aliases = null,
-            IEnumerable<KeyValuePair<string, IReadOnlyDictionary<string, int>>> enumMembers = null)
+            IEnumerable<KeyValuePair<string, IReadOnlyDictionary<string, int>>> enumMembers = null,
+            IEnumerable<InterfaceAst> interfaceTypes = null)
         {
             foreach (var type in types)
                 _types[type.Name] = type;
@@ -51,6 +58,10 @@ namespace xStunit.Interpreter
             if (structTypes != null)
                 foreach (var structType in structTypes)
                     _structTypes[structType.Name] = structType;
+
+            if (interfaceTypes != null)
+                foreach (var interfaceType in interfaceTypes)
+                    _interfaceTypes[interfaceType.Name] = interfaceType;
 
             // Parsed once here rather than on every global field access;
             // VAR_GLOBAL is just another VarBlockParser section.
@@ -98,6 +109,12 @@ namespace xStunit.Interpreter
             || BuiltinAliases.TryGetUnderlyingType(typeName, out underlying);
 
         public StructAst GetStruct(string name) => _structTypes.TryGetValue(name, out var structType) ? structType : null;
+
+        // Null for any name no loaded .TcIO declared, which includes an
+        // interface whose file was never among the loaded directories: a miss
+        // means "not known to be an interface", never "not an interface".
+        public InterfaceAst GetInterface(string name) =>
+            _interfaceTypes.TryGetValue(name, out var interfaceType) ? interfaceType : null;
 
         public bool TryGetEnumMembers(string typeName, out IReadOnlyDictionary<string, int> members) =>
             _enumMembers.TryGetValue(typeName, out members);

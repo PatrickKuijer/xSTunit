@@ -7,8 +7,9 @@ using xStunit.Parser;
 namespace xStunit.Interpreter
 {
     // Turns the directories a run is pointed at into the type universe it
-    // executes against: every .TcPOU, .TcDUT and .TcGVL under them, merged into
-    // one TypeRegistry, plus the list of files that could not be read.
+    // executes against: every .TcPOU, .TcDUT, .TcGVL and .TcIO under them,
+    // merged into one TypeRegistry, plus the list of files that could not be
+    // read.
     public static class WorkspaceLoader
     {
         public static LoadedWorkspace Load(IReadOnlyList<string> directories)
@@ -94,8 +95,19 @@ namespace xStunit.Interpreter
                 return LoadedWorkspace.Failed(ex.Message, skipped);
             }
 
+            IReadOnlyList<InterfaceAst> interfaceTypes;
+            try
+            {
+                interfaceTypes = InterfaceLoader.Load(directories, out var interfaceSkipped);
+                skipped.AddRange(interfaceSkipped);
+            }
+            catch (DuplicateInterfaceTypeException ex)
+            {
+                return LoadedWorkspace.Failed(ex.Message, skipped);
+            }
+
             return LoadedWorkspace.Succeeded(
-                new TypeRegistry(types, structTypes, gvls, aliases, enumMembers),
+                new TypeRegistry(types, structTypes, gvls, aliases, enumMembers, interfaceTypes),
                 types,
                 loaded.ToDictionary(l => l.Pou.Name, l => l.FilePath),
                 skipped);

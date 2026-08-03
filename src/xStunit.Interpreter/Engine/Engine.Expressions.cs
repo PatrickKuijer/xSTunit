@@ -94,7 +94,7 @@ namespace xStunit.Interpreter
                     }
 
                     var receiverValue = Evaluate(fieldAccess.Receiver, frame);
-                    var fields = FieldsOf(receiverValue);
+                    var fields = FieldsOf(receiverValue, fieldAccess.FieldName);
                     if (fields.TryGetValue(fieldAccess.FieldName, out var cell))
                         return cell.Value;
 
@@ -192,6 +192,7 @@ namespace xStunit.Interpreter
 
             if ((binary.Op == "=" || binary.Op == "<>") &&
                 (leftVal is Pointer || rightVal is Pointer || leftVal is FbInstance || rightVal is FbInstance ||
+                 leftVal is UnassignedInterfaceReference || rightVal is UnassignedInterfaceReference ||
                  leftVal == null || rightVal == null))
                 return EvaluatePointerEquality(binary.Op, leftVal, rightVal);
 
@@ -317,13 +318,16 @@ namespace xStunit.Interpreter
         //
         // An interface-typed (or plain FB-reference) variable follows the same
         // "= 0 means unassigned" idiom - 'IF (iipHandler <> 0) AND
-        // iipHandler.bDoWork(...) THEN' - without a null representation of its
-        // own: no POU is registered under an interface type name, so
-        // DefaultValue's lookups all miss and it falls through to the int-0
-        // default, and once assigned the field holds the concrete FB's
-        // FbInstance directly. FbInstance therefore gets the same null-check
-        // semantics as Pointer, with two assigned interface variables comparing
-        // by referenced-instance identity.
+        // iipHandler.bDoWork(...) THEN'. Once assigned, either kind holds the
+        // concrete FB's FbInstance directly, so FbInstance gets the same
+        // null-check semantics as Pointer, with two assigned interface
+        // variables comparing by referenced-instance identity.
+        //
+        // Unassigned, the two kinds are spelled differently and both have to be
+        // recognized here: a variable of a LOADED interface type holds an
+        // UnassignedInterfaceReference, while one whose type name no .TcIO
+        // declared still falls through DefaultValue to int 0 and reaches this
+        // method only when the other operand forces it to.
         private static object EvaluatePointerEquality(string op, object leftVal, object rightVal)
         {
             bool equal;
@@ -331,6 +335,12 @@ namespace xStunit.Interpreter
                 equal = PointerTargetsEqual(leftPtr.Target, rightPtr.Target);
             else if (leftVal is FbInstance leftFb && rightVal is FbInstance rightFb)
                 equal = ReferenceEquals(leftFb, rightFb);
+            else if (leftVal is UnassignedInterfaceReference && rightVal is UnassignedInterfaceReference)
+                equal = true;
+            else if (leftVal is UnassignedInterfaceReference)
+                equal = rightVal == null || IsNumericZero(rightVal);
+            else if (rightVal is UnassignedInterfaceReference)
+                equal = leftVal == null || IsNumericZero(leftVal);
             else if (leftVal is Pointer || rightVal is Pointer || leftVal is FbInstance || rightVal is FbInstance)
                 equal = false;
             else if (leftVal == null && rightVal == null)
@@ -730,8 +740,11 @@ namespace xStunit.Interpreter
                 return CallMethod(frame.Instance, call.MethodName, call.PositionalArgs, call.NamedArgs, frame, baseType);
             }
 
-            var receiverInstance = (FbInstance)Evaluate(call.Receiver, frame);
-            return CallMethod(receiverInstance, call.MethodName, call.PositionalArgs, call.NamedArgs, frame, null);
+            var receiver = Evaluate(call.Receiver, frame);
+            if (receiver is UnassignedInterfaceReference unassignedReceiver)
+                throw unassignedReceiver.Fault(call.MethodName);
+
+            return CallMethod((FbInstance)receiver, call.MethodName, call.PositionalArgs, call.NamedArgs, frame, null);
         }
 
         private static readonly HashSet<string> IntegerCastTargets = new HashSet<string>

@@ -18,6 +18,12 @@ namespace xStunit.Interpreter
             if (structAst != null)
                 return BuildStructDefault(structAst, decl.DefaultValueText, owningInstance);
 
+            // Only a LOADED interface gets the sentinel. A name no .TcIO
+            // declared is not known to be an interface at all, and still falls
+            // through to the int-0 default at the bottom.
+            if (_registry.GetInterface(typeName) != null)
+                return new UnassignedInterfaceReference(typeName);
+
             if (_registry.Get(typeName) != null || IsNativeFbTypeName(typeName))
                 return NewInstance(typeName);
 

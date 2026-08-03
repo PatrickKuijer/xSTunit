@@ -69,7 +69,7 @@ namespace xStunit.Interpreter
                     return gvlCell;
                 }
 
-                var fields = FieldsOf(Evaluate(fieldAccess.Receiver, frame));
+                var fields = FieldsOf(Evaluate(fieldAccess.Receiver, frame), fieldAccess.FieldName);
                 if (!fields.TryGetValue(fieldAccess.FieldName, out var cell))
                     throw new InvalidOperationException($"Unknown field '{fieldAccess.FieldName}'");
                 return cell;
@@ -177,7 +177,7 @@ namespace xStunit.Interpreter
                 if (receiver is StructInstance st)
                     return st.FieldTypeNames.TryGetValue(fieldAccess.FieldName, out var stFieldType) ? stFieldType : null;
 
-                var fields = FieldsOf(receiver);
+                var fields = FieldsOf(receiver, fieldAccess.FieldName);
                 return fields.TryGetValue(fieldAccess.FieldName, out var fieldCell) ? fieldCell.DeclaredTypeName : null;
             }
 
@@ -186,10 +186,17 @@ namespace xStunit.Interpreter
 
         // FbInstance and StructInstance are both named-field containers of
         // Cells, so FieldAccessExpr reads either the same way.
-        private static Dictionary<string, Cell> FieldsOf(object receiver) => receiver switch
+        //
+        // memberName is the field being reached for, carried in only so an
+        // unassigned interface reference can name it: reaching THROUGH a null
+        // contract is a defect in the code under test, and "Cannot access
+        // fields on UnassignedInterfaceReference" would describe this
+        // interpreter's plumbing instead of the missing injection.
+        private static Dictionary<string, Cell> FieldsOf(object receiver, string memberName) => receiver switch
         {
             FbInstance fb => fb.Fields,
             StructInstance st => st.Fields,
+            UnassignedInterfaceReference unassigned => throw unassigned.Fault(memberName),
             _ => throw new NotSupportedException($"Cannot access fields on {receiver?.GetType().Name}"),
         };
     }

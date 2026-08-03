@@ -97,6 +97,56 @@ namespace xStunit.Interpreter.Tests
             Assert.Equal("INT", workspace.Registry.ResolveAlias("E_Mode"));
         }
 
+        // A .TcIO reaches the registry as an interface and NOT as a POU: an
+        // interface in the POU map would be instantiable, offered to
+        // SuiteDiscovery's ancestry walk, and would put its file in
+        // FilePathsByTypeName as though it held runnable code.
+        [Fact]
+        public void Load_InterfaceBesidePous_ReachesTheRegistryAsAnInterfaceOnly()
+        {
+            File.WriteAllText(Path.Combine(_tempDir, "FB_Counter.TcPOU"), CounterPouXml);
+            File.WriteAllText(Path.Combine(_tempDir, "I_Countable.TcIO"), InterfaceXml);
+
+            var workspace = WorkspaceLoader.Load(new[] { _tempDir });
+
+            Assert.Null(workspace.Error);
+            Assert.Empty(workspace.Skipped);
+            Assert.Equal("I_Countable", workspace.Registry.GetInterface("I_Countable").Name);
+            Assert.Null(workspace.Registry.Get("I_Countable"));
+            Assert.Equal(new[] { "FB_Counter" }, workspace.PouTypes.Select(t => t.Name));
+        }
+
+        [Fact]
+        public void Load_MalformedInterfaceBesideGoodPou_KeepsGoodTypeAndReportsSkip()
+        {
+            File.WriteAllText(Path.Combine(_tempDir, "FB_Counter.TcPOU"), CounterPouXml);
+            File.WriteAllText(Path.Combine(_tempDir, "I_Malformed.TcIO"), "<TcPlcObject><Itf Name=");
+
+            var workspace = WorkspaceLoader.Load(new[] { _tempDir });
+
+            Assert.Null(workspace.Error);
+            Assert.NotNull(workspace.Registry.Get("FB_Counter"));
+            Assert.EndsWith("I_Malformed.TcIO", Assert.Single(workspace.Skipped).FileKey);
+        }
+
+        // Same rule as a duplicate POU type name: an ambiguous interface name
+        // means the caller pointed the CLI at an inconsistent directory set,
+        // and letting the last file win would pick a contract at random.
+        [Fact]
+        public void Load_SameInterfaceNameInTwoDirectories_ReportsErrorRatherThanSkipping()
+        {
+            var first = Path.Combine(_tempDir, "first");
+            var second = Path.Combine(_tempDir, "second");
+            Directory.CreateDirectory(first);
+            Directory.CreateDirectory(second);
+            File.WriteAllText(Path.Combine(first, "I_Countable.TcIO"), InterfaceXml);
+            File.WriteAllText(Path.Combine(second, "I_Countable.TcIO"), InterfaceXml);
+
+            var workspace = WorkspaceLoader.Load(new[] { first, second });
+
+            Assert.Contains("I_Countable", workspace.Error);
+        }
+
         [Fact]
         public void Load_MissingDirectory_ReportsErrorNamingThePath()
         {
@@ -205,6 +255,19 @@ END_TYPE]]></Declaration>
 ) INT;
 END_TYPE]]></Declaration>
   </DUT>
+</TcPlcObject>";
+
+        private const string InterfaceXml = @"<?xml version=""1.0"" encoding=""utf-8""?>
+<TcPlcObject Version=""1.1.0.1"">
+  <Itf Name=""I_Countable"" Id=""{00000000-0000-0000-0000-0000000000c6}"">
+    <Declaration><![CDATA[INTERFACE I_Countable]]></Declaration>
+    <Method Name=""Reset"" Id=""{00000000-0000-0000-0000-0000000000c7}"">
+      <Declaration><![CDATA[METHOD Reset : BOOL]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[]]></ST>
+      </Implementation>
+    </Method>
+  </Itf>
 </TcPlcObject>";
 
         private const string GvlXml = @"<?xml version=""1.0"" encoding=""utf-8""?>

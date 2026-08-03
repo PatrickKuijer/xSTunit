@@ -113,11 +113,20 @@ namespace xStunit.Interpreter
         // constructed FbInstance/StructInstance), so passing a plain variable
         // here by mistake would silently evaluate to TRUE instead of surfacing
         // the misuse.
+        //
+        // The check runs on the alias-resolved name so that a variable
+        // declared through an ALIAS DUT (pData : PT_Byte, PT_Byte being
+        // POINTER TO BYTE) answers as its underlying type does. TypeLayout's
+        // SIZEOF and Engine.Defaults already size and null-default that
+        // declaration as a pointer; testing the unresolved name here would
+        // leave the one intrinsic that reads the null they establish unable to
+        // see it. The message still names the type as written, since that is
+        // the text to search the VAR block for.
         private bool IsValidRef(Expr expr, Frame frame)
         {
             var cell = ResolveCellForLValue(expr, frame);
             var typeName = ResolveDeclaredTypeName(expr, frame);
-            if (!AddressTypeInfo.IsAddressType(typeName))
+            if (!AddressTypeInfo.IsAddressType(_registry.ResolveAlias(typeName)))
             {
                 throw new InvalidOperationException(
                     $"__ISVALIDREF requires a POINTER TO or REFERENCE TO variable, but got " +

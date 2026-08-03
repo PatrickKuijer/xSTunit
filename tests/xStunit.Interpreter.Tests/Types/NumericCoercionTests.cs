@@ -229,5 +229,48 @@ namespace xStunit.Interpreter.Tests
             Assert.IsType<int>(result);
             Assert.Equal(5, result);
         }
+
+        // Promote widens a uint operand to long, so every arithmetic result
+        // bound for a TIME or DATE-family cell arrives one tier too wide.
+        // Without the narrowing back, the declared type's box would depend on
+        // how the value was computed.
+        [Fact]
+        public void CoerceForAssignment_UIntExistingLongIncoming_NarrowsToUInt()
+        {
+            var result = NumericCoercion.CoerceForAssignment(0u, 1500L);
+
+            Assert.IsType<uint>(result);
+            Assert.Equal(1500u, result);
+        }
+
+        [Fact]
+        public void CoerceForAssignment_UIntExistingIntIncoming_NarrowsToUInt()
+        {
+            var result = NumericCoercion.CoerceForAssignment(0u, 7);
+
+            Assert.IsType<uint>(result);
+            Assert.Equal(7u, result);
+        }
+
+        // The 32-bit types wrap on overflow rather than rejecting it, matching
+        // the counter width on the target; rejecting would make this runtime
+        // stricter than the PLC it stands in for.
+        [Fact]
+        public void CoerceForAssignment_UIntExistingLongIncomingAboveRange_Wraps()
+        {
+            var result = NumericCoercion.CoerceForAssignment(0u, (long)uint.MaxValue + 5L);
+
+            Assert.IsType<uint>(result);
+            Assert.Equal(4u, result);
+        }
+
+        [Fact]
+        public void CoerceForAssignment_UIntExistingNegativeIncoming_WrapsToTheTopOfTheRange()
+        {
+            var result = NumericCoercion.CoerceForAssignment(0u, -2L);
+
+            Assert.IsType<uint>(result);
+            Assert.Equal(uint.MaxValue - 1u, result);
+        }
     }
 }

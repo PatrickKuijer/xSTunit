@@ -70,10 +70,7 @@ namespace xStunit.Interpreter.Tests
 
         public static uint TotalRunMs(FbInstance unit) => DurationMs(unit, "TotalRunTime");
 
-        // Converted rather than cast: a TIME read straight off a timer is boxed
-        // as UInt32, but TotalRunTime is a sum of two of them and the addition
-        // widens it, so the two meters do not arrive in the same box.
         private static uint DurationMs(FbInstance unit, string field) =>
-            System.Convert.ToUInt32(unit.Fields[field].Value);
+            (uint)unit.Fields[field].Value;
     }
 }

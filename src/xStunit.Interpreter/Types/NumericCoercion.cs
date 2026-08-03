@@ -109,6 +109,25 @@ namespace xStunit.Interpreter
                 return (ulong)intForULong;
             }
 
+            // TIME and the DATE family are the only things boxing as uint, and
+            // nothing else reaches them as a value: Promote widens a uint
+            // operand to long to do the arithmetic, and a plain integer literal
+            // arrives as int, so a TIME cell is written from a tier above and a
+            // tier below but never at its own width. Narrowing here is what
+            // keeps a declared TIME the same box whether or not arithmetic
+            // touched it.
+            //
+            // The narrowing wraps rather than throwing, because TwinCAT stores
+            // TIME/DATE/DT/TOD in 32 bits: a sum past T#49d17h2m47s295ms rolls
+            // over there, and a difference that goes negative rolls over the
+            // other way. Rejecting the overflow would make this a stricter
+            // machine than the one it stands in for, so a fixture that rolls a
+            // meter over on the target rolls it over here too.
+            if (existing is uint && incoming is long longForUInt)
+                return unchecked((uint)longForUInt);
+            if (existing is uint && incoming is int intForUInt)
+                return unchecked((uint)intForUInt);
+
             return incoming;
         }
     }

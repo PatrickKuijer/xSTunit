@@ -92,5 +92,26 @@ namespace xStunit.Interpreter.Tests
             MiniloadPackMLFixtureEngine.Step(engine, unit);
             Assert.Equal(500u, MiniloadPackMLFixtureEngine.TotalRunMs(unit));
         }
+
+        // A TIME variable holds a TIME-shaped box whether or not arithmetic
+        // reached it. TotalRunTime is a sum of two TIME values, StateElapsedTime
+        // is read straight off a timer; if the sum kept the width its operands
+        // were widened to, the same declared type would surface to a caller as
+        // two different CLR types depending on how it was computed, and every
+        // consumer of Fields[...].Value would have to convert defensively
+        // instead of cast.
+        [Fact]
+        public void TimeArithmetic_NarrowsBackToTheDeclaredType_SoEveryTimeFieldReadsAsOneBox()
+        {
+            var (engine, unit) = NewUnit();
+            DriveToExecute(engine, unit);
+            engine.Clock.AdvanceMs(200);
+            MiniloadPackMLFixtureEngine.Step(engine, unit);
+
+            Assert.Equal(200u, (uint)unit.Fields["TotalRunTime"].Value);
+            Assert.Equal(
+                unit.Fields["StateElapsedTime"].Value.GetType(),
+                unit.Fields["TotalRunTime"].Value.GetType());
+        }
     }
 }

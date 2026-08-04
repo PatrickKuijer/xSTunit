@@ -426,7 +426,13 @@ namespace xStunit.Interpreter
         // 61131-3 §2.4.2 defines. Letters A-Z/a-z count as digits 10-35 even
         // above the base, so an out-of-range digit produces a clear "invalid
         // digit" error rather than silently misparsing.
-        private static long ParseBasedLiteral(string digits, int numberBase, string text, int position)
+        // Accumulates in ulong, not long: a full-width LWORD/ULINT bit pattern
+        // (16#FFFFFFFFFFFFFFFF) is a legal 64-bit value with no signed
+        // equivalent, and the token this feeds carries the value as digits, so
+        // an unsigned spelling is the only one that survives the round trip.
+        // Checked, so digits past 64 bits name the literal instead of wrapping
+        // into a plausible-looking small number.
+        private static ulong ParseBasedLiteral(string digits, int numberBase, string text, int position)
         {
             if (numberBase != 2 && numberBase != 8 && numberBase != 16)
                 throw new ParseException(
@@ -438,7 +444,7 @@ namespace xStunit.Interpreter
                     $"Based literal has no digits after '#' at position {position} in: {text}",
                     "#", LineAt(text, position));
 
-            long value = 0;
+            ulong value = 0;
             foreach (var ch in digits)
             {
                 var digitValue = ch switch
@@ -454,7 +460,17 @@ namespace xStunit.Interpreter
                         $"Digit '{ch}' is invalid for base {numberBase} at position {position} in: {text}",
                         ch.ToString(), LineAt(text, position));
 
-                value = (value * numberBase) + digitValue;
+                try
+                {
+                    value = checked((value * (ulong)numberBase) + (ulong)digitValue);
+                }
+                catch (OverflowException)
+                {
+                    throw new ParseException(
+                        $"Based literal {numberBase}#{digits} does not fit in 64 bits, the width of the widest " +
+                        $"IEC integer type (ULINT/LWORD), at position {position} in: {text}",
+                        $"{numberBase}#{digits}", LineAt(text, position));
+                }
             }
 
             return value;

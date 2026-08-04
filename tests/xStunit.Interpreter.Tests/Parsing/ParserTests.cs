@@ -97,6 +97,26 @@ namespace xStunit.Interpreter.Tests
             Assert.Single(elsif2.Else);
         }
 
+        // Regression coverage: a $'-escaped quote used to corrupt the token
+        // stream past the string literal itself, surfacing as "Expected
+        // RParen but got StringLiteral" several tokens later rather than at
+        // the escape - so the call's full shape (arg count, string value)
+        // is asserted here, not just that parsing didn't throw.
+        [Fact]
+        public void ParseStatements_CallArgWithDollarEscapedQuote_ParsesAllArgsWithoutTokenStreamCorruption()
+        {
+            var stmts = Parser.ParseStatements(
+                "AssertEquals_UINT( Expected := 3, Actual := tCntr.nHeartbeat, " +
+                "Message := 'nHeartbeat is the widget$'s free-running heartbeat counter' );");
+
+            var exprStmt = Assert.IsType<ExprStmt>(Assert.Single(stmts));
+            Assert.Equal("AssertEquals_UINT", exprStmt.Call.MethodName);
+            Assert.Equal(3, exprStmt.Call.NamedArgs.Count);
+
+            var message = Assert.IsType<StringLiteralExpr>(exprStmt.Call.NamedArgs[2].Value);
+            Assert.Equal("nHeartbeat is the widget's free-running heartbeat counter", message.Value);
+        }
+
         [Fact]
         public void ParseStatements_SuperInitCall_ProducesExprStmtCallingFbInit()
         {

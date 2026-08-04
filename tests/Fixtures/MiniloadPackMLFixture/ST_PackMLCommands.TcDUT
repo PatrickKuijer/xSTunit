@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4026.18">
+  <DUT Name="ST_PackMLCommands" Id="{5e4501d0-0012-4d19-9a41-000000000001}">
+    <Declaration><![CDATA[(*
+    The nine PackML unit commands, as one value a caller can fill in and hand
+    over whole - an HMI writes it, a supervising unit writes it, a test writes
+    it, and none of them needs nine separate arguments.
+
+    Every field is a LEVEL, not a pulse: the state manager decides whether a
+    command means anything in the state it is currently in, so a command that
+    arrives too early is ignored rather than queued, and one that is held past
+    the transition it caused does not cause it a second time. That is what
+    makes a stuck HMI button harmless.
+*)
+TYPE ST_PackMLCommands :
+STRUCT
+	Reset : BOOL;
+	Start : BOOL;
+	Stop : BOOL;
+	Hold : BOOL;
+	Unhold : BOOL;
+	Suspend : BOOL;
+	Unsuspend : BOOL;
+	Abort : BOOL;
+	Clear : BOOL;
+END_STRUCT
+END_TYPE
+]]></Declaration>
+  </DUT>
+</TcPlcObject>

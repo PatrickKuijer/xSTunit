@@ -32,7 +32,8 @@ namespace xStunit.Interpreter
         // over frame, which is the only frame-dependent part of the layout
         // rules, and parsing a bound expression dwarfs the allocation.
         private TypeLayout LayoutFor(Frame frame) =>
-            new TypeLayout(_registry, boundText => Convert.ToInt32(Evaluate(Parser.ParseExpression(boundText), frame)));
+            new TypeLayout(
+                _registry, _target, boundText => Convert.ToInt32(Evaluate(Parser.ParseExpression(boundText), frame)));
 
         private (int Size, int Align) SizeOfType(string typeName, Frame frame) =>
             LayoutFor(frame).SizeOf(typeName);

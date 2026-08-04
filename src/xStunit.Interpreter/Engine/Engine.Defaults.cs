@@ -18,6 +18,12 @@ namespace xStunit.Interpreter
             if (structAst != null)
                 return BuildStructDefault(structAst, decl.DefaultValueText, owningInstance);
 
+            // Only a LOADED interface gets the sentinel. A name no .TcIO
+            // declared is not known to be an interface at all, and still falls
+            // through to the int-0 default at the bottom.
+            if (_registry.GetInterface(typeName) != null)
+                return new UnassignedInterfaceReference(typeName);
+
             if (_registry.Get(typeName) != null || IsNativeFbTypeName(typeName))
                 return NewInstance(typeName);
 
@@ -42,11 +48,9 @@ namespace xStunit.Interpreter
             if (IecElementaryDefault.TryGetDefault(typeName, out var elementaryDefault))
                 return elementaryDefault;
 
-            // IEC 61131-3 type names are case-insensitive, hence the
-            // OrdinalIgnoreCase prefix match - the same decision as
-            // IecNumericType, StringTypeInfo, ArrayTypeInfo and TypeRegistry.
-            if (typeName.StartsWith("POINTER TO", StringComparison.OrdinalIgnoreCase)
-                || typeName.StartsWith("REFERENCE TO", StringComparison.OrdinalIgnoreCase))
+            // An address type starts unbound rather than at a value, which is
+            // what makes __ISVALIDREF's null test meaningful.
+            if (AddressTypeInfo.IsAddressType(typeName))
                 return null;
 
             if (IecNumericType.TryGetDefault(typeName, out var numericDefault))

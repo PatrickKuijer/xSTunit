@@ -158,6 +158,55 @@ namespace xStunit.Interpreter.Tests
         }
 
         [Fact]
+        public void Evaluate_StringToLrealCast_ParsesDecimalPointRegardlessOfCulture()
+        {
+            var originalCulture = System.Threading.Thread.CurrentThread.CurrentCulture;
+            System.Threading.Thread.CurrentThread.CurrentCulture = new System.Globalization.CultureInfo("de-DE");
+            try
+            {
+                var engine = NewEngine();
+                var result = engine.Evaluate(Parser.ParseExpression("STRING_TO_LREAL('42.5')"), NewFrame());
+
+                Assert.IsType<double>(result);
+                Assert.Equal(42.5d, (double)result);
+            }
+            finally
+            {
+                System.Threading.Thread.CurrentThread.CurrentCulture = originalCulture;
+            }
+        }
+
+        [Fact]
+        public void Evaluate_StringToLrealCast_ParsesFractionalValue()
+        {
+            var engine = NewEngine();
+            var result = engine.Evaluate(Parser.ParseExpression("STRING_TO_LREAL('99.9')"), NewFrame());
+
+            Assert.IsType<double>(result);
+            Assert.Equal(99.9d, (double)result);
+        }
+
+        [Theory]
+        [InlineData(42.5d)]
+        [InlineData(99.9d)]
+        [InlineData(0.125d)]
+        public void Evaluate_LrealToStringToLrealRoundTrip_PreservesValue(double x)
+        {
+            var engine = NewEngine();
+            var frame = NewFrame();
+
+            var str = engine.Evaluate(
+                Parser.ParseExpression($"REAL_TO_STRING(LREAL_TO_REAL(LREAL#{x.ToString(System.Globalization.CultureInfo.InvariantCulture)}))"),
+                frame);
+            frame.Locals["ts"] = new Cell { Value = str };
+
+            var result = engine.Evaluate(Parser.ParseExpression("STRING_TO_LREAL(ts)"), frame);
+
+            Assert.IsType<double>(result);
+            Assert.Equal(x, (double)result, 1);
+        }
+
+        [Fact]
         public void ExecuteStatements_AssignRealIntoIntWithoutCast_Throws()
         {
             var engine = NewEngine();

@@ -71,7 +71,7 @@ END_TYPE";
         [Fact]
         public void Load_EnumDutWithStructSubstringInComment_IsSkippedNotRegisteredAsStruct()
         {
-            var tempDir = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "tcxunit-enumcomment-" + Guid.NewGuid()));
+            var tempDir = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "xstunit-enumcomment-" + Guid.NewGuid()));
             try
             {
                 const string declaration = @"(* replaces the old STRUCT-based version *)
@@ -98,7 +98,7 @@ END_TYPE";
         [Fact]
         public void Load_AliasDutWithStructSubstringIdentifier_IsSkippedNotRegisteredAsStruct()
         {
-            var tempDir = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "tcxunit-aliasstruct-" + Guid.NewGuid()));
+            var tempDir = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "xstunit-aliasstruct-" + Guid.NewGuid()));
             try
             {
                 const string declaration = "TYPE ST_STRUCTURED_ALIAS : INT;\nEND_TYPE";
@@ -126,7 +126,7 @@ END_TYPE";
             // cannot match past the EXTENDS clause and leaves StructAst.Name
             // null. Move the rejection to the filter and the mid-test assertion
             // is what fails.
-            var tempDir = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "tcxunit-extendsstruct-" + Guid.NewGuid()));
+            var tempDir = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "xstunit-extendsstruct-" + Guid.NewGuid()));
             try
             {
                 const string declaration = "TYPE FB_ExtendedThing EXTENDS FB_Base :\nSTRUCT\n\tx : REAL;\nEND_STRUCT\nEND_TYPE";
@@ -149,7 +149,7 @@ END_TYPE";
         [Fact]
         public void Load_ActualStructDut_IsRegistered()
         {
-            var tempDir = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "tcxunit-realstruct-" + Guid.NewGuid()));
+            var tempDir = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "xstunit-realstruct-" + Guid.NewGuid()));
             try
             {
                 const string declaration = "TYPE ST_Point :\nSTRUCT\n\tx : REAL;\nEND_STRUCT\nEND_TYPE";
@@ -166,6 +166,48 @@ END_TYPE";
             {
                 Directory.Delete(tempDir.FullName, recursive: true);
             }
+        }
+
+        // A UNION DUT loads alongside the STRUCT DUTs, carrying the flag that
+        // separates the two layouts. Skip it and every type holding one is
+        // unsizable, which is how TcUnit's own ST_AssertResult was reachable
+        // only as an unsupported construct.
+        [Fact]
+        public void Load_UnionDut_IsRegisteredAndMarkedAUnion()
+        {
+            var tempDir = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "xstunit-union-" + Guid.NewGuid()));
+            try
+            {
+                const string declaration = "TYPE U_Overlaid :\nUNION\n\tasWord : WORD;\n\tasLong : LWORD;\nEND_UNION\nEND_TYPE";
+                File.WriteAllText(Path.Combine(tempDir.FullName, "U_Overlaid.TcDUT"), DutXml("U_Overlaid", declaration));
+
+                var structTypes = DutStructLoader.Load(new[] { tempDir.FullName }, out var skipped);
+
+                Assert.Empty(skipped);
+                var unionAst = Assert.Single(structTypes);
+                Assert.Equal("U_Overlaid", unionAst.Name);
+                Assert.True(unionAst.IsUnion);
+                Assert.Equal(new[] { "asWord", "asLong" }, unionAst.Fields.Select(f => f.Name));
+            }
+            finally
+            {
+                Directory.Delete(tempDir.FullName, recursive: true);
+            }
+        }
+
+        // The STRUCT filter stays a STRUCT filter: DutAliasLoader consults it to
+        // decide a DUT is not an alias, and a union answering true there would
+        // change what that means.
+        [Fact]
+        public void IsStructDeclaration_UnionDeclaration_ReturnsFalse()
+        {
+            const string declaration = @"TYPE U_Overlaid :
+UNION
+	asWord : WORD;
+END_UNION
+END_TYPE";
+
+            Assert.False(DutStructLoader.IsStructDeclaration(declaration));
         }
     }
 }

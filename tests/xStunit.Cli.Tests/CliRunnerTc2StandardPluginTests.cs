@@ -16,7 +16,7 @@ namespace xStunit.Cli.Tests
 
         public CliRunnerTc2StandardPluginTests()
         {
-            _pluginDir = Path.Combine(Path.GetTempPath(), "tcxunit-tc2std-plugin-test-" + Guid.NewGuid().ToString("N"));
+            _pluginDir = Path.Combine(Path.GetTempPath(), "xstunit-tc2std-plugin-test-" + Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(_pluginDir);
             File.Copy(PluginDll(), Path.Combine(_pluginDir, "xStunit.StandardStringPlugins.dll"));
         }

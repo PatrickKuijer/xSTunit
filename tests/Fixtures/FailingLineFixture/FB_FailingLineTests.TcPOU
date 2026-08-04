@@ -2,9 +2,9 @@
 <TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4026.18">
   <POU Name="FB_FailingLineTests" Id="{c4d5e6f7-0004-4a1a-8b1b-000000000003}" SpecialFunc="None">
     <Declaration><![CDATA[(*
-    TcXunit interpreter fixture (TcXunit-p3t.4). Suite whose test method
-    faults inside FB_FailingLineHelper: the reported location must be the
-    INNERMOST body's POU/method/line, not this suite's call site.
+    Interpreter fixture. Suite whose test method faults inside
+    FB_FailingLineHelper: the reported location must be the INNERMOST body's
+    POU/method/line, not this suite's call site.
 *)
 FUNCTION_BLOCK FB_FailingLineTests EXTENDS TcUnit.FB_TestSuite
 VAR

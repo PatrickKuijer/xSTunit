@@ -163,5 +163,35 @@ namespace xStunit.Interpreter.Tests
             Assert.IsType<uint>(instance.Fields["todValue"].Value);
             Assert.Equal(0u, instance.Fields["todValue"].Value);
         }
+
+        // The DATE family shares TIME's 32-bit box, so it shares TIME's
+        // narrowing rule on assignment: arithmetic widens the operands, and the
+        // declared type is what survives into the variable.
+        [Fact]
+        public void Assign_ArithmeticOnDateDtAndTod_NarrowsBackToUInt()
+        {
+            var pou = new PouAst(
+                "FB_Calendar",
+                null,
+                "VAR\n"
+                    + "\tdValue : DATE := D#2024-01-01;\n\tdSum : DATE;\n"
+                    + "\tdtValue : DATE_AND_TIME := DT#2024-01-01-10:00:00;\n\tdtSum : DATE_AND_TIME;\n"
+                    + "\ttodValue : TIME_OF_DAY := TOD#10:00:00;\n\ttodSum : TIME_OF_DAY;\n"
+                    + "END_VAR",
+                "dSum := dValue + dValue;\ndtSum := dtValue + dtValue;\ntodSum := todValue + todValue;",
+                new List<MethodAst>());
+
+            var engine = new Engine(new TypeRegistry(new[] { pou }));
+            var instance = engine.NewInstance("FB_Calendar");
+            engine.CallMethod(
+                instance, "StepCycles", new Expr[] { new IntLiteralExpr(1) }, new List<NamedArg>(), null, null);
+
+            Assert.IsType<uint>(instance.Fields["dSum"].Value);
+            Assert.Equal(3_408_134_400u, instance.Fields["dSum"].Value);
+            Assert.IsType<uint>(instance.Fields["dtSum"].Value);
+            Assert.Equal(3_408_206_400u, instance.Fields["dtSum"].Value);
+            Assert.IsType<uint>(instance.Fields["todSum"].Value);
+            Assert.Equal(72_000_000u, instance.Fields["todSum"].Value);
+        }
     }
 }

@@ -150,8 +150,24 @@ namespace xStunit.Parser.Tests
             Assert.Equal(new[] { path }, found);
         }
 
+        [Fact]
+        public void FindInterfaceFiles_FindsTcIoFilesAcrossDirectoriesButNotTcPouTcDutOrTcGvl()
+        {
+            var itfPathA = Path.Combine(_dirA, "I_One.TcIO");
+            var itfPathB = Path.Combine(_dirB, "I_Two.TcIO");
+            File.WriteAllText(itfPathA, "not real xml, just needs to exist for globbing");
+            File.WriteAllText(itfPathB, "not real xml, just needs to exist for globbing");
+            WritePou(_dirA, "FB_One.TcPOU", "FB_One");
+            File.WriteAllText(Path.Combine(_dirA, "ST_Foo.TcDUT"), "not real xml either");
+            File.WriteAllText(Path.Combine(_dirA, "gFoo.TcGVL"), "not real xml either");
+
+            var found = MultiDirectoryPouLoader.FindInterfaceFiles(new[] { _dirA, _dirB });
+
+            Assert.Equal(new[] { itfPathA, itfPathB }.OrderBy(f => f).ToArray(), found.OrderBy(f => f).ToArray());
+        }
+
         private static string CreateTempDir() =>
-            Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "tcxunit-multidir-" + Guid.NewGuid())).FullName;
+            Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "xstunit-multidir-" + Guid.NewGuid())).FullName;
 
         private static string WritePou(string dir, string fileName, string typeName)
         {

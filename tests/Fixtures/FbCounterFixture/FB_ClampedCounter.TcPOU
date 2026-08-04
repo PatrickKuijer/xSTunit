@@ -2,9 +2,9 @@
 <TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4026.18">
   <POU Name="FB_ClampedCounter" Id="{a1b2c3d4-0002-4a1a-8b1b-000000000001}" SpecialFunc="None">
     <Declaration><![CDATA[(*
-    TcXunit interpreter fixture (TcXunit-w5x.8). Adds a ceiling on top of
-    FB_Counter to exercise EXTENDS, FB_init chaining via SUPER^, THIS^ method
-    calls, and REFERENCE TO in the v1 subset.
+    Interpreter fixture. Adds a ceiling on top of FB_Counter to exercise
+    EXTENDS, FB_init chaining via SUPER^, THIS^ method calls, and
+    REFERENCE TO in the v1 subset.
 *)
 FUNCTION_BLOCK FB_ClampedCounter EXTENDS FB_Counter
 VAR

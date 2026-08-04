@@ -12,11 +12,31 @@ monotonic absolute running total in **nanoseconds**; nothing rewinds it.
 `AdvanceMs(ms)` and `AdvanceNs(ns)` accumulate into that same total, and
 `TotalMs` is the truncating ms view of it.
 
-There's no direct ST syntax to call `Engine.Clock.AdvanceMs` shown in the
-current fixtures (it's driven from the C# test harness in today's tests).
-If your fixture needs to advance simulated time, do it the same way the
-existing interpreter tests do — advance the shared clock between
-`StepCycles` calls, not inside the ST body.
+`AdvanceClock(dt)` is the ST-visible counterpart, callable from any
+interpreted body (a suite's test case, a plain FB's own method, ...) the
+same way `SIZEOF`/`CONCAT` are — no receiver, just a call. `dt`'s CLR shape
+picks the unit: a `TIME` literal (or a bare integer) advances milliseconds,
+an `LTIME` literal advances nanoseconds:
+
+```
+AdvanceClock(T#100ms);
+AdvanceClock(LTIME#1us500ns);
+```
+
+A suite can therefore advance time and observe a TON/TOF fire without a C#
+harness stepping in between `StepCycles` calls — see
+`FB_DigitalInputTimingTests.TcPOU`'s `RisingEdgeSettlesExactlyAtDebounceTime`
+and neighbors.
+
+TwinCAT has no `AdvanceClock`, so a suite that calls it no longer compiles on
+the target. Any fixture whose verdicts are meant to be diffed against a real
+TwinCAT run therefore has to keep clear of it — that is why the miniload
+sensor fixture carries two suites, `FB_DigitalInputTests` (portable) and
+`FB_DigitalInputTimingTests` (xStunit only).
+
+`PilotSetPortabilityTests` enforces that split: it scans every `.TcPOU` in the
+miniload fixtures for a call to an intrinsic with no TwinCAT counterpart and
+fails if one turns up outside a POU declared xStunit-only.
 
 ## TON / TOF / TP (`FB_Pulse`) and LTON / LTOF / LTP
 

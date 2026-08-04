@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using xStunit.Interpreter;
 using xStunit.Parser;
@@ -12,10 +13,14 @@ namespace xStunit.Interpreter.Tests
         private static (Engine Engine, FbInstance Instance, Frame Frame) NewHolder(
             string varBlock,
             IEnumerable<StructAst> structTypes = null,
-            IEnumerable<KeyValuePair<string, string>> aliases = null)
+            IEnumerable<KeyValuePair<string, string>> aliases = null,
+            TargetPlatform target = null)
         {
             var fb = new PouAst("FB_Holder", null, varBlock, "", new List<MethodAst>());
-            var engine = new Engine(new TypeRegistry(new[] { fb }, structTypes, aliases: aliases));
+            var engine = new Engine(
+                new TypeRegistry(new[] { fb }, structTypes, aliases: aliases),
+                null,
+                target ?? TargetPlatform.Default);
             var instance = engine.NewInstance("FB_Holder");
             return (engine, instance, new Frame(instance, "FB_Holder"));
         }
@@ -241,6 +246,57 @@ END_TYPE");
             Assert.Equal(4, result);
         }
 
+        // An object-type-class id is four bytes on every target - both golden
+        // .tmc modules declare PlcAppSystemInfo.ObjId at 32 bits, the x86 build
+        // and the x64 one alike - so it is sizable without knowing which target
+        // the code is built for, unlike the void pointer below.
+        [Theory]
+        [InlineData("SIZEOF(id)")]
+        [InlineData("SIZEOF(OTCID)")]
+        public void SizeOf_ObjectTypeClassId_IsFourBytesWithoutKnowingTheTarget(string expression)
+        {
+            var (engine, _, frame) = NewHolder("VAR\n\tid : OTCID;\nEND_VAR");
+
+            var result = engine.Evaluate(Parser.ParseExpression(expression), frame);
+
+            Assert.Equal(4, result);
+        }
+
+        // The addresses are the case the id above is not: the golden .tmc pair
+        // disagrees about their width, 32 bits on x86 and 64 on x64, so any
+        // fixed answer would be right on one target and wrong on the other.
+        // The void pointer sizes with the spelled-out addresses beside it -
+        // naming no referent is what makes it an address, not something
+        // narrower.
+        [Theory]
+        [InlineData("x86", 4)]
+        [InlineData("x64", 8)]
+        public void SizeOf_AddressDeclarations_AreTheSelectedTargetsAddressWidth(
+            string targetName, int expectedBytes)
+        {
+            Assert.True(TargetPlatform.TryParse(targetName, out var target));
+            var (engine, _, frame) = NewHolder(
+                "VAR\n\tp : PVOID;\n\tq : POINTER TO LREAL;\n\tr : REFERENCE TO INT;\nEND_VAR", target: target);
+
+            Assert.Equal(expectedBytes, engine.Evaluate(Parser.ParseExpression("SIZEOF(p)"), frame));
+            Assert.Equal(expectedBytes, engine.Evaluate(Parser.ParseExpression("SIZEOF(q)"), frame));
+            Assert.Equal(expectedBytes, engine.Evaluate(Parser.ParseExpression("SIZEOF(r)"), frame));
+        }
+
+        // An Engine built without a target is the one every other test here
+        // uses, so what it assumes is part of the layout contract rather than
+        // an implementation detail: 4-byte addresses, the width every SIZEOF
+        // answer xStunit has given so far was computed at.
+        [Fact]
+        public void SizeOf_AddressWithNoTargetSelected_IsTheDefaultTargetsAddressWidth()
+        {
+            var (engine, _, frame) = NewHolder("VAR\n\tp : POINTER TO LREAL;\nEND_VAR");
+
+            Assert.Equal(
+                TargetPlatform.Default.AddressSize,
+                engine.Evaluate(Parser.ParseExpression("SIZEOF(p)"), frame));
+        }
+
         // {attribute 'pack_mode' := '1'} byte-packs a struct: no per-field
         // alignment padding at all. The same fields at natural alignment pad
         // the LREAL out to offset 8 and the struct to 16 bytes, as the test
@@ -300,5 +356,50 @@ END_TYPE");
             // it at offset 2..3, total 4 bytes.
             Assert.Equal(4, result);
         }
+
+        // A union is as wide as its widest member, not as wide as its members
+        // laid end to end: reading it as a struct would make this 14 bytes.
+        [Fact]
+        public void SizeOf_Union_IsItsWidestMemberRatherThanTheSumOfThem()
+        {
+            var unionType = StructDeclParser.Parse(UnionDeclaration);
+            var (engine, _, frame) = NewHolder("VAR\n\tu : U_Overlaid;\nEND_VAR", new[] { unionType });
+
+            var result = engine.Evaluate(Parser.ParseExpression("SIZEOF(u)"), frame);
+
+            Assert.Equal(8, result);
+        }
+
+        // A union imposes its widest member's alignment on whatever holds it,
+        // which nothing about its own size reveals: an 8-byte union that
+        // aligned to 1 would put the trailer at 9 and make the holder 10 bytes.
+        [Fact]
+        public void SizeOf_StructHoldingAUnion_AlignsItToItsWidestMember()
+        {
+            var unionType = StructDeclParser.Parse(UnionDeclaration);
+            var holderType = StructDeclParser.Parse(@"TYPE ST_Holder :
+STRUCT
+	leadIn : BYTE;
+	overlay : U_Overlaid;
+	trailer : BYTE;
+END_STRUCT
+END_TYPE");
+            var (engine, _, frame) = NewHolder(
+                "VAR\n\th : ST_Holder;\nEND_VAR", new[] { unionType, holderType });
+
+            var result = engine.Evaluate(Parser.ParseExpression("SIZEOF(h)"), frame);
+
+            Assert.Equal(24, result);
+        }
+
+        // Three deliberately different widths: all-same-width members would
+        // leave "widest member" indistinguishable from "first" or "last".
+        private const string UnionDeclaration = @"TYPE U_Overlaid :
+UNION
+	asWord : WORD;
+	asBytes : ARRAY[0..3] OF BYTE;
+	asLong : LWORD;
+END_UNION
+END_TYPE";
     }
 }

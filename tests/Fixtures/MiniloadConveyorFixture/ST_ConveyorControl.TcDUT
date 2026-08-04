@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4026.18">
+  <DUT Name="ST_ConveyorControl" Id="{5e4501d0-0022-4d19-9a41-000000000001}">
+    <Declaration><![CDATA[(*
+    Everything that distinguishes one conveyor instance from another, as a
+    value. The equipment module holds no tuning of its own, so the same block
+    serves an infeed, a transport and an outfeed run by being handed a
+    different ST_ConveyorControl.
+
+    All four durations are meant to be settable to zero. At zero the stage they
+    gate is transparent - the ramp is over on the scan it starts, the handover
+    completes as soon as the photo-eye is clear, the belt stops with the demand
+    - which is what lets a suite walk every arc of the state machine without a
+    moving clock.
+*)
+TYPE ST_ConveyorControl :
+STRUCT
+	// Belt speed as a percentage of the drive's rated velocity. The equipment
+	// module scales rather than commands absolute units, so a run re-geared
+	// during commissioning keeps its recipe.
+	SpeedPercentage : LREAL;
+	AccelTime : TIME;
+	DecelTime : TIME;
+	// The drawn Delay: how long the photo-eye must stay clear before the
+	// container counts as taken by the downstream station. Shorter than the
+	// gap between two containers, or two containers read as one.
+	HandoverDelay : TIME;
+	// How long the belt keeps turning after the demand drops, so a container
+	// that has just been released coasts fully out of the transfer rather than
+	// stopping half on it.
+	MotorRunOn : TIME;
+END_STRUCT
+END_TYPE
+]]></Declaration>
+  </DUT>
+</TcPlcObject>

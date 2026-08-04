@@ -15,7 +15,7 @@ namespace xStunit.Cli.Tests
 
         public CliRunnerWideStringPluginTests()
         {
-            _pluginDir = Path.Combine(Path.GetTempPath(), "tcxunit-wstring-plugin-test-" + Guid.NewGuid().ToString("N"));
+            _pluginDir = Path.Combine(Path.GetTempPath(), "xstunit-wstring-plugin-test-" + Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(_pluginDir);
             File.Copy(PluginDll(), Path.Combine(_pluginDir, "xStunit.StandardStringPlugins.dll"));
         }

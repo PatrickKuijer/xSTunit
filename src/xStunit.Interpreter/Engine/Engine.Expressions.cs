@@ -13,6 +13,10 @@ namespace xStunit.Interpreter
             {
                 case IntLiteralExpr i:
                     return i.Value;
+                case LintLiteralExpr l:
+                    return l.Value;
+                case UlintLiteralExpr ul:
+                    return ul.Value;
                 case RealLiteralExpr r:
                     return r.Value;
                 case LrealLiteralExpr lr:
@@ -90,7 +94,7 @@ namespace xStunit.Interpreter
                     }
 
                     var receiverValue = Evaluate(fieldAccess.Receiver, frame);
-                    var fields = FieldsOf(receiverValue);
+                    var fields = FieldsOf(receiverValue, fieldAccess.FieldName);
                     if (fields.TryGetValue(fieldAccess.FieldName, out var cell))
                         return cell.Value;
 
@@ -156,6 +160,12 @@ namespace xStunit.Interpreter
                 switch (value)
                 {
                     case int i: return -i;
+                    case long l: return -l;
+                    // The one negatable ulong: long.MinValue's magnitude is
+                    // one past long.MaxValue, so a literal can only spell it
+                    // unsigned, and '-9223372036854775808' would otherwise be
+                    // the single LINT value no source text could produce.
+                    case ulong u when u == (ulong)long.MaxValue + 1: return long.MinValue;
                     case float f: return -f;
                     case double d: return -d;
                     default:
@@ -182,6 +192,7 @@ namespace xStunit.Interpreter
 
             if ((binary.Op == "=" || binary.Op == "<>") &&
                 (leftVal is Pointer || rightVal is Pointer || leftVal is FbInstance || rightVal is FbInstance ||
+                 leftVal is UnassignedInterfaceReference || rightVal is UnassignedInterfaceReference ||
                  leftVal == null || rightVal == null))
                 return EvaluatePointerEquality(binary.Op, leftVal, rightVal);
 
@@ -307,13 +318,16 @@ namespace xStunit.Interpreter
         //
         // An interface-typed (or plain FB-reference) variable follows the same
         // "= 0 means unassigned" idiom - 'IF (iipHandler <> 0) AND
-        // iipHandler.bDoWork(...) THEN' - without a null representation of its
-        // own: no POU is registered under an interface type name, so
-        // DefaultValue's lookups all miss and it falls through to the int-0
-        // default, and once assigned the field holds the concrete FB's
-        // FbInstance directly. FbInstance therefore gets the same null-check
-        // semantics as Pointer, with two assigned interface variables comparing
-        // by referenced-instance identity.
+        // iipHandler.bDoWork(...) THEN'. Once assigned, either kind holds the
+        // concrete FB's FbInstance directly, so FbInstance gets the same
+        // null-check semantics as Pointer, with two assigned interface
+        // variables comparing by referenced-instance identity.
+        //
+        // Unassigned, the two kinds are spelled differently and both have to be
+        // recognized here: a variable of a LOADED interface type holds an
+        // UnassignedInterfaceReference, while one whose type name no .TcIO
+        // declared still falls through DefaultValue to int 0 and reaches this
+        // method only when the other operand forces it to.
         private static object EvaluatePointerEquality(string op, object leftVal, object rightVal)
         {
             bool equal;
@@ -321,6 +335,12 @@ namespace xStunit.Interpreter
                 equal = PointerTargetsEqual(leftPtr.Target, rightPtr.Target);
             else if (leftVal is FbInstance leftFb && rightVal is FbInstance rightFb)
                 equal = ReferenceEquals(leftFb, rightFb);
+            else if (leftVal is UnassignedInterfaceReference && rightVal is UnassignedInterfaceReference)
+                equal = true;
+            else if (leftVal is UnassignedInterfaceReference)
+                equal = rightVal == null || IsNumericZero(rightVal);
+            else if (rightVal is UnassignedInterfaceReference)
+                equal = leftVal == null || IsNumericZero(leftVal);
             else if (leftVal is Pointer || rightVal is Pointer || leftVal is FbInstance || rightVal is FbInstance)
                 equal = false;
             else if (leftVal == null && rightVal == null)
@@ -384,6 +404,24 @@ namespace xStunit.Interpreter
         // caller mixed named and positional args.
         private static readonly string[] ConcatParamNames =
             { "STR1", "STR2", "STR3", "STR4", "STR5", "STR6", "STR7", "STR8", "STR9", "STR10" };
+
+        private static readonly string[] AdvanceClockParamNames = { "Duration" };
+
+        // The one ST-visible way to move the shared Clock: a suite (or any
+        // other interpreted body) calls AdvanceClock(T#100ms) the same way it
+        // calls SIZEOF/CONCAT, rather than needing a C# harness between
+        // StepCycles calls. Duration's CLR shape already says which unit it
+        // is in - TimeLiteral parses TIME to uint (ms) and LTIME to ulong
+        // (ns, Clock's own base unit) - so a ulong means nanoseconds and
+        // anything else (a TIME literal or a bare integer cycle-style count)
+        // means milliseconds.
+        private void AdvanceClock(object duration)
+        {
+            if (duration is ulong ns)
+                Clock.AdvanceNs((long)ns);
+            else
+                Clock.AdvanceMs(Convert.ToInt64(duration));
+        }
 
         private static Expr RequireIntrinsicArg(string methodName, string paramName, IReadOnlyDictionary<string, Expr> args)
         {
@@ -663,6 +701,14 @@ namespace xStunit.Interpreter
                         frame);
                 }
 
+                if (call.MethodName == "AdvanceClock")
+                {
+                    var args = ResolveIntrinsicArgs(AdvanceClockParamNames, call.PositionalArgs, call.NamedArgs);
+                    var duration = Evaluate(RequireIntrinsicArg("AdvanceClock", "Duration", args), frame);
+                    AdvanceClock(duration);
+                    return null;
+                }
+
                 if (call.MethodName == "SIZEOF")
                     return EvaluateSizeOf(call.PositionalArgs[0], frame);
 
@@ -694,8 +740,11 @@ namespace xStunit.Interpreter
                 return CallMethod(frame.Instance, call.MethodName, call.PositionalArgs, call.NamedArgs, frame, baseType);
             }
 
-            var receiverInstance = (FbInstance)Evaluate(call.Receiver, frame);
-            return CallMethod(receiverInstance, call.MethodName, call.PositionalArgs, call.NamedArgs, frame, null);
+            var receiver = Evaluate(call.Receiver, frame);
+            if (receiver is UnassignedInterfaceReference unassignedReceiver)
+                throw unassignedReceiver.Fault(call.MethodName);
+
+            return CallMethod((FbInstance)receiver, call.MethodName, call.PositionalArgs, call.NamedArgs, frame, null);
         }
 
         private static readonly HashSet<string> IntegerCastTargets = new HashSet<string>
@@ -719,12 +768,17 @@ namespace xStunit.Interpreter
             var toType = call.MethodName.Substring(separator + 4);
             var value = Evaluate(call.PositionalArgs[0], frame);
 
+            // Explicit InvariantCulture provider: Convert.ToXXX(object) without
+            // one parses string sources (e.g. STRING_TO_LREAL) against
+            // CurrentCulture, which under a culture using '.' as the group
+            // separator (e.g. de-DE) drops the decimal point instead of
+            // erroring or parsing it correctly.
             if (toType == "REAL")
-                result = Convert.ToSingle(value);
+                result = Convert.ToSingle(value, System.Globalization.CultureInfo.InvariantCulture);
             else if (toType == "LREAL")
-                result = Convert.ToDouble(value);
+                result = Convert.ToDouble(value, System.Globalization.CultureInfo.InvariantCulture);
             else if (IntegerCastTargets.Contains(toType))
-                result = Convert.ToInt32(value);
+                result = Convert.ToInt32(value, System.Globalization.CultureInfo.InvariantCulture);
             // _TO_STRING is deliberately scoped to numeric source types only:
             // a non-numeric prefix like BOOL_TO_STRING or TIME_TO_STRING falls
             // through to CallMethod/native-bridge dispatch and keeps its

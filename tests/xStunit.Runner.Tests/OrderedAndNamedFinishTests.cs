@@ -9,7 +9,7 @@ namespace xStunit.Runner.Tests
         [Fact]
         public void TestOrdered_RunsBothTestsInDeclaredOrder()
         {
-            var results = SuiteRunner.RunAll(new OrderedTestSuite());
+            var results = new OrderedTestSuite().Run();
 
             Assert.Equal(2, results.Count);
             Assert.Equal("Test_1", results[0].Name);
@@ -21,7 +21,7 @@ namespace xStunit.Runner.Tests
         [Fact]
         public void TestOrdered_NotYetItsTurn_SkipsAssertsAndNeverFinishes()
         {
-            var results = SuiteRunner.RunAll(new OutOfTurnOrderedTestSuite());
+            var results = new OutOfTurnOrderedTestSuite().Run();
 
             var result = Assert.Single(results);
             Assert.Equal("Test_1", result.Name);
@@ -31,7 +31,7 @@ namespace xStunit.Runner.Tests
         [Fact]
         public void TestFinishedNamed_ClosesNamedTestEvenWhenCurrent()
         {
-            var results = SuiteRunner.RunAll(new NamedFinishTestSuite());
+            var results = new NamedFinishTestSuite().Run();
 
             var result = Assert.Single(results);
             Assert.Equal("A", result.Name);
@@ -42,14 +42,14 @@ namespace xStunit.Runner.Tests
         public void TestFinishedNamed_UnknownName_ThrowsImmediately()
         {
             Assert.Throws<InvalidOperationException>(
-                () => SuiteRunner.RunAll(new UnknownNamedFinishTestSuite()));
+                () => new UnknownNamedFinishTestSuite().Run());
         }
 
         [Fact]
         public void IsTestFinished_UnknownName_ThrowsImmediately()
         {
             Assert.Throws<InvalidOperationException>(
-                () => SuiteRunner.RunAll(new UnknownIsFinishedTestSuite()));
+                () => new UnknownIsFinishedTestSuite().Run());
         }
     }
 }

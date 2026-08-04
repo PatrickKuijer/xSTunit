@@ -21,7 +21,7 @@ namespace xStunit.Cli.Tests
 
         public CliRunnerTestBlastRadiusTests()
         {
-            _tempDir = Path.Combine(Path.GetTempPath(), "TcXunitCliBlastRadiusFixture_" + Guid.NewGuid());
+            _tempDir = Path.Combine(Path.GetTempPath(), "xStunitCliBlastRadiusFixture_" + Guid.NewGuid());
             Directory.CreateDirectory(_tempDir);
         }
 

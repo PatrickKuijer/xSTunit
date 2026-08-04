@@ -1,0 +1,200 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4026.18">
+  <POU Name="FB_DigitalInputTimingTests" Id="{5e4501d1-0004-4d19-9a41-000000000001}" SpecialFunc="None">
+    <Declaration><![CDATA[(*
+    The part of FB_DigitalInput's contract that only shows itself once time
+    moves inside a single test case: what happens strictly between the two
+    debounce boundaries, and how the elapsed meters follow the settled state.
+
+    xStunit ONLY. Every case here calls AdvanceClock, an xStunit intrinsic
+    with no TwinCAT counterpart, so this POU does not compile on the target
+    and is deliberately kept out of the portable suite. FB_DigitalInputTests
+    holds the cases that do run on both engines; nothing that calls
+    AdvanceClock belongs in it.
+*)
+FUNCTION_BLOCK FB_DigitalInputTimingTests EXTENDS TcUnit.FB_TestSuite]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[RisingEdgeSettlesExactlyAtDebounceTime();
+FallingEdgeReleasesExactlyAtDebounceTime();
+GlitchShorterThanDebounceTimeNeverSettlesAndRestartsTheWindow();
+TimeActiveMetersTheCurrentStretchAndBothMetersSwapOnATransition();
+ElapsedMetersFollowTheSettledStateNotTheUnfilteredLevel();]]></ST>
+    </Implementation>
+    <Method Name="RisingEdgeSettlesExactlyAtDebounceTime" Id="{5e4501d1-0004-4d19-9a41-000000000002}">
+      <Declaration><![CDATA[// The boundary cases in FB_DigitalInputTests pin "never" and "immediately";
+// this pins the contract's actual promise, that Active moves at exactly
+// DebounceTime - not one ms early (still a bounce) and not one ms late (a
+// lagging sensor).
+METHOD PRIVATE RisingEdgeSettlesExactlyAtDebounceTime
+VAR
+	sensor : FB_DigitalInput;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('RisingEdgeSettlesExactlyAtDebounceTime');
+
+sensor.DebounceTime := T#20ms;
+
+sensor(HardwareInput := TRUE); // baseline: establishes the filter's own clock tracking
+
+AdvanceClock(T#19ms);
+sensor(HardwareInput := TRUE);
+AssertFalse(Condition := sensor.Active,
+            Message := 'settled one ms before DebounceTime elapsed');
+
+AdvanceClock(T#1ms);
+sensor(HardwareInput := TRUE);
+AssertTrue(Condition := sensor.Active,
+           Message := 'did not settle at exactly DebounceTime');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="FallingEdgeReleasesExactlyAtDebounceTime" Id="{5e4501d1-0004-4d19-9a41-000000000003}">
+      <Declaration><![CDATA[// Symmetric with the rising-edge boundary test: release is delayed by
+// exactly DebounceTime too, not merely "eventually".
+METHOD PRIVATE FallingEdgeReleasesExactlyAtDebounceTime
+VAR
+	sensor : FB_DigitalInput;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('FallingEdgeReleasesExactlyAtDebounceTime');
+
+sensor.DebounceTime := T#20ms;
+
+sensor(HardwareInput := TRUE); // baseline
+
+AdvanceClock(T#20ms);
+sensor(HardwareInput := TRUE);
+AssertTrue(Condition := sensor.Active,
+           Message := 'rising edge did not settle at DebounceTime');
+
+AdvanceClock(T#19ms);
+sensor(HardwareInput := FALSE);
+AssertTrue(Condition := sensor.Active,
+           Message := 'released one ms before DebounceTime elapsed');
+
+AdvanceClock(T#1ms);
+sensor(HardwareInput := FALSE);
+AssertFalse(Condition := sensor.Active,
+            Message := 'did not release at exactly DebounceTime');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="GlitchShorterThanDebounceTimeNeverSettlesAndRestartsTheWindow" Id="{5e4501d1-0004-4d19-9a41-000000000004}">
+      <Declaration><![CDATA[// A settling window has to restart from zero on a dropout rather than resume
+// from wherever it left off - otherwise a fast enough chatter could bank
+// partial time across several bounces and eventually fake a settled edge that
+// never actually held continuously.
+METHOD PRIVATE GlitchShorterThanDebounceTimeNeverSettlesAndRestartsTheWindow
+VAR
+	sensor : FB_DigitalInput;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('GlitchShorterThanDebounceTimeNeverSettlesAndRestartsTheWindow');
+
+sensor.DebounceTime := T#20ms;
+
+sensor(HardwareInput := TRUE); // baseline
+
+AdvanceClock(T#10ms);
+sensor(HardwareInput := TRUE);
+AssertFalse(Condition := sensor.Active,
+            Message := 'settled with only half of DebounceTime banked');
+
+AdvanceClock(T#5ms);
+sensor(HardwareInput := FALSE); // glitch: drops before the window closes
+
+AdvanceClock(T#15ms);
+sensor(HardwareInput := TRUE);
+AssertFalse(Condition := sensor.Active,
+            Message := 'the 10ms banked before the glitch carried over instead of the window restarting');
+
+AdvanceClock(T#5ms);
+sensor(HardwareInput := TRUE);
+AssertTrue(Condition := sensor.Active,
+           Message := 'did not settle a full DebounceTime after the glitch');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="TimeActiveMetersTheCurrentStretchAndBothMetersSwapOnATransition" Id="{5e4501d1-0004-4d19-9a41-000000000005}">
+      <Declaration><![CDATA[// TimeActive has to read the CURRENT settled stretch, not a running total -
+// a station asking "how long has this photo-eye been blocked" needs the
+// meter to zero the instant the block clears, not keep counting a stretch
+// that is already over.
+METHOD PRIVATE TimeActiveMetersTheCurrentStretchAndBothMetersSwapOnATransition
+VAR
+	sensor : FB_DigitalInput;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('TimeActiveMetersTheCurrentStretchAndBothMetersSwapOnATransition');
+
+sensor.DebounceTime := T#0ms;
+
+sensor(HardwareInput := TRUE); // baseline
+
+AdvanceClock(T#100ms);
+sensor(HardwareInput := TRUE);
+AssertEquals_TIME(Expected := T#100ms, Actual := sensor.TimeActive,
+                  Message := 'TimeActive after 100ms blocked');
+AssertEquals_TIME(Expected := T#0ms, Actual := sensor.TimeInactive,
+                  Message := 'TimeInactive moved while still blocked');
+
+AdvanceClock(T#250ms);
+sensor(HardwareInput := TRUE);
+AssertEquals_TIME(Expected := T#350ms, Actual := sensor.TimeActive,
+                  Message := 'TimeActive did not accumulate across steps');
+
+sensor(HardwareInput := FALSE); // transition step, no elapsed time yet
+AdvanceClock(T#40ms);
+sensor(HardwareInput := FALSE);
+AssertEquals_TIME(Expected := T#0ms, Actual := sensor.TimeActive,
+                  Message := 'TimeActive kept a running total instead of resetting on release');
+AssertEquals_TIME(Expected := T#40ms, Actual := sensor.TimeInactive,
+                  Message := 'TimeInactive did not meter the new stretch');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="ElapsedMetersFollowTheSettledStateNotTheUnfilteredLevel" Id="{5e4501d1-0004-4d19-9a41-000000000006}">
+      <Declaration><![CDATA[// A bounce the debounce filter swallows must not disturb the elapsed meters
+// either, or "the lane has been clear for N ms" would be reset by noise that
+// never counted as a container in the first place.
+METHOD PRIVATE ElapsedMetersFollowTheSettledStateNotTheUnfilteredLevel
+VAR
+	sensor : FB_DigitalInput;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('ElapsedMetersFollowTheSettledStateNotTheUnfilteredLevel');
+
+sensor.DebounceTime := T#20ms;
+
+sensor(HardwareInput := FALSE); // baseline
+
+AdvanceClock(T#100ms);
+sensor(HardwareInput := FALSE);
+AssertEquals_TIME(Expected := T#100ms, Actual := sensor.TimeInactive,
+                  Message := 'TimeInactive after 100ms clear');
+
+AdvanceClock(T#5ms);
+sensor(HardwareInput := TRUE); // a bounce shorter than DebounceTime
+
+AdvanceClock(T#5ms);
+sensor(HardwareInput := FALSE);
+
+AssertFalse(Condition := sensor.Active,
+            Message := 'a bounce the filter swallowed reached Active');
+AssertEquals_TIME(Expected := T#110ms, Actual := sensor.TimeInactive,
+                  Message := 'the swallowed bounce restarted TimeInactive');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+  </POU>
+</TcPlcObject>

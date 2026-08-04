@@ -69,7 +69,7 @@ namespace xStunit.Interpreter
                     return gvlCell;
                 }
 
-                var fields = FieldsOf(Evaluate(fieldAccess.Receiver, frame));
+                var fields = FieldsOf(Evaluate(fieldAccess.Receiver, frame), fieldAccess.FieldName);
                 if (!fields.TryGetValue(fieldAccess.FieldName, out var cell))
                     throw new InvalidOperationException($"Unknown field '{fieldAccess.FieldName}'");
                 return cell;
@@ -113,12 +113,20 @@ namespace xStunit.Interpreter
         // constructed FbInstance/StructInstance), so passing a plain variable
         // here by mistake would silently evaluate to TRUE instead of surfacing
         // the misuse.
+        //
+        // The check runs on the alias-resolved name so that a variable
+        // declared through an ALIAS DUT (pData : PT_Byte, PT_Byte being
+        // POINTER TO BYTE) answers as its underlying type does. TypeLayout's
+        // SIZEOF and Engine.Defaults already size and null-default that
+        // declaration as a pointer; testing the unresolved name here would
+        // leave the one intrinsic that reads the null they establish unable to
+        // see it. The message still names the type as written, since that is
+        // the text to search the VAR block for.
         private bool IsValidRef(Expr expr, Frame frame)
         {
             var cell = ResolveCellForLValue(expr, frame);
             var typeName = ResolveDeclaredTypeName(expr, frame);
-            if (typeName == null ||
-                !(typeName.StartsWith("POINTER TO") || typeName.StartsWith("REFERENCE TO")))
+            if (!AddressTypeInfo.IsAddressType(_registry.ResolveAlias(typeName)))
             {
                 throw new InvalidOperationException(
                     $"__ISVALIDREF requires a POINTER TO or REFERENCE TO variable, but got " +
@@ -169,7 +177,7 @@ namespace xStunit.Interpreter
                 if (receiver is StructInstance st)
                     return st.FieldTypeNames.TryGetValue(fieldAccess.FieldName, out var stFieldType) ? stFieldType : null;
 
-                var fields = FieldsOf(receiver);
+                var fields = FieldsOf(receiver, fieldAccess.FieldName);
                 return fields.TryGetValue(fieldAccess.FieldName, out var fieldCell) ? fieldCell.DeclaredTypeName : null;
             }
 
@@ -178,10 +186,17 @@ namespace xStunit.Interpreter
 
         // FbInstance and StructInstance are both named-field containers of
         // Cells, so FieldAccessExpr reads either the same way.
-        private static Dictionary<string, Cell> FieldsOf(object receiver) => receiver switch
+        //
+        // memberName is the field being reached for, carried in only so an
+        // unassigned interface reference can name it: reaching THROUGH a null
+        // contract is a defect in the code under test, and "Cannot access
+        // fields on UnassignedInterfaceReference" would describe this
+        // interpreter's plumbing instead of the missing injection.
+        private static Dictionary<string, Cell> FieldsOf(object receiver, string memberName) => receiver switch
         {
             FbInstance fb => fb.Fields,
             StructInstance st => st.Fields,
+            UnassignedInterfaceReference unassigned => throw unassigned.Fault(memberName),
             _ => throw new NotSupportedException($"Cannot access fields on {receiver?.GetType().Name}"),
         };
     }

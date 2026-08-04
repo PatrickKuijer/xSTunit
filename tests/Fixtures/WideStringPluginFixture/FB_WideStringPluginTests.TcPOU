@@ -2,22 +2,20 @@
 <TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4026.18">
   <POU Name="FB_WideStringPluginTests" Id="{93190000-0000-4a1a-8b1b-000000000000}" SpecialFunc="None">
     <Declaration><![CDATA[(*
-    TcXunit interpreter fixture (TcXunit-93l9). Exercises the Tc2_Standard
-    WSTRING function set (WCONCAT, WDELETE, WFIND, WINSERT, WLEFT, WLEN,
-    WMID, WREPLACE, WRIGHT) resolving through the native-function
-    plugin/registry path (samples/xStunit.StandardStringPlugins), not a built-in
-    intrinsic.
+    Interpreter fixture. Exercises the Tc2_Standard WSTRING function set
+    (WCONCAT, WDELETE, WFIND, WINSERT, WLEFT, WLEN, WMID, WREPLACE, WRIGHT)
+    resolving through the native-function plugin/registry path
+    (samples/xStunit.StandardStringPlugins), not a built-in intrinsic.
 
-    Unlike CONCAT - which TcXunit-3lt made an interpreter intrinsic, so its
-    plugin counterpart would be unreachable (TcXunit-8po.1) - WCONCAT is NOT
-    shadowed: the intrinsic is dispatched by exact ordinal name match on
-    "CONCAT" (Engine.Expressions.cs), which "WCONCAT" does not hit, and no
-    other intrinsic mentions it. It is therefore implemented as a plugin
-    function here and covered below.
+    Unlike CONCAT - an interpreter intrinsic, so a plugin counterpart would
+    be unreachable - WCONCAT is NOT shadowed: the intrinsic is dispatched by
+    exact ordinal name match on "CONCAT" (Engine.Expressions.cs), which
+    "WCONCAT" does not hit, and no other intrinsic mentions it. It is
+    therefore implemented as a plugin function here and covered below.
 
-    WSTRING literals use "..." rather than STRING's '...' (TcXunit-gd2.4).
-    Both are plain C# strings inside the interpreter, so the wide functions
-    count UTF-16 code units - the same unit TwinCAT's WSTRING is defined in.
+    WSTRING literals use "..." rather than STRING's '...'. Both are plain C#
+    strings inside the interpreter, so the wide functions count UTF-16 code
+    units - the same unit TwinCAT's WSTRING is defined in.
 *)
 FUNCTION_BLOCK FB_WideStringPluginTests EXTENDS TcUnit.FB_TestSuite]]></Declaration>
     <Implementation>
@@ -435,7 +433,7 @@ END_VAR
       <Implementation>
         <ST><![CDATA[TEST('WConcat');
 
-(* Unlike CONCAT (an interpreter intrinsic since TcXunit-3lt), WCONCAT is
+(* Unlike CONCAT (an interpreter intrinsic), WCONCAT is
    not intercepted before native-function dispatch - the intrinsic matches
    the method name "CONCAT" exactly - so this call reaches the plugin. *)
 wsResult := WCONCAT(wsLeft, "Leaf");

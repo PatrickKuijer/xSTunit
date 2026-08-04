@@ -15,7 +15,7 @@ namespace xStunit.Cli.Tests
 
         public CliRunnerJsonFormatTests()
         {
-            _tempDir = Path.Combine(Path.GetTempPath(), "TcXunitCliJsonFixture_" + Guid.NewGuid());
+            _tempDir = Path.Combine(Path.GetTempPath(), "xStunitCliJsonFixture_" + Guid.NewGuid());
             Directory.CreateDirectory(_tempDir);
             File.WriteAllText(Path.Combine(_tempDir, "FB_AlwaysFailsTests.TcPOU"), AlwaysFailsSuiteXml);
         }
@@ -124,7 +124,7 @@ namespace xStunit.Cli.Tests
         [Fact]
         public void Run_JsonFormat_SuiteLoadFailure_OmitsOrNullsDurationMsRatherThanReportingZero()
         {
-            var brokenDir = Path.Combine(Path.GetTempPath(), "TcXunitCliJsonBrokenFixture_" + Guid.NewGuid());
+            var brokenDir = Path.Combine(Path.GetTempPath(), "xStunitCliJsonBrokenFixture_" + Guid.NewGuid());
             Directory.CreateDirectory(brokenDir);
             try
             {

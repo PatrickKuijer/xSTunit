@@ -14,7 +14,7 @@ namespace xStunit.Cli.Tests
 
         public CliRunnerSuiteExceptionTests()
         {
-            _tempDir = Path.Combine(Path.GetTempPath(), "TcXunitCliSuiteExceptionFixture_" + Guid.NewGuid());
+            _tempDir = Path.Combine(Path.GetTempPath(), "xStunitCliSuiteExceptionFixture_" + Guid.NewGuid());
             Directory.CreateDirectory(_tempDir);
             File.WriteAllText(Path.Combine(_tempDir, "FB_ThrowingSuiteTests.TcPOU"), ThrowingSuiteXml);
             File.WriteAllText(Path.Combine(_tempDir, "FB_CleanSuiteTests.TcPOU"), CleanSuiteXml);

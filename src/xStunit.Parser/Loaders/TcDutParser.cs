@@ -8,8 +8,8 @@ namespace xStunit.Parser
     /// </summary>
     /// <remarks>
     /// Left unparsed because a DUT file can also declare ENUMs, aliases and
-    /// unions, which this project has no model for - callers interpret the
-    /// text as far as they need (xStunit.Interpreter's StructDeclParser).
+    /// unions, none of which this project has a model for - callers interpret
+    /// the text as far as they need (xStunit.Interpreter's StructDeclParser).
     /// </remarks>
     public readonly struct DutAst
     {

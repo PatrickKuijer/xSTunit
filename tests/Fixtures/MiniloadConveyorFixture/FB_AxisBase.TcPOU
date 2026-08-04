@@ -1,0 +1,101 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4026.18">
+  <POU Name="FB_AxisBase" Id="{5e4501d0-0024-4d19-9a41-000000000001}" SpecialFunc="None">
+    <Declaration><![CDATA[(*
+    The drive control module behind I_AxisBase: the thing an equipment module
+    commands instead of touching motion function blocks directly.
+
+    Only the behaviour a conveyor run depends on is modelled - power, a
+    commanded velocity, a latching drive fault and the velocity readback.
+    There is no ramp here on purpose: how long a run is allowed to reach speed
+    belongs to the equipment module's recipe (ST_ConveyorControl.AccelTime),
+    because two runs sharing one drive type still need different allowances.
+
+    The fault is a LATCH, not a passthrough. A drive that trips and recovers
+    within a scan still has to be acknowledged, or a conveyor would resume on
+    its own after a trip nobody saw.
+*)
+FUNCTION_BLOCK FB_AxisBase IMPLEMENTS I_AxisBase
+VAR_INPUT
+	// The drive-side fault line, wired to the amplifier on a real machine.
+	DriveFault : BOOL;
+END_VAR
+VAR
+	powered : BOOL;
+	commanded : LREAL;
+	actual : LREAL;
+	faulted : BOOL;
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[IF DriveFault THEN
+	faulted := TRUE;
+END_IF
+
+// A faulted or unpowered drive is at standstill whatever was last commanded,
+// so a consumer reading ActualVelocity can never see a demand the drive is
+// not honouring.
+IF faulted OR NOT powered THEN
+	actual := 0.0;
+END_IF]]></ST>
+    </Implementation>
+    <Method Name="Enable" Id="{5e4501d0-0024-4d19-9a41-000000000002}">
+      <Declaration><![CDATA[METHOD Enable : BOOL]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[powered := TRUE;
+Enable := powered AND NOT faulted;]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="MoveVelocity" Id="{5e4501d0-0024-4d19-9a41-000000000004}">
+      <Declaration><![CDATA[METHOD MoveVelocity : BOOL
+VAR_INPUT
+	Velocity : LREAL;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[// The demand is recorded even when it cannot be honoured, so the readback
+// after a Reset is the speed the caller last asked for rather than zero.
+commanded := Velocity;
+
+IF powered AND NOT faulted THEN
+	actual := commanded;
+ELSE
+	actual := 0.0;
+END_IF
+
+MoveVelocity := powered AND NOT faulted;]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="Reset" Id="{5e4501d0-0024-4d19-9a41-000000000005}">
+      <Declaration><![CDATA[METHOD Reset : BOOL]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[// An acknowledgement against a fault that is still standing is a no-op
+// rather than a lie: the body would re-latch it on the next cycle anyway,
+// and a caller that saw Reset succeed would have been told the drive was
+// usable for exactly one scan.
+IF NOT DriveFault THEN
+	faulted := FALSE;
+END_IF
+
+Reset := NOT faulted;]]></ST>
+      </Implementation>
+    </Method>
+    <Property Name="Error" Id="{5e4501d0-0024-4d19-9a41-000000000008}">
+      <Declaration><![CDATA[PROPERTY Error : BOOL]]></Declaration>
+      <Get Name="Get" Id="{5e4501d0-0024-4d19-9a41-000000000009}">
+        <Declaration><![CDATA[]]></Declaration>
+        <Implementation>
+          <ST><![CDATA[Error := faulted;]]></ST>
+        </Implementation>
+      </Get>
+    </Property>
+    <Property Name="ActualVelocity" Id="{5e4501d0-0024-4d19-9a41-00000000000c}">
+      <Declaration><![CDATA[PROPERTY ActualVelocity : LREAL]]></Declaration>
+      <Get Name="Get" Id="{5e4501d0-0024-4d19-9a41-00000000000d}">
+        <Declaration><![CDATA[]]></Declaration>
+        <Implementation>
+          <ST><![CDATA[ActualVelocity := actual;]]></ST>
+        </Implementation>
+      </Get>
+    </Property>
+  </POU>
+</TcPlcObject>

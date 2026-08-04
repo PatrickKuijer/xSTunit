@@ -15,7 +15,7 @@ namespace xStunit.Cli.Tests
 
         public CliRunnerSuiteFilterTests()
         {
-            _tempDir = Path.Combine(Path.GetTempPath(), "TcXunitCliSuiteFilterFixture_" + Guid.NewGuid());
+            _tempDir = Path.Combine(Path.GetTempPath(), "xStunitCliSuiteFilterFixture_" + Guid.NewGuid());
             Directory.CreateDirectory(_tempDir);
             File.WriteAllText(Path.Combine(_tempDir, "FB_AlwaysPassesTests.TcPOU"), AlwaysPassesSuiteXml);
             File.WriteAllText(Path.Combine(_tempDir, "FB_AlwaysFailsTests.TcPOU"), AlwaysFailsSuiteXml);

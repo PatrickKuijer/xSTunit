@@ -1,0 +1,122 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4026.18">
+  <Itf Name="I_DigitalInput" Id="{5e4501d0-0001-4d19-9a41-000000000001}">
+    <Declaration><![CDATA[(*
+    The sensor contract every miniload module reads a discrete signal through.
+    A consumer holds an I_DigitalInput and asks it what the signal MEANS -
+    settled, in field polarity - never what the wire is doing right now. The
+    consumer does not cycle the sensor; whoever owns the instance does.
+
+    DebounceTime is symmetric: it gates both the rising and the falling
+    transition, so a chattering photo-eye cannot make Active flicker in either
+    direction.
+
+    TimeActive / TimeInactive measure the CURRENT unbroken stretch in that
+    state and reset on every settled transition. They answer "how long has
+    this been so", not "how long in total", which is what a blocked-conveyor
+    or missing-container diagnostic needs.
+
+    Simulation is the seam a mock hangs off: with Simulation set, SimulatedInput
+    replaces the field bit and everything downstream - polarity, debounce,
+    elapsed time - behaves exactly as it does on real hardware.
+*)
+INTERFACE I_DigitalInput]]></Declaration>
+    <Property Name="Active" Id="{5e4501d0-0001-4d19-9a41-000000000002}">
+      <Declaration><![CDATA[// The settled, polarity-corrected signal.
+PROPERTY Active : BOOL]]></Declaration>
+      <Get Name="Get" Id="{5e4501d0-0001-4d19-9a41-000000000003}">
+        <Declaration><![CDATA[]]></Declaration>
+        <Implementation>
+          <ST><![CDATA[]]></ST>
+        </Implementation>
+      </Get>
+    </Property>
+    <Property Name="DebounceTime" Id="{5e4501d0-0001-4d19-9a41-000000000004}">
+      <Declaration><![CDATA[// How long a level must hold before it is allowed to move Active, in
+// both directions. Zero means no filtering at all.
+PROPERTY DebounceTime : TIME]]></Declaration>
+      <Get Name="Get" Id="{5e4501d0-0001-4d19-9a41-000000000005}">
+        <Declaration><![CDATA[]]></Declaration>
+        <Implementation>
+          <ST><![CDATA[]]></ST>
+        </Implementation>
+      </Get>
+      <Set Name="Set" Id="{5e4501d0-0001-4d19-9a41-000000000006}">
+        <Declaration><![CDATA[]]></Declaration>
+        <Implementation>
+          <ST><![CDATA[]]></ST>
+        </Implementation>
+      </Set>
+    </Property>
+    <Property Name="Inverted" Id="{5e4501d0-0001-4d19-9a41-000000000007}">
+      <Declaration><![CDATA[// TRUE for a normally closed sensor: the wire level is negated before
+// anything else looks at it.
+PROPERTY Inverted : BOOL]]></Declaration>
+      <Get Name="Get" Id="{5e4501d0-0001-4d19-9a41-000000000008}">
+        <Declaration><![CDATA[]]></Declaration>
+        <Implementation>
+          <ST><![CDATA[]]></ST>
+        </Implementation>
+      </Get>
+      <Set Name="Set" Id="{5e4501d0-0001-4d19-9a41-000000000009}">
+        <Declaration><![CDATA[]]></Declaration>
+        <Implementation>
+          <ST><![CDATA[]]></ST>
+        </Implementation>
+      </Set>
+    </Property>
+    <Property Name="Simulation" Id="{5e4501d0-0001-4d19-9a41-00000000000a}">
+      <Declaration><![CDATA[// Selects SimulatedInput over the field bit.
+PROPERTY Simulation : BOOL]]></Declaration>
+      <Get Name="Get" Id="{5e4501d0-0001-4d19-9a41-00000000000b}">
+        <Declaration><![CDATA[]]></Declaration>
+        <Implementation>
+          <ST><![CDATA[]]></ST>
+        </Implementation>
+      </Get>
+      <Set Name="Set" Id="{5e4501d0-0001-4d19-9a41-00000000000c}">
+        <Declaration><![CDATA[]]></Declaration>
+        <Implementation>
+          <ST><![CDATA[]]></ST>
+        </Implementation>
+      </Set>
+    </Property>
+    <Property Name="SimulatedInput" Id="{5e4501d0-0001-4d19-9a41-00000000000d}">
+      <Declaration><![CDATA[// The stand-in level, read only while Simulation is set. Writing it with
+// Simulation clear changes nothing, so a test may arm it up front.
+PROPERTY SimulatedInput : BOOL]]></Declaration>
+      <Get Name="Get" Id="{5e4501d0-0001-4d19-9a41-00000000000e}">
+        <Declaration><![CDATA[]]></Declaration>
+        <Implementation>
+          <ST><![CDATA[]]></ST>
+        </Implementation>
+      </Get>
+      <Set Name="Set" Id="{5e4501d0-0001-4d19-9a41-00000000000f}">
+        <Declaration><![CDATA[]]></Declaration>
+        <Implementation>
+          <ST><![CDATA[]]></ST>
+        </Implementation>
+      </Set>
+    </Property>
+    <Property Name="TimeActive" Id="{5e4501d0-0001-4d19-9a41-000000000010}">
+      <Declaration><![CDATA[// Length of the current unbroken active stretch; zero whenever inactive.
+PROPERTY TimeActive : TIME]]></Declaration>
+      <Get Name="Get" Id="{5e4501d0-0001-4d19-9a41-000000000011}">
+        <Declaration><![CDATA[]]></Declaration>
+        <Implementation>
+          <ST><![CDATA[]]></ST>
+        </Implementation>
+      </Get>
+    </Property>
+    <Property Name="TimeInactive" Id="{5e4501d0-0001-4d19-9a41-000000000012}">
+      <Declaration><![CDATA[// Length of the current unbroken inactive stretch; zero whenever active.
+PROPERTY TimeInactive : TIME]]></Declaration>
+      <Get Name="Get" Id="{5e4501d0-0001-4d19-9a41-000000000013}">
+        <Declaration><![CDATA[]]></Declaration>
+        <Implementation>
+          <ST><![CDATA[]]></ST>
+        </Implementation>
+      </Get>
+    </Property>
+  </Itf>
+</TcPlcObject>

@@ -8,10 +8,12 @@ namespace xStunit.Interpreter.Tests
 {
     public class IsValidRefTests
     {
-        private static (Engine Engine, FbInstance Instance, Frame Frame) NewHolder(string varBlock)
+        private static (Engine Engine, FbInstance Instance, Frame Frame) NewHolder(
+            string varBlock,
+            IEnumerable<KeyValuePair<string, string>> aliases = null)
         {
             var fb = new PouAst("FB_Holder", null, varBlock, "", new List<MethodAst>());
-            var engine = new Engine(new TypeRegistry(new[] { fb }));
+            var engine = new Engine(new TypeRegistry(new[] { fb }, aliases: aliases));
             var instance = engine.NewInstance("FB_Holder");
             return (engine, instance, new Frame(instance, "FB_Holder"));
         }
@@ -132,6 +134,87 @@ namespace xStunit.Interpreter.Tests
 
             var ex = Assert.Throws<InvalidOperationException>(
                 () => engine.Evaluate(Parser.ParseExpression("__ISVALIDREF(machine)"), frame));
+
+            Assert.Contains("__ISVALIDREF", ex.Message);
+        }
+
+        // An ALIAS DUT names an address type without spelling POINTER TO or
+        // REFERENCE TO at the declaration, and __ISVALIDREF must answer for
+        // such a variable exactly as it does for the direct spelling. Anything
+        // else splits one declaration three ways: SIZEOF sizes it as a
+        // pointer, its default is the null that makes the validity test
+        // meaningful, and __ISVALIDREF alone refuses to look at it.
+        [Fact]
+        public void IsValidRef_UnboundAliasDeclaredPointer_ReturnsFalse()
+        {
+            var (engine, _, frame) = NewHolder(
+                "VAR\n\tpData : PT_Byte;\nEND_VAR",
+                new[] { new KeyValuePair<string, string>("PT_Byte", "POINTER TO BYTE") });
+
+            var result = engine.Evaluate(Parser.ParseExpression("__ISVALIDREF(pData)"), frame);
+
+            Assert.Equal(false, result);
+        }
+
+        [Fact]
+        public void IsValidRef_AliasDeclaredPointerAssignedAnAddress_ReturnsTrue()
+        {
+            var (engine, _, frame) = NewHolder(
+                "VAR\n\ttarget : BYTE := 7;\n\tpData : PT_Byte;\nEND_VAR",
+                new[] { new KeyValuePair<string, string>("PT_Byte", "POINTER TO BYTE") });
+
+            engine.ExecuteStatements(Parser.ParseStatements("pData := ADR(target);"), frame);
+            var result = engine.Evaluate(Parser.ParseExpression("__ISVALIDREF(pData)"), frame);
+
+            Assert.Equal(true, result);
+        }
+
+        [Fact]
+        public void IsValidRef_AliasDeclaredReferenceBoundViaRefAssign_ReturnsFalseThenTrue()
+        {
+            var (engine, _, frame) = NewHolder(
+                "VAR\n\ttarget : INT := 5;\n\trefInt : T_IntRef;\nEND_VAR",
+                new[] { new KeyValuePair<string, string>("T_IntRef", "REFERENCE TO INT") });
+
+            Assert.Equal(false, engine.Evaluate(Parser.ParseExpression("__ISVALIDREF(refInt)"), frame));
+
+            engine.ExecuteStatements(Parser.ParseStatements("refInt REF= target;"), frame);
+
+            Assert.Equal(true, engine.Evaluate(Parser.ParseExpression("__ISVALIDREF(refInt)"), frame));
+        }
+
+        [Fact]
+        public void IsValidRef_AliasChainEndingInAnAddressType_ReturnsFalse()
+        {
+            // Alias-of-alias resolves the whole way, so an indirection added
+            // between the declaration and the address type cannot smuggle a
+            // pointer past the check.
+            var (engine, _, frame) = NewHolder(
+                "VAR\n\tpData : PT_Outer;\nEND_VAR",
+                new[]
+                {
+                    new KeyValuePair<string, string>("PT_Outer", "PT_Inner"),
+                    new KeyValuePair<string, string>("PT_Inner", "POINTER TO BYTE"),
+                });
+
+            var result = engine.Evaluate(Parser.ParseExpression("__ISVALIDREF(pData)"), frame);
+
+            Assert.Equal(false, result);
+        }
+
+        [Fact]
+        public void IsValidRef_AliasOfAPlainScalar_StillThrows()
+        {
+            // Resolving the alias widens what __ISVALIDREF accepts only as far
+            // as the address types: an alias whose underlying type is an
+            // ordinary scalar is the same misuse as naming that scalar
+            // directly, and must still be reported rather than answered.
+            var (engine, _, frame) = NewHolder(
+                "VAR\n\tcount : T_Counter;\nEND_VAR",
+                new[] { new KeyValuePair<string, string>("T_Counter", "INT") });
+
+            var ex = Assert.Throws<InvalidOperationException>(
+                () => engine.Evaluate(Parser.ParseExpression("__ISVALIDREF(count)"), frame));
 
             Assert.Contains("__ISVALIDREF", ex.Message);
         }

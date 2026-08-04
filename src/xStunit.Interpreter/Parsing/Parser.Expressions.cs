@@ -135,7 +135,7 @@ namespace xStunit.Interpreter
             switch (Current.Type)
             {
                 case TokenType.IntLiteral:
-                    return new IntLiteralExpr(int.Parse(Advance().Text));
+                    return ParseIntegerLiteral(Advance());
                 case TokenType.RealLiteral:
                     return new RealLiteralExpr(float.Parse(Advance().Text, CultureInfo.InvariantCulture));
                 case TokenType.LrealLiteral:
@@ -206,6 +206,45 @@ namespace xStunit.Interpreter
                     // name - only source that is incomplete or wrong.
                     throw new ParseException($"Unexpected token {Current} at index {_pos}", CurrentToken, Current.Line);
             }
+        }
+
+        // Widest-fits: an integer literal takes the NARROWEST box that holds
+        // it - int, then long (LINT/UDINT/DWORD), then ulong (ULINT/LWORD) -
+        // and nothing else influences its width.
+        //
+        // The alternative, declared-type-directed widths ('x : LINT := 1'
+        // yielding a long because the target is a LINT), reads better and is
+        // what a compiler would do, but there is no target here to be directed
+        // by: this parser runs over method bodies, call arguments and
+        // initializer text with no TypeRegistry, no frame and no assignment
+        // context, so that rule costs a whole type-resolution pass the
+        // interpreter does not have. Widest-fits needs only the digits.
+        //
+        // What it buys is that every literal that already fitted an int still
+        // boxes as an int, so INT arithmetic, NumericCoercion.Promote and every
+        // 'is int' test downstream see exactly what they saw before; only the
+        // literals that used to throw change shape. What it costs is that a
+        // literal's box says nothing about the declared type it lands in - but
+        // that is already true of every value in the interpreter, where a BYTE
+        // and a DINT are the same box (see IecNumericType).
+        private static Expr ParseIntegerLiteral(Token token)
+        {
+            if (int.TryParse(token.Text, out var intValue))
+                return new IntLiteralExpr(intValue);
+
+            if (long.TryParse(token.Text, out var longValue))
+                return new LintLiteralExpr(longValue);
+
+            // The top half of the ULINT/LWORD range has no signed equivalent,
+            // so unsigned is a width of its own rather than the same 64 bits
+            // read differently.
+            if (ulong.TryParse(token.Text, out var ulongValue))
+                return new UlintLiteralExpr(ulongValue);
+
+            throw new ParseException(
+                $"Integer literal '{token.Text}' does not fit in 64 bits, the width of the widest IEC integer " +
+                "type (ULINT/LWORD)",
+                token.Text, token.Line);
         }
 
         // Applies postfix ^ (deref), .Member(args) and [index] operators to

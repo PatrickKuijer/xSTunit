@@ -19,7 +19,7 @@ namespace xStunit.Cli.Tests
             // also contains transitively-copied host assemblies, and while the
             // loader skips those by name, these tests shouldn't depend on that
             // guard to get a clean result.
-            _pluginDir = Path.Combine(Path.GetTempPath(), "tcxunit-plugin-test-" + Guid.NewGuid().ToString("N"));
+            _pluginDir = Path.Combine(Path.GetTempPath(), "xstunit-plugin-test-" + Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(_pluginDir);
             File.Copy(SamplePluginDll(), Path.Combine(_pluginDir, "xStunit.SamplePlugins.dll"));
         }

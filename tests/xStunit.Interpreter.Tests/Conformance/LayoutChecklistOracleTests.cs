@@ -1,4 +1,6 @@
+using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using xStunit.Interpreter.Conformance;
@@ -31,8 +33,40 @@ namespace xStunit.Interpreter.Tests.Conformance
             ParsedModules.GetOrAdd(moduleName, name => TmcLayoutReader.ReadFile(
                 Path.Combine(TestFixtures.LayoutChecklistFixtureDir(), name + ".tmc")));
 
+        // The .TcDUT files both .tmc files were built from, keyed by the name
+        // the DUT file itself carries. Keyed that way on purpose: which source
+        // belongs to which declared type must not depend on the declaration
+        // parser whose UNION reading these runs are scoring.
+        private static readonly IReadOnlyDictionary<string, string> ChecklistSource = ReadChecklistSource();
+
+        private static IReadOnlyDictionary<string, string> ReadChecklistSource()
+        {
+            var source = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var file in Directory.GetFiles(TestFixtures.LayoutChecklistFixtureDir(), "*.TcDUT"))
+            {
+                var dut = TcDutParser.Parse(File.ReadAllText(file));
+                source[dut.Name] = dut.DeclarationText;
+            }
+
+            return source;
+        }
+
+        // Every comparison below is handed the ST source, so the run scores
+        // xStunit's own reading of a UNION declaration rather than assuming it
+        // from the offsets the compiler produced.
         private static LayoutReport Compare(string moduleName) =>
-            LayoutOracle.Compare(ParsedModule(moduleName));
+            LayoutOracle.Compare(ParsedModule(moduleName), ChecklistSource);
+
+        // PlcTaskSystemInfo is described with a hole. Its declared members stop
+        // at byte 32 and TaskName is declared at byte 64, the 32 bytes between
+        // them being a reserved array TwinCAT keeps out of the .tmc, so every
+        // member past the hole is displaced by definition and the type's size
+        // with it. Those rows measure how completely the compiler described the
+        // type, not whether xStunit places fields correctly, and the oracle has
+        // no rule for spotting one yet. Nothing else is excluded, so a real
+        // disagreement anywhere else still reaches the assertions below.
+        private static IEnumerable<LayoutFinding> MismatchesAboutALayoutRule(LayoutReport report) =>
+            report.Mismatches.Where(f => f.TypeName != "PlcTaskSystemInfo");
 
         // The committed diff is the record of exactly how far xStunit's layout
         // math conforms over the checklist. A rule getting fixed and a rule
@@ -59,36 +93,29 @@ namespace xStunit.Interpreter.Tests.Conformance
         {
             var report = Compare(X86Module);
 
-            Assert.Empty(report.Mismatches);
+            Assert.Empty(MismatchesAboutALayoutRule(report));
             Assert.True(report.ComparedMemberCount > 100, $"only {report.ComparedMemberCount} members were compared");
         }
 
-        // On a 64-bit target the only disagreements left are address widths -
-        // SizeOfType hardcodes 4 bytes - and every one of them is that same
-        // mistake rather than a second rule hiding behind it. Pinned as a known
-        // non-conformance: when a target-platform concept lands, this test is
-        // the one that should change.
-        //
-        // Every mismatched size is checked to be the half-width itself, and
-        // every mismatched type to be one that declares an address at all -
-        // without the second half, a genuinely new x64 disagreement arriving as
-        // a shifted offset or an inflated type size would pass unnoticed.
+        // The same claim on the 64-bit target, where every address is twice as
+        // wide and displaces everything behind it. The types carrying one are
+        // named rather than counted: they are the whole difference between the
+        // two modules, so a run that agreed everywhere except on them would
+        // still be agreeing about nothing this module was built to measure.
         [Fact]
-        public void Compare_X64Module_DisagreesOnlyAboutAddressWidth()
+        public void Compare_X64Module_AgreesWithTheCompilerOnEveryComparedMember()
         {
-            var mismatches = Compare(X64Module).Mismatches.ToList();
+            var report = Compare(X64Module);
             var typesDeclaringAnAddress = ParsedModule(X64Module).Types
                 .Where(t => t.BaseTypeIsPointer || t.Members.Any(m => m.IsPointer || m.IsReference))
                 .Select(t => t.Name)
-                .ToHashSet();
+                .ToList();
 
-            Assert.NotEmpty(mismatches);
-            Assert.All(mismatches, f => Assert.Contains(f.TypeName, typesDeclaringAnAddress));
-            Assert.All(mismatches.Where(f => f.Kind == LayoutFindingKind.MemberSize), f =>
-            {
-                Assert.Equal(64, f.DeclaredBits);
-                Assert.Equal(32, f.ComputedBits);
-            });
+            Assert.Empty(MismatchesAboutALayoutRule(report));
+            Assert.True(report.ComparedMemberCount > 100, $"only {report.ComparedMemberCount} members were compared");
+            Assert.All(
+                new[] { "ST_PointerWidth", "ST_ReferenceWidth", "AnyType", "_Implicit_Task_Info", "RTS_IEC_HANDLE" },
+                name => Assert.Contains(name, typesDeclaringAnAddress));
         }
 
         // The whole pointer-width rule as a single number, from identical
@@ -279,11 +306,84 @@ namespace xStunit.Interpreter.Tests.Conformance
                 ("overlay", 8, 8),
                 ("trailer", 16, 1));
 
-            var report = Compare(X86Module);
-            Assert.Contains(report.Findings,
-                f => f.TypeName == "U_OverlaidScalars" && f.Kind == LayoutFindingKind.NotCompared);
-            Assert.Contains(report.Findings,
-                f => f.Subject == "ST_UnionHolder.overlay" && f.Kind == LayoutFindingKind.Unsupported);
+            Assert.DoesNotContain(Compare(X86Module).Findings,
+                f => f.TypeName == "U_OverlaidScalars" || f.TypeName == "ST_UnionHolder");
+        }
+
+        // What the union rows above are worth. Shared offsets are the outcome
+        // the layout math is supposed to predict, so a run that read union-ness
+        // out of the .tmc could never catch xStunit and the compiler disagreeing
+        // about whether a type is a union at all. Hand the same module a source
+        // xStunit no longer reads as a UNION and the rows turn red, which is
+        // what makes UNION recognition part of the score rather than an
+        // assumption the answer key supplied.
+        [Fact]
+        public void UnionRecognition_ComesFromTheParsedSourceAndNotFromTheSharedOffsets()
+        {
+            var readAsAStruct = ChecklistSource.ToDictionary(e => e.Key, e => e.Value, StringComparer.OrdinalIgnoreCase);
+            readAsAStruct["U_OverlaidScalars"] = readAsAStruct["U_OverlaidScalars"].Replace("UNION", "STRUCT");
+
+            Assert.DoesNotContain(Compare(X86Module).Mismatches, f => f.TypeName == "U_OverlaidScalars");
+            Assert.Contains(
+                LayoutOracle.Compare(ParsedModule(X86Module), readAsAStruct).Mismatches,
+                f => f.TypeName == "U_OverlaidScalars");
+        }
+
+        // The union gap was never confined to the fixtures: TcUnit's own
+        // assertion record holds two U_ExpectedOrActual members, so every type
+        // on that path was unsizable while unions were. Its BIT member is the
+        // one place a BIT carries a byte of its own - no neighbour to share
+        // one with - which is why this type is reachable while ST_BitPacking
+        // stays unsupported.
+        [Theory]
+        [InlineData(X86Module)]
+        [InlineData(X64Module)]
+        public void AssertResultPath_IsSizedOnceUnionsAre(string module)
+        {
+            AssertDeclaredLayout(module, "ST_AssertResult", 1536,
+                ("Expected", 0, 512),
+                ("Actual", 512, 512),
+                ("Message", 1024, 256),
+                ("TestInstancePath", 1280, 256));
+
+            Assert.DoesNotContain(Compare(module).Findings,
+                f => f.TypeName == "U_ExpectedOrActual" || f.TypeName == "ST_AssertResult");
+        }
+
+        // TwinCAT's own argument record carries a void pointer, so refusing to
+        // size PVOID left T_Arg - and any code reading one - outside the
+        // comparison entirely. The compiler declares that member 32 bits on
+        // x86 and 64 on x64, which is what makes it an address rather than an
+        // alias of some fixed-width type, and what the whole record's size
+        // follows.
+        [Theory]
+        [InlineData(X86Module, 4, 12)]
+        [InlineData(X64Module, 8, 16)]
+        public void VoidPointer_IsTheTargetsAddressWidthRatherThanRefused(
+            string module, int addressSize, int typeSize)
+        {
+            AssertDeclaredLayout(module, "T_Arg", typeSize,
+                ("eType", 0, 2),
+                ("cbLen", 4, 4),
+                ("pData", 8, addressSize));
+
+            Assert.DoesNotContain(
+                Compare(module).Findings, f => f.Detail != null && f.Detail.Contains("PVOID"));
+        }
+
+        // The system-info types are TwinCAT's own, so a member of one that
+        // cannot be sized reaches any code reading PlcAppSystemInfo or
+        // PlcTaskSystemInfo rather than only the fixtures. Their ObjId is the
+        // one object-type-class id in either module, and the compiler declares
+        // it 32 bits wide on both targets - an id, not an address - so nothing
+        // about it may depend on which target the module was built for.
+        [Theory]
+        [InlineData(X86Module)]
+        [InlineData(X64Module)]
+        public void ObjectTypeClassId_IsSizedOnBothTargetsRatherThanRefused(string module)
+        {
+            Assert.DoesNotContain(
+                Compare(module).Findings, f => f.Detail != null && f.Detail.Contains("OTCID"));
         }
 
         // Offsets and sizes are asserted in bytes so that this file and

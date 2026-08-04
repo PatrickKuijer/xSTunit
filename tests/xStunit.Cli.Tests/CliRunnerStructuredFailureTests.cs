@@ -17,7 +17,7 @@ namespace xStunit.Cli.Tests
 
         public CliRunnerStructuredFailureTests()
         {
-            _tempDir = Path.Combine(Path.GetTempPath(), "TcXunitCliStructuredFailureFixture_" + Guid.NewGuid());
+            _tempDir = Path.Combine(Path.GetTempPath(), "xStunitCliStructuredFailureFixture_" + Guid.NewGuid());
             Directory.CreateDirectory(_tempDir);
             File.WriteAllText(Path.Combine(_tempDir, "FB_ThreeAssertTests.TcPOU"), ThreeAssertSuiteXml);
         }

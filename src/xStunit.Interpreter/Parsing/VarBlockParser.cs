@@ -6,7 +6,8 @@ namespace xStunit.Interpreter
     // Turns the raw VAR/VAR_INPUT/VAR_OUTPUT/VAR_IN_OUT/VAR_TEMP declaration
     // text a FUNCTION_BLOCK or METHOD carries in its Declaration CDATA into
     // typed VarDecl entries. Also doubles as StructDeclParser's field-list
-    // parser: STRUCT/END_STRUCT toggle the same section state as VAR/END_VAR.
+    // parser: STRUCT/UNION and their END_ keywords toggle the same section
+    // state as VAR/END_VAR.
     // Scoped to the fixtures' grammar - one name per line, no comma lists.
     public static class VarBlockParser
     {
@@ -23,10 +24,19 @@ namespace xStunit.Interpreter
         // every later use of the name reports "Unknown variable" instead.
         private const string SizedStringPattern = @"W?STRING\s*\(\s*[^()]+\s*\)";
 
+        // IgnoreCase because IEC 61131-3 type names are case-insensitive and
+        // every consumer of the type text this produces already treats them
+        // that way - AddressTypeInfo, ArrayTypeInfo, StringTypeInfo,
+        // IecNumericType, IecElementaryDefault and TypeRegistry. Matching
+        // POINTER TO/REFERENCE TO/ARRAY..OF/W?STRING exactly would make the
+        // parser the one layer that disagrees, and it disagrees silently: the
+        // whole line fails to match and the variable never exists. The matched
+        // text is still passed through verbatim, since the declared spelling is
+        // what FbInstance and Cell record.
         private static readonly Regex VarLinePattern = new Regex(
             @"^(?<name>\w+)\s*:\s*(?<type>POINTER TO \w+|REFERENCE TO \w+|ARRAY\s*\[[^\]]+\]\s*OF\s*(?:"
             + SizedStringPattern + @"|\w+)|" + SizedStringPattern + @"|\w+)\s*(:=\s*(?<default>.+?))?;$",
-            RegexOptions.Compiled);
+            RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
         public static IReadOnlyList<VarDecl> Parse(string declarationText)
         {
@@ -39,6 +49,15 @@ namespace xStunit.Interpreter
                 if (line.Length == 0)
                     continue;
 
+                // Section keywords match exactly, unlike the type names
+                // VarLinePattern accepts in any case. STRUCT/UNION are also
+                // read case-sensitively upstream by StructDeclParser.
+                // DeclaredBody, which is what decides whether a DUT reaches
+                // DutStructLoader or DutAliasLoader in the first place.
+                // Widening only this copy would open a body here for a
+                // declaration those two already routed elsewhere, so the
+                // accepted spelling is a pipeline-wide decision rather than
+                // this parser's to make alone.
                 switch (line)
                 {
                     case "VAR":
@@ -65,9 +84,11 @@ namespace xStunit.Interpreter
                         currentSection = null;
                         continue;
                     case "STRUCT":
+                    case "UNION":
                         currentSection = VarSection.Local;
                         continue;
                     case "END_STRUCT":
+                    case "END_UNION":
                         currentSection = null;
                         continue;
                 }

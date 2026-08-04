@@ -5,10 +5,15 @@ using Xunit;
 
 namespace xStunit.Interpreter.Tests
 {
-    // An interface-typed field has no dedicated null representation:
-    // unassigned it holds a plain int 0, and once assigned it holds the
-    // concrete FbInstance itself. That is what makes the ST idiom
-    // 'IF (iipHandler <> 0) AND iipHandler.bDoWork(...) THEN' work here.
+    // A field typed by a name no .TcIO declared - ITF_Fake here - has no
+    // dedicated null representation: unassigned it holds a plain int 0, and
+    // once assigned it holds the concrete FbInstance itself. That is what
+    // makes the ST idiom 'IF (iipHandler <> 0) AND iipHandler.bDoWork(...)
+    // THEN' work here.
+    //
+    // A field typed by a LOADED interface starts as an
+    // UnassignedInterfaceReference instead, and has to answer the same idiom
+    // the same way - see UnassignedInterfaceReferenceTests.
     public class InterfaceReferenceEqualityTests
     {
         private static (Engine Engine, FbInstance Instance, Frame Frame) NewHolder(string varBlock)

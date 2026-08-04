@@ -71,6 +71,68 @@ namespace xStunit.Interpreter.Tests
         }
 
         [Fact]
+        public void TryParseEnum_LeadingBlockCommentHeader_IsSkipped()
+        {
+            // The house style documents a DUT with a multi-line "(* ... *)"
+            // header. An enum wearing one still has to register: when it does
+            // not, nothing reports a malformed DUT - the type is silently not
+            // an enum, and the first symptom is "Unknown variable" from every
+            // body that names one of its members.
+            const string declaration =
+                "(*\n    Which state the machine reports.\n\n    Held as an enum so a body can name the state instead of a magic INT.\n*)\nTYPE E_PackMLState :\n(\n\tIdle,\n\tExecute\n);\nEND_TYPE";
+
+            var parsed = DutEnumLoader.TryParseEnum(declaration, out var name, out var underlying, out var members);
+
+            Assert.True(parsed);
+            Assert.Equal("E_PackMLState", name);
+            Assert.Equal("INT", underlying);
+            Assert.Equal(0, members["Idle"]);
+            Assert.Equal(1, members["Execute"]);
+        }
+
+        [Fact]
+        public void TryParseEnum_LeadingSingleLineBlockComment_IsSkipped()
+        {
+            const string declaration =
+                "(* replaces the old STRUCT-based version *)\nTYPE E_Color :\n(\n\tRed,\n\tGreen\n);\nEND_TYPE";
+
+            var parsed = DutEnumLoader.TryParseEnum(declaration, out var name, out _, out _);
+
+            Assert.True(parsed);
+            Assert.Equal("E_Color", name);
+        }
+
+        [Fact]
+        public void TryParseEnum_LeadingBlockCommentThenPragmas_AreSkipped()
+        {
+            // Pragmas and comments come in either order and in any number; the
+            // header is whatever survives all of them.
+            const string declaration =
+                "(*\n    Opcode carried on the channel.\n*)\n{attribute 'qualified_only'}\n// one per command\n{attribute 'strict'}\nTYPE eWidgetOpcode :\n(\n\tAdd := 0,\n\tRemove := 1\n);\nEND_TYPE";
+
+            var parsed = DutEnumLoader.TryParseEnum(declaration, out var name, out _, out var members);
+
+            Assert.True(parsed);
+            Assert.Equal("eWidgetOpcode", name);
+            Assert.Equal(1, members["Remove"]);
+        }
+
+        [Fact]
+        public void TryParseEnum_BlockCommentMentioningTypeHeader_TakesTheRealHeaderName()
+        {
+            // Prose in the header comment can quote a TYPE line; the name must
+            // still come from the declaration rather than from the commentary
+            // about it.
+            const string declaration =
+                "(*\n    Supersedes TYPE E_Legacy : (A, B);\n*)\nTYPE E_Color :\n(\n\tRed,\n\tGreen\n);\nEND_TYPE";
+
+            var parsed = DutEnumLoader.TryParseEnum(declaration, out var name, out _, out _);
+
+            Assert.True(parsed);
+            Assert.Equal("E_Color", name);
+        }
+
+        [Fact]
         public void TryParseEnum_AliasDeclaration_ReturnsFalse()
         {
             const string declaration = "TYPE T_MaxString : STRING(255);\nEND_TYPE";
@@ -180,7 +242,7 @@ namespace xStunit.Interpreter.Tests
         [Fact]
         public void Load_EnumDut_IsRegisteredWithUnderlyingType()
         {
-            var tempDir = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "tcxunit-enum-" + Guid.NewGuid()));
+            var tempDir = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "xstunit-enum-" + Guid.NewGuid()));
             try
             {
                 const string declaration = "TYPE E_Color :\n(\n\tRed,\n\tGreen,\n\tBlue\n);\nEND_TYPE";
@@ -201,9 +263,38 @@ namespace xStunit.Interpreter.Tests
         }
 
         [Fact]
+        public void Load_EnumDutWithBlockCommentHeader_IsRegisteredWithMembers()
+        {
+            var tempDir = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "xstunit-enumblockcomment-" + Guid.NewGuid()));
+            try
+            {
+                const string declaration = @"(*
+    Which state the machine reports, named rather than numbered.
+*)
+TYPE E_PackMLState :
+(
+	Idle,
+	Execute
+);
+END_TYPE";
+                File.WriteAllText(Path.Combine(tempDir.FullName, "E_PackMLState.TcDUT"), DutXml("E_PackMLState", declaration));
+
+                var enums = DutEnumLoader.Load(new[] { tempDir.FullName }, out var skipped, out var memberTables);
+
+                Assert.Empty(skipped);
+                Assert.Equal("INT", enums["E_PackMLState"]);
+                Assert.Equal(1, memberTables["E_PackMLState"]["Execute"]);
+            }
+            finally
+            {
+                Directory.Delete(tempDir.FullName, recursive: true);
+            }
+        }
+
+        [Fact]
         public void Load_StructDut_IsNotRegisteredAsEnum()
         {
-            var tempDir = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "tcxunit-enumstructskip-" + Guid.NewGuid()));
+            var tempDir = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "xstunit-enumstructskip-" + Guid.NewGuid()));
             try
             {
                 const string declaration = "TYPE ST_Point :\nSTRUCT\n\tx : REAL;\nEND_STRUCT\nEND_TYPE";

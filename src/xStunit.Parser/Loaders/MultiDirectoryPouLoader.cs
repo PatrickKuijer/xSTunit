@@ -37,9 +37,9 @@ namespace xStunit.Parser
                 pouDirectories
                     .SelectMany(dir => Directory.GetFiles(dir, "*.TcPOU", SearchOption.AllDirectories)));
 
-        // .TcDUT and .TcGVL are globbed separately from .TcPOU rather than in
-        // one pass because each uses its own root XML element (<DUT>, <GVL>,
-        // <POU>) and so needs a different parser.
+        // .TcDUT, .TcGVL and .TcIO are globbed separately from .TcPOU rather
+        // than in one pass because each uses its own root XML element (<DUT>,
+        // <GVL>, <Itf>, <POU>) and so needs a different parser.
         public static IReadOnlyList<string> FindDutFiles(IReadOnlyList<string> pouDirectories) =>
             DeduplicatePaths(
                 pouDirectories
@@ -49,6 +49,11 @@ namespace xStunit.Parser
             DeduplicatePaths(
                 pouDirectories
                     .SelectMany(dir => Directory.GetFiles(dir, "*.TcGVL", SearchOption.AllDirectories)));
+
+        public static IReadOnlyList<string> FindInterfaceFiles(IReadOnlyList<string> pouDirectories) =>
+            DeduplicatePaths(
+                pouDirectories
+                    .SelectMany(dir => Directory.GetFiles(dir, "*.TcIO", SearchOption.AllDirectories)));
 
         // Normalizes and de-duplicates case-insensitively so overlapping input
         // directories (same directory passed twice, one nested inside another,

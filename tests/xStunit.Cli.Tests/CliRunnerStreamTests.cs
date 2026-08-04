@@ -21,7 +21,7 @@ namespace xStunit.Cli.Tests
 
         public CliRunnerStreamTests()
         {
-            _tempDir = Path.Combine(Path.GetTempPath(), "TcXunitCliStreamFixture_" + Guid.NewGuid());
+            _tempDir = Path.Combine(Path.GetTempPath(), "xStunitCliStreamFixture_" + Guid.NewGuid());
             Directory.CreateDirectory(_tempDir);
         }
 

@@ -35,14 +35,26 @@ namespace xStunit.Interpreter
         // constructor, so the dispatch site needs no null check of its own.
         private readonly Extensibility.NativeFunctionRegistry _nativeFunctions;
 
+        // The machine the code under test is compiled for, which only the
+        // layout rules read: it is what makes an address 4 bytes or 8, and so
+        // what SIZEOF and the MEMCPY byte image answer.
+        private readonly TargetPlatform _target;
+
         public Engine(TypeRegistry registry)
-            : this(registry, null)
+            : this(registry, null, TargetPlatform.Default)
         {
         }
 
         public Engine(TypeRegistry registry, Extensibility.NativeFunctionRegistry nativeFunctions)
+            : this(registry, nativeFunctions, TargetPlatform.Default)
+        {
+        }
+
+        public Engine(
+            TypeRegistry registry, Extensibility.NativeFunctionRegistry nativeFunctions, TargetPlatform target)
         {
             _registry = registry;
+            _target = target;
             _nativeFunctions = nativeFunctions ?? new Extensibility.NativeFunctionRegistry();
 
             // Every GVL's Cells are allocated and registered in _globals
@@ -234,10 +246,25 @@ namespace xStunit.Interpreter
         // non-recursing native-stub path instead.
         private Cell CreateFieldCell(VarDecl decl, FbInstance owningInstance)
         {
-            if (_registry.Get(_registry.ResolveAlias(decl.TypeName)) != null)
+            if (IsDeferredFieldType(decl.TypeName))
                 return new LazyCell(() => DefaultValue(decl, owningInstance), decl.TypeName);
 
             return NewDeclaredCell(DefaultValue(decl, owningInstance), decl.TypeName, owningInstance);
+        }
+
+        // An ARRAY OF an FB type pays that same construction cost once per
+        // element, so it defers too - as one cell over the whole array, not one
+        // per element: ArrayValue.Elements is a plain object[] that every index,
+        // iteration and byte-model site reads straight out of, and per-element
+        // cells would have to be honoured at all of them.
+        private bool IsDeferredFieldType(string typeName)
+        {
+            var resolved = _registry.ResolveAlias(typeName);
+            if (ArrayTypeInfo.IsArrayType(resolved))
+                return ArrayTypeInfo.TryGetElementTypeName(resolved, out var elementTypeName) &&
+                    IsDeferredFieldType(elementTypeName);
+
+            return _registry.Get(resolved) != null;
         }
 
         // The sections materialized as instance Fields at NewInstance() time,

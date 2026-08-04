@@ -1,0 +1,225 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4026.18">
+  <POU Name="PML_StateMachine" Id="{5e4501d0-0014-4d19-9a41-000000000001}" SpecialFunc="None">
+    <Declaration><![CDATA[(*
+    The PackML state manager: the seventeen-state engine every unit and every
+    equipment module in the miniload runs, and the only place a state change is
+    allowed to happen.
+
+    It owns no motion, no IO and no product. Commands come in as levels
+    (ST_PackMLCommands), the equipment logic reports finished work back as
+    levels (ST_PackMLStateComplete), and everything this block publishes is
+    derived from the state it is in. That is what lets the same block sit at
+    machine level, at unit level and under an equipment module without knowing
+    which it is.
+
+    Three commands override the state model instead of living inside it, in
+    this order:
+
+      1. Abort   - accepted from every state that is not already aborting or
+                   aborted, because an abort that a state could refuse would
+                   not be an abort;
+      2. Clear   - only ever from Aborted, the one state it means anything in;
+      3. Stop    - accepted from every state except the five that are already
+                   heading for, or sitting in, a stopped or aborted condition.
+
+    Everything below that is per-state and lives in the CASE: a wait state
+    leaves on a command, an acting state leaves on its own completion flag.
+
+    The scan order is load-bearing. The three overriding commands are decided
+    ONCE, at the top, against the state as it was entered; the transition then
+    runs; and only then are the latch, the counters and the meters driven, so
+    they all describe the same scan rather than a mixture of before and after.
+*)
+FUNCTION_BLOCK PML_StateMachine
+VAR_INPUT
+	Commands : ST_PackMLCommands;
+	StateComplete : ST_PackMLStateComplete;
+END_VAR
+VAR_OUTPUT
+	CurrentState : E_PackMLState := E_PackMLState.STOPPED;
+	// Set the moment an abort is accepted, held across Aborting and Aborted,
+	// released only by a Clear. Not the same thing as "state = ABORTED": the
+	// fault is already true while the unit is still on its way there.
+	Faulted : BOOL;
+	StateElapsedTime : TIME;
+	// Time accumulated in Execute over the unit's whole life, across every
+	// hold, suspend and stop - so it survives the transitions that reset
+	// StateElapsedTime.
+	TotalRunTime : TIME;
+	ProductCount : UINT;
+	ErrorCount : UINT;
+END_VAR
+VAR
+	abortAccepted : BOOL;
+	clearAccepted : BOOL;
+	stopAccepted : BOOL;
+	lastState : E_PackMLState := E_PackMLState.STOPPED;
+	wasExecuting : BOOL;
+	bankedRunTime : TIME;
+	faultLatch : RS;
+	stateMeter : TON;
+	executeMeter : TON;
+	productCounter : CTU;
+	errorCounter : CTU;
+	// The meters are on-delays that are never meant to fire; their PT only has
+	// to outlast any stretch worth measuring, because ET is capped at PT.
+	MeterCeiling : TIME := T#24d;
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[// Overriding commands, decided against the state being left rather than the
+// state being entered - the latch below is fed these same three answers, so it
+// cannot disagree with the transition they caused.
+abortAccepted := Commands.Abort
+	AND CurrentState <> E_PackMLState.ABORTING
+	AND CurrentState <> E_PackMLState.ABORTED;
+
+clearAccepted := Commands.Clear AND CurrentState = E_PackMLState.ABORTED;
+
+stopAccepted := Commands.Stop
+	AND CurrentState <> E_PackMLState.STOPPED
+	AND CurrentState <> E_PackMLState.STOPPING
+	AND CurrentState <> E_PackMLState.ABORTING
+	AND CurrentState <> E_PackMLState.ABORTED
+	AND CurrentState <> E_PackMLState.CLEARING;
+
+// Statemachine
+IF abortAccepted THEN
+	CurrentState := E_PackMLState.ABORTING;
+ELSIF clearAccepted THEN
+	CurrentState := E_PackMLState.CLEARING;
+ELSIF stopAccepted THEN
+	CurrentState := E_PackMLState.STOPPING;
+ELSE
+	CASE CurrentState OF
+		E_PackMLState.CLEARING:
+			IF StateComplete.Clearing THEN
+				CurrentState := E_PackMLState.STOPPED;
+			END_IF
+
+		E_PackMLState.STOPPED:
+			IF Commands.Reset THEN
+				CurrentState := E_PackMLState.RESETTING;
+			END_IF
+
+		E_PackMLState.RESETTING:
+			IF StateComplete.Resetting THEN
+				CurrentState := E_PackMLState.IDLE;
+			END_IF
+
+		E_PackMLState.IDLE:
+			IF Commands.Start THEN
+				CurrentState := E_PackMLState.STARTING;
+			END_IF
+
+		E_PackMLState.STARTING:
+			IF StateComplete.Starting THEN
+				CurrentState := E_PackMLState.EXECUTE;
+			END_IF
+
+		E_PackMLState.EXECUTE:
+			// Hold ahead of Suspend: a hold is an equipment problem this unit
+			// has, a suspend is a starvation this unit is only suffering, and
+			// the unit's own problem is the one worth reporting.
+			IF Commands.Hold THEN
+				CurrentState := E_PackMLState.HOLDING;
+			ELSIF Commands.Suspend THEN
+				CurrentState := E_PackMLState.SUSPENDING;
+			ELSIF StateComplete.Execute THEN
+				CurrentState := E_PackMLState.COMPLETING;
+			END_IF
+
+		E_PackMLState.HOLDING:
+			IF StateComplete.Holding THEN
+				CurrentState := E_PackMLState.HELD;
+			END_IF
+
+		E_PackMLState.HELD:
+			IF Commands.Unhold THEN
+				CurrentState := E_PackMLState.UNHOLDING;
+			END_IF
+
+		E_PackMLState.UNHOLDING:
+			IF StateComplete.Unholding THEN
+				CurrentState := E_PackMLState.EXECUTE;
+			END_IF
+
+		E_PackMLState.SUSPENDING:
+			IF StateComplete.Suspending THEN
+				CurrentState := E_PackMLState.SUSPENDED;
+			END_IF
+
+		E_PackMLState.SUSPENDED:
+			IF Commands.Unsuspend THEN
+				CurrentState := E_PackMLState.UNSUSPENDING;
+			END_IF
+
+		E_PackMLState.UNSUSPENDING:
+			IF StateComplete.Unsuspending THEN
+				CurrentState := E_PackMLState.EXECUTE;
+			END_IF
+
+		E_PackMLState.COMPLETING:
+			IF StateComplete.Completing THEN
+				CurrentState := E_PackMLState.COMPLETE;
+			END_IF
+
+		E_PackMLState.COMPLETE:
+			IF Commands.Reset THEN
+				CurrentState := E_PackMLState.RESETTING;
+			END_IF
+
+		E_PackMLState.STOPPING:
+			IF StateComplete.Stopping THEN
+				CurrentState := E_PackMLState.STOPPED;
+			END_IF
+
+		E_PackMLState.ABORTING:
+			IF StateComplete.Aborting THEN
+				CurrentState := E_PackMLState.ABORTED;
+			END_IF
+
+		// Aborted is the one state with no arm of its own: its single exit is
+		// Clear, which is decided above this CASE, so an arm here could only
+		// ever be empty.
+	END_CASE
+END_IF
+
+// Fault latch. Reset-dominant on purpose: SET is the RAW abort level, so an
+// abort input an HMI never dropped is still high when the operator finally
+// clears - and a stale level must not be able to hold the unit faulted
+// forever. A fresh abort re-latches on the next scan through abortAccepted,
+// which is the state model's answer, not the latch's.
+faultLatch(SET := Commands.Abort, RESET1 := clearAccepted);
+Faulted := faultLatch.Q1;
+
+// Counters. Both count a rising edge on their own input, so a state or a latch
+// held for many scans counts once. Lifetime totals for the unit - clearing
+// them is a supervisory action, not something a state change may do quietly.
+productCounter(CU := CurrentState = E_PackMLState.COMPLETE, RESET := FALSE, PV := 0);
+ProductCount := productCounter.CV;
+
+errorCounter(CU := Faulted, RESET := FALSE, PV := 0);
+ErrorCount := errorCounter.CV;
+
+// Run-time meter. A TON zeroes ET on the same call that drops IN, so a
+// finished Execute stretch is banked BEFORE the meter is re-driven or it is
+// lost the instant the unit is held, suspended or stopped.
+IF wasExecuting AND CurrentState <> E_PackMLState.EXECUTE THEN
+	bankedRunTime := bankedRunTime + executeMeter.ET;
+END_IF
+
+executeMeter(IN := CurrentState = E_PackMLState.EXECUTE, PT := MeterCeiling);
+wasExecuting := CurrentState = E_PackMLState.EXECUTE;
+TotalRunTime := bankedRunTime + executeMeter.ET;
+
+// State meter. Held reset for the one scan a transition lands on, so
+// StateElapsedTime restarts from zero instead of carrying the previous
+// state's total into the new one.
+stateMeter(IN := CurrentState = lastState, PT := MeterCeiling);
+StateElapsedTime := stateMeter.ET;
+lastState := CurrentState;]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

@@ -19,6 +19,18 @@ namespace xStunit.Interpreter
         public static bool IsArrayType(string typeName) =>
             typeName != null && typeName.TrimStart().StartsWith("ARRAY", StringComparison.OrdinalIgnoreCase);
 
+        // The element type alone, for callers deciding what an array declaration
+        // is made of before committing to build it. Parse would settle the
+        // bounds too, and a bound is a constant expression that can fault or be
+        // unresolvable - the very thing a caller asking this question is trying
+        // not to trigger yet.
+        public static bool TryGetElementTypeName(string typeName, out string elementTypeName)
+        {
+            var match = Pattern.Match(typeName.Trim());
+            elementTypeName = match.Success ? match.Groups["elementType"].Value.Trim() : null;
+            return match.Success;
+        }
+
         // IEC 61131-3 array bounds are constant expressions, not just integer
         // literals, so resolveBound turns a non-literal bound's text (e.g.
         // "cRemoteClientConfig.MAX_REMOTE_ITEMS") into its value. Callers with

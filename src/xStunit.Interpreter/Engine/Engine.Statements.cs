@@ -27,6 +27,8 @@ namespace xStunit.Interpreter
 
             switch (stmt)
             {
+                case NoOpStmt:
+                    break;
                 case AssignStmt assign:
                     SetLValue(assign.Target, Evaluate(assign.Value, frame), frame);
                     break;
@@ -92,7 +94,7 @@ namespace xStunit.Interpreter
             {
                 for (var i = from; step > 0 ? i <= to : i >= to; i += step)
                 {
-                    SetVariable(stmt.VarName, i, frame);
+                    SetLValue(stmt.Var, i, frame);
                     ExecuteStatements(stmt.Body, frame);
                 }
             }
@@ -185,7 +187,7 @@ namespace xStunit.Interpreter
                     }
 
                     var receiverValue = Evaluate(fieldAccess.Receiver, frame);
-                    var fields = FieldsOf(receiverValue);
+                    var fields = FieldsOf(receiverValue, fieldAccess.FieldName);
                     if (fields.TryGetValue(fieldAccess.FieldName, out var cell))
                     {
                         cell.Value = CoerceForAssignment(cell.Value, value);
@@ -280,7 +282,7 @@ namespace xStunit.Interpreter
                         break;
                     }
 
-                    var fields = FieldsOf(Evaluate(fieldAccess.Receiver, frame));
+                    var fields = FieldsOf(Evaluate(fieldAccess.Receiver, frame), fieldAccess.FieldName);
                     if (!fields.ContainsKey(fieldAccess.FieldName))
                         throw new InvalidOperationException($"Unknown field '{fieldAccess.FieldName}'");
                     fields[fieldAccess.FieldName] = sourceCell;

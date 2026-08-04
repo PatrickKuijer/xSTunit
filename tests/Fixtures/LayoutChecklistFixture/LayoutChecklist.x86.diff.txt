@@ -1,5 +1,5 @@
 module PLC target TwinCAT RT (x86)
-compared 53 of 94 declared types, 145 members
+compared 60 of 94 declared types, 200 members
 sizes and offsets in bits
 NotCompared TOF function block instance layout is not modeled
 NotCompared I_TestResults neither members nor a base type declared
@@ -15,11 +15,7 @@ NotCompared FB_TcUnitRunner function block instance layout is not modeled
 NotCompared FB_Test function block instance layout is not modeled
 NotCompared FW_GetCurTaskIndex function block instance layout is not modeled
 NotCompared GETCURTASKINDEX function block instance layout is not modeled
-Unsupported T_Arg.pData SIZEOF() doesn't know the byte size of type 'PVOID'
 NotCompared FB_FormatString function block instance layout is not modeled
-NotCompared U_ExpectedOrActual union layout is not modeled
-Unsupported ST_AssertResult.Expected SIZEOF() doesn't know the byte size of type 'U_ExpectedOrActual'
-Unsupported ST_AssertResultInstances.AssertResult SIZEOF() doesn't know the byte size of type 'U_ExpectedOrActual'
 NotCompared FB_AssertResultStatic function block instance layout is not modeled
 NotCompared FB_AssertArrayResultStatic function block instance layout is not modeled
 NotCompared I_AssertMessageFormatter neither members nor a base type declared
@@ -31,10 +27,9 @@ NotCompared TON function block instance layout is not modeled
 NotCompared FB_AdsLogStringMessageFifoQueue function block instance layout is not modeled
 NotCompared FB_AddLrealInt function block instance layout is not modeled
 Unsupported ST_BitPacking.firstBit SIZEOF() doesn't know the byte size of type 'BIT'
-NotCompared U_OverlaidScalars union layout is not modeled
-Unsupported ST_UnionHolder.overlay SIZEOF() doesn't know the byte size of type 'U_OverlaidScalars'
-Unsupported PlcAppSystemInfo.ObjId SIZEOF() doesn't know the byte size of type 'OTCID'
-Unsupported PlcTaskSystemInfo.ObjId SIZEOF() doesn't know the byte size of type 'OTCID'
+Unsupported PlcAppSystemInfo.AppTimestamp SIZEOF() doesn't know the byte size of type 'DT'
+MemberOffset PlcTaskSystemInfo.TaskName declared=512 computed=256
+TypeSize PlcTaskSystemInfo declared=1024 computed=768
 NotCompared Global_Variables static members - a program or global variable list, not an instance layout
 NotCompared GVL_Param_TcUnit static members - a program or global variable list, not an instance layout
 NotCompared GVL_TcUnit static members - a program or global variable list, not an instance layout

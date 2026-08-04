@@ -8,7 +8,7 @@ namespace xStunit.Runner.Tests
         [Fact]
         public void TestFinished_CapturesElapsedTimeSinceTestOpened()
         {
-            var results = SuiteRunner.RunAll(new SleepingTestSuite());
+            var results = new SleepingTestSuite().Run();
 
             var result = Assert.Single(results);
             Assert.Equal("SlowTest", result.Name);
@@ -21,7 +21,7 @@ namespace xStunit.Runner.Tests
         [Fact]
         public void TestFinishedNamed_ViaTestOrdered_CapturesElapsedTime()
         {
-            var results = SuiteRunner.RunAll(new SleepingOrderedTestSuite());
+            var results = new SleepingOrderedTestSuite().Run();
 
             var result = Assert.Single(results);
             Assert.Equal("SlowOrderedTest", result.Name);
@@ -34,7 +34,7 @@ namespace xStunit.Runner.Tests
         [Fact]
         public void TestFinished_QuickTest_ElapsedMillisecondsIsNonNegative()
         {
-            var results = SuiteRunner.RunAll(new CounterTestSuite());
+            var results = new CounterTestSuite().Run();
 
             Assert.All(results, r => Assert.True(r.ElapsedMilliseconds >= 0));
         }

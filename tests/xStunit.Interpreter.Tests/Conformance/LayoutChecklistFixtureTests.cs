@@ -25,7 +25,7 @@ namespace xStunit.Interpreter.Tests.Conformance
         // hand, so a fixture line these loaders silently drop shows up as a
         // wrong offset here instead of as a fixture that measures nothing.
         private static readonly TypeRegistry Registry = BuildRegistry();
-        private static readonly TypeLayout Layout = new TypeLayout(Registry);
+        private static readonly TypeLayout Layout = new TypeLayout(Registry, TargetPlatform.X86);
 
         private static TypeRegistry BuildRegistry()
         {
@@ -42,26 +42,46 @@ namespace xStunit.Interpreter.Tests.Conformance
 
         // A 32-bit address leaves the trailer at byte 8; the 64-bit target the
         // same source also builds for puts it at 16. That gap is the whole
-        // pointer-width rule, and this type exists to make it a single number.
-        [Fact]
-        public void PointerWidth_PlacesTheTrailerBehindAFourByteAddress()
+        // pointer-width rule, and this type exists to make it a single number -
+        // one that follows the target rather than being fixed at either answer.
+        [Theory]
+        [InlineData("x86", 4, 12)]
+        [InlineData("x64", 8, 24)]
+        public void PointerWidth_PlacesTheTrailerBehindTheTargetsAddress(
+            string targetName, int addressSize, int typeSize)
         {
-            AssertLayout("ST_PointerWidth", 12,
+            AssertLayout(Target(targetName), "ST_PointerWidth", typeSize,
                 ("leadIn", 0, 1),
-                ("target", 4, 4),
-                ("trailer", 8, 1));
+                ("target", addressSize, addressSize),
+                ("trailer", addressSize * 2, 1));
         }
 
         // REFERENCE TO is sized as an address in its own right rather than
         // inheriting the referent's width - INT here, which would put the
-        // trailer at 4 instead of 8.
-        [Fact]
-        public void ReferenceWidth_IsSizedAsAnAddressNotAsTheReferent()
+        // trailer at 4 on both targets and make the type immune to the one
+        // rule it exists to measure.
+        [Theory]
+        [InlineData("x86", 4, 12)]
+        [InlineData("x64", 8, 24)]
+        public void ReferenceWidth_IsSizedAsAnAddressNotAsTheReferent(
+            string targetName, int addressSize, int typeSize)
         {
-            AssertLayout("ST_ReferenceWidth", 12,
+            AssertLayout(Target(targetName), "ST_ReferenceWidth", typeSize,
                 ("leadIn", 0, 1),
-                ("target", 4, 4),
-                ("trailer", 8, 1));
+                ("target", addressSize, addressSize),
+                ("trailer", addressSize * 2, 1));
+        }
+
+        // A void pointer names no referent at all, which is exactly why it is
+        // an address and not an alias of some fixed-width type: it is as wide
+        // as the target's other addresses, and refusing to size it would leave
+        // TwinCAT's own T_Arg unmeasurable.
+        [Theory]
+        [InlineData("x86", 4)]
+        [InlineData("x64", 8)]
+        public void VoidPointer_IsSizedAsAnAddressOnEitherTarget(string targetName, int addressSize)
+        {
+            Assert.Equal(addressSize, new TypeLayout(Registry, Target(targetName)).SizeOf("PVOID").Size);
         }
 
         // The 8-byte scalars align to 8, not to the 4 bytes that would suffice
@@ -195,27 +215,34 @@ namespace xStunit.Interpreter.Tests.Conformance
         }
 
         // A union's members all start at offset 0 and its size is its widest
-        // member, neither of which xStunit models. Refusing to size the holder
-        // is the honest answer; reading the union as a struct would place the
-        // members end to end and report a layout nothing in TwinCAT produces.
+        // member: 8 bytes from the LWORD, not the 2 of the first member, the 4
+        // of the middle one, or the 14 that laying them end to end would give.
+        // The holder is what reports the alignment the union imposes - a union
+        // aligned to 1 would put the trailer at 9 rather than 16.
         [Fact]
-        public void UnionHolder_IsRefusedBecauseThereIsNoUnionModel()
+        public void UnionLayout_OverlaysEveryMemberAndImposesItsWidestAlignment()
         {
-            var ex = Assert.Throws<NotSupportedException>(() => Placements("ST_UnionHolder"));
+            AssertLayout("U_OverlaidScalars", 8,
+                ("asWord", 0, 2),
+                ("asBytes", 0, 4),
+                ("asLong", 0, 8));
 
-            Assert.Contains("U_OverlaidScalars", ex.Message);
+            AssertLayout("ST_UnionHolder", 24,
+                ("leadIn", 0, 1),
+                ("overlay", 8, 8),
+                ("trailer", 16, 1));
         }
 
         // VarBlockParser skips a declaration line it cannot spell instead of
         // failing, so a fixture written in a shape it does not accept would
-        // still load - as a struct silently missing a member, quietly measuring
-        // a layout no one authored. Every line inside a STRUCT body must
-        // therefore survive as a field.
+        // still load - as a type silently missing a member, quietly measuring
+        // a layout no one authored. Every line inside a STRUCT or UNION body
+        // must therefore survive as a field.
         [Fact]
         public void EveryDeclaredStructField_SurvivesParsing()
         {
             foreach (var (file, declarationText) in DutDeclarations()
-                         .Where(d => DutStructLoader.IsStructDeclaration(d.DeclarationText)))
+                         .Where(d => StructDeclParser.DeclaredBody(d.DeclarationText) != null))
             {
                 var declared = CountDeclaredFields(declarationText);
                 var parsed = StructDeclParser.Parse(declarationText).Fields.Count;
@@ -247,22 +274,38 @@ namespace xStunit.Interpreter.Tests.Conformance
                 Assert.True(instantiated.Contains(type), $"{type} is declared but never instantiated"));
         }
 
+        // The bare overload measures the 32-bit target, which is what every
+        // fixture whose numbers do not contain an address is measuring anyway.
         private static void AssertLayout(
-            string typeName, int expectedSize, params (string Field, int Offset, int Size)[] expectedFields)
+            string typeName, int expectedSize, params (string Field, int Offset, int Size)[] expectedFields) =>
+            AssertLayout(TargetPlatform.X86, typeName, expectedSize, expectedFields);
+
+        private static void AssertLayout(
+            TargetPlatform target,
+            string typeName,
+            int expectedSize,
+            params (string Field, int Offset, int Size)[] expectedFields)
         {
-            var actual = Placements(typeName)
+            var layout = new TypeLayout(Registry, target);
+            var actual = Placements(typeName, layout)
                 .Select(p => (p.Field.Name, p.Offset, p.Size))
                 .ToArray();
 
             Assert.Equal(expectedFields, actual);
-            Assert.Equal(expectedSize, Layout.SizeOf(typeName).Size);
+            Assert.Equal(expectedSize, layout.SizeOf(typeName).Size);
         }
 
-        private static IReadOnlyList<FieldPlacement> Placements(string typeName)
+        private static IReadOnlyList<FieldPlacement> Placements(string typeName, TypeLayout layout = null)
         {
             var structAst = Registry.GetStruct(typeName);
             Assert.NotNull(structAst);
-            return Layout.Fields(structAst).ToList();
+            return (layout ?? Layout).Fields(structAst).ToList();
+        }
+
+        private static TargetPlatform Target(string name)
+        {
+            Assert.True(TargetPlatform.TryParse(name, out var target), $"'{name}' is not a target platform");
+            return target;
         }
 
         private static IEnumerable<(string File, string DeclarationText)> DutDeclarations() =>
@@ -283,9 +326,9 @@ namespace xStunit.Interpreter.Tests.Conformance
             foreach (var rawLine in declarationText.Replace("\r\n", "\n").Split('\n'))
             {
                 var line = rawLine.Trim();
-                if (line == "STRUCT")
+                if (line == "STRUCT" || line == "UNION")
                     inBody = true;
-                else if (line == "END_STRUCT")
+                else if (line == "END_STRUCT" || line == "END_UNION")
                     inBody = false;
                 else if (inBody && FieldLinePattern.IsMatch(line))
                     count++;

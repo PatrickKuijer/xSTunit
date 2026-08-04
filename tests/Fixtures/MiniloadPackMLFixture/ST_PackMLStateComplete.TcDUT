@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4026.18">
+  <DUT Name="ST_PackMLStateComplete" Id="{5e4501d0-0013-4d19-9a41-000000000001}">
+    <Declaration><![CDATA[(*
+    The answer half of the command struct: one flag per ACTING state, raised by
+    the equipment logic to say "the work this state stands for is finished".
+    The state manager owns no motion and no IO, so this is the only way it can
+    ever learn that a transient state is over.
+
+    There is a field per state rather than a single StateComplete flag on
+    purpose. The flags are levels like the commands are, and a level left high
+    across a transition would otherwise complete the NEXT acting state as well
+    - a caller that finishes Starting and forgets to drop the flag would run
+    straight through Execute into Completing without producing anything.
+*)
+TYPE ST_PackMLStateComplete :
+STRUCT
+	Clearing : BOOL;
+	Stopping : BOOL;
+	Aborting : BOOL;
+	Resetting : BOOL;
+	Starting : BOOL;
+	Execute : BOOL;
+	Completing : BOOL;
+	Holding : BOOL;
+	Unholding : BOOL;
+	Suspending : BOOL;
+	Unsuspending : BOOL;
+END_STRUCT
+END_TYPE
+]]></Declaration>
+  </DUT>
+</TcPlcObject>

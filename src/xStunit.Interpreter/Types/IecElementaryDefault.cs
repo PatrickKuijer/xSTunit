@@ -7,8 +7,8 @@ namespace xStunit.Interpreter
     // the value returned here, not at CLR null. Everything outside that set is
     // deliberately elsewhere: numerics belong to IecNumericType; STRUCT/ARRAY/
     // FB defaults stay in Engine, needing materialization rather than a
-    // constant; POINTER TO/REFERENCE TO stay there too, being a prefix rule
-    // rather than a type-name entry.
+    // constant; POINTER TO/REFERENCE TO belong to AddressTypeInfo, being a
+    // prefix rule rather than a type-name entry.
     internal static class IecElementaryDefault
     {
         // IEC 61131-3 type names are case-insensitive (a VAR declared 'bool'

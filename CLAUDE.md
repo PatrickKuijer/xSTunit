@@ -118,11 +118,17 @@ stale comment is worse than no comment, and a deleted one can't rot.
 **`///` is for the public API surface; everything else stays `//`.** A type or
 member ships XML doc when code outside its own project can call it: the plugin
 contract in `xStunit.Interpreter/Extensibility`, the native-stub boundary in
-`xStunit.Runner`, the loader entry points in `xStunit.Parser`. Internals of
-those projects — and all of `xStunit.Interpreter` outside `Extensibility/` —
-keep `//` and are not converted. `Directory.Build.props` suppresses CS1591 so
-that partial coverage is the intended state, not a warning wall to chip away
-at. Never mass-promote `//` to `///` to close the gap.
+`xStunit.Runner`, the loader entry points in `xStunit.Parser`, and
+`src/xStunit.Vsix/TestRunner` — those types cross into
+`tests/xStunit.Vsix.Tests` by source-link, a real consumer outside the file,
+and they carry the CLI wire contract the VSIX parses out-of-process. The rest
+of `src/xStunit.Vsix` is not named here and stays on `//`. Internals of those
+projects — and all of `xStunit.Interpreter` outside `Extensibility/` — keep
+`//` and are not converted. `Directory.Build.props` suppresses CS1591 so that
+partial coverage is the intended state, not a warning wall to chip away at.
+Never mass-promote `//` to `///` to close the gap — and never mass-demote an
+established folder back either; that is the same churn in the other
+direction.
 
 **XML doc `<summary>` only when it adds information beyond the signature.**
 Skip it entirely for a member whose name and type already say everything (a
@@ -170,4 +176,4 @@ The product is named `xStunit`, deliberately distinct from TwinCAT/Beckhoff-adja
 
 Do NOT reuse the `Tc`/`TC` namespace or Beckhoff's own naming conventions (`Tc2_*`, `TcPOU`, `Tc*` prefixes, etc.) in any NEW identifier — namespaces, project names, class names, file names, CLI flags, config keys. If a new type needs to reference a TwinCAT/Beckhoff concept, name it after the IEC 61131-3 or domain concept instead (e.g. `BistableLatchHost`, not `TcBistableHost`).
 
-The `.TcPOU`/`.TcDUT`/`.TcGVL` file-format parsers (`TcPouParser` and siblings) keep their `Tc` prefix by decision — it describes a format-specific adapter accurately. Do not rename them. Full rule and reasoning: [docs/CODING_STANDARDS.md](docs/CODING_STANDARDS.md#naming).
+TwinCAT's own file-format extensions are exempt by decision — `.TcPOU`, `.TcDUT`, `.TcGVL`, `.TcIO` and any other `.Tc*` extension TwinCAT defines. Files genuinely in one of those formats keep the extension, and the parsers that read them (`TcPouParser` and siblings) keep the matching `Tc` prefix because it describes a format-specific adapter accurately. Do not rename them. Full rule and reasoning: [docs/CODING_STANDARDS.md](docs/CODING_STANDARDS.md#naming).

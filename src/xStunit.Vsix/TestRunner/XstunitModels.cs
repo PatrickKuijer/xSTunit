@@ -27,6 +27,18 @@ namespace xStunit.Vsix.TestRunner
 
         public int ExitCode { get; set; }
 
+        /// <summary>
+        /// The files the run could not load, and so never got a suite out of.
+        /// </summary>
+        /// <remarks>
+        /// The CLI empties this array rather than omitting it, so a consumer reads it
+        /// unconditionally; the initializer keeps that true for a payload predating the
+        /// field, which System.Text.Json would otherwise leave null. These are load
+        /// errors, not a third test outcome - xStunit has no skip outcome - so a
+        /// renderer must not file them beside passing and failing tests.
+        /// </remarks>
+        public List<XstunitSkippedFile> Skipped { get; set; } = new List<XstunitSkippedFile>();
+
         public string Error { get; set; }
 
         // Classifies the run-level Error above. Always "load-error" - every error
@@ -41,6 +53,13 @@ namespace xStunit.Vsix.TestRunner
         // BuildRenderResultScript) instead of re-serializing this object and risking a
         // drift between what the CLI emitted and what the tree renders from.
         public string RawJson { get; set; }
+    }
+
+    internal sealed class XstunitSkippedFile
+    {
+        public string FilePath { get; set; }
+
+        public string Reason { get; set; }
     }
 
     internal class XstunitSuiteResult

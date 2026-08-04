@@ -319,6 +319,76 @@ namespace xStunit.Vsix.Tests
             Assert.Null(suite.CallStack);
         }
 
+        // A file the CLI could not load is reported under `skipped`, never as a test
+        // outcome. Dropping either field here leaves the IDE able to say only that
+        // something was skipped, without naming the file or the reason -- which is the
+        // whole of what the array is for.
+        [Fact]
+        public void Deserialize_PopulatedSkipped_MapsEveryEntryWithFilePathAndReason()
+        {
+            const string json = @"{
+                ""suites"": [],
+                ""passed"": 0,
+                ""failed"": 0,
+                ""exitCode"": 0,
+                ""skipped"": [
+                    {
+                        ""filePath"": ""C:\\proj\\FB_UsesUnsupportedLib.TcPOU"",
+                        ""reason"": ""uses a library outside the v1 parse subset""
+                    },
+                    {
+                        ""filePath"": ""C:\\proj\\FB_Malformed.TcPOU"",
+                        ""reason"": ""could not read this body at line 2""
+                    }
+                ]
+            }";
+
+            var result = JsonSerializer.Deserialize<XstunitRunResult>(json, Options);
+
+            Assert.Equal(2, result.Skipped.Count);
+            Assert.Equal(@"C:\proj\FB_UsesUnsupportedLib.TcPOU", result.Skipped[0].FilePath);
+            Assert.Equal("uses a library outside the v1 parse subset", result.Skipped[0].Reason);
+            Assert.Equal(@"C:\proj\FB_Malformed.TcPOU", result.Skipped[1].FilePath);
+            Assert.Equal("could not read this body at line 2", result.Skipped[1].Reason);
+        }
+
+        // The CLI emits `skipped` on every report and empties it rather than omitting
+        // it, so a consumer reads it unconditionally. A run where nothing was skipped
+        // must therefore arrive as an empty collection, never as a null one that would
+        // fault the first caller to enumerate it.
+        [Fact]
+        public void Deserialize_EmptySkipped_YieldsEmptyCollectionRatherThanNull()
+        {
+            const string json = @"{
+                ""suites"": [],
+                ""passed"": 1,
+                ""failed"": 0,
+                ""exitCode"": 0,
+                ""skipped"": []
+            }";
+
+            var result = JsonSerializer.Deserialize<XstunitRunResult>(json, Options);
+
+            Assert.NotNull(result.Skipped);
+            Assert.Empty(result.Skipped);
+        }
+
+        // The same unconditional read has to survive a payload with no `skipped` key at
+        // all -- a CLI older than the field, or the early-exit error shape as some
+        // future build emits it. System.Text.Json leaves an absent key untouched, so
+        // what holds this is the property's own initializer; drop it and every consumer
+        // needs a null check the wire contract says it should not need.
+        [Fact]
+        public void Deserialize_WithoutSkippedField_YieldsEmptyCollectionRatherThanNull()
+        {
+            const string json = @"{ ""error"": ""no TcUnit suites found under /path"", ""kind"": ""load-error"" }";
+
+            var result = JsonSerializer.Deserialize<XstunitRunResult>(json, Options);
+
+            Assert.NotNull(result.Skipped);
+            Assert.Empty(result.Skipped);
+        }
+
         [Fact]
         public void Deserialize_SuiteWithoutFilePath_LeavesFilePathNull()
         {

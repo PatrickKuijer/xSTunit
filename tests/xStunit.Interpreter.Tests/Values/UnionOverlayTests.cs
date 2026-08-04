@@ -36,9 +36,8 @@ END_TYPE";
             return (engine, instance, new Frame(instance, "FB_Holder"));
         }
 
-        // The defect this bead reports: 16#1234 written through the WORD member
-        // has to be the low half of the LWORD member, not a value only asWord
-        // can see.
+        // 16#1234 written through the WORD member has to be the low half of the
+        // LWORD member, not a value only asWord can see.
         [Fact]
         public void Assign_NarrowMember_IsVisibleThroughTheWiderMember()
         {
@@ -137,10 +136,10 @@ END_TYPE";
             Assert.Equal(0x1234UL, u.Fields["asLong"].Value);
         }
 
-        // The second defect, and the silent one: packing a union for MEMCPY
-        // used to loop its members and write each one's own independent value
-        // at offset 0, so the last member declared overwrote every earlier one
-        // and the bytes that left the union were nobody's value.
+        // The bytes that leave a union have to be its storage, and the failure
+        // here is silent: a pack that loops the members writes each one's own
+        // value at offset 0, so the last member declared wins and the copy
+        // carries a value nobody wrote.
         [Fact]
         public void Memcpy_OutOfAUnion_WritesTheOverlaidBytesNotTheLastMember()
         {
@@ -172,8 +171,8 @@ END_TYPE";
         }
 
         // A struct's members are not overlaid, so the same shape of test has to
-        // come out the other way: this is the guard against "fix" that overlays
-        // everything.
+        // come out the other way. An overlay mechanism that reached every
+        // composite would pass every test above and fail only here.
         [Fact]
         public void Assign_StructField_IsNotVisibleThroughItsSibling()
         {

@@ -507,7 +507,7 @@ namespace xStunit.Interpreter
         // an untouched union reads as every member's own default without any
         // member having to be written. That matters for a member type with no
         // wire format: it costs nothing until something reads it.
-        public StructInstance NewUnionInstance(StructAst unionAst)
+        internal StructInstance NewUnionInstance(StructAst unionAst)
         {
             var storage = new UnionStorage(this, unionAst);
             var instance = new StructInstance(unionAst.Name) { Overlay = storage };
@@ -571,7 +571,7 @@ namespace xStunit.Interpreter
                 ? StringTypeInfo.ParseLength(resolvedTypeName)
                 : StringTypeInfo.ParseLength(resolvedTypeName, _resolveBound);
 
-        public (int Size, int Align) SizeOfStruct(StructAst structAst)
+        internal (int Size, int Align) SizeOfStruct(StructAst structAst)
         {
             var end = 0;
             var maxAlign = 1;

@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.IO;
 
@@ -32,7 +33,8 @@ namespace xStunit.Interpreter.Tests
             if (workspace.Skipped.Count > 0)
             {
                 var first = workspace.Skipped[0];
-                throw new IOException($"unreadable fixture file in {Named(directories)}: {first.FileKey}: {first.Message}");
+                throw new IOException(
+                    $"unreadable fixture file in {DirectoryOf(first.FileKey, directories)}: {first.FileKey}: {first.Message}");
             }
 
             return new Engine(workspace.Registry);
@@ -52,5 +54,20 @@ namespace xStunit.Interpreter.Tests
             ((StructInstance)instance.Fields[structField].Value).Fields[member];
 
         private static string Named(IEnumerable<string> directories) => string.Join(", ", directories);
+
+        // A slice loaded from two directories must still say which one holds
+        // the bad file, or the message sends the reader to the wrong fixture.
+        // A skip is not always attributable to a path - a duplicate name is
+        // keyed by the name - so the whole set is the honest fallback.
+        private static string DirectoryOf(string fileKey, IReadOnlyList<string> directories)
+        {
+            foreach (var directory in directories)
+            {
+                if (fileKey != null && fileKey.StartsWith(directory, StringComparison.OrdinalIgnoreCase))
+                    return directory;
+            }
+
+            return Named(directories);
+        }
     }
 }

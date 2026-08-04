@@ -44,5 +44,31 @@ namespace xStunit.Interpreter.Tests
                 Directory.Delete(dir, true);
             }
         }
+
+        // The conveyor slice loads two directories, so naming the whole set
+        // sends the reader to the wrong fixture as often as the right one. The
+        // message has to name the directory the bad file is actually in.
+        [Fact]
+        public void FileTheLoaderWouldSkip_NamesOnlyTheDirectoryHoldingIt()
+        {
+            var root = Path.Combine(Path.GetTempPath(), "xstunit-fixture-" + Guid.NewGuid().ToString("n"));
+            var sound = Path.Combine(root, "Sound");
+            var torn = Path.Combine(root, "Torn");
+            Directory.CreateDirectory(sound);
+            Directory.CreateDirectory(torn);
+            try
+            {
+                File.WriteAllText(Path.Combine(torn, "FB_Torn.TcPOU"), "<TcPlcObject><POU Name=\"FB_Torn\">");
+
+                var ex = Assert.Throws<IOException>(() => MiniloadFixtureEngine.Create(sound, torn));
+
+                Assert.Contains(torn, ex.Message);
+                Assert.DoesNotContain(sound + ",", ex.Message);
+            }
+            finally
+            {
+                Directory.Delete(root, true);
+            }
+        }
     }
 }

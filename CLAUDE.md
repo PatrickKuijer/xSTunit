@@ -115,17 +115,20 @@ well-shaped methods are the default; a comment is the exception that earns its
 place, not the norm. When in doubt, delete rather than reformat — a wrong or
 stale comment is worse than no comment, and a deleted one can't rot.
 
-**`///` is for the public API surface; everything else stays `//`.** A type or
-member ships XML doc when code outside its own project can call it: the plugin
-contract in `xStunit.Interpreter/Extensibility`, the native-stub boundary in
-`xStunit.Runner`, the loader entry points in `xStunit.Parser`, and
-`src/xStunit.Vsix/TestRunner` — those types cross into
-`tests/xStunit.Vsix.Tests` by source-link, a real consumer outside the file,
-and they carry the CLI wire contract the VSIX parses out-of-process. The rest
+**`///` is for the public API surface; everything else stays `//`.** One test
+decides: a type or member ships XML doc when code outside its own project can
+call it. That is the plugin contract in `xStunit.Interpreter/Extensibility`,
+the native-stub boundary in `xStunit.Runner`, the loader entry points in
+`xStunit.Parser`, and `src/xStunit.Vsix/TestRunner` — source-link compiles
+those types into `tests/xStunit.Vsix.Tests`, a second assembly, so they meet
+the same test the other three do, and they carry the CLI wire contract the
+VSIX parses out-of-process. Crossing a *file* boundary is not the test and
+never was; taken literally it would put `///` on nearly everything. The rest
 of `src/xStunit.Vsix` is not named here and stays on `//`. Internals of those
 projects — and all of `xStunit.Interpreter` outside `Extensibility/` — keep
-`//` and are not converted. `Directory.Build.props` suppresses CS1591 so that
-partial coverage is the intended state, not a warning wall to chip away at.
+`//` and are not converted. `Directory.Build.props` turns docgen on for
+exactly these four and suppresses CS1591, so partial coverage is the intended
+state, not a warning wall to chip away at.
 Never mass-promote `//` to `///` to close the gap — and never mass-demote an
 established folder back either; that is the same churn in the other
 direction.

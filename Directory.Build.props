@@ -1,10 +1,12 @@
 <Project>
 
-  <!-- Emit XML doc output for the libraries consumed by downstream code (Cli and Vsix
-       are entry points, not referenced as libraries, so they're excluded). CS1591 is
-       suppressed so the flag is purely an emit switch: partial doc coverage must not
-       land as a warning wall. -->
-  <PropertyGroup Condition="'$(MSBuildProjectName)' == 'xStunit.Interpreter' Or '$(MSBuildProjectName)' == 'xStunit.Runner' Or '$(MSBuildProjectName)' == 'xStunit.Parser'">
+  <!-- Emit XML doc output for every project holding a documented surface, so this list
+       and the one in CLAUDE.md name the same set. Vsix qualifies on TestRunner alone:
+       source-link compiles it into xStunit.Vsix.Tests, so it is called from outside its
+       own project like the other three. Cli is an entry point with no such surface.
+       CS1591 is suppressed so the flag is purely an emit switch: partial doc coverage
+       must not land as a warning wall. -->
+  <PropertyGroup Condition="'$(MSBuildProjectName)' == 'xStunit.Interpreter' Or '$(MSBuildProjectName)' == 'xStunit.Runner' Or '$(MSBuildProjectName)' == 'xStunit.Parser' Or '$(MSBuildProjectName)' == 'xStunit.Vsix'">
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <NoWarn>$(NoWarn);CS1591</NoWarn>
   </PropertyGroup>

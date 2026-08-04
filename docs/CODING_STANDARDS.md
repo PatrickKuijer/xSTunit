@@ -38,11 +38,24 @@ Document without fail: **exceptions a caller must handle**, and **parameters
 or return values with non-obvious semantics** (units, ranges, null/empty
 meaning, ownership).
 
-`<GenerateDocumentationFile>` is on for the three consumable libraries
-(`Interpreter`, `Runner`, `Parser`) via `Directory.Build.props`, with
-`CS1591` in `NoWarn` — the flag is an emit switch for docgen/IntelliSense,
-deliberately **not** a "document everything" enforcement mechanism. A missing
-`<summary>` is therefore not a review finding; a *wrong* or *redundant* one is.
+`<GenerateDocumentationFile>` is on for `Interpreter`, `Runner`, `Parser` and
+`Vsix` via `Directory.Build.props`, with `CS1591` in `NoWarn` — the flag is an
+emit switch for docgen/IntelliSense, deliberately **not** a "document
+everything" enforcement mechanism. A missing `<summary>` is therefore not a
+review finding; a *wrong* or *redundant* one is.
+
+That list is the same four projects CLAUDE.md names as the `///` surface, and
+they are meant to stay the same. `Vsix` is on the list for `TestRunner` only:
+source-link compiles it into `xStunit.Vsix.Tests`, which puts its callers
+outside its own project, the one test that decides the whole question.
+
+`Vsix` is the one entry that does not emit under `dotnet build`, and this is
+not an oversight to fix: `xStunit.Vsix` carries no `Build.0` row in
+`xStunit.sln`, so the solution build skips it and only a VS2017 msbuild build
+produces `xStunit.Vsix.xml`. The flag is set for when that build runs. Do not
+conclude from a missing `.xml` in `dotnet build` output that the setting is
+broken, and do not add `Build.0` to make it appear — that would put the VSSDK
+targets in the path of every CI and headless build.
 
 One compiler constraint to know: `CS1573` makes `<param>` all-or-nothing per
 member. Documenting some parameters and not others warns, so once one

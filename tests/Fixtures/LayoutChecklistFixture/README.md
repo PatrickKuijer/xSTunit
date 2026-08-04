@@ -34,10 +34,33 @@ compiler states an answer that can be read when a model for it is written.
 
 ## What the .tmc cannot settle
 
-One half of the trailing-padding rule stays out of reach: a `.tmc` says how
-wide a type is, not whether a packing write touches the padding bytes inside
-it. That half is a `MEMCPY` question, and getting it wrong is a buffer overrun
-rather than a wrong value — it needs a runtime comparison, not a layout one.
+A `.tmc` says how wide a type is, not which bytes a packing write lands on, so
+no golden `.tmc` can close the second half of the trailing-padding rule: whether
+a `MEMCPY` of `SIZEOF` bytes touches the padding inside a type, and with what.
+Getting that wrong is a buffer overrun rather than a wrong value, so the row is
+answered here — from measurement inside xStunit, plus one named carve-out —
+rather than left open.
+
+`LayoutChecklistPackWriteTests` pins pack and `SIZEOF` in agreement on all three
+trailing-padding fixtures, on both targets: a write of `ST_TrailingPadding`,
+`ST_WideAlignment` or `ST_ArrayStride` fills exactly the 8, 32 and 28 bytes
+`SIZEOF` claims, and a poisoned destination keeps its poison from there on.
+xStunit's padding is zero by construction rather than by luck — the pack buffer
+is a zero-filled array and `PackValue` only ever writes at a field placement,
+never at a padding offset — so a whole-type copy zeroes the destination's
+padding instead of carrying the source's across. The target agrees for any
+struct that has only ever been written field-wise, because CODESYS
+zero-initialises variable memory.
+
+That leaves one divergence, and it is nameable: a source struct whose padding is
+*non-zero*. On the target that is reachable through a `MEMSET` over the struct, a
+union overlay, a pointer write, or a struct filled from a fieldbus buffer, and a
+`MEMCPY` there copies those padding bytes verbatim; in xStunit the whole class is
+unreachable, there being no storage for a padding byte to hold anything but a
+zero. Probing that class is what a Grade B runtime comparison still owes this
+rule — narrowed from checking `MEMCPY` at large. That CODESYS `MEMCPY` copies
+source padding verbatim is asserted from the specification and not measured on a
+box, so the Grade B trial confirms it rather than assumes it.
 
 The `{attribute 'pack_mode'}` pragma does survive, as a `pack_mode` property on
 the type, so the packed fixtures are measured under the cap the compiler
@@ -73,9 +96,10 @@ type is added here, add it to that list too — a test enforces this.
 ## What the compiler settled
 
 Every rule above came back as xStunit already had it, over 59 types and 208
-members with zero disagreements on the x86 module. On x64 the only
-disagreements are address widths, `POINTER TO` and `REFERENCE TO` alike:
-xStunit hardcodes four bytes.
+members with zero disagreements, on the x64 module as much as the x86 one.
+Addresses are sized from the target rather than hardcoded, `POINTER TO` and
+`REFERENCE TO` alike, so the 64-bit module's wider addresses and everything they
+displace land where the compiler put them.
 
 One type is described with a hole rather than compared to the end.
 `PlcTaskSystemInfo`'s declared members stop at byte 32 and `TaskName` is

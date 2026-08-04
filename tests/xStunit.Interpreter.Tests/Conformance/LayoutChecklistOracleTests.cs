@@ -57,17 +57,6 @@ namespace xStunit.Interpreter.Tests.Conformance
         private static LayoutReport Compare(string moduleName) =>
             LayoutOracle.Compare(ParsedModule(moduleName), ChecklistSource);
 
-        // PlcTaskSystemInfo is described with a hole. Its declared members stop
-        // at byte 32 and TaskName is declared at byte 64, the 32 bytes between
-        // them being a reserved array TwinCAT keeps out of the .tmc, so every
-        // member past the hole is displaced by definition and the type's size
-        // with it. Those rows measure how completely the compiler described the
-        // type, not whether xStunit places fields correctly, and the oracle has
-        // no rule for spotting one yet. Nothing else is excluded, so a real
-        // disagreement anywhere else still reaches the assertions below.
-        private static IEnumerable<LayoutFinding> MismatchesAboutALayoutRule(LayoutReport report) =>
-            report.Mismatches.Where(f => f.TypeName != "PlcTaskSystemInfo");
-
         // The committed diff is the record of exactly how far xStunit's layout
         // math conforms over the checklist. A rule getting fixed and a rule
         // silently regressing look the same to the compiler; this is what tells
@@ -93,7 +82,7 @@ namespace xStunit.Interpreter.Tests.Conformance
         {
             var report = Compare(X86Module);
 
-            Assert.Empty(MismatchesAboutALayoutRule(report));
+            Assert.Empty(report.Mismatches);
             Assert.True(report.ComparedMemberCount > 100, $"only {report.ComparedMemberCount} members were compared");
         }
 
@@ -111,7 +100,7 @@ namespace xStunit.Interpreter.Tests.Conformance
                 .Select(t => t.Name)
                 .ToList();
 
-            Assert.Empty(MismatchesAboutALayoutRule(report));
+            Assert.Empty(report.Mismatches);
             Assert.True(report.ComparedMemberCount > 100, $"only {report.ComparedMemberCount} members were compared");
             Assert.All(
                 new[] { "ST_PointerWidth", "ST_ReferenceWidth", "AnyType", "_Implicit_Task_Info", "RTS_IEC_HANDLE" },

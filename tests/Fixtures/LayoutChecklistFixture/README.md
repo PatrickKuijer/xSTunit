@@ -77,14 +77,15 @@ members with zero disagreements on the x86 module. On x64 the only
 disagreements are address widths, `POINTER TO` and `REFERENCE TO` alike:
 xStunit hardcodes four bytes.
 
-One type disagrees on both targets without any rule being at stake.
-`PlcTaskSystemInfo` is described with a hole: its declared members stop at byte
-32 and `TaskName` is declared at byte 64, the 32 bytes between them being a
-reserved array TwinCAT keeps out of the `.tmc`. A member past a hole is
-displaced by definition, and the type's size with it, so what those rows measure
-is how completely the compiler described the type. `PlcAppSystemInfo` has the
-same hole and never reaches it, being refused earlier at `DT` — the abbreviated
-spelling of `DATE_AND_TIME`, which xStunit sizes only spelled out.
+One type is described with a hole rather than compared to the end.
+`PlcTaskSystemInfo`'s declared members stop at byte 32 and `TaskName` is
+declared at byte 64, the 32 bytes between them being a reserved array TwinCAT
+keeps out of the `.tmc`. A member past a hole is displaced by definition, and
+the type's size with it, so the oracle stops at `TaskName` and reports it as
+`NotCompared`. The eleven members in front of the hole are compared like any
+others — a hole costs the rows it displaces and no more. `PlcAppSystemInfo` has
+the same hole and never reaches it, being refused earlier at `DT` — the
+abbreviated spelling of `DATE_AND_TIME`, which xStunit sizes only spelled out.
 
 Two answers are worth stating outright, being the ones a reader is most likely
 to guess the other way:

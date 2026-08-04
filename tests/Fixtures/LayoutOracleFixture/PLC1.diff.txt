@@ -1,9 +1,8 @@
 module PLC1 target TwinCAT RT (x64)
-compared 6 of 10 declared types, 56 members
+compared 5 of 10 declared types, 55 members
 sizes and offsets in bits
 NotCompared FB_AddLrealInt function block instance layout is not modeled
 Unsupported PlcAppSystemInfo.AppTimestamp SIZEOF() doesn't know the byte size of type 'DT'
-MemberOffset PlcTaskSystemInfo.TaskName declared=512 computed=256
-TypeSize PlcTaskSystemInfo declared=1024 computed=768
+NotCompared PlcTaskSystemInfo.TaskName displaced by a gap the .tmc does not describe
 NotCompared MAIN static members - a program or global variable list, not an instance layout
 NotCompared TwinCAT_PreventOnlineChangeGvl static members - a program or global variable list, not an instance layout

@@ -23,6 +23,11 @@ namespace xStunit.Interpreter.Conformance
     {
         private const int BitsPerByte = 8;
 
+        // The alignment of the widest scalar TwinCAT aligns anything to, in
+        // bits. Nothing is ever padded by this much - padding is what it takes
+        // to reach the next multiple, always less than the alignment itself.
+        private const int WidestAlignmentBits = 64;
+
         private static readonly IReadOnlyDictionary<string, string> NoSource =
             new Dictionary<string, string>();
 
@@ -51,7 +56,7 @@ namespace xStunit.Interpreter.Conformance
                 var skipReason = SkipReason(type);
                 if (skipReason != null)
                 {
-                    findings.Add(LayoutFinding.NotCompared(type.Name, skipReason));
+                    findings.Add(LayoutFinding.NotCompared(type.Name, null, skipReason));
                     continue;
                 }
 
@@ -99,7 +104,11 @@ namespace xStunit.Interpreter.Conformance
             var structAst = registry.GetStruct(type.Name);
             var (placements, failedIndex, failureDetail) = PlaceFields(layout, structAst);
 
-            for (var i = 0; i < placements.Count; i++)
+            var gapIndex = FirstMemberBehindAnUndescribedGap(type, target);
+            var stoppedByAGap = gapIndex >= 0 && (failedIndex < 0 || gapIndex < failedIndex);
+            var comparedCount = stoppedByAGap ? gapIndex : placements.Count;
+
+            for (var i = 0; i < comparedCount; i++)
             {
                 var member = type.Members[i];
                 var placement = placements[i];
@@ -113,6 +122,13 @@ namespace xStunit.Interpreter.Conformance
                 var computedSize = placement.Size * BitsPerByte;
                 if (declaredSize != computedSize)
                     findings.Add(LayoutFinding.MemberSize(type.Name, member.Name, declaredSize, computedSize));
+            }
+
+            if (stoppedByAGap)
+            {
+                findings.Add(LayoutFinding.NotCompared(
+                    type.Name, type.Members[gapIndex].Name, "displaced by a gap the .tmc does not describe"));
+                return new Comparison(false, comparedCount);
             }
 
             if (failedIndex >= 0)
@@ -130,6 +146,35 @@ namespace xStunit.Interpreter.Conformance
                 findings.Add(LayoutFinding.TypeSize(type.Name, type.BitSize, computedTypeBits));
 
             return new Comparison(true, placements.Count);
+        }
+
+        // The first member the compiler placed further along than the members
+        // in front of it account for, or -1 when the declared members describe
+        // the type end to end.
+        //
+        // TwinCAT keeps a reserved member out of the .tmc entirely, leaving a
+        // hole no SubItem describes. Padding can never open one: alignment tops
+        // out at 8 bytes, so it always inserts less than that. Everything
+        // behind such a hole is displaced by definition, and the comparison
+        // stops there - reporting those members would state the hole's width as
+        // an offset disagreement and say nothing about a layout rule. The
+        // members in front of it are still scored, so the hole costs exactly
+        // the rows it displaces.
+        private static int FirstMemberBehindAnUndescribedGap(DeclaredTypeLayout type, TargetPlatform target)
+        {
+            for (var i = 1; i < type.Members.Count; i++)
+            {
+                var previous = type.Members[i - 1];
+                var describedThrough = previous.BitOffset + DeclaredBits(previous, target);
+
+                // Null widths and overlaid members (a union's, all at offset 0)
+                // both fall out as "no gap": the comparison only stops on a hole
+                // it can measure.
+                if (type.Members[i].BitOffset - describedThrough >= WidestAlignmentBits)
+                    return i;
+            }
+
+            return -1;
         }
 
         // How much of a declared type the comparison actually got through:

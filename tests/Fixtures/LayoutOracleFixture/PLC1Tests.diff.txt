@@ -1,5 +1,5 @@
 module PLC1Tests target TwinCAT RT (x86)
-compared 41 of 71 declared types, 129 members
+compared 40 of 71 declared types, 128 members
 sizes and offsets in bits
 NotCompared TOF function block instance layout is not modeled
 NotCompared I_TestResults neither members nor a base type declared
@@ -26,8 +26,7 @@ NotCompared FB_MemRingBuffer function block instance layout is not modeled
 NotCompared TON function block instance layout is not modeled
 NotCompared FB_AdsLogStringMessageFifoQueue function block instance layout is not modeled
 Unsupported PlcAppSystemInfo.AppTimestamp SIZEOF() doesn't know the byte size of type 'DT'
-MemberOffset PlcTaskSystemInfo.TaskName declared=512 computed=256
-TypeSize PlcTaskSystemInfo declared=1024 computed=768
+NotCompared PlcTaskSystemInfo.TaskName displaced by a gap the .tmc does not describe
 NotCompared Global_Variables static members - a program or global variable list, not an instance layout
 NotCompared Global_Variables static members - a program or global variable list, not an instance layout
 NotCompared GVL_Param_TcUnit static members - a program or global variable list, not an instance layout

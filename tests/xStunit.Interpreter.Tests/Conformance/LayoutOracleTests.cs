@@ -1,6 +1,4 @@
-using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 using xStunit.Interpreter.Conformance;
 using xStunit.Parser;
 using Xunit;
@@ -21,17 +19,6 @@ namespace xStunit.Interpreter.Tests.Conformance
         private static LayoutReport Compare(string module) =>
             LayoutOracle.Compare(TmcLayoutReader.ReadFile(
                 Path.Combine(TestFixtures.LayoutOracleFixtureDir(), module + ".tmc")));
-
-        // PlcTaskSystemInfo is described with a hole. Its declared members stop
-        // at byte 32 and TaskName is declared at byte 64, the 32 bytes between
-        // them being a reserved array TwinCAT keeps out of the .tmc, so every
-        // member past the hole is displaced by definition and the type's size
-        // with it. Those rows measure how completely the compiler described the
-        // type, not whether xStunit places fields correctly, and the oracle has
-        // no rule for spotting one yet. Nothing else is excluded, so a real
-        // disagreement anywhere else still reaches the assertions below.
-        private static IEnumerable<LayoutFinding> MismatchesAboutALayoutRule(LayoutReport report) =>
-            report.Mismatches.Where(f => f.TypeName != "PlcTaskSystemInfo");
 
         // The committed diff is the record of exactly how far xStunit's layout
         // math currently conforms. Any change to SizeOfType or the packing
@@ -65,7 +52,7 @@ namespace xStunit.Interpreter.Tests.Conformance
         {
             var report = Compare(X86Module);
 
-            Assert.Empty(MismatchesAboutALayoutRule(report));
+            Assert.Empty(report.Mismatches);
             Assert.True(report.ComparedMemberCount > 50, $"only {report.ComparedMemberCount} members were compared");
         }
 
@@ -79,7 +66,7 @@ namespace xStunit.Interpreter.Tests.Conformance
         {
             var report = Compare(X64Module);
 
-            Assert.Empty(MismatchesAboutALayoutRule(report));
+            Assert.Empty(report.Mismatches);
             Assert.True(report.ComparedMemberCount > 50, $"only {report.ComparedMemberCount} members were compared");
         }
 
@@ -125,6 +112,87 @@ namespace xStunit.Interpreter.Tests.Conformance
             Assert.Equal(LayoutFindingKind.Unsupported, finding.Kind);
             Assert.Contains("DT", finding.Detail);
         }
+
+        // TwinCAT keeps PlcTaskSystemInfo's reserved bytes out of the .tmc, so
+        // TaskName is declared 32 bytes further along than the members in front
+        // of it account for. Comparing it would state the width of the hole as
+        // an offset disagreement, and again as the type's size - two rows that
+        // measure how completely the compiler described the type rather than
+        // any rule xStunit implements. Asserted as the single finding the type
+        // produces, so a run that reported them anyway goes red.
+        [Theory]
+        [InlineData(X86Module)]
+        [InlineData(X64Module)]
+        public void Compare_TypeDescribedWithAHole_StopsAtTheDisplacedMember(string module)
+        {
+            var finding = Assert.Single(Compare(module).Findings, f => f.TypeName == "PlcTaskSystemInfo");
+
+            Assert.Equal(LayoutFindingKind.NotCompared, finding.Kind);
+            Assert.Equal("PlcTaskSystemInfo.TaskName", finding.Subject);
+        }
+
+        // A hole costs exactly the rows it displaces. Every member declared in
+        // front of one is still scored, so a width xStunit and the compiler
+        // disagree about there still reaches the conformance claim - dropping
+        // the whole type instead would carry every rule its earlier members
+        // exercise out of the claim along with the hole.
+        [Fact]
+        public void Compare_TypeDescribedWithAHole_StillScoresTheMembersInFrontOfIt()
+        {
+            var report = CompareHoledType(declaredLeadInBits: 16);
+
+            var mismatch = Assert.Single(report.Mismatches);
+            Assert.Equal(LayoutFindingKind.MemberSize, mismatch.Kind);
+            Assert.Equal("ST_Holed.leadIn", mismatch.Subject);
+        }
+
+        // Nothing behind the hole is comparable: the compiler placed those
+        // members past bytes it never described, and the type's size follows
+        // from where they landed.
+        [Fact]
+        public void Compare_TypeDescribedWithAHole_ReportsNoOffsetOrSizeBehindIt()
+        {
+            var report = CompareHoledType(declaredLeadInBits: 32);
+
+            var finding = Assert.Single(report.Findings);
+            Assert.Equal(LayoutFindingKind.NotCompared, finding.Kind);
+            Assert.Equal("ST_Holed.displaced", finding.Subject);
+        }
+
+        // A hand-built type with PlcTaskSystemInfo's shape: two DINTs with 60
+        // bytes between them that no member accounts for. leadIn's declared
+        // width is the dial - state it wrong and a disagreement sits in front
+        // of the hole.
+        private static LayoutReport CompareHoledType(int declaredLeadInBits)
+        {
+            var type = new DeclaredTypeLayout(
+                "ST_Holed",
+                bitSize: 544,
+                baseTypeName: null,
+                baseTypeIsPointer: false,
+                arrayDimensions: new DeclaredArrayDimension[0],
+                isFunctionBlock: false,
+                packMode: 0,
+                members: new[]
+                {
+                    DeclaredDint("leadIn", declaredLeadInBits, bitOffset: 0),
+                    DeclaredDint("displaced", 32, bitOffset: 512),
+                });
+
+            return LayoutOracle.Compare(new ModuleLayout("Synthetic", "TwinCAT RT (x86)", new[] { type }));
+        }
+
+        private static DeclaredMemberLayout DeclaredDint(string name, int bitSize, int bitOffset) =>
+            new DeclaredMemberLayout(
+                name,
+                "DINT",
+                isPointer: false,
+                isReference: false,
+                isStatic: false,
+                arrayDimensions: new DeclaredArrayDimension[0],
+                bitSize: bitSize,
+                bitSizeX64: null,
+                bitOffset: bitOffset);
 
         // Neither committed .tmc reaches a member carrying both widths - the one
         // that does sits behind a type name xStunit cannot size - so the choice

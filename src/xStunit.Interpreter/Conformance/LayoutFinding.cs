@@ -57,8 +57,8 @@
         public static LayoutFinding Unsupported(string typeName, string memberName, string detail) =>
             new LayoutFinding(LayoutFindingKind.Unsupported, typeName, memberName, null, null, detail);
 
-        public static LayoutFinding NotCompared(string typeName, string reason) =>
-            new LayoutFinding(LayoutFindingKind.NotCompared, typeName, null, null, null, reason);
+        public static LayoutFinding NotCompared(string typeName, string memberName, string reason) =>
+            new LayoutFinding(LayoutFindingKind.NotCompared, typeName, memberName, null, null, reason);
 
         public LayoutFindingKind Kind { get; }
 

@@ -11,6 +11,12 @@ namespace xStunit.Interpreter
         {
             if (value is StructInstance structInstance)
             {
+                // A UNION has one storage, so copying it means copying those
+                // bytes: rebuilding it field by field would hand the copy
+                // independent members and lose the overlay.
+                if (structInstance.Overlay != null)
+                    return structInstance.Overlay.CloneInstance();
+
                 var clone = new StructInstance(structInstance.TypeName);
                 // The clone carries the source's declared type and capacity, or
                 // a copied-in STRUCT would stop truncating its own string

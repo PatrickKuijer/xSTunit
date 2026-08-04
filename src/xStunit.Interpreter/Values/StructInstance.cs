@@ -18,6 +18,13 @@ namespace xStunit.Interpreter
         // latter.
         public Dictionary<string, string> FieldTypeNames { get; } = new Dictionary<string, string>();
 
+        // Non-null exactly for a UNION instance, whose members are views onto
+        // one buffer rather than the independent Cells a STRUCT's fields are.
+        // The byte model reads the union's value off here, because packing the
+        // members one at a time would write every one of them to offset 0 and
+        // leave only the last declared.
+        internal UnionStorage Overlay { get; set; }
+
         public StructInstance(string typeName)
         {
             TypeName = typeName;

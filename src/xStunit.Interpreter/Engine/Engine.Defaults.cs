@@ -59,11 +59,26 @@ namespace xStunit.Interpreter
             return 0;
         }
 
-        // Every declared field at its own DefaultValue first, then the struct
-        // literal initializer (if any) overlaid on top, so unset fields keep the
-        // type's default - TwinCAT's documented partial-initialization
-        // behaviour.
+        // The declaration's own defaults first, then the struct literal
+        // initializer (if any) overlaid on top, so unset fields keep the type's
+        // default - TwinCAT's documented partial-initialization behaviour. The
+        // literal overlays a UNION the same way, because it writes through the
+        // member Cells either way.
         private StructInstance BuildStructDefault(StructAst structAst, string literalText, FbInstance owningInstance)
+        {
+            var instance = structAst.IsUnion
+                ? BuildUnionDefault(structAst, owningInstance)
+                : BuildFieldwiseDefault(structAst, owningInstance);
+
+            if (literalText != null && Parser.ParseExpression(literalText) is StructLiteralExpr lit)
+                OverlayStruct(instance, lit, new Frame(owningInstance, structAst.Name));
+
+            return instance;
+        }
+
+        // A STRUCT's fields are independent storage, so each one is built at its
+        // own DefaultValue.
+        private StructInstance BuildFieldwiseDefault(StructAst structAst, FbInstance owningInstance)
         {
             var instance = new StructInstance(structAst.Name);
             foreach (var field in structAst.Fields)
@@ -72,8 +87,25 @@ namespace xStunit.Interpreter
                 instance.FieldTypeNames[field.Name] = field.TypeName;
             }
 
-            if (literalText != null && Parser.ParseExpression(literalText) is StructLiteralExpr lit)
-                OverlayStruct(instance, lit, new Frame(owningInstance, structAst.Name));
+            return instance;
+        }
+
+        // A UNION has one storage, so it has one initial value. Its members are
+        // seated as views onto a zeroed buffer, which already reads as every
+        // member's own default, and only the members carrying a declared
+        // initial value are written - in declaration order, the last one
+        // written keeping the bytes it overlaps. Writing the unset members'
+        // defaults too would be the same bytes and one more way for a member
+        // type with no wire format to sink a declaration that never reads it.
+        private StructInstance BuildUnionDefault(StructAst unionAst, FbInstance owningInstance)
+        {
+            var frame = new Frame(owningInstance, unionAst.Name);
+            var instance = LayoutFor(frame).NewUnionInstance(unionAst);
+            foreach (var field in unionAst.Fields)
+            {
+                if (field.DefaultValueText != null)
+                    instance.Fields[field.Name].Value = DefaultValue(field, owningInstance);
+            }
 
             return instance;
         }

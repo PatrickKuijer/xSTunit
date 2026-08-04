@@ -266,7 +266,9 @@ namespace xStunit.Interpreter
         // Writes value, already known to be of IEC type typeName, into buffer at
         // offset in the layout SizeOf measures - recursing into a STRUCT's
         // fields and an ARRAY's elements, and reaching the scalar and string
-        // codecs at the leaves.
+        // codecs at the leaves. A UNION is the one composite with nothing to
+        // recurse into: its members are already views onto one buffer, and that
+        // buffer is the value.
         //
         // Only the declared fields and elements are written. A struct's padding
         // has no storage behind it, so those bytes keep whatever the buffer
@@ -288,6 +290,16 @@ namespace xStunit.Interpreter
             if (structAst != null)
             {
                 var instance = (StructInstance)value;
+                if (structAst.IsUnion)
+                {
+                    var overlay = instance.Overlay
+                        ?? throw new NotSupportedException(
+                            $"UNION '{resolved}' has no overlaid storage behind it, so its bytes are undefined");
+                    var overlaid = overlay.SettledBytes();
+                    Array.Copy(overlaid, 0, buffer, offset, overlaid.Length);
+                    return;
+                }
+
                 foreach (var placement in Fields(structAst))
                 {
                     var field = placement.Field;
@@ -327,6 +339,13 @@ namespace xStunit.Interpreter
             var structAst = _registry.GetStruct(resolved);
             if (structAst != null)
             {
+                if (structAst.IsUnion)
+                {
+                    var union = NewUnionInstance(structAst);
+                    union.Overlay.Load(buffer, offset);
+                    return union;
+                }
+
                 var instance = new StructInstance(resolved);
                 foreach (var placement in Fields(structAst))
                 {
@@ -478,6 +497,30 @@ namespace xStunit.Interpreter
             }
         }
 
+        // The value a UNION instantiates as: one backing buffer, and one typed
+        // view per member onto it. Every construction site goes through here -
+        // a declaration's default, a byte-model unpack, a copy - because a
+        // union assembled field by field would have independent members, which
+        // is precisely what a union is not.
+        //
+        // The buffer starts zeroed, and every IEC default is all-zero bytes, so
+        // an untouched union reads as every member's own default without any
+        // member having to be written. That matters for a member type with no
+        // wire format: it costs nothing until something reads it.
+        public StructInstance NewUnionInstance(StructAst unionAst)
+        {
+            var storage = new UnionStorage(this, unionAst);
+            var instance = new StructInstance(unionAst.Name) { Overlay = storage };
+            foreach (var field in unionAst.Fields)
+            {
+                instance.Fields[field.Name] =
+                    new UnionMemberCell(storage, field.TypeName, StringCapacityOf(field.TypeName));
+                instance.FieldTypeNames[field.Name] = field.TypeName;
+            }
+
+            return instance;
+        }
+
         // Each field's placement inside structAst, in declaration order.
         public IEnumerable<FieldPlacement> Fields(StructAst structAst) =>
             structAst.IsUnion ? OverlaidFields(structAst) : SequentialFields(structAst);
@@ -528,7 +571,7 @@ namespace xStunit.Interpreter
                 ? StringTypeInfo.ParseLength(resolvedTypeName)
                 : StringTypeInfo.ParseLength(resolvedTypeName, _resolveBound);
 
-        private (int Size, int Align) SizeOfStruct(StructAst structAst)
+        public (int Size, int Align) SizeOfStruct(StructAst structAst)
         {
             var end = 0;
             var maxAlign = 1;

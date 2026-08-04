@@ -1,0 +1,336 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4026.18">
+  <POU Name="FB_ConveyorTimingTests" Id="{5e4501d0-0028-4d19-9a41-000000000001}" SpecialFunc="None">
+    <Declaration><![CDATA[(*
+    The part of FB_Conveyor's contract that only shows itself once time moves
+    inside a single test case: the scan each of the four timed gates actually
+    closes on, and the hand-over window restarting rather than resuming.
+
+    FB_ConveyorTests pins both ENDS of every one of those gates - at zero the
+    gate is transparent, at any non-zero setting no number of scans may close
+    it with the clock stopped. What is strictly BETWEEN those ends is here.
+
+    xStunit ONLY. Every case here calls AdvanceClock, an xStunit intrinsic
+    with no TwinCAT counterpart, so this POU does not compile on the target
+    and is deliberately kept out of the portable suite. FB_ConveyorTests holds
+    the cases that do run on both engines; nothing that calls AdvanceClock
+    belongs in it.
+
+    The detection point is a real FB_DigitalInput from the sensor fixture
+    directory, in simulation with its debounce off: this suite is measuring
+    the CONVEYOR's clock, and a filter window on the sensor would put a second
+    timer between the level a case sets and the transition it is timing.
+*)
+FUNCTION_BLOCK FB_ConveyorTimingTests EXTENDS TcUnit.FB_TestSuite]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[StartingReachesWaitContainerOnlyOnceAccelTimeHasElapsed();
+StoppingReachesInitOnlyOnceDecelTimeHasElapsed();
+HandoverCompletesOnlyOnceTheEyeHasBeenClearForTheWholeDelay();
+AContainerBackOnTheEyeRestartsTheHandoverDelayRatherThanResumingIt();
+MotorRunOnReleasesTheBeltOnlyOnceItsWindowHasElapsed();]]></ST>
+    </Implementation>
+    <Method Name="StartingReachesWaitContainerOnlyOnceAccelTimeHasElapsed" Id="{5e4501d0-0028-4d19-9a41-000000000002}">
+      <Declaration><![CDATA[// The AccelTime gate on the scan it closes. A belt that reached
+// WAIT_CONTAINER one ms early would accept a detection while it was still
+// coming up to speed and count a container it had not transported.
+METHOD PRIVATE StartingReachesWaitContainerOnlyOnceAccelTimeHasElapsed
+VAR
+	conveyor : FB_Conveyor;
+	sensor : FB_DigitalInput;
+	axis : FB_AxisBase;
+	recipe : ST_ConveyorControl;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('StartingReachesWaitContainerOnlyOnceAccelTimeHasElapsed');
+
+recipe.AccelTime := T#500ms;
+
+sensor.Simulation := TRUE;
+sensor.DebounceTime := T#0ms;
+sensor(HardwareInput := FALSE);
+
+conveyor(caseDetectionSensor := sensor, conveyorAxis := axis, Control := recipe, Start := TRUE);
+AssertEquals_INT(Expected := E_ConveyorState.STARTING,
+                 Actual := conveyor.CurrentState,
+                 Message := 'Start did not reach STARTING');
+
+AdvanceAndScan(conveyor := conveyor, sensor := sensor, Span := T#499ms);
+AssertEquals_INT(Expected := E_ConveyorState.STARTING,
+                 Actual := conveyor.CurrentState,
+                 Message := 'the ramp completed one ms before AccelTime elapsed');
+
+AdvanceAndScan(conveyor := conveyor, sensor := sensor, Span := T#1ms);
+AssertEquals_INT(Expected := E_ConveyorState.WAIT_CONTAINER,
+                 Actual := conveyor.CurrentState,
+                 Message := 'the ramp did not complete at exactly AccelTime');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="StoppingReachesInitOnlyOnceDecelTimeHasElapsed" Id="{5e4501d0-0028-4d19-9a41-000000000003}">
+      <Declaration><![CDATA[// The DecelTime gate on the scan it closes. The run is not finished until the
+// belt has actually come to rest: reaching INIT early would let the next
+// Start command a drive that was still coasting.
+METHOD PRIVATE StoppingReachesInitOnlyOnceDecelTimeHasElapsed
+VAR
+	conveyor : FB_Conveyor;
+	sensor : FB_DigitalInput;
+	axis : FB_AxisBase;
+	recipe : ST_ConveyorControl;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('StoppingReachesInitOnlyOnceDecelTimeHasElapsed');
+
+recipe.DecelTime := T#800ms;
+DriveToWaitContainer(conveyor := conveyor, sensor := sensor, axis := axis, recipe := recipe);
+AssertEquals_INT(Expected := E_ConveyorState.WAIT_CONTAINER,
+                 Actual := conveyor.CurrentState,
+                 Message := 'setup did not reach a running belt');
+
+conveyor(Start := FALSE, Stop := TRUE);
+AssertEquals_INT(Expected := E_ConveyorState.STOPPING,
+                 Actual := conveyor.CurrentState,
+                 Message := 'Stop did not reach STOPPING');
+
+AdvanceAndScan(conveyor := conveyor, sensor := sensor, Span := T#799ms);
+AssertEquals_INT(Expected := E_ConveyorState.STOPPING,
+                 Actual := conveyor.CurrentState,
+                 Message := 'the stop ramp completed one ms before DecelTime elapsed');
+
+AdvanceAndScan(conveyor := conveyor, sensor := sensor, Span := T#1ms);
+AssertEquals_INT(Expected := E_ConveyorState.INIT,
+                 Actual := conveyor.CurrentState,
+                 Message := 'the stop ramp did not complete at exactly DecelTime');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="HandoverCompletesOnlyOnceTheEyeHasBeenClearForTheWholeDelay" Id="{5e4501d0-0028-4d19-9a41-000000000004}">
+      <Declaration><![CDATA[// The drawn Delay on the scan it closes, and the container counted on that
+// same scan. Completing early would hand the next station a container that
+// had not yet cleared the transfer.
+METHOD PRIVATE HandoverCompletesOnlyOnceTheEyeHasBeenClearForTheWholeDelay
+VAR
+	conveyor : FB_Conveyor;
+	sensor : FB_DigitalInput;
+	axis : FB_AxisBase;
+	recipe : ST_ConveyorControl;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('HandoverCompletesOnlyOnceTheEyeHasBeenClearForTheWholeDelay');
+
+recipe.HandoverDelay := T#200ms;
+DriveToHandover(conveyor := conveyor, sensor := sensor, axis := axis, recipe := recipe);
+AssertEquals_INT(Expected := E_ConveyorState.PROCES_CONTAINER,
+                 Actual := conveyor.CurrentState,
+                 Message := 'setup did not reach the hand-over');
+
+ClearTheEye(sensor := sensor);
+AdvanceAndScan(conveyor := conveyor, sensor := sensor, Span := T#199ms);
+AssertEquals_INT(Expected := E_ConveyorState.PROCES_CONTAINER,
+                 Actual := conveyor.CurrentState,
+                 Message := 'the hand-over completed one ms before the delay elapsed');
+AssertEquals_UINT(Expected := 0,
+                  Actual := conveyor.ContainersPassed,
+                  Message := 'a container was counted before the hand-over completed');
+
+AdvanceAndScan(conveyor := conveyor, sensor := sensor, Span := T#1ms);
+AssertEquals_INT(Expected := E_ConveyorState.WAIT_CONTAINER,
+                 Actual := conveyor.CurrentState,
+                 Message := 'the hand-over did not complete at exactly the delay');
+AssertEquals_UINT(Expected := 1,
+                  Actual := conveyor.ContainersPassed,
+                  Message := 'the completed hand-over did not count its container');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="AContainerBackOnTheEyeRestartsTheHandoverDelayRatherThanResumingIt" Id="{5e4501d0-0028-4d19-9a41-000000000005}">
+      <Declaration><![CDATA[// The negation is in what DRIVES the hand-over timer, so time banked before
+// the eye was blocked again must not carry over. Banked time plus fresh time
+// adding up would count two closely spaced containers as one that had
+// cleared.
+METHOD PRIVATE AContainerBackOnTheEyeRestartsTheHandoverDelayRatherThanResumingIt
+VAR
+	conveyor : FB_Conveyor;
+	sensor : FB_DigitalInput;
+	axis : FB_AxisBase;
+	recipe : ST_ConveyorControl;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('AContainerBackOnTheEyeRestartsTheHandoverDelayRatherThanResumingIt');
+
+recipe.HandoverDelay := T#200ms;
+DriveToHandover(conveyor := conveyor, sensor := sensor, axis := axis, recipe := recipe);
+
+ClearTheEye(sensor := sensor);
+AdvanceAndScan(conveyor := conveyor, sensor := sensor, Span := T#150ms);
+AssertEquals_INT(Expected := E_ConveyorState.PROCES_CONTAINER,
+                 Actual := conveyor.CurrentState,
+                 Message := 'the hand-over completed with only 150ms of the delay banked');
+
+// A second container arriving 150 ms into the window must not be able to
+// finish the first one's hand-over 50 ms later.
+BlockTheEye(sensor := sensor);
+AdvanceAndScan(conveyor := conveyor, sensor := sensor, Span := T#10ms);
+ClearTheEye(sensor := sensor);
+AdvanceAndScan(conveyor := conveyor, sensor := sensor, Span := T#60ms);
+AssertEquals_INT(Expected := E_ConveyorState.PROCES_CONTAINER,
+                 Actual := conveyor.CurrentState,
+                 Message := 'the banked 150ms carried over instead of the window restarting');
+AssertEquals_UINT(Expected := 0,
+                  Actual := conveyor.ContainersPassed,
+                  Message := 'two closely spaced containers were counted as one that had cleared');
+
+AdvanceAndScan(conveyor := conveyor, sensor := sensor, Span := T#140ms);
+AssertEquals_INT(Expected := E_ConveyorState.WAIT_CONTAINER,
+                 Actual := conveyor.CurrentState,
+                 Message := 'the hand-over did not complete a full delay after the eye last cleared');
+AssertEquals_UINT(Expected := 1,
+                  Actual := conveyor.ContainersPassed,
+                  Message := 'the restarted hand-over did not count its container');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="MotorRunOnReleasesTheBeltOnlyOnceItsWindowHasElapsed" Id="{5e4501d0-0028-4d19-9a41-000000000006}">
+      <Declaration><![CDATA[// The run-on on the scan it closes. It is what carries a released container
+// the rest of the way onto the transfer instead of stopping it half on, so
+// releasing the belt early is the jam the run-on exists to prevent.
+METHOD PRIVATE MotorRunOnReleasesTheBeltOnlyOnceItsWindowHasElapsed
+VAR
+	conveyor : FB_Conveyor;
+	sensor : FB_DigitalInput;
+	axis : FB_AxisBase;
+	recipe : ST_ConveyorControl;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('MotorRunOnReleasesTheBeltOnlyOnceItsWindowHasElapsed');
+
+recipe.MotorRunOn := T#300ms;
+DriveToWaitContainer(conveyor := conveyor, sensor := sensor, axis := axis, recipe := recipe);
+AssertTrue(Condition := conveyor.MotorRunning,
+           Message := 'the belt was not driven while waiting for a container');
+
+// Detection drops the demand - the container is held for the next station -
+// and the run-on is what keeps the belt turning past it.
+BlockTheEye(sensor := sensor);
+conveyor();
+AssertEquals_INT(Expected := E_ConveyorState.WAIT_DOWNSTREAM_READY,
+                 Actual := conveyor.CurrentState,
+                 Message := 'detection did not put the container on hold');
+
+AdvanceAndScan(conveyor := conveyor, sensor := sensor, Span := T#299ms);
+AssertTrue(Condition := conveyor.MotorRunning,
+           Message := 'the belt was released one ms before MotorRunOn elapsed');
+
+AdvanceAndScan(conveyor := conveyor, sensor := sensor, Span := T#1ms);
+AssertFalse(Condition := conveyor.MotorRunning,
+            Message := 'the belt was not released at exactly MotorRunOn');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="AdvanceAndScan" Id="{5e4501d0-0028-4d19-9a41-000000000007}">
+      <Declaration><![CDATA[// One scan of the run with Span of simulated time in front of it, in the
+// order a real task would: the world the module reads is updated before the
+// module reads it, so a level set between two scans is seen on the next one
+// rather than the one after. A timer's elapsed time is only observed on the
+// call that follows the advance, which is why the advance leads.
+//
+// The drive is not cycled: its body decides nothing on elapsed time, and the
+// conveyor commands it through I_AxisBase on every scan anyway.
+METHOD PRIVATE AdvanceAndScan
+VAR_IN_OUT
+	conveyor : FB_Conveyor;
+	sensor : FB_DigitalInput;
+END_VAR
+VAR_INPUT
+	Span : TIME;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[AdvanceClock(Span);
+sensor(HardwareInput := FALSE);
+conveyor();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="DriveToWaitContainer" Id="{5e4501d0-0028-4d19-9a41-000000000008}">
+      <Declaration><![CDATA[// Arrangement shared by the cases that start from a belt already running with
+// nothing on it. Binds both dependencies and the recipe, so a caller sets any
+// recipe field it cares about BEFORE calling this, and holds Start - the run
+// is meant to stay up until the case takes it down. AccelTime is left at zero
+// here; the case that measures the ramp itself drives Start by hand.
+METHOD PRIVATE DriveToWaitContainer
+VAR_IN_OUT
+	conveyor : FB_Conveyor;
+	sensor : FB_DigitalInput;
+	axis : FB_AxisBase;
+END_VAR
+VAR_INPUT
+	recipe : ST_ConveyorControl;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[sensor.Simulation := TRUE;
+sensor.DebounceTime := T#0ms;
+sensor(HardwareInput := FALSE);
+
+conveyor(caseDetectionSensor := sensor, conveyorAxis := axis, Control := recipe, Start := TRUE);
+conveyor();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="DriveToHandover" Id="{5e4501d0-0028-4d19-9a41-000000000009}">
+      <Declaration><![CDATA[// Arrangement shared by the cases about the hand-over itself: a container is
+// on the eye and the next station has said it will take it, so the run is in
+// PROCES_CONTAINER with DownstreamReady still held.
+METHOD PRIVATE DriveToHandover
+VAR_IN_OUT
+	conveyor : FB_Conveyor;
+	sensor : FB_DigitalInput;
+	axis : FB_AxisBase;
+END_VAR
+VAR_INPUT
+	recipe : ST_ConveyorControl;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[DriveToWaitContainer(conveyor := conveyor, sensor := sensor, axis := axis, recipe := recipe);
+
+BlockTheEye(sensor := sensor);
+conveyor();
+conveyor(DownstreamReady := TRUE);]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="BlockTheEye" Id="{5e4501d0-0028-4d19-9a41-00000000000a}">
+      <Declaration><![CDATA[// Puts a container in front of the detection point. Only the SENSOR is
+// cycled: whether the conveyor sees the new level on this scan or the next is
+// what these cases are timing, so it stays the caller's decision.
+METHOD PRIVATE BlockTheEye
+VAR_IN_OUT
+	sensor : FB_DigitalInput;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[sensor.SimulatedInput := TRUE;
+sensor(HardwareInput := FALSE);]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="ClearTheEye" Id="{5e4501d0-0028-4d19-9a41-00000000000b}">
+      <Declaration><![CDATA[METHOD PRIVATE ClearTheEye
+VAR_IN_OUT
+	sensor : FB_DigitalInput;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[sensor.SimulatedInput := FALSE;
+sensor(HardwareInput := FALSE);]]></ST>
+      </Implementation>
+    </Method>
+  </POU>
+</TcPlcObject>

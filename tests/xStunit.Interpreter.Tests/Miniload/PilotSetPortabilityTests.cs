@@ -36,7 +36,8 @@ namespace xStunit.Interpreter.Tests
         // xStunit-only, and are therefore outside the pilot set by decision. A
         // POU earns a place here only when running on the target is not a
         // property it ever claimed.
-        private static readonly string[] DeclaredXstunitOnlyPous = { "FB_DigitalInputTimingTests" };
+        private static readonly string[] DeclaredXstunitOnlyPous =
+            { "FB_ConveyorTimingTests", "FB_DigitalInputTimingTests" };
 
         [Fact]
         public void PilotSetPous_CallNoIntrinsicTheTargetLacks()

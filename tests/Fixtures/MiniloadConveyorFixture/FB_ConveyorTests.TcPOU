@@ -8,9 +8,12 @@
 
     WHERE EACH ARC IS PINNED, AND WHY IT IS SPLIT AT ALL
 
-    xStunit's simulated clock is driven from the C# harness and has no
-    ST-visible advance, so a suite written in ST sees time frozen. Four arcs of
-    this machine are gated on a timer, and each one is covered from BOTH sides:
+    Portable ST only - every case here compiles and runs under TwinCAT as well
+    as under xStunit, which is what lets the two engines' verdicts be diffed
+    against each other. Moving time mid-case needs AdvanceClock, an xStunit
+    intrinsic the target has no counterpart for, so nothing here may call it
+    and this suite sees time frozen. Four arcs of this machine are gated on a
+    timer, and each one is covered from BOTH sides:
 
       Start -> STARTING -> WAIT_CONTAINER          gated on AccelTime
       STOPPING -> INIT                             gated on DecelTime
@@ -23,9 +26,8 @@
     walk the whole machine; at any non-zero setting no window can ever close,
     so the arc must not be taken however many cycles are run. What happens
     strictly BETWEEN those ends - the boundary scan a window actually closes on,
-    and a window restarting rather than resuming - is pinned in
-    tests/xStunit.Interpreter.Tests/Miniload/ConveyorTimingTests.cs, against
-    these same fixture files with the harness moving the clock.
+    and a window restarting rather than resuming - is pinned against these same
+    fixture files in FB_ConveyorTimingTests, outside this file.
 
     Everything else here - detection, the downstream handshake in both
     directions, the Stop override, the fault latch, the counter, the speed

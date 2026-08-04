@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using xStunit.Parser;
@@ -39,11 +38,5 @@ namespace xStunit.Interpreter.Tests
 
             return new Engine(new TypeRegistry(pous, structs, null, aliases, enumMembers));
         }
-
-        // One PLC scan of a block's own top-level body. Timing tests call this
-        // between clock advances, because a timer's elapsed time is only
-        // observed on the call that follows the advance.
-        public static void Step(Engine engine, FbInstance instance) =>
-            engine.CallMethod(instance, "StepCycles", new Expr[] { new IntLiteralExpr(1) }, new List<NamedArg>(), null, null);
     }
 }

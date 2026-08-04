@@ -13,6 +13,29 @@
     <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
   </ItemGroup>
 
+  <!--
+    The consumer half of the CLI's wire contract, source-linked so one assembly
+    can serialize with the CLI's own serializer and deserialize with the
+    extension's own models (see WireContractRoundTripTests). This project is
+    where the round trip can live at all: the report types are internal to
+    xStunit.Cli and visible to exactly this assembly, and widening that to a
+    second one would trade a real contract test for a larger internals surface.
+
+    A ProjectReference to src\xStunit.Vsix is not an option either way. It is a
+    classic packages.config VSSDK project (net472, VS SDK and WebView2
+    assemblies) that does not build outside Visual Studio on Windows; the two
+    files below are the TestRunner types with no such dependency, serializing
+    with System.Text.Json, which resolves on net472 and net8.0 alike.
+
+    Keep every comment in this file free of a double hyphen. XML forbids one
+    inside a comment body, so writing an aside that way here does not fail a
+    test; it fails the parse, and the project stops loading.
+  -->
+  <ItemGroup>
+    <Compile Include="..\..\src\xStunit.Vsix\TestRunner\XstunitModels.cs" Link="TestRunner\XstunitModels.cs" />
+    <Compile Include="..\..\src\xStunit.Vsix\TestRunner\XstunitEventStream.cs" Link="TestRunner\XstunitEventStream.cs" />
+  </ItemGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\..\src\xStunit.Cli\xStunit.Cli.csproj" />
     <!-- Built, but deliberately NOT linked

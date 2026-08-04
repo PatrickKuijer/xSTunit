@@ -40,10 +40,13 @@ namespace xStunit.Interpreter.Tests.Conformance
         // Five bytes of content in a type SIZEOF calls 8: the three bytes
         // behind the trailer are the trailing padding the checklist asks
         // about, and a pack write leaves them zero.
-        [Fact]
-        public void TrailingPadding_FillsFiveFieldBytesAndZeroesTheThreeBehindThem()
+        [Theory]
+        [InlineData("x86")]
+        [InlineData("x64")]
+        public void TrailingPadding_FillsFiveFieldBytesAndZeroesTheThreeBehindThem(string targetName)
         {
             AssertPackedImage(
+                targetName,
                 "ST_TrailingPadding",
                 new[] { "src.wide := 16#01020304;", "src.tail := 16#7F;" },
                 declaredSize: 8,
@@ -54,8 +57,10 @@ namespace xStunit.Interpreter.Tests.Conformance
         // 8-byte alignment pads a type ending in a single byte at offset 24
         // out to 32, and a pack write zeroes all seven of those bytes as well
         // as the four between leadIn and wideFloat.
-        [Fact]
-        public void WideAlignment_ZeroesTheInteriorGapAndAllSevenTrailingBytes()
+        [Theory]
+        [InlineData("x86")]
+        [InlineData("x64")]
+        public void WideAlignment_ZeroesTheInteriorGapAndAllSevenTrailingBytes(string targetName)
         {
             var expected = new byte[32];
             BitConverter.GetBytes(0x11223344).CopyTo(expected, 0);
@@ -70,6 +75,7 @@ namespace xStunit.Interpreter.Tests.Conformance
             // negative so that its high four bytes are non-zero: sized as a
             // DINT it would leave them zero and read as padding.
             AssertPackedImage(
+                targetName,
                 "ST_WideAlignment",
                 new[]
                 {
@@ -86,8 +92,10 @@ namespace xStunit.Interpreter.Tests.Conformance
         // element's own three padding bytes are inside the copy, so the second
         // element's first byte lands at 8 and not at 5, and the outer type's
         // three trailing bytes behind the sentinel are zeroed too.
-        [Fact]
-        public void ArrayStride_ZeroesEachElementsPaddingAndTheOuterTrailer()
+        [Theory]
+        [InlineData("x86")]
+        [InlineData("x64")]
+        public void ArrayStride_ZeroesEachElementsPaddingAndTheOuterTrailer(string targetName)
         {
             var expected = new byte[28];
             for (var i = 0; i < 3; i++)
@@ -98,6 +106,7 @@ namespace xStunit.Interpreter.Tests.Conformance
             expected[24] = 0x5A;
 
             AssertPackedImage(
+                targetName,
                 "ST_ArrayStride",
                 new[]
                 {
@@ -116,12 +125,15 @@ namespace xStunit.Interpreter.Tests.Conformance
         // breaks the moment the pack write and SIZEOF disagree about a type -
         // in either direction, and without needing an overrun to crash first.
         [Theory]
-        [InlineData("ST_TrailingPadding", 8)]
-        [InlineData("ST_WideAlignment", 32)]
-        [InlineData("ST_ArrayStride", 28)]
-        public void PackedView_IsExactlySizeOfBytesWide(string typeName, int declaredSize)
+        [InlineData("x86", "ST_TrailingPadding", 8)]
+        [InlineData("x86", "ST_WideAlignment", 32)]
+        [InlineData("x86", "ST_ArrayStride", 28)]
+        [InlineData("x64", "ST_TrailingPadding", 8)]
+        [InlineData("x64", "ST_WideAlignment", 32)]
+        [InlineData("x64", "ST_ArrayStride", 28)]
+        public void PackedView_IsExactlySizeOfBytesWide(string targetName, string typeName, int declaredSize)
         {
-            var (engine, _, frame) = NewHolder(typeName);
+            var (engine, _, frame) = NewHolder(targetName, typeName);
 
             Assert.Equal(declaredSize, Convert.ToInt32(Evaluate(engine, frame, "SIZEOF(src)")));
             Assert.Equal(
@@ -134,12 +146,16 @@ namespace xStunit.Interpreter.Tests.Conformance
             Assert.Contains($"only {declaredSize} byte(s) available", ex.Message);
         }
 
+        // The expected image is one table for both targets, not one per
+        // target: none of these types holds an address, so a byte that moved
+        // with the target would mean the pack write had taken the pointer
+        // width into account somewhere it has no business doing so.
         private static void AssertPackedImage(
-            string typeName, string[] setup, int declaredSize, byte[] expected)
+            string targetName, string typeName, string[] setup, int declaredSize, byte[] expected)
         {
             Assert.Equal(declaredSize, expected.Length);
 
-            var (engine, instance, frame) = NewHolder(typeName);
+            var (engine, instance, frame) = NewHolder(targetName, typeName);
             engine.ExecuteStatements(Parser.ParseStatements(string.Join("\n", setup)), frame);
 
             Assert.Equal(declaredSize, Convert.ToInt32(Evaluate(engine, frame, "SIZEOF(src)")));
@@ -164,7 +180,8 @@ namespace xStunit.Interpreter.Tests.Conformance
         private static object Evaluate(Engine engine, Frame frame, string expression) =>
             engine.Evaluate(Parser.ParseExpression(expression), frame);
 
-        private static (Engine Engine, FbInstance Instance, Frame Frame) NewHolder(string typeName)
+        private static (Engine Engine, FbInstance Instance, Frame Frame) NewHolder(
+            string targetName, string typeName)
         {
             var holder = new PouAst(
                 "FB_PackHolder",
@@ -176,9 +193,18 @@ namespace xStunit.Interpreter.Tests.Conformance
             var nativeFunctions = new NativeFunctionRegistry();
             nativeFunctions.RegisterAll(new IXstunitNativeFunction[] { new ReadableByteCounter() });
 
-            var engine = new Engine(BuildRegistry(holder), nativeFunctions);
+            // The three-argument overload on purpose: the two-argument one
+            // hard-defaults to x86, which would leave every claim below an
+            // x86-only claim no matter what the theory row asked for.
+            var engine = new Engine(BuildRegistry(holder), nativeFunctions, Target(targetName));
             var instance = engine.NewInstance("FB_PackHolder");
             return (engine, instance, new Frame(instance, "FB_PackHolder"));
+        }
+
+        private static TargetPlatform Target(string name)
+        {
+            Assert.True(TargetPlatform.TryParse(name, out var target), $"'{name}' is not a target platform");
+            return target;
         }
 
         // Reading through the plugin boundary rather than with MEMCPY: it goes

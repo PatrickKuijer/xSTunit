@@ -18,7 +18,7 @@ namespace xStunit.Interpreter.Tests
         [Fact]
         public void RunSuite_FbConveyorTimingTests_EveryCasePasses()
         {
-            var engine = MiniloadConveyorFixtureEngine.Create(FixtureDir, SensorFixtureDir);
+            var engine = MiniloadFixtureEngine.Create(FixtureDir, SensorFixtureDir);
 
             var results = engine.RunSuite("FB_ConveyorTimingTests");
 

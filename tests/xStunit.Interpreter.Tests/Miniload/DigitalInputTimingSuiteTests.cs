@@ -16,7 +16,7 @@ namespace xStunit.Interpreter.Tests
         [Fact]
         public void RunSuite_FbDigitalInputTimingTests_EveryCasePasses()
         {
-            var engine = MiniloadSensorFixtureEngine.Create(FixtureDir);
+            var engine = MiniloadFixtureEngine.Create(FixtureDir);
 
             var results = engine.RunSuite("FB_DigitalInputTimingTests");
 

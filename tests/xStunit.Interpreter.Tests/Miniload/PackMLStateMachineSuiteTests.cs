@@ -15,7 +15,7 @@ namespace xStunit.Interpreter.Tests
         [Fact]
         public void RunSuite_PmlStateMachineTests_EveryCasePasses()
         {
-            var engine = MiniloadPackMLFixtureEngine.Create(FixtureDir);
+            var engine = MiniloadFixtureEngine.Create(FixtureDir);
 
             var results = engine.RunSuite("PML_StateMachineTests");
 

@@ -20,7 +20,7 @@ namespace xStunit.Interpreter.Tests
 
         private static (Engine Engine, FbInstance Unit) NewUnit()
         {
-            var engine = MiniloadPackMLFixtureEngine.Create(FixtureDir);
+            var engine = MiniloadFixtureEngine.Create(FixtureDir);
             return (engine, engine.NewInstance("PML_StateMachine"));
         }
 
@@ -40,9 +40,9 @@ namespace xStunit.Interpreter.Tests
             // Baseline scan: a timer counts from its own last-observed clock
             // total, so nothing has elapsed for it until the call after an
             // advance.
-            MiniloadPackMLFixtureEngine.Step(engine, unit);
+            MiniloadFixtureEngine.Step(engine, unit);
             engine.Clock.AdvanceMs(100);
-            MiniloadPackMLFixtureEngine.Step(engine, unit);
+            MiniloadFixtureEngine.Step(engine, unit);
             Assert.Equal(Stopped, MiniloadPackMLFixtureEngine.State(unit));
             Assert.Equal(100u, MiniloadPackMLFixtureEngine.StateElapsedMs(unit));
 
@@ -55,7 +55,7 @@ namespace xStunit.Interpreter.Tests
             Assert.Equal(0u, MiniloadPackMLFixtureEngine.StateElapsedMs(unit));
 
             engine.Clock.AdvanceMs(50);
-            MiniloadPackMLFixtureEngine.Step(engine, unit);
+            MiniloadFixtureEngine.Step(engine, unit);
             Assert.Equal(50u, MiniloadPackMLFixtureEngine.StateElapsedMs(unit));
         }
 
@@ -68,7 +68,7 @@ namespace xStunit.Interpreter.Tests
             Assert.Equal(0u, MiniloadPackMLFixtureEngine.TotalRunMs(unit));
 
             engine.Clock.AdvanceMs(200);
-            MiniloadPackMLFixtureEngine.Step(engine, unit);
+            MiniloadFixtureEngine.Step(engine, unit);
             Assert.Equal(200u, MiniloadPackMLFixtureEngine.TotalRunMs(unit));
 
             // Leaving Execute must bank the stretch rather than discard it. The
@@ -80,7 +80,7 @@ namespace xStunit.Interpreter.Tests
             Assert.Equal(200u, MiniloadPackMLFixtureEngine.TotalRunMs(unit));
 
             engine.Clock.AdvanceMs(500);
-            MiniloadPackMLFixtureEngine.Step(engine, unit);
+            MiniloadFixtureEngine.Step(engine, unit);
             Assert.Equal(200u, MiniloadPackMLFixtureEngine.TotalRunMs(unit));
 
             MiniloadPackMLFixtureEngine.PulseComplete(engine, unit, "Holding");
@@ -89,7 +89,7 @@ namespace xStunit.Interpreter.Tests
             Assert.Equal(Execute, MiniloadPackMLFixtureEngine.State(unit));
 
             engine.Clock.AdvanceMs(300);
-            MiniloadPackMLFixtureEngine.Step(engine, unit);
+            MiniloadFixtureEngine.Step(engine, unit);
             Assert.Equal(500u, MiniloadPackMLFixtureEngine.TotalRunMs(unit));
         }
 
@@ -106,7 +106,7 @@ namespace xStunit.Interpreter.Tests
             var (engine, unit) = NewUnit();
             DriveToExecute(engine, unit);
             engine.Clock.AdvanceMs(200);
-            MiniloadPackMLFixtureEngine.Step(engine, unit);
+            MiniloadFixtureEngine.Step(engine, unit);
 
             Assert.Equal(200u, (uint)unit.Fields["TotalRunTime"].Value);
             Assert.Equal(

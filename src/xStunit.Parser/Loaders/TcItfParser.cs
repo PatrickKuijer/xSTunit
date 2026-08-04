@@ -11,6 +11,11 @@ namespace xStunit.Parser
     /// </summary>
     public static class TcItfParser
     {
+        // Methods and properties are parsed but nothing yet reads them: an FB's
+        // IMPLEMENTS clause is still parsed past without effect, so a
+        // non-conformant FB loads clean. Checking it needs the whole signature
+        // shape this already captures, which is why it is captured before there
+        // is a consumer.
         public static InterfaceAst Parse(string xml)
         {
             var itf = XDocument.Parse(xml).Root.Element("Itf");

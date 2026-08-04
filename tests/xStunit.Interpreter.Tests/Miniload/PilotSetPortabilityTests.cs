@@ -11,8 +11,7 @@ namespace xStunit.Interpreter.Tests
     // and once on a real TwinCAT runtime, so every POU in the pilot set has to
     // build on the target. An intrinsic xStunit dispatches but TwinCAT has no
     // counterpart for breaks that quietly: the fixture stays green here and
-    // simply stops compiling there, which is exactly how AdvanceClock reached
-    // FB_DigitalInputTests unnoticed. If this goes red, a pilot POU has picked
+    // simply stops compiling there. If this goes red, a pilot POU has picked
     // up a call the target cannot build - move the case into an xStunit-only
     // suite of its own rather than adding it to the exclusion list below.
     public class PilotSetPortabilityTests
@@ -37,7 +36,7 @@ namespace xStunit.Interpreter.Tests
         // xStunit-only, and are therefore outside the pilot set by decision. A
         // POU earns a place here only when running on the target is not a
         // property it ever claimed.
-        private static readonly string[] DeclaredXStunitOnlyPous = { "FB_DigitalInputTimingTests" };
+        private static readonly string[] DeclaredXstunitOnlyPous = { "FB_DigitalInputTimingTests" };
 
         [Fact]
         public void PilotSetPous_CallNoIntrinsicTheTargetLacks()
@@ -89,7 +88,7 @@ namespace xStunit.Interpreter.Tests
         [Fact]
         public void ExcludedPous_StillCallSomethingTheTargetLacks()
         {
-            foreach (var name in DeclaredXStunitOnlyPous)
+            foreach (var name in DeclaredXstunitOnlyPous)
             {
                 var file = PouFilesUnderPilotFixtures().Single(f => PouNameOf(f) == name);
 
@@ -99,7 +98,7 @@ namespace xStunit.Interpreter.Tests
 
         private static List<string> PilotSetPouFiles() =>
             PouFilesUnderPilotFixtures()
-                .Where(f => !DeclaredXStunitOnlyPous.Contains(PouNameOf(f)))
+                .Where(f => !DeclaredXstunitOnlyPous.Contains(PouNameOf(f)))
                 .ToList();
 
         private static List<string> PouFilesUnderPilotFixtures() =>

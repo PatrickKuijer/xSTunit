@@ -16,9 +16,7 @@ namespace xStunit.Interpreter
 
         // What a run computes at when nothing selected a target. x86 is the
         // width every SIZEOF answer xStunit has ever given was computed at, so
-        // defaulting to it changes no result that was already right; whether it
-        // is the right long-term default for TwinCAT 3, whose targets are
-        // overwhelmingly 64-bit, is an open question this type does not settle.
+        // defaulting to it changes no result that was already right.
         public static TargetPlatform Default => X86;
 
         private TargetPlatform(string name, int addressSize)

@@ -45,8 +45,6 @@ namespace xStunit.Interpreter
         {
         }
 
-        // Leaves the target at TargetPlatform.Default; a caller that knows
-        // which machine the code is for says so through the overload below.
         public Engine(TypeRegistry registry, Extensibility.NativeFunctionRegistry nativeFunctions)
             : this(registry, nativeFunctions, TargetPlatform.Default)
         {

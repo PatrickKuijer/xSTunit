@@ -26,10 +26,17 @@ namespace xStunit.Interpreter.Tests
             Assert.Equal(0ul, value);
         }
 
+        // DT and TOD are the same two types as DATE_AND_TIME and TIME_OF_DAY,
+        // so a VAR declared in the short spelling has to start where one
+        // declared in full does; falling through to the int-0 default instead
+        // would box it as int and desynchronise its arithmetic from the CLR
+        // shape the codec and the coercions expect.
         [Theory]
         [InlineData("DATE")]
         [InlineData("DATE_AND_TIME")]
+        [InlineData("DT")]
         [InlineData("TIME_OF_DAY")]
+        [InlineData("TOD")]
         public void TryGetDefault_DateFamily_ReturnsUintZero(string typeName)
         {
             Assert.True(IecElementaryDefault.TryGetDefault(typeName, out var value));

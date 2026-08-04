@@ -55,6 +55,24 @@ namespace xStunit.Interpreter.Tests
             Assert.Equal(expectedBytes, result);
         }
 
+        // IEC 61131-3 spells its two longest date/time types twice over - DT for
+        // DATE_AND_TIME, TOD for TIME_OF_DAY - and TwinCAT's own
+        // PlcAppSystemInfo declares a member in the short form. One type under
+        // two names: sizing them apart makes the same declaration measure
+        // differently depending on how its author happened to write it.
+        [Theory]
+        [InlineData("DT", "DATE_AND_TIME")]
+        [InlineData("TOD", "TIME_OF_DAY")]
+        public void SizeOf_AbbreviatedDateTimeSpelling_MatchesTheSpelledOutOne(string abbreviated, string spelledOut)
+        {
+            var (engine, _, frame) = NewHolder(
+                $"VAR\n\tshortSpelling : {abbreviated};\n\tlongSpelling : {spelledOut};\nEND_VAR");
+
+            Assert.Equal(
+                engine.Evaluate(Parser.ParseExpression("SIZEOF(longSpelling)"), frame),
+                engine.Evaluate(Parser.ParseExpression("SIZEOF(shortSpelling)"), frame));
+        }
+
         [Fact]
         public void SizeOf_BareTypeName_ReturnsByteWidth()
         {

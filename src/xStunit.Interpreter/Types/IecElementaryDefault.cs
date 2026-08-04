@@ -46,9 +46,13 @@ namespace xStunit.Interpreter
 
                 // The whole DATE family boxes as uint, like TIME above, though
                 // the three disagree on unit and origin (see DateTimeLiteral).
+                // DT and TOD are IEC's own abbreviations of the last two, not
+                // types of their own.
                 if (typeName.Equals("DATE", StringComparison.OrdinalIgnoreCase)
                     || typeName.Equals("DATE_AND_TIME", StringComparison.OrdinalIgnoreCase)
-                    || typeName.Equals("TIME_OF_DAY", StringComparison.OrdinalIgnoreCase))
+                    || typeName.Equals("DT", StringComparison.OrdinalIgnoreCase)
+                    || typeName.Equals("TIME_OF_DAY", StringComparison.OrdinalIgnoreCase)
+                    || typeName.Equals("TOD", StringComparison.OrdinalIgnoreCase))
                 {
                     value = 0u;
                     return true;

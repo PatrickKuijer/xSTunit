@@ -375,6 +375,19 @@ namespace xStunit.Interpreter.Tests.Conformance
                 Compare(module).Findings, f => f.Detail != null && f.Detail.Contains("OTCID"));
         }
 
+        // TwinCAT declares PlcAppSystemInfo.AppTimestamp as DT, IEC's
+        // abbreviated spelling of DATE_AND_TIME. Sizing only the spelled-out
+        // name cut the type off eight members in, which is a hole in xStunit's
+        // reading of a name rather than anything the compiler decided.
+        [Theory]
+        [InlineData(X86Module)]
+        [InlineData(X64Module)]
+        public void AbbreviatedDateAndTime_IsSizedOnBothTargetsRatherThanRefused(string module)
+        {
+            Assert.DoesNotContain(
+                Compare(module).Findings, f => f.Detail != null && f.Detail.Contains("'DT'"));
+        }
+
         // Offsets and sizes are asserted in bytes so that this file and
         // LayoutChecklistFixtureTests state the same rule in the same unit and
         // can be read side by side. The .tmc counts in bits; a checklist type

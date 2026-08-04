@@ -72,7 +72,7 @@ type is added here, add it to that list too — a test enforces this.
 
 ## What the compiler settled
 
-Every rule above came back as xStunit already had it, over 59 types and 199
+Every rule above came back as xStunit already had it, over 59 types and 208
 members with zero disagreements on the x86 module. On x64 the only
 disagreements are address widths, `POINTER TO` and `REFERENCE TO` alike:
 xStunit hardcodes four bytes.
@@ -84,8 +84,9 @@ keeps out of the `.tmc`. A member past a hole is displaced by definition, and
 the type's size with it, so the oracle stops at `TaskName` and reports it as
 `NotCompared`. The eleven members in front of the hole are compared like any
 others — a hole costs the rows it displaces and no more. `PlcAppSystemInfo` has
-the same hole and never reaches it, being refused earlier at `DT` — the
-abbreviated spelling of `DATE_AND_TIME`, which xStunit sizes only spelled out.
+the same hole and never reaches it, being refused earlier at `TComSrvPtr`: an
+`ITComObjectServer`, a COM interface pointer the `.tmc` declares 32 bits wide on
+x86 and 64 on x64, named as a plain type rather than marked as a pointer.
 
 Two answers are worth stating outright, being the ones a reader is most likely
 to guess the other way:

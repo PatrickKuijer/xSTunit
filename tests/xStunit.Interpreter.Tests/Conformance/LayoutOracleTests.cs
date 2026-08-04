@@ -100,17 +100,16 @@ namespace xStunit.Interpreter.Tests.Conformance
 
         // A type name xStunit has no size rule for is a gap in the interpreter,
         // not a disagreement about a rule, and must not be counted as either
-        // conformance or non-conformance. DT, the abbreviated spelling of
-        // DATE_AND_TIME, is one such name even though the spelled-out form is
-        // sized.
+        // conformance or non-conformance. The COM server pointer TwinCAT hangs
+        // off PlcAppSystemInfo is one such name.
         [Fact]
         public void Compare_UnknownTypeName_IsReportedAsUnsupported()
         {
             var finding = Assert.Single(
-                Compare(X64Module).Findings, f => f.Subject == "PlcAppSystemInfo.AppTimestamp");
+                Compare(X64Module).Findings, f => f.Subject == "PlcAppSystemInfo.TComSrvPtr");
 
             Assert.Equal(LayoutFindingKind.Unsupported, finding.Kind);
-            Assert.Contains("DT", finding.Detail);
+            Assert.Contains("ITComObjectServer", finding.Detail);
         }
 
         // TwinCAT keeps PlcTaskSystemInfo's reserved bytes out of the .tmc, so

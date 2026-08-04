@@ -109,6 +109,32 @@ namespace xStunit.Interpreter
                 return (ulong)intForULong;
             }
 
+            // long and ulong are the same width, so neither is "larger" and no
+            // implicit widening rule spans them - but both halves of the
+            // boundary are reachable without a cast: a literal takes the
+            // narrowest box that holds it regardless of the declared type, and
+            // UDINT/DWORD box as long while ULINT/LWORD box as ulong. Storing
+            // the incoming box unchanged would leave the cell disagreeing with
+            // its own declared type for the rest of its life, so the value is
+            // converted where the other half of the range can hold it and
+            // rejected where it cannot. The message names both type groups
+            // because the box is all this method knows, and one box serves
+            // several IEC types.
+            if (existing is long && incoming is ulong ulongForLong)
+            {
+                if (ulongForLong > long.MaxValue)
+                    throw new InvalidOperationException(
+                        $"Cannot assign ULINT/LWORD value {ulongForLong} to a LINT/UDINT/DWORD (signed 64-bit) variable");
+                return (long)ulongForLong;
+            }
+            if (existing is ulong && incoming is long longForULong)
+            {
+                if (longForULong < 0)
+                    throw new InvalidOperationException(
+                        $"Cannot assign negative LINT/UDINT/DWORD value {longForULong} to a ULINT/LWORD (unsigned 64-bit) variable");
+                return (ulong)longForULong;
+            }
+
             // TIME and the DATE family are the only things boxing as uint, and
             // nothing else reaches them as a value: Promote widens a uint
             // operand to long to do the arithmetic, and a plain integer literal

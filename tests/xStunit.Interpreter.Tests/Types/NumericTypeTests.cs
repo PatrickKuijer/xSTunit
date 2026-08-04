@@ -514,6 +514,32 @@ namespace xStunit.Interpreter.Tests
             Assert.Equal("3 apples", s);
         }
 
+        // No literal is involved here: UDINT boxes as long and ULINT as ulong,
+        // so a plain variable-to-variable assignment crosses the 64-bit
+        // signedness boundary. Every non-negative UDINT value is a ULINT value,
+        // so it converts - if it were stored as the incoming long instead, the
+        // ULINT cell would stop reading as a ULINT.
+        [Fact]
+        public void ExecuteStatements_AssignUdintFieldIntoUlintField_ConvertsToUlong()
+        {
+            var pou = new PouAst(
+                "FB_Widths",
+                null,
+                "VAR\n\twide : ULINT;\n\tnarrow : UDINT;\nEND_VAR",
+                "",
+                new List<MethodAst>());
+
+            var engine = new Engine(new TypeRegistry(new[] { pou }));
+            var instance = engine.NewInstance("FB_Widths");
+            instance.Fields["narrow"].Value = 4000000000L;
+            var frame = new Frame(instance, "FB_Widths");
+
+            engine.ExecuteStatements(Parser.ParseStatements("wide := narrow;"), frame);
+
+            Assert.IsType<ulong>(instance.Fields["wide"].Value);
+            Assert.Equal(4000000000UL, instance.Fields["wide"].Value);
+        }
+
         [Fact]
         public void ExecuteStatements_AssignIntLiteralIntoUlintField_Widens()
         {

@@ -230,6 +230,65 @@ namespace xStunit.Interpreter.Tests
             Assert.Equal(5, result);
         }
 
+        // long and ulong are the same width but different signedness, so an
+        // assignment across the two either converts or is rejected - never
+        // stored as-is. Leaving the box alone would make the cell's declared
+        // type disagree with its contents, and every later test keyed off the
+        // box would read the cell as the type it is not.
+        [Fact]
+        public void CoerceForAssignment_ULongExistingLongIncoming_ConvertsToULong()
+        {
+            var result = NumericCoercion.CoerceForAssignment(0UL, 5L);
+
+            Assert.IsType<ulong>(result);
+            Assert.Equal(5UL, result);
+        }
+
+        [Fact]
+        public void CoerceForAssignment_LongExistingULongIncomingWithinSignedRange_ConvertsToLong()
+        {
+            var result = NumericCoercion.CoerceForAssignment(0L, 5UL);
+
+            Assert.IsType<long>(result);
+            Assert.Equal(5L, result);
+        }
+
+        [Fact]
+        public void CoerceForAssignment_LongExistingULongIncomingAtLongMaxValue_ConvertsToLong()
+        {
+            var result = NumericCoercion.CoerceForAssignment(0L, (ulong)long.MaxValue);
+
+            Assert.IsType<long>(result);
+            Assert.Equal(long.MaxValue, result);
+        }
+
+        // The throw side of "convert where representable": these two values
+        // have no representation in the target's half of the 64-bit range, so
+        // converting would silently change the number. The message has to name
+        // both type groups, because the box is all this method knows and one
+        // box serves several IEC types.
+        [Fact]
+        public void CoerceForAssignment_LongExistingULongIncomingAboveLongMaxValue_ThrowsNamingBothTypeGroups()
+        {
+            var ex = Assert.Throws<InvalidOperationException>(
+                () => NumericCoercion.CoerceForAssignment(0L, ulong.MaxValue));
+
+            Assert.Contains("ULINT/LWORD", ex.Message);
+            Assert.Contains("LINT/UDINT/DWORD", ex.Message);
+            Assert.Contains("18446744073709551615", ex.Message);
+        }
+
+        [Fact]
+        public void CoerceForAssignment_ULongExistingNegativeLongIncoming_ThrowsNamingBothTypeGroups()
+        {
+            var ex = Assert.Throws<InvalidOperationException>(
+                () => NumericCoercion.CoerceForAssignment(0UL, -1L));
+
+            Assert.Contains("LINT/UDINT/DWORD", ex.Message);
+            Assert.Contains("ULINT/LWORD", ex.Message);
+            Assert.Contains("-1", ex.Message);
+        }
+
         // Promote widens a uint operand to long, so every arithmetic result
         // bound for a TIME or DATE-family cell arrives one tier too wide.
         // Without the narrowing back, the declared type's box would depend on

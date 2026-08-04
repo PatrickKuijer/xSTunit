@@ -65,6 +65,21 @@ namespace xStunit.Interpreter.Tests
             Assert.Equal(ulong.MaxValue, instance.Fields["value"].Value);
         }
 
+        // The literal takes the narrowest box that holds it, so a value above
+        // long.MaxValue arrives as a ulong even where the declaration says
+        // LINT. It has no LINT representation, so the initializer is rejected
+        // naming both type groups: storing it would leave a ulong sitting in a
+        // cell every later 'is long' test reads as not-a-LINT.
+        [Fact]
+        public void NewInstance_LintInitialisedFromLiteralAboveLongMaxValue_ThrowsNamingBothTypeGroups()
+        {
+            var ex = Assert.Throws<InvalidOperationException>(
+                () => NewInstanceWithVar("\tvalue : LINT := 16#FFFFFFFFFFFFFFFF;"));
+
+            Assert.Contains("ULINT/LWORD", ex.Message);
+            Assert.Contains("LINT/UDINT/DWORD", ex.Message);
+        }
+
         // A negative literal is unary minus over a positive one, so a wide
         // negative LINT initializer only works if negation reaches past int.
         [Fact]

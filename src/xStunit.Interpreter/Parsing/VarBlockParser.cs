@@ -49,37 +49,17 @@ namespace xStunit.Interpreter
                 if (line.Length == 0)
                     continue;
 
-                // Section keywords match exactly, unlike the type names
-                // VarLinePattern accepts in any case. STRUCT/UNION are also
-                // read case-sensitively upstream by StructDeclParser.
-                // DeclaredBody, which is what decides whether a DUT reaches
-                // DutStructLoader or DutAliasLoader in the first place.
-                // Widening only this copy would open a body here for a
-                // declaration those two already routed elsewhere, so the
-                // accepted spelling is a pipeline-wide decision rather than
-                // this parser's to make alone.
+                // Section keywords are read case-sensitively, here and in
+                // TryReadSectionHeader, unlike the type names VarLinePattern
+                // accepts in any case. STRUCT/UNION are also read
+                // case-sensitively upstream by StructDeclParser.DeclaredBody,
+                // which is what decides whether a DUT reaches DutStructLoader
+                // or DutAliasLoader in the first place. Widening only this copy
+                // would open a body here for a declaration those two already
+                // routed elsewhere, so the accepted spelling is a pipeline-wide
+                // decision rather than this parser's to make alone.
                 switch (line)
                 {
-                    case "VAR":
-                        currentSection = VarSection.Local;
-                        continue;
-                    case "VAR_INPUT":
-                        currentSection = VarSection.Input;
-                        continue;
-                    case "VAR_OUTPUT":
-                        currentSection = VarSection.Output;
-                        continue;
-                    case "VAR_IN_OUT":
-                        currentSection = VarSection.InOut;
-                        continue;
-                    // A top-level VAR_TEMP gets its own section rather than
-                    // aliasing to Local: it has to live in instance.Fields
-                    // for dot-access and methods to see it, so there is no
-                    // per-call Frame to give it the reset-every-invocation
-                    // semantics VAR_TEMP requires. See VarSection.Temp.
-                    case "VAR_TEMP":
-                        currentSection = VarSection.Temp;
-                        continue;
                     case "END_VAR":
                         currentSection = null;
                         continue;
@@ -93,14 +73,9 @@ namespace xStunit.Interpreter
                         continue;
                 }
 
-                // A GVL's VAR_GLOBAL header may carry CONSTANT/RETAIN/
-                // PERSISTENT modifiers on the same line. They are ignored
-                // rather than recorded: no retain/persistence semantics are
-                // modelled, so they change nothing but the section a field
-                // lands in.
-                if (line == "VAR_GLOBAL" || line.StartsWith("VAR_GLOBAL "))
+                if (TryReadSectionHeader(line, out var openedSection))
                 {
-                    currentSection = VarSection.Global;
+                    currentSection = openedSection;
                     continue;
                 }
 
@@ -120,6 +95,51 @@ namespace xStunit.Interpreter
             }
 
             return result;
+        }
+
+        // Reads a VAR/VAR_INPUT/VAR_OUTPUT/VAR_IN_OUT/VAR_TEMP/VAR_GLOBAL
+        // header and the section it opens, ignoring any CONSTANT/RETAIN/
+        // PERSISTENT modifiers trailing it. The modifiers change nothing but
+        // the section a field lands in - no write-protection, retain or
+        // persistence semantics are modelled - but the header they sit on has
+        // to be recognized anyway. Unrecognized, it leaves no section open, and
+        // every declaration under it is dropped without a word: each later use
+        // reports "Unknown variable", pointing at the use rather than at the
+        // block that never opened.
+        private static bool TryReadSectionHeader(string line, out VarSection section)
+        {
+            var space = line.IndexOfAny(new[] { ' ', '\t' });
+            var keyword = space < 0 ? line : line.Substring(0, space);
+
+            switch (keyword)
+            {
+                case "VAR":
+                    section = VarSection.Local;
+                    return true;
+                case "VAR_INPUT":
+                    section = VarSection.Input;
+                    return true;
+                case "VAR_OUTPUT":
+                    section = VarSection.Output;
+                    return true;
+                case "VAR_IN_OUT":
+                    section = VarSection.InOut;
+                    return true;
+                // A top-level VAR_TEMP gets its own section rather than
+                // aliasing to Local: it has to live in instance.Fields for
+                // dot-access and methods to see it, so there is no per-call
+                // Frame to give it the reset-every-invocation semantics
+                // VAR_TEMP requires. See VarSection.Temp.
+                case "VAR_TEMP":
+                    section = VarSection.Temp;
+                    return true;
+                case "VAR_GLOBAL":
+                    section = VarSection.Global;
+                    return true;
+                default:
+                    section = default;
+                    return false;
+            }
         }
 
         // Strips a trailing "// ..." or "(* ... *)" comment, ignoring those

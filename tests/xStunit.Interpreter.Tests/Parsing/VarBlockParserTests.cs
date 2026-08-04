@@ -258,6 +258,28 @@ END_VAR";
             Assert.Equal("16", value.DefaultValueText);
         }
 
+        // A modifier the header carries must not cost the block: the whole
+        // declaration list under it goes missing, and says nothing about why.
+        [Theory]
+        [InlineData("VAR CONSTANT", VarSection.Local)]
+        [InlineData("VAR RETAIN", VarSection.Local)]
+        [InlineData("VAR RETAIN PERSISTENT", VarSection.Local)]
+        [InlineData("VAR_INPUT CONSTANT", VarSection.Input)]
+        [InlineData("VAR_OUTPUT PERSISTENT", VarSection.Output)]
+        public void Parse_VarBlockWithModifiers_ReadsTheSectionItsKeywordNames(string header, VarSection expected)
+        {
+            var declaration = $@"{header}
+	Capacity : UINT := 1800;
+END_VAR";
+
+            var vars = VarBlockParser.Parse(declaration);
+
+            var capacity = Assert.Single(vars);
+            Assert.Equal("Capacity", capacity.Name);
+            Assert.Equal(expected, capacity.Section);
+            Assert.Equal("1800", capacity.DefaultValueText);
+        }
+
         // A STRING/WSTRING size may be any IEC 61131-3 constant expression, not
         // just an integer literal. A size this parser cannot match costs more
         // than the size itself: the whole declaration line fails to match and

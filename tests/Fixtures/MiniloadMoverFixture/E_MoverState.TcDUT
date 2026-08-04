@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4026.18">
+  <DUT Name="E_MoverState" Id="{5e4501d0-0033-4d19-9a41-000000000001}">
+    <Declaration><![CDATA[// Where the container mover is in a move, from an order arriving to the
+// container having changed hands.
+//
+// The three transfer states in the middle are the mechanism showing through.
+// A shuttle that pulled containers with a telescopic fork would have one
+// stroke and could get away with a single state; grabbing hooks plus a lifting
+// cylinder are two actuators that must be driven in order, each waiting on its
+// own end-position sensor before the next one is allowed to move, and each of
+// those waits is a place the machine can be found standing.
+//
+// IDLE is deliberately the zero value: a mover that has never run has not
+// homed and holds no order, which is exactly what IDLE means.
+TYPE E_MoverState :
+(
+	IDLE := 0,
+	HOMING := 1,
+	MOVE_HORIZONTAL := 2,
+	MOVE_VERTICAL := 3,
+	HOOKS_ENGAGING := 4,
+	LIFTING := 5,
+	HOOKS_RELEASING := 6,
+	AT_TARGET := 7,
+	FAULT := 8
+);
+END_TYPE
+]]></Declaration>
+  </DUT>
+</TcPlcObject>

@@ -1,0 +1,435 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4026.18">
+  <POU Name="FB_ContainerMoverTimingTests" Id="{5e4501d0-0038-4d19-9a41-000000000001}" SpecialFunc="None">
+    <Declaration><![CDATA[(*
+    The part of FB_ContainerMover's contract that only shows itself once time
+    moves inside a single test case: the move allowance, which is the one thing
+    in the shuttle that turns a machine standing still into a fault.
+
+    FB_ContainerMoverTests pins everything that faults on a GUARD - an order
+    the racking cannot serve, a drive that tripped, an interlock that never
+    cleared. Those all decide on a level. This is the only fault the shuttle
+    raises because nothing happened, so it is the only one that cannot be
+    reached with the clock stopped, and every case here is about the scan the
+    allowance closes on.
+
+    xStunit ONLY. Every case here calls AdvanceClock, an xStunit intrinsic with
+    no TwinCAT counterpart, so this POU does not compile on the target and is
+    deliberately kept out of the portable suite. FB_ContainerMoverTests holds
+    the cases that do run on both engines; nothing that calls AdvanceClock
+    belongs in it.
+
+    A SEIZED AXIS IS THE RIG. FB_PositioningAxis with TravelPerScan := 0.0 is
+    powered, commanded and never arrives, which is exactly the machine the
+    allowance exists for and is why these cases need no fault injection of
+    their own: the shuttle is not broken, it is late.
+*)
+FUNCTION_BLOCK FB_ContainerMoverTimingTests EXTENDS TcUnit.FB_TestSuite]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[AShuttleThatNeverArrivesFaultsExactlyAtTheMoveAllowance();
+AMoveThatFinishesWithAMillisecondToSpareNeverTripsTheLatch();
+TheAllowanceCoversTheHookSequenceAndNotOnlyTheTravel();
+EachOrderGetsAWholeAllowanceRatherThanWhatTheLastOneLeft();]]></ST>
+    </Implementation>
+    <Method Name="AShuttleThatNeverArrivesFaultsExactlyAtTheMoveAllowance" Id="{5e4501d0-0038-4d19-9a41-000000000002}">
+      <Declaration><![CDATA[// The allowance on the scan it closes, and the whole fault path behind it: the
+// latch set, the FSM in FAULT, the ErrorID written, the order abandoned
+// without the map ever being told the container arrived.
+//
+// Tripping early would fault shuttles that were merely slow, on a machine
+// where the recipe is the only place anybody says how slow is too slow.
+// Tripping late is worse: a container left half way into a rack face is found
+// by a person, and the allowance is what tells them to come.
+METHOD PRIVATE AShuttleThatNeverArrivesFaultsExactlyAtTheMoveAllowance
+VAR
+	mover : FB_ContainerMover;
+	map : FB_StorageLocationMap;
+	railAxis : FB_PositioningAxis;
+	liftAxis : FB_PositioningAxis;
+	recipe : ST_MoverControl;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('AShuttleThatNeverArrivesFaultsExactlyAtTheMoveAllowance');
+
+recipe.MoveTimeout := T#5s;
+railAxis.TravelPerScan := 0.0;
+
+map.Reserve(Aisle := 1, Side := 1, Level := 8, Position := 13);
+Arrange(mover := mover, map := map, railAxis := railAxis, liftAxis := liftAxis, recipe := recipe);
+mover.StoreContainer(Index := 153, Barcode := 'C-000153', StoredAt := DT#2026-08-05-06:00:00);
+
+DriveToTravel(mover := mover, map := map, railAxis := railAxis, liftAxis := liftAxis);
+AssertEquals_INT(Expected := E_MoverState.MOVE_HORIZONTAL,
+                 Actual := mover.CurrentState,
+                 Message := 'setup did not reach a shuttle with the allowance running');
+
+AdvanceAndScan(mover := mover, map := map, railAxis := railAxis, liftAxis := liftAxis, Span := T#4999ms);
+AssertFalse(Condition := mover.Fault, Message := 'the shuttle faulted one ms before the allowance elapsed');
+AssertEquals_UDINT(Expected := 0, Actual := mover.ErrorID, Message := 'ErrorID before the allowance elapsed');
+AssertTrue(Condition := mover.Busy, Message := 'the shuttle stopped reporting an order it still owed');
+
+AdvanceAndScan(mover := mover, map := map, railAxis := railAxis, liftAxis := liftAxis, Span := T#1ms);
+AssertTrue(Condition := mover.Fault, Message := 'the shuttle did not fault at exactly MoveTimeout');
+AssertEquals_UDINT(Expected := 16#85010001,
+                   Actual := mover.ErrorID,
+                   Message := 'ErrorID for a move that timed out');
+AssertEquals_INT(Expected := E_MoverState.FAULT,
+                 Actual := mover.CurrentState,
+                 Message := 'state after the allowance elapsed');
+AssertFalse(Condition := mover.Homed, Message := 'a timed-out shuttle kept a reference it can no longer trust');
+AssertFalse(Condition := mover.Busy, Message := 'a timed-out shuttle still reported an order in flight');
+AssertEquals_INT(Expected := E_LocationState.RESERVED,
+                 Actual := map.StateAt(Index := 153),
+                 Message := 'the abandoned order told the map a container had arrived');
+
+// Time is not an acknowledgement. The latch outliving the allowance is what
+// stops a shuttle that timed out from being ordered somewhere else while the
+// container it lost is still in the aisle.
+AdvanceAndScan(mover := mover, map := map, railAxis := railAxis, liftAxis := liftAxis, Span := T#1m);
+AssertTrue(Condition := mover.Fault, Message := 'the timeout fault cleared itself once the clock moved on');
+AssertEquals_UDINT(Expected := 16#85010001,
+                   Actual := mover.ErrorID,
+                   Message := 'ErrorID while the timeout fault is still standing');
+
+mover.Reset := TRUE;
+AdvanceAndScan(mover := mover, map := map, railAxis := railAxis, liftAxis := liftAxis, Span := T#10ms);
+mover.Reset := FALSE;
+
+AssertFalse(Condition := mover.Fault, Message := 'the acknowledgement did not release the timeout latch');
+AssertEquals_UDINT(Expected := 0, Actual := mover.ErrorID, Message := 'ErrorID after the acknowledgement');
+AssertEquals_INT(Expected := E_MoverState.IDLE,
+                 Actual := mover.CurrentState,
+                 Message := 'state after the acknowledgement');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="AMoveThatFinishesWithAMillisecondToSpareNeverTripsTheLatch" Id="{5e4501d0-0038-4d19-9a41-000000000003}">
+      <Declaration><![CDATA[// The other end of the same gate, one millisecond away from the case above: a
+// move that lands inside its allowance must complete normally, and the
+// allowance must then stop running altogether.
+//
+// Both halves matter. A gate that fired at MoveTimeout minus one would fault
+// every move tuned to sit near its allowance, and a timer that kept running
+// after AT_TARGET would fault a shuttle for standing still with nothing to do,
+// which is where a shuttle spends most of a shift.
+METHOD PRIVATE AMoveThatFinishesWithAMillisecondToSpareNeverTripsTheLatch
+VAR
+	mover : FB_ContainerMover;
+	map : FB_StorageLocationMap;
+	railAxis : FB_PositioningAxis;
+	liftAxis : FB_PositioningAxis;
+	recipe : ST_MoverControl;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('AMoveThatFinishesWithAMillisecondToSpareNeverTripsTheLatch');
+
+recipe.MoveTimeout := T#5s;
+
+map.Reserve(Aisle := 1, Side := 1, Level := 1, Position := 1);
+Arrange(mover := mover, map := map, railAxis := railAxis, liftAxis := liftAxis, recipe := recipe);
+mover.StoreContainer(Index := 1, Barcode := 'C-000001', StoredAt := DT#2026-08-05-06:00:00);
+
+DriveToTravel(mover := mover, map := map, railAxis := railAxis, liftAxis := liftAxis);
+AdvanceAndScan(mover := mover, map := map, railAxis := railAxis, liftAxis := liftAxis, Span := T#4999ms);
+AssertFalse(Condition := mover.Fault, Message := 'the shuttle faulted one ms before the allowance elapsed');
+
+// The rest of the order runs with the clock held, so the whole move is spent
+// one millisecond short of the allowance however many scans it takes.
+AssertTrue(Condition := RunUntil(mover := mover, map := map, railAxis := railAxis, liftAxis := liftAxis,
+                                 Target := E_MoverState.AT_TARGET),
+           Message := 'the order did not complete inside its allowance');
+AssertFalse(Condition := mover.Fault, Message := 'a move that finished in time was faulted anyway');
+AssertEquals_UDINT(Expected := 0, Actual := mover.ErrorID, Message := 'ErrorID after a move that finished in time');
+AssertEquals_INT(Expected := E_LocationState.OCCUPIED,
+                 Actual := map.StateAt(Index := 1),
+                 Message := 'the completed order did not tell the map the container arrived');
+
+AdvanceAndScan(mover := mover, map := map, railAxis := railAxis, liftAxis := liftAxis, Span := T#1m);
+AssertFalse(Condition := mover.Fault, Message := 'a shuttle resting at its target was faulted for taking too long');
+AssertEquals_INT(Expected := E_MoverState.AT_TARGET,
+                 Actual := mover.CurrentState,
+                 Message := 'state of a shuttle left resting at its target');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="TheAllowanceCoversTheHookSequenceAndNotOnlyTheTravel" Id="{5e4501d0-0038-4d19-9a41-000000000004}">
+      <Declaration><![CDATA[// One allowance over the whole move, hook and cylinder strokes included. A
+// sequence stuck waiting on an end-position sensor is as overdue as one stuck
+// on an axis, and it is the more dangerous of the two: the shuttle is standing
+// with its hooks in the racking, which is the position nothing else may move
+// through.
+//
+// If the allowance covered only travel, this shuttle would wait for its
+// sensor forever and nothing would ever say so.
+METHOD PRIVATE TheAllowanceCoversTheHookSequenceAndNotOnlyTheTravel
+VAR
+	mover : FB_ContainerMover;
+	map : FB_StorageLocationMap;
+	railAxis : FB_PositioningAxis;
+	liftAxis : FB_PositioningAxis;
+	recipe : ST_MoverControl;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('TheAllowanceCoversTheHookSequenceAndNotOnlyTheTravel');
+
+recipe.MoveTimeout := T#5s;
+
+map.Reserve(Aisle := 1, Side := 1, Level := 1, Position := 1);
+Arrange(mover := mover, map := map, railAxis := railAxis, liftAxis := liftAxis, recipe := recipe);
+mover.StoreContainer(Index := 1, Barcode := 'C-000001', StoredAt := DT#2026-08-05-06:00:00);
+
+// The travel itself costs no simulated time, so the whole allowance is still
+// in front of the shuttle when it reaches the rack face.
+AssertTrue(Condition := RunUntil(mover := mover, map := map, railAxis := railAxis, liftAxis := liftAxis,
+                                 Target := E_MoverState.HOOKS_ENGAGING),
+           Message := 'the shuttle never reached the rack face');
+
+// From here the manipulator is left unattended: the hooks are commanded out
+// and never report themselves latched.
+AdvanceAndScan(mover := mover, map := map, railAxis := railAxis, liftAxis := liftAxis, Span := T#4999ms);
+AssertEquals_INT(Expected := E_MoverState.HOOKS_ENGAGING,
+                 Actual := mover.CurrentState,
+                 Message := 'the hooks reported themselves latched without their sensor');
+AssertFalse(Condition := mover.Fault, Message := 'the hook wait faulted one ms before the allowance elapsed');
+
+AdvanceAndScan(mover := mover, map := map, railAxis := railAxis, liftAxis := liftAxis, Span := T#1ms);
+AssertTrue(Condition := mover.Fault, Message := 'a hook that never latched was left waiting past the allowance');
+AssertEquals_UDINT(Expected := 16#85010001,
+                   Actual := mover.ErrorID,
+                   Message := 'ErrorID for a hook stroke that timed out');
+AssertEquals_INT(Expected := E_MoverState.FAULT,
+                 Actual := mover.CurrentState,
+                 Message := 'state after the hook stroke timed out');
+AssertEquals_INT(Expected := E_LocationState.RESERVED,
+                 Actual := map.StateAt(Index := 1),
+                 Message := 'a container that never left the hooks was written into the map');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="EachOrderGetsAWholeAllowanceRatherThanWhatTheLastOneLeft" Id="{5e4501d0-0038-4d19-9a41-000000000005}">
+      <Declaration><![CDATA[// The allowance is per move, so time banked by one order must not count
+// against the next. A shuttle running back-to-back orders accumulates the
+// whole shift between resets, and an allowance that carried over would fault
+// it on a move that had barely started - the busier the machine, the sooner.
+METHOD PRIVATE EachOrderGetsAWholeAllowanceRatherThanWhatTheLastOneLeft
+VAR
+	mover : FB_ContainerMover;
+	map : FB_StorageLocationMap;
+	railAxis : FB_PositioningAxis;
+	liftAxis : FB_PositioningAxis;
+	recipe : ST_MoverControl;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('EachOrderGetsAWholeAllowanceRatherThanWhatTheLastOneLeft');
+
+recipe.MoveTimeout := T#5s;
+
+map.Reserve(Aisle := 1, Side := 1, Level := 1, Position := 1);
+map.Reserve(Aisle := 1, Side := 1, Level := 8, Position := 13);
+map.Store(Index := 153, Barcode := 'C-000153', StoredAt := DT#2026-08-05-05:00:00);
+
+Arrange(mover := mover, map := map, railAxis := railAxis, liftAxis := liftAxis, recipe := recipe);
+mover.StoreContainer(Index := 1, Barcode := 'C-000001', StoredAt := DT#2026-08-05-06:00:00);
+
+// The first order spends all but one millisecond of its allowance and still
+// completes.
+DriveToTravel(mover := mover, map := map, railAxis := railAxis, liftAxis := liftAxis);
+AdvanceAndScan(mover := mover, map := map, railAxis := railAxis, liftAxis := liftAxis, Span := T#4999ms);
+AssertTrue(Condition := RunUntil(mover := mover, map := map, railAxis := railAxis, liftAxis := liftAxis,
+                                 Target := E_MoverState.AT_TARGET),
+           Message := 'the first order did not complete inside its allowance');
+
+// The second order goes to a shuttle that has seized, so the only thing that
+// can end it is the allowance.
+railAxis.TravelPerScan := 0.0;
+AssertTrue(Condition := mover.RetrieveContainer(Index := 153),
+           Message := 'the shuttle refused a second order');
+
+DriveToTravel(mover := mover, map := map, railAxis := railAxis, liftAxis := liftAxis);
+AssertEquals_INT(Expected := E_MoverState.MOVE_HORIZONTAL,
+                 Actual := mover.CurrentState,
+                 Message := 'the second order never set off');
+
+AdvanceAndScan(mover := mover, map := map, railAxis := railAxis, liftAxis := liftAxis, Span := T#4999ms);
+AssertFalse(Condition := mover.Fault,
+            Message := 'time banked by the first order carried over into the second');
+
+AdvanceAndScan(mover := mover, map := map, railAxis := railAxis, liftAxis := liftAxis, Span := T#1ms);
+AssertTrue(Condition := mover.Fault, Message := 'the second order did not fault at exactly MoveTimeout');
+AssertEquals_UDINT(Expected := 16#85010001,
+                   Actual := mover.ErrorID,
+                   Message := 'ErrorID for the second order timing out');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="Arrange" Id="{5e4501d0-0038-4d19-9a41-000000000006}">
+      <Declaration><![CDATA[// Puts a shuttle in the state one is found in at the start of a shift: at
+// rest at the aisle end, hooks home, cylinder down, nothing on the deck, and
+// its map bound.
+//
+// The map is bound by CALLING the mover, not by writing a field, because it is
+// a VAR_IN_OUT: it has to travel on every invocation, and this is the one that
+// establishes it before the first order method reads it.
+//
+// The caller sets any recipe field it cares about BEFORE calling this.
+METHOD PRIVATE Arrange
+VAR_IN_OUT
+	mover : FB_ContainerMover;
+	map : FB_StorageLocationMap;
+	railAxis : FB_PositioningAxis;
+	liftAxis : FB_PositioningAxis;
+END_VAR
+VAR_INPUT
+	recipe : ST_MoverControl;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[mover.HooksReleased := TRUE;
+mover.HooksEngaged := FALSE;
+mover.CylinderLowered := TRUE;
+mover.CylinderRaised := FALSE;
+
+railAxis();
+liftAxis();
+mover(railAxis := railAxis, liftAxis := liftAxis, Control := recipe, locationMap := map);]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="Scan" Id="{5e4501d0-0038-4d19-9a41-000000000007}">
+      <Declaration><![CDATA[// One PLC scan of the whole run, in the order a real task would: the control
+// modules first, so the equipment module reads a world that has already
+// answered its previous commands, and never the other way round.
+//
+// The clock is deliberately NOT touched here. A case measuring the allowance
+// needs to say which scans cost time and which do not, so time is added by
+// AdvanceAndScan and by nothing else.
+METHOD PRIVATE Scan
+VAR_IN_OUT
+	mover : FB_ContainerMover;
+	map : FB_StorageLocationMap;
+	railAxis : FB_PositioningAxis;
+	liftAxis : FB_PositioningAxis;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[railAxis();
+liftAxis();
+mover(locationMap := map);]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="AdvanceAndScan" Id="{5e4501d0-0038-4d19-9a41-000000000008}">
+      <Declaration><![CDATA[// One scan of the run with Span of simulated time in front of it, in the
+// order a real task would: the world the module reads is updated before the
+// module reads it. A timer's elapsed time is only observed on the call that
+// follows the advance, which is why the advance leads.
+//
+// The manipulator is not served, so the hooks and the cylinder report whatever
+// the case last set them to. An actuator that never answers is the shuttle the
+// allowance is there to end.
+METHOD PRIVATE AdvanceAndScan
+VAR_IN_OUT
+	mover : FB_ContainerMover;
+	map : FB_StorageLocationMap;
+	railAxis : FB_PositioningAxis;
+	liftAxis : FB_PositioningAxis;
+END_VAR
+VAR_INPUT
+	Span : TIME;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[AdvanceClock(Span);
+Scan(mover := mover, map := map, railAxis := railAxis, liftAxis := liftAxis);]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="DriveToTravel" Id="{5e4501d0-0038-4d19-9a41-000000000009}">
+      <Declaration><![CDATA[// Takes an accepted order from standing to travelling, and leaves the
+// allowance running with none of it spent.
+//
+// Two scans, and both are load-bearing. The first moves the shuttle off its
+// resting state, and the second is the one on which the allowance starts -
+// neither costs simulated time, so a case that follows this can say the whole
+// allowance is still in front of the shuttle and count from zero.
+METHOD PRIVATE DriveToTravel
+VAR_IN_OUT
+	mover : FB_ContainerMover;
+	map : FB_StorageLocationMap;
+	railAxis : FB_PositioningAxis;
+	liftAxis : FB_PositioningAxis;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[Scan(mover := mover, map := map, railAxis := railAxis, liftAxis := liftAxis);
+Scan(mover := mover, map := map, railAxis := railAxis, liftAxis := liftAxis);]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="ServeManipulator" Id="{5e4501d0-0038-4d19-9a41-00000000000a}">
+      <Declaration><![CDATA[// The hook and cylinder control modules answering the commands they were given
+// on the previous scan.
+//
+// One scan of lag, and it is what makes the hook sequence a sequence rather
+// than a single cycle: every step in it waits on an actuator that only reports
+// itself after the mover has asked.
+METHOD PRIVATE ServeManipulator
+VAR_IN_OUT
+	mover : FB_ContainerMover;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[mover.HooksEngaged := mover.EngageHooks;
+mover.HooksReleased := NOT mover.EngageHooks;
+mover.CylinderRaised := mover.RaiseCylinder;
+mover.CylinderLowered := NOT mover.RaiseCylinder;]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="RunUntil" Id="{5e4501d0-0038-4d19-9a41-00000000000b}">
+      <Declaration><![CDATA[// Scans the run, with the manipulator answering and the CLOCK HELD, until the
+// shuttle reaches Target. FALSE if it faulted or never got there.
+//
+// Holding the clock is what makes it usable inside a timing case: however many
+// scans the mechanism takes, none of them spends any of the allowance, so the
+// time a case has deliberately advanced is the only time on it.
+METHOD PRIVATE RunUntil : BOOL
+VAR_IN_OUT
+	mover : FB_ContainerMover;
+	map : FB_StorageLocationMap;
+	railAxis : FB_PositioningAxis;
+	liftAxis : FB_PositioningAxis;
+END_VAR
+VAR_INPUT
+	Target : E_MoverState;
+END_VAR
+VAR
+	guard : UINT;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[RunUntil := FALSE;
+
+// The bound is far above the ~40 scans the longest move in this suite takes,
+// and exists only so a machine that stopped advancing ends the case instead of
+// the run.
+FOR guard := 1 TO 400 DO
+	IF mover.CurrentState = Target THEN
+		RunUntil := TRUE;
+		EXIT;
+	END_IF
+
+	IF mover.Fault THEN
+		EXIT;
+	END_IF
+
+	ServeManipulator(mover := mover);
+	Scan(mover := mover, map := map, railAxis := railAxis, liftAxis := liftAxis);
+END_FOR]]></ST>
+      </Implementation>
+    </Method>
+  </POU>
+</TcPlcObject>

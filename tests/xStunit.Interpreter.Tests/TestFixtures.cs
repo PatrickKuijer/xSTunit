@@ -22,11 +22,17 @@ namespace xStunit.Interpreter.Tests
         public static string MiniloadConveyorFixtureDir([CallerFilePath] string callerFile = "") =>
             FixtureDir("MiniloadConveyorFixture", callerFile);
 
+        public static string MiniloadMoverFixtureDir([CallerFilePath] string callerFile = "") =>
+            FixtureDir("MiniloadMoverFixture", callerFile);
+
         public static string MiniloadPackMLFixtureDir([CallerFilePath] string callerFile = "") =>
             FixtureDir("MiniloadPackMLFixture", callerFile);
 
         public static string MiniloadSensorFixtureDir([CallerFilePath] string callerFile = "") =>
             FixtureDir("MiniloadSensorFixture", callerFile);
+
+        public static string MiniloadStorageFixtureDir([CallerFilePath] string callerFile = "") =>
+            FixtureDir("MiniloadStorageFixture", callerFile);
 
         private static string FixtureDir(string name, string callerFile) =>
             Path.GetFullPath(Path.Combine(Path.GetDirectoryName(callerFile)!, "..", "..", "Fixtures", name));

@@ -1,0 +1,532 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4026.18">
+  <POU Name="FB_StorageLocationMap" Id="{5e4501d0-0031-4d19-9a41-000000000001}" SpecialFunc="None">
+    <Declaration><![CDATA[(*
+    The PLC's own picture of the racking environment: 1800 storage locations,
+    what each one holds, and where the next container is allowed to go.
+
+    Three aisles, two rack sides per aisle, fifteen levels, twenty positions -
+    3 * 2 * 15 * 20 = 1800. The four-part address is the one the machine is
+    built in: a shuttle per aisle, on its own rail, reaching the rack on either
+    side of it.
+
+    WHO ALLOCATES. The MES owns the warehouse inventory, and on a normal day it
+    is the MES that says where a container goes: the caller passes the address
+    it was given and this block reserves it. The allocator here is the fallback
+    for the MES link being down, and it is reachable no other way - while
+    MesOnline is TRUE the requested address is the only address considered,
+    even when it is unusable. A location this block chose for itself is
+    therefore always a degraded-mode decision, and can be read as one.
+
+    THE LIFE OF A LOCATION. Free -> Reserved when it is allocated, Reserved ->
+    Occupied when the shuttle has actually put the container in it, and
+    anything -> Free on Release. Allocation and arrival are minutes apart, and
+    the Reserved step is what stops a second container being sent to a slot the
+    first one is still on its way to.
+
+    All four counts are maintained as locations change state rather than by
+    scanning: a warehouse is asked how full it is far more often than it
+    changes, and a scan of 1800 elements per query would be the most expensive
+    thing in the cycle. FindNextFree is the one place a scan is unavoidable,
+    and it is on the degraded path.
+*)
+FUNCTION_BLOCK FB_StorageLocationMap
+VAR_INPUT
+	// The MES link as the PLC sees it. FALSE hands allocation to this block's
+	// own next-free search; it is an input rather than something derived here
+	// because the link is watched by the MES controller, not by the map.
+	MesOnline : BOOL := TRUE;
+END_VAR
+VAR_OUTPUT
+	FreeCount : UINT;
+	ReservedCount : UINT;
+	OccupiedCount : UINT;
+	// Containers stored over the block's whole life, across every release. The
+	// throughput figure, not an inventory: it never goes down.
+	StoredTotal : UINT;
+	// Nothing left to allocate. Reserved and Blocked locations count against
+	// it just as Occupied ones do, because none of the three can be handed out.
+	Full : BOOL;
+	// Where the last accepted Reserve put the container. The only way a caller
+	// learns what the fallback allocator chose, since it ignored the address
+	// it was handed.
+	LastAllocated : ST_LocationAddress;
+END_VAR
+VAR
+	locations : ARRAY[1..3, 1..2, 1..15, 1..20] OF ST_StorageLocation;
+	mapped : BOOL;
+	storeCounter : CTU;
+END_VAR
+VAR CONSTANT
+	AisleCount : UINT := 3;
+	SideCount : UINT := 2;
+	LevelCount : UINT := 15;
+	PositionCount : UINT := 20;
+	Capacity : UINT := 1800;
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[// The block holds no cyclic logic of its own - every state change arrives as a
+// method call - so the one thing a scan does is make sure a map nobody has
+// touched yet still publishes the truth about an empty warehouse.
+EnsureMapped();]]></ST>
+    </Implementation>
+    <Method Name="EnsureMapped" Id="{5e4501d0-0031-4d19-9a41-000000000002}">
+      <Declaration><![CDATA[// Writes each location's own address into it, once. Not done in the
+// declaration because there is no initialiser that reaches 1800 elements one
+// at a time, and not done per scan because an address never changes.
+//
+// Called from the body and from the top of every method that touches a
+// location: a caller that reaches for a method before the first scan must get
+// the same answers as one that did not.
+METHOD PRIVATE EnsureMapped
+VAR
+	aisle : UINT;
+	side : UINT;
+	level : UINT;
+	position : UINT;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[IF mapped THEN
+	RETURN;
+END_IF
+
+FOR aisle := 1 TO AisleCount DO
+	FOR side := 1 TO SideCount DO
+		FOR level := 1 TO LevelCount DO
+			FOR position := 1 TO PositionCount DO
+				locations[aisle, side, level, position].Address.Aisle := aisle;
+				locations[aisle, side, level, position].Address.Side := side;
+				locations[aisle, side, level, position].Address.Level := level;
+				locations[aisle, side, level, position].Address.Position := position;
+			END_FOR
+		END_FOR
+	END_FOR
+END_FOR
+
+FreeCount := Capacity;
+mapped := TRUE;]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="DecomposeIndex" Id="{5e4501d0-0031-4d19-9a41-000000000003}">
+      <Declaration><![CDATA[// Flat index to the four-part address, by arithmetic alone - the inverse of
+// FlatIndexOf, and the only thing that turns a caller's index into something
+// the array can be subscripted with.
+//
+// Kept private and kept separate from AddressOf: this is what the map is
+// built ON, so it must not be what the map is checked against. AddressOf reads
+// the address a location was stamped with, which is a different answer to the
+// same question, and the two disagreeing is exactly the bug worth catching.
+METHOD PRIVATE DecomposeIndex : BOOL
+VAR_INPUT
+	FlatIndex : UINT;
+END_VAR
+VAR_OUTPUT
+	Aisle : UINT;
+	Side : UINT;
+	Level : UINT;
+	Position : UINT;
+END_VAR
+VAR
+	remaining : UINT;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[Aisle := 0;
+Side := 0;
+Level := 0;
+Position := 0;
+DecomposeIndex := FALSE;
+
+IF FlatIndex < 1 OR FlatIndex > Capacity THEN
+	RETURN;
+END_IF
+
+// Position varies fastest, then Level, then Side, then Aisle - so a run of
+// consecutive indices is a run along one rack face, which is what makes the
+// allocator's lowest-free answer also the shortest shuttle move.
+remaining := FlatIndex - 1;
+Position := (remaining MOD PositionCount) + 1;
+remaining := remaining / PositionCount;
+Level := (remaining MOD LevelCount) + 1;
+remaining := remaining / LevelCount;
+Side := (remaining MOD SideCount) + 1;
+Aisle := (remaining / SideCount) + 1;
+
+DecomposeIndex := TRUE;]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="FlatIndexOf" Id="{5e4501d0-0031-4d19-9a41-000000000004}">
+      <Declaration><![CDATA[// The four-part address to the flat index every other method takes, or 0 for
+// an address the racking does not have.
+//
+// Zero rather than a clamp: an MES that asks for level 16 has a bug or a
+// stale rack model, and turning that into level 15 would put a container
+// somewhere nobody is looking for it.
+METHOD FlatIndexOf : UINT
+VAR_INPUT
+	Aisle : UINT;
+	Side : UINT;
+	Level : UINT;
+	Position : UINT;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[IF Aisle < 1 OR Aisle > AisleCount
+	OR Side < 1 OR Side > SideCount
+	OR Level < 1 OR Level > LevelCount
+	OR Position < 1 OR Position > PositionCount THEN
+	FlatIndexOf := 0;
+	RETURN;
+END_IF
+
+FlatIndexOf := ((((Aisle - 1) * SideCount + (Side - 1)) * LevelCount + (Level - 1)) * PositionCount) + Position;]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="AddressOf" Id="{5e4501d0-0031-4d19-9a41-000000000005}">
+      <Declaration><![CDATA[// The address a location carries, reached by its flat index. FALSE, and all
+// four components zero, for an index outside the racking.
+METHOD AddressOf : BOOL
+VAR_INPUT
+	FlatIndex : UINT;
+END_VAR
+VAR_OUTPUT
+	Aisle : UINT;
+	Side : UINT;
+	Level : UINT;
+	Position : UINT;
+END_VAR
+VAR
+	a : UINT;
+	s : UINT;
+	l : UINT;
+	p : UINT;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[EnsureMapped();
+
+Aisle := 0;
+Side := 0;
+Level := 0;
+Position := 0;
+AddressOf := FALSE;
+
+IF NOT DecomposeIndex(FlatIndex := FlatIndex, Aisle => a, Side => s, Level => l, Position => p) THEN
+	RETURN;
+END_IF
+
+Aisle := locations[a, s, l, p].Address.Aisle;
+Side := locations[a, s, l, p].Address.Side;
+Level := locations[a, s, l, p].Address.Level;
+Position := locations[a, s, l, p].Address.Position;
+
+AddressOf := TRUE;]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="StateAt" Id="{5e4501d0-0031-4d19-9a41-000000000006}">
+      <Declaration><![CDATA[// An index outside the racking reads as Blocked rather than Free. There is no
+// honest fifth state to return, and of the four the one thing a caller must
+// never conclude from a bad index is that there is room there.
+METHOD StateAt : E_LocationState
+VAR_INPUT
+	Index : UINT;
+END_VAR
+VAR
+	a : UINT;
+	s : UINT;
+	l : UINT;
+	p : UINT;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[EnsureMapped();
+
+IF NOT DecomposeIndex(FlatIndex := Index, Aisle => a, Side => s, Level => l, Position => p) THEN
+	StateAt := E_LocationState.BLOCKED;
+	RETURN;
+END_IF
+
+StateAt := locations[a, s, l, p].State;]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="BarcodeAt" Id="{5e4501d0-0031-4d19-9a41-000000000007}">
+      <Declaration><![CDATA[METHOD BarcodeAt : STRING(32)
+VAR_INPUT
+	Index : UINT;
+END_VAR
+VAR
+	a : UINT;
+	s : UINT;
+	l : UINT;
+	p : UINT;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[EnsureMapped();
+
+IF NOT DecomposeIndex(FlatIndex := Index, Aisle => a, Side => s, Level => l, Position => p) THEN
+	BarcodeAt := '';
+	RETURN;
+END_IF
+
+BarcodeAt := locations[a, s, l, p].Barcode;]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="StoredTimeAt" Id="{5e4501d0-0031-4d19-9a41-000000000008}">
+      <Declaration><![CDATA[// When the container in this location arrived. The epoch is the same "nothing
+// here" value a released location is reset to, so it is only meaningful
+// alongside a state of Occupied.
+METHOD StoredTimeAt : DATE_AND_TIME
+VAR_INPUT
+	Index : UINT;
+END_VAR
+VAR
+	a : UINT;
+	s : UINT;
+	l : UINT;
+	p : UINT;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[EnsureMapped();
+
+IF NOT DecomposeIndex(FlatIndex := Index, Aisle => a, Side => s, Level => l, Position => p) THEN
+	StoredTimeAt := DT#1970-01-01-00:00:00;
+	RETURN;
+END_IF
+
+StoredTimeAt := locations[a, s, l, p].StoredAt;]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="FindNextFree" Id="{5e4501d0-0031-4d19-9a41-000000000009}">
+      <Declaration><![CDATA[// The lowest free flat index, or 0 when the warehouse has none.
+//
+// Lowest rather than nearest-to-the-shuttle: the answer has to be the same
+// every time it is asked, whatever the shuttle happens to be doing, or the
+// same warehouse state would allocate differently on two runs and nothing
+// downstream could be reasoned about.
+//
+// Private because it is the MES-offline fallback and nothing else. Exposing it
+// would make the degraded path callable on a normal day, which is the one
+// thing the split between the two exists to prevent.
+METHOD PRIVATE FindNextFree : UINT
+VAR
+	index : UINT;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[FindNextFree := 0;
+
+// The early exit is the point: a warehouse that is mostly empty finds its
+// answer in the first few elements, and only a full one pays for all 1800.
+FOR index := 1 TO Capacity DO
+	IF StateAt(Index := index) = E_LocationState.FREE THEN
+		FindNextFree := index;
+		EXIT;
+	END_IF
+END_FOR]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="Reserve" Id="{5e4501d0-0031-4d19-9a41-00000000000a}">
+      <Declaration><![CDATA[// Allocate a location for a container that has not arrived yet. Returns the
+// flat index reserved, or 0 if nothing could be.
+//
+// The four inputs are the address the MES assigned. They are read only while
+// MesOnline is TRUE; with the link down they are ignored outright rather than
+// used as a hint, because an address from a MES that is not answering is by
+// definition stale.
+METHOD Reserve : UINT
+VAR_INPUT
+	Aisle : UINT;
+	Side : UINT;
+	Level : UINT;
+	Position : UINT;
+END_VAR
+VAR
+	slot : UINT;
+	a : UINT;
+	s : UINT;
+	l : UINT;
+	p : UINT;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[EnsureMapped();
+
+Reserve := 0;
+
+IF MesOnline THEN
+	slot := FlatIndexOf(Aisle := Aisle, Side := Side, Level := Level, Position := Position);
+ELSE
+	slot := FindNextFree();
+END_IF
+
+IF NOT DecomposeIndex(FlatIndex := slot, Aisle => a, Side => s, Level => l, Position => p) THEN
+	RETURN;
+END_IF
+
+// Only a free location can be allocated, and that is the whole interlock: it
+// is what makes a second order for an already-spoken-for slot a refusal rather
+// than two containers arriving at one place.
+IF locations[a, s, l, p].State <> E_LocationState.FREE THEN
+	RETURN;
+END_IF
+
+locations[a, s, l, p].State := E_LocationState.RESERVED;
+
+FreeCount := FreeCount - 1;
+ReservedCount := ReservedCount + 1;
+Full := FreeCount = 0;
+
+LastAllocated.Aisle := a;
+LastAllocated.Side := s;
+LastAllocated.Level := l;
+LastAllocated.Position := p;
+
+Reserve := slot;]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="Store" Id="{5e4501d0-0031-4d19-9a41-00000000000b}">
+      <Declaration><![CDATA[// Record that the shuttle has put a container into a location it reserved
+// earlier. FALSE if that location was not reserved.
+//
+// Storing into a Free location is refused rather than accepted-and-corrected:
+// a container in a slot nobody allocated is one the next allocation can be
+// sent straight on top of.
+METHOD Store : BOOL
+VAR_INPUT
+	Index : UINT;
+	Barcode : STRING(32);
+	StoredAt : DATE_AND_TIME;
+END_VAR
+VAR
+	a : UINT;
+	s : UINT;
+	l : UINT;
+	p : UINT;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[EnsureMapped();
+
+Store := FALSE;
+
+IF NOT DecomposeIndex(FlatIndex := Index, Aisle => a, Side => s, Level => l, Position => p) THEN
+	RETURN;
+END_IF
+
+IF locations[a, s, l, p].State <> E_LocationState.RESERVED THEN
+	RETURN;
+END_IF
+
+locations[a, s, l, p].State := E_LocationState.OCCUPIED;
+locations[a, s, l, p].Barcode := Barcode;
+locations[a, s, l, p].StoredAt := StoredAt;
+
+ReservedCount := ReservedCount - 1;
+OccupiedCount := OccupiedCount + 1;
+
+// A CTU counts a rising edge on CU, and this is a method called on demand
+// rather than a block called once a scan, so both halves of the edge are made
+// here. Left to the caller's scan, two containers stored in one cycle would
+// count as one.
+storeCounter(CU := FALSE, RESET := FALSE, PV := 0);
+storeCounter(CU := TRUE, RESET := FALSE, PV := 0);
+StoredTotal := storeCounter.CV;
+
+Store := TRUE;]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="Release" Id="{5e4501d0-0031-4d19-9a41-00000000000c}">
+      <Declaration><![CDATA[// Return a location to the free pool, whatever it was. FALSE if it was already
+// free - a caller releasing an empty slot disagrees with the map about what
+// the warehouse holds, and that is worth reporting rather than absorbing.
+//
+// The one way back to Free from every other state, Blocked included: a
+// maintenance hold that nothing can take off would shrink the warehouse
+// permanently.
+METHOD Release : BOOL
+VAR_INPUT
+	Index : UINT;
+END_VAR
+VAR
+	a : UINT;
+	s : UINT;
+	l : UINT;
+	p : UINT;
+	was : E_LocationState;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[EnsureMapped();
+
+Release := FALSE;
+
+IF NOT DecomposeIndex(FlatIndex := Index, Aisle => a, Side => s, Level => l, Position => p) THEN
+	RETURN;
+END_IF
+
+was := locations[a, s, l, p].State;
+IF was = E_LocationState.FREE THEN
+	RETURN;
+END_IF
+
+locations[a, s, l, p].State := E_LocationState.FREE;
+// The container's details go with the container. A barcode left behind on a
+// free location is what a retrieval order chases after the container has
+// already shipped.
+locations[a, s, l, p].Barcode := '';
+locations[a, s, l, p].StoredAt := DT#1970-01-01-00:00:00;
+
+IF was = E_LocationState.OCCUPIED THEN
+	OccupiedCount := OccupiedCount - 1;
+ELSIF was = E_LocationState.RESERVED THEN
+	ReservedCount := ReservedCount - 1;
+END_IF
+
+FreeCount := FreeCount + 1;
+Full := FALSE;
+
+Release := TRUE;]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="MarkBlocked" Id="{5e4501d0-0031-4d19-9a41-00000000000d}">
+      <Declaration><![CDATA[// Take a location out of service - a bent rack upright, a slot the shuttle can
+// no longer reach. Only a free one: blocking a location a container is in, or
+// is on its way to, strands that container.
+METHOD MarkBlocked : BOOL
+VAR_INPUT
+	Index : UINT;
+END_VAR
+VAR
+	a : UINT;
+	s : UINT;
+	l : UINT;
+	p : UINT;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[EnsureMapped();
+
+MarkBlocked := FALSE;
+
+IF NOT DecomposeIndex(FlatIndex := Index, Aisle => a, Side => s, Level => l, Position => p) THEN
+	RETURN;
+END_IF
+
+IF locations[a, s, l, p].State <> E_LocationState.FREE THEN
+	RETURN;
+END_IF
+
+locations[a, s, l, p].State := E_LocationState.BLOCKED;
+
+FreeCount := FreeCount - 1;
+Full := FreeCount = 0;
+
+MarkBlocked := TRUE;]]></ST>
+      </Implementation>
+    </Method>
+  </POU>
+</TcPlcObject>

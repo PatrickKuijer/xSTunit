@@ -1,0 +1,145 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4026.18">
+  <POU Name="FB_PositioningAxis" Id="{5e4501d0-0035-4d19-9a41-000000000001}" SpecialFunc="None">
+    <Declaration><![CDATA[(*
+    The control module behind I_PositioningAxis: the thing the container mover
+    commands instead of touching motion function blocks directly.
+
+    Only the behaviour a sequencer depends on is modelled - power, an absolute
+    target, a latching drive fault, and where the axis actually is. There is no
+    velocity profile: TravelPerScan is how far the axis closes on its target in
+    one call, which is enough to make a move take a known number of scans, and
+    a real profile would make the number depend on a ramp nothing here asserts.
+
+    The fault is a LATCH, not a passthrough. A drive that trips and recovers
+    within a scan still has to be acknowledged, or a shuttle would resume a
+    move after a trip nobody saw - and it would resume it from a position it
+    has no reason to believe.
+*)
+FUNCTION_BLOCK FB_PositioningAxis IMPLEMENTS I_PositioningAxis
+VAR_INPUT
+	// The drive-side fault line, wired to the amplifier on a real machine.
+	DriveFault : BOOL;
+	// How far the axis closes on its target per call, in mm. Zero is a
+	// legitimate setting and means an axis that is powered and commanded but
+	// never arrives - a seized shuttle, which is what the move timeout exists
+	// for.
+	TravelPerScan : LREAL := 500.0;
+	// How close to the commanded target counts as arrived, in mm. Wider than
+	// the survey deviations in the position table on purpose: it is the
+	// mechanical repeatability of the drive, not the accuracy of the rack.
+	InPositionWindow : LREAL := 0.5;
+END_VAR
+VAR
+	powered : BOOL;
+	commanded : LREAL;
+	actual : LREAL;
+	faulted : BOOL;
+	remaining : LREAL;
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[IF DriveFault THEN
+	faulted := TRUE;
+END_IF
+
+// A faulted or unpowered axis holds its last measured position rather than
+// returning anywhere: the shuttle is physically where it stopped, and that is
+// the whole reason a fault costs the machine its homed reference.
+IF powered AND NOT faulted THEN
+	remaining := commanded - actual;
+
+	IF remaining > TravelPerScan THEN
+		actual := actual + TravelPerScan;
+	ELSIF remaining < (0.0 - TravelPerScan) THEN
+		actual := actual - TravelPerScan;
+	ELSE
+		// The last step lands exactly on the target instead of within one
+		// increment of it, so an axis that has finished reads the same
+		// position whatever increment it travelled at.
+		actual := commanded;
+	END_IF
+END_IF]]></ST>
+    </Implementation>
+    <Method Name="Enable" Id="{5e4501d0-0035-4d19-9a41-000000000002}">
+      <Declaration><![CDATA[METHOD Enable : BOOL]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[powered := TRUE;
+Enable := powered AND NOT faulted;]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="MoveAbsolute" Id="{5e4501d0-0035-4d19-9a41-000000000003}">
+      <Declaration><![CDATA[METHOD MoveAbsolute : BOOL
+VAR_INPUT
+	Position : LREAL;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[// The target is recorded even when it cannot be honoured, so the readback
+// after a Reset is the position the caller last asked for rather than
+// wherever the axis was left.
+commanded := Position;
+
+MoveAbsolute := powered AND NOT faulted;]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="Reset" Id="{5e4501d0-0035-4d19-9a41-000000000004}">
+      <Declaration><![CDATA[METHOD Reset : BOOL]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[// An acknowledgement against a fault that is still standing is a no-op
+// rather than a lie: the body would re-latch it on the next cycle anyway,
+// and a caller that saw Reset succeed would have been told the drive was
+// usable for exactly one scan.
+IF NOT DriveFault THEN
+	faulted := FALSE;
+END_IF
+
+Reset := NOT faulted;]]></ST>
+      </Implementation>
+    </Method>
+    <Property Name="Error" Id="{5e4501d0-0035-4d19-9a41-000000000005}">
+      <Declaration><![CDATA[PROPERTY Error : BOOL]]></Declaration>
+      <Get Name="Get" Id="{5e4501d0-0035-4d19-9a41-000000000006}">
+        <Declaration><![CDATA[]]></Declaration>
+        <Implementation>
+          <ST><![CDATA[Error := faulted;]]></ST>
+        </Implementation>
+      </Get>
+    </Property>
+    <Property Name="ActualPosition" Id="{5e4501d0-0035-4d19-9a41-000000000007}">
+      <Declaration><![CDATA[PROPERTY ActualPosition : LREAL]]></Declaration>
+      <Get Name="Get" Id="{5e4501d0-0035-4d19-9a41-000000000008}">
+        <Declaration><![CDATA[]]></Declaration>
+        <Implementation>
+          <ST><![CDATA[ActualPosition := actual;]]></ST>
+        </Implementation>
+      </Get>
+    </Property>
+    <Property Name="CommandedPosition" Id="{5e4501d0-0035-4d19-9a41-000000000009}">
+      <Declaration><![CDATA[PROPERTY CommandedPosition : LREAL]]></Declaration>
+      <Get Name="Get" Id="{5e4501d0-0035-4d19-9a41-00000000000a}">
+        <Declaration><![CDATA[]]></Declaration>
+        <Implementation>
+          <ST><![CDATA[CommandedPosition := commanded;]]></ST>
+        </Implementation>
+      </Get>
+    </Property>
+    <Property Name="InPosition" Id="{5e4501d0-0035-4d19-9a41-00000000000b}">
+      <Declaration><![CDATA[PROPERTY InPosition : BOOL]]></Declaration>
+      <Get Name="Get" Id="{5e4501d0-0035-4d19-9a41-00000000000c}">
+        <Declaration><![CDATA[]]></Declaration>
+        <Implementation>
+          <ST><![CDATA[// Answered from the current target on every read rather than latched when
+// the axis arrived, which is what lets a sequencer command a new target and
+// test for arrival in the same scan without being told it is already there.
+IF faulted OR NOT powered THEN
+	InPosition := FALSE;
+ELSIF commanded >= actual THEN
+	InPosition := (commanded - actual) <= InPositionWindow;
+ELSE
+	InPosition := (actual - commanded) <= InPositionWindow;
+END_IF]]></ST>
+        </Implementation>
+      </Get>
+    </Property>
+  </POU>
+</TcPlcObject>

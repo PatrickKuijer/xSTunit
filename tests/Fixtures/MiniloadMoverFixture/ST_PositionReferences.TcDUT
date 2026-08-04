@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4026.18">
+  <DUT Name="ST_PositionReferences" Id="{5e4501d0-0033-4d19-9a41-000000000003}">
+    <Declaration><![CDATA[(*
+    Where every part of the racking is, in millimetres on the two shuttle axes.
+
+    This is a SURVEYED table, not a pitch and a count. A rack is welded and
+    then measured, and the measurement is what the shuttle is driven to: most
+    slots land on the nominal pitch and a few do not, and the ones that do not
+    are precisely the reason a table exists instead of an expression. Anything
+    that recomputes a target from a pitch is wrong at those slots by more than
+    the in-position window, which is a container set down on the edge of a
+    shelf.
+
+    Rail positions are shared by the two rack faces of an aisle: both are
+    surveyed off the same rail datum, so a position number means the same
+    distance along the aisle whichever face it is on. What tells the two faces
+    apart is the direction the hooks reach, which is SideReach - signed, not a
+    second table.
+
+    The envelope is the axis travel the shuttle physically has. It is held here
+    rather than on the axes because it is what a target is checked AGAINST
+    before a move is started: an axis refusing a move it has already begun is
+    too late.
+*)
+TYPE ST_PositionReferences :
+STRUCT
+	// Rail position of each of the twenty positions along one rack face, in mm.
+	// Nominal pitch is 1250 from 800; positions 13 and 20 are surveyed off it.
+	StoragePositions : ARRAY[1..20] OF LREAL := [800.0, 2050.0, 3300.0, 4550.0, 5800.0, 7050.0, 8300.0, 9550.0, 10800.0, 12050.0, 13300.0, 14550.0, 15804.5, 17050.0, 18300.0, 19550.0, 20800.0, 22050.0, 23300.0, 24547.0];
+	// Deck height of each of the fifteen levels, in mm. Nominal pitch is 850
+	// from 300; level 8 is surveyed off it.
+	LevelHeights : ARRAY[1..15] OF LREAL := [300.0, 1150.0, 2000.0, 2850.0, 3700.0, 4550.0, 5400.0, 6253.5, 7100.0, 7950.0, 8800.0, 9650.0, 10500.0, 11350.0, 12200.0];
+	// The reference the shuttle homes to. Both axes at zero is the end of the
+	// aisle at deck height, which is where the infeed hands containers over.
+	HomeRail : LREAL := 0.0;
+	HomeLift : LREAL := 0.0;
+	RailMinimum : LREAL := 0.0;
+	RailMaximum : LREAL := 25000.0;
+	LiftMinimum : LREAL := 0.0;
+	LiftMaximum : LREAL := 12500.0;
+	// How far the hooks reach across into a rack face, in mm. Signed at the
+	// point of use: the two faces of an aisle are on opposite sides of the
+	// rail, so the same reach with the other sign is the other rack.
+	SideReach : LREAL := 780.0;
+END_STRUCT
+END_TYPE
+]]></Declaration>
+  </DUT>
+</TcPlcObject>

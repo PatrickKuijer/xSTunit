@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4026.18">
+  <DUT Name="ST_MoverControl" Id="{5e4501d0-0033-4d19-9a41-000000000004}">
+    <Declaration><![CDATA[(*
+    Everything that makes one shuttle different from the other two.
+
+    There is a container mover per aisle and they run identical code, so what
+    separates them is this recipe: which aisle's orders they answer, how long a
+    move is allowed to take, and the survey of the racking they run in front
+    of.
+
+    MoveTimeout covers a whole move rather than one leg of it - travel, the
+    hook stroke and the cylinder stroke are all under the same allowance. A
+    per-step allowance would have to be re-tuned every time the sequence gained
+    a step, and the thing the operator actually cares about is that a container
+    handed to the shuttle turns up somewhere.
+*)
+TYPE ST_MoverControl :
+STRUCT
+	// The aisle this shuttle is on. An order for any other aisle is another
+	// shuttle's work and this one cannot reach it at all.
+	AisleServed : UINT := 1;
+	MoveTimeout : TIME := T#20s;
+	PositionReferences : ST_PositionReferences;
+END_STRUCT
+END_TYPE
+]]></Declaration>
+  </DUT>
+</TcPlcObject>

@@ -1,0 +1,1061 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4026.18">
+  <POU Name="FB_ContainerMoverTests" Id="{5e4501d0-0037-4d19-9a41-000000000001}" SpecialFunc="None">
+    <Declaration><![CDATA[(*
+    Suite over FB_ContainerMover: the two-axis move, the interlocked hook
+    sequence that hands a container over, and everything the shuttle refuses
+    before it moves at all.
+
+    It runs against a real FB_StorageLocationMap rather than a stand-in, and
+    that is the point of the pairing: the mover asks the map what a location
+    holds before it accepts an order, and tells the map what happened only once
+    the container is in the rack. A stub map would let both halves of that
+    agree with themselves and with nothing else.
+
+    Nothing here advances the clock. The move timeout is real and is asserted,
+    but only in FB_ContainerMoverTimingTests, which calls an xStunit intrinsic
+    and therefore does not build on the target - everything in THIS file must,
+    so nothing here may call it. The cases below reach the timeout's own
+    boundary from the outside: with the clock stopped the allowance can never
+    elapse, so any number of scans in one state is a state the machine is
+    genuinely holding rather than one it is about to time out of.
+
+    The simulated manipulator answers its commands one scan late (see
+    ServeManipulator), which is what makes the hook sequence a sequence.  The
+    cases about an interlock deliberately do NOT run it: an actuator that never
+    reports itself is exactly what an interlock is there to stand in front of.
+*)
+FUNCTION_BLOCK FB_ContainerMoverTests EXTENDS TcUnit.FB_TestSuite]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[AFreshMoverIsIdleAndHoldsNoOrder();
+AnOrderHomesTheShuttleBeforeItTravels();
+BothAxesAreCommandedTogetherRatherThanOneAfterTheOther();
+TheAxisTargetsAreReadFromTheSurveyedPositionTable();
+TheHookReachTakesItsSignFromTheRackFace();
+AStoreOrderRunsTheHookSequenceAndTellsTheMapOnlyOnceItIsDone();
+ARetrieveOrderReturnsTheLocationToTheFreePool();
+TheHooksMayNotReachIntoTheRackUntilTheyAreHome();
+TheHooksMayNotReachIntoTheRackUntilTheCylinderIsSet();
+TheOrderIsNotCompleteUntilTheHooksAreBackFromTheRack();
+AnOrderForALocationTheRackingDoesNotHaveIsFaulted();
+AnOrderForAnotherAislesRackIsFaulted();
+StoringIntoALocationNobodyReservedIsFaulted();
+RetrievingFromAnEmptyLocationIsFaulted();
+ATargetOutsideTheAxisEnvelopeIsFaulted();
+AnOrderArrivingWhileTheShuttleIsBusyIsRefusedWithoutFaulting();
+ADriveFaultLatchesUntilItIsAcknowledged();
+TheCoordinatedMoveReportsTheLongerOfItsTwoLegsAsRemaining();]]></ST>
+    </Implementation>
+    <Method Name="AFreshMoverIsIdleAndHoldsNoOrder" Id="{5e4501d0-0037-4d19-9a41-000000000002}">
+      <Declaration><![CDATA[// A shuttle that has been scanned but never ordered anywhere must not claim a
+// reference it has not established. A mover that powered up believing itself
+// homed would take its first order straight into the racking from wherever the
+// last shift left it.
+METHOD PRIVATE AFreshMoverIsIdleAndHoldsNoOrder
+VAR
+	mover : FB_ContainerMover;
+	map : FB_StorageLocationMap;
+	railAxis : FB_PositioningAxis;
+	liftAxis : FB_PositioningAxis;
+	recipe : ST_MoverControl;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('AFreshMoverIsIdleAndHoldsNoOrder');
+
+Arrange(mover := mover, map := map, railAxis := railAxis, liftAxis := liftAxis, recipe := recipe);
+
+AssertEquals_INT(Expected := E_MoverState.IDLE,
+                 Actual := mover.CurrentState,
+                 Message := 'a mover that has not been ordered anywhere');
+
+AssertFalse(Condition := mover.Homed, Message := 'a mover claimed a reference it never established');
+AssertFalse(Condition := mover.Busy, Message := 'a mover with no order reported itself busy');
+AssertFalse(Condition := mover.Fault, Message := 'a fresh mover reported a fault');
+
+AssertEquals_UDINT(Expected := 0, Actual := mover.ErrorID, Message := 'ErrorID with nothing wrong');
+AssertEquals_UINT(Expected := 0, Actual := mover.TargetIndex, Message := 'TargetIndex with no order');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="AnOrderHomesTheShuttleBeforeItTravels" Id="{5e4501d0-0037-4d19-9a41-000000000003}">
+      <Declaration><![CDATA[// The first order after a power-up establishes the reference before it uses
+// it. Travelling first and homing later would mean the very first move is the
+// one made from an unknown position, which is the move most likely to end
+// inside a rack upright.
+METHOD PRIVATE AnOrderHomesTheShuttleBeforeItTravels
+VAR
+	mover : FB_ContainerMover;
+	map : FB_StorageLocationMap;
+	railAxis : FB_PositioningAxis;
+	liftAxis : FB_PositioningAxis;
+	recipe : ST_MoverControl;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('AnOrderHomesTheShuttleBeforeItTravels');
+
+map.Reserve(Aisle := 1, Side := 1, Level := 8, Position := 13);
+Arrange(mover := mover, map := map, railAxis := railAxis, liftAxis := liftAxis, recipe := recipe);
+
+AssertTrue(Condition := mover.StoreContainer(Index := 153,
+                                             Barcode := 'C-000153',
+                                             StoredAt := DT#2026-08-05-06:00:00),
+           Message := 'a store order for a reserved location was refused');
+
+Scan(mover := mover, map := map, railAxis := railAxis, liftAxis := liftAxis);
+
+AssertEquals_INT(Expected := E_MoverState.HOMING,
+                 Actual := mover.CurrentState,
+                 Message := 'the first order did not home the shuttle first');
+AssertFalse(Condition := mover.Homed, Message := 'the shuttle was homed before it had finished homing');
+AssertTrue(Condition := mover.Busy, Message := 'a shuttle on its way to a location reported itself free');
+
+Scan(mover := mover, map := map, railAxis := railAxis, liftAxis := liftAxis);
+
+AssertTrue(Condition := mover.Homed, Message := 'reaching the home reference did not establish it');
+AssertEquals_INT(Expected := E_MoverState.MOVE_HORIZONTAL,
+                 Actual := mover.CurrentState,
+                 Message := 'the shuttle did not set off once it was homed');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="BothAxesAreCommandedTogetherRatherThanOneAfterTheOther" Id="{5e4501d0-0037-4d19-9a41-000000000004}">
+      <Declaration><![CDATA[// The move is coordinated: MOVE_HORIZONTAL and MOVE_VERTICAL name the axis
+// still outstanding, not two legs run one after the other. The mast has its
+// target from the first scan of the travel and can - and here does - arrive
+// while the rail is still going.
+//
+// A shuttle that ran its legs in sequence would take the SUM of the two on
+// every order instead of the longer of them. Nothing about the state names
+// would change, which is why this is asserted on the mast's commanded position
+// rather than on the state.
+METHOD PRIVATE BothAxesAreCommandedTogetherRatherThanOneAfterTheOther
+VAR
+	mover : FB_ContainerMover;
+	map : FB_StorageLocationMap;
+	railAxis : FB_PositioningAxis;
+	liftAxis : FB_PositioningAxis;
+	recipe : ST_MoverControl;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('BothAxesAreCommandedTogetherRatherThanOneAfterTheOther');
+
+map.Reserve(Aisle := 1, Side := 1, Level := 8, Position := 13);
+Arrange(mover := mover, map := map, railAxis := railAxis, liftAxis := liftAxis, recipe := recipe);
+mover.StoreContainer(Index := 153, Barcode := 'C-000153', StoredAt := DT#2026-08-05-06:00:00);
+
+AssertTrue(Condition := RunUntil(mover := mover, map := map, railAxis := railAxis, liftAxis := liftAxis,
+                                 Target := E_MoverState.MOVE_HORIZONTAL),
+           Message := 'the shuttle never set off');
+
+AssertEquals_LREAL(Expected := 6253.5,
+                   Actual := liftAxis.CommandedPosition,
+                   Delta := 0.001,
+                   Message := 'the mast was left without a target while the rail travelled');
+
+// The mast has the shorter leg by some 9.5 metres, so it finishes first - with
+// the rail still travelling and the state still naming the rail.
+ScanTimes(mover := mover, map := map, railAxis := railAxis, liftAxis := liftAxis, Count := 13);
+
+AssertTrue(Condition := liftAxis.InPosition,
+           Message := 'the mast had not arrived after enough scans to cover its leg twice over');
+AssertFalse(Condition := railAxis.InPosition, Message := 'the rail finished its far longer leg first');
+AssertEquals_INT(Expected := E_MoverState.MOVE_HORIZONTAL,
+                 Actual := mover.CurrentState,
+                 Message := 'the mast arriving ended the travel while the rail was still going');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="TheAxisTargetsAreReadFromTheSurveyedPositionTable" Id="{5e4501d0-0037-4d19-9a41-000000000005}">
+      <Declaration><![CDATA[// Both targets come out of the surveyed table, and the two locations chosen
+// here are what makes that assertable: position 13 and level 8 are the two
+// entries that do NOT sit on the nominal pitch, so a mover computing its
+// targets from a pitch and an offset lands 4.5 mm and 3.5 mm out - further
+// than the in-position window, which is a container set down on the edge of a
+// shelf. The second order is on the pitch, so a table read backwards or offset
+// by one would still be caught.
+METHOD PRIVATE TheAxisTargetsAreReadFromTheSurveyedPositionTable
+VAR
+	mover : FB_ContainerMover;
+	map : FB_StorageLocationMap;
+	railAxis : FB_PositioningAxis;
+	liftAxis : FB_PositioningAxis;
+	recipe : ST_MoverControl;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('TheAxisTargetsAreReadFromTheSurveyedPositionTable');
+
+map.Reserve(Aisle := 1, Side := 1, Level := 8, Position := 13);
+map.Reserve(Aisle := 1, Side := 1, Level := 7, Position := 12);
+Arrange(mover := mover, map := map, railAxis := railAxis, liftAxis := liftAxis, recipe := recipe);
+
+mover.StoreContainer(Index := 153, Barcode := 'C-000153', StoredAt := DT#2026-08-05-06:00:00);
+
+AssertEquals_LREAL(Expected := 15804.5,
+                   Actual := mover.RailTarget,
+                   Delta := 0.001,
+                   Message := 'the rail target of the position surveyed off the pitch');
+AssertEquals_LREAL(Expected := 6253.5,
+                   Actual := mover.LiftTarget,
+                   Delta := 0.001,
+                   Message := 'the mast target of the level surveyed off the pitch');
+AssertEquals_UINT(Expected := 153, Actual := mover.TargetIndex, Message := 'the location the order named');
+
+AssertTrue(Condition := RunUntil(mover := mover, map := map, railAxis := railAxis, liftAxis := liftAxis,
+                                 Target := E_MoverState.AT_TARGET),
+           Message := 'the first order never finished');
+
+mover.StoreContainer(Index := 132, Barcode := 'C-000132', StoredAt := DT#2026-08-05-06:30:00);
+
+AssertEquals_LREAL(Expected := 14550.0,
+                   Actual := mover.RailTarget,
+                   Delta := 0.001,
+                   Message := 'the rail target of a position on the nominal pitch');
+AssertEquals_LREAL(Expected := 5400.0,
+                   Actual := mover.LiftTarget,
+                   Delta := 0.001,
+                   Message := 'the mast target of a level on the nominal pitch');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="TheHookReachTakesItsSignFromTheRackFace" Id="{5e4501d0-0037-4d19-9a41-000000000006}">
+      <Declaration><![CDATA[// One rail serves the rack on either side of it, so the two faces of an aisle
+// share a rail position entirely and differ only in the direction the hooks
+// reach. Losing the sign would send every second container into the rack
+// opposite the one the MES allocated - and the shuttle would report the move
+// as complete, because everything except the reach was right.
+METHOD PRIVATE TheHookReachTakesItsSignFromTheRackFace
+VAR
+	mover : FB_ContainerMover;
+	map : FB_StorageLocationMap;
+	railAxis : FB_PositioningAxis;
+	liftAxis : FB_PositioningAxis;
+	recipe : ST_MoverControl;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('TheHookReachTakesItsSignFromTheRackFace');
+
+map.Reserve(Aisle := 1, Side := 1, Level := 8, Position := 13);
+map.Reserve(Aisle := 1, Side := 2, Level := 8, Position := 13);
+Arrange(mover := mover, map := map, railAxis := railAxis, liftAxis := liftAxis, recipe := recipe);
+
+mover.StoreContainer(Index := 153, Barcode := 'C-000153', StoredAt := DT#2026-08-05-06:00:00);
+
+AssertEquals_LREAL(Expected := -780.0,
+                   Actual := mover.HookReach,
+                   Delta := 0.001,
+                   Message := 'the reach into the near rack face');
+
+AssertTrue(Condition := RunUntil(mover := mover, map := map, railAxis := railAxis, liftAxis := liftAxis,
+                                 Target := E_MoverState.AT_TARGET),
+           Message := 'the near-face order never finished');
+
+mover.StoreContainer(Index := 453, Barcode := 'C-000453', StoredAt := DT#2026-08-05-06:30:00);
+
+AssertEquals_LREAL(Expected := 780.0,
+                   Actual := mover.HookReach,
+                   Delta := 0.001,
+                   Message := 'the reach into the far rack face');
+
+// The far face is the same distance along the same rail at the same height -
+// the sign of the reach is the whole of the difference between the two.
+AssertEquals_LREAL(Expected := 15804.5,
+                   Actual := mover.RailTarget,
+                   Delta := 0.001,
+                   Message := 'the far face moved the rail target');
+AssertEquals_LREAL(Expected := 6253.5,
+                   Actual := mover.LiftTarget,
+                   Delta := 0.001,
+                   Message := 'the far face moved the mast target');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="AStoreOrderRunsTheHookSequenceAndTellsTheMapOnlyOnceItIsDone" Id="{5e4501d0-0037-4d19-9a41-000000000007}">
+      <Declaration><![CDATA[// A store end to end, and the property the whole sequence exists to protect:
+// the map is not told anything until the container is somewhere it will stay
+// if the machine stops. A mover that marked the location occupied when it
+// accepted the order, or when it arrived, would leave the warehouse holding a
+// container that is still on the shuttle deck - and a retrieval order for it
+// would send the shuttle to an empty shelf.
+//
+// The cylinder stroke is asserted in both directions because it is the one
+// thing that flips: a store approaches with the container carried above shelf
+// height and sets it down, which is the opposite of what a retrieval does with
+// the same two actuators.
+METHOD PRIVATE AStoreOrderRunsTheHookSequenceAndTellsTheMapOnlyOnceItIsDone
+VAR
+	mover : FB_ContainerMover;
+	map : FB_StorageLocationMap;
+	railAxis : FB_PositioningAxis;
+	liftAxis : FB_PositioningAxis;
+	recipe : ST_MoverControl;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('AStoreOrderRunsTheHookSequenceAndTellsTheMapOnlyOnceItIsDone');
+
+map.Reserve(Aisle := 1, Side := 1, Level := 8, Position := 13);
+Arrange(mover := mover, map := map, railAxis := railAxis, liftAxis := liftAxis, recipe := recipe);
+mover.StoreContainer(Index := 153, Barcode := 'C-000153', StoredAt := DT#2026-08-05-06:00:00);
+
+AssertTrue(Condition := RunUntil(mover := mover, map := map, railAxis := railAxis, liftAxis := liftAxis,
+                                 Target := E_MoverState.HOOKS_ENGAGING),
+           Message := 'the shuttle never reached the rack face');
+AssertTrue(Condition := mover.EngageHooks, Message := 'the hooks were not commanded out');
+AssertTrue(Condition := mover.RaiseCylinder, Message := 'a store approached with the container already down');
+AssertEquals_INT(Expected := E_LocationState.RESERVED,
+                 Actual := map.StateAt(Index := 153),
+                 Message := 'the map was written before the hooks had even reached');
+
+AssertTrue(Condition := RunUntil(mover := mover, map := map, railAxis := railAxis, liftAxis := liftAxis,
+                                 Target := E_MoverState.LIFTING),
+           Message := 'the hooks never latched the container');
+AssertFalse(Condition := mover.RaiseCylinder, Message := 'the transfer stroke did not set the container down');
+AssertEquals_INT(Expected := E_LocationState.RESERVED,
+                 Actual := map.StateAt(Index := 153),
+                 Message := 'the map was written mid-transfer');
+
+AssertTrue(Condition := RunUntil(mover := mover, map := map, railAxis := railAxis, liftAxis := liftAxis,
+                                 Target := E_MoverState.HOOKS_RELEASING),
+           Message := 'the cylinder never completed its stroke');
+AssertFalse(Condition := mover.EngageHooks, Message := 'the hooks were still commanded out while letting go');
+AssertEquals_INT(Expected := E_LocationState.RESERVED,
+                 Actual := map.StateAt(Index := 153),
+                 Message := 'the map was written while the hooks were still in the rack');
+
+AssertTrue(Condition := RunUntil(mover := mover, map := map, railAxis := railAxis, liftAxis := liftAxis,
+                                 Target := E_MoverState.AT_TARGET),
+           Message := 'the hooks never came home');
+
+AssertEquals_INT(Expected := E_LocationState.OCCUPIED,
+                 Actual := map.StateAt(Index := 153),
+                 Message := 'the completed store never reached the map');
+AssertEquals_STRING(Expected := 'C-000153',
+                    Actual := map.BarcodeAt(Index := 153),
+                    Message := 'the barcode the order carried');
+AssertEquals_DATE_AND_TIME(Expected := DT#2026-08-05-06:00:00,
+                           Actual := map.StoredTimeAt(Index := 153),
+                           Message := 'the time the order carried');
+AssertEquals_UINT(Expected := 1, Actual := map.OccupiedCount, Message := 'OccupiedCount after the store');
+AssertEquals_UINT(Expected := 1, Actual := map.StoredTotal, Message := 'StoredTotal after the store');
+
+AssertFalse(Condition := mover.Busy, Message := 'a finished shuttle still reported an order in flight');
+AssertFalse(Condition := mover.Fault, Message := 'a completed store faulted');
+AssertTrue(Condition := mover.Homed, Message := 'a completed order cost the shuttle its reference');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="ARetrieveOrderReturnsTheLocationToTheFreePool" Id="{5e4501d0-0037-4d19-9a41-000000000008}">
+      <Declaration><![CDATA[// The other half of the warehouse, and the same three actuators run the other
+// way round: the hooks come in UNDER a container on a shelf and the cylinder
+// lifts it off. The location goes back to the free pool with the container's
+// details cleared off it, because a barcode left on an empty shelf is what a
+// later retrieval order chases after a container that has already shipped.
+METHOD PRIVATE ARetrieveOrderReturnsTheLocationToTheFreePool
+VAR
+	mover : FB_ContainerMover;
+	map : FB_StorageLocationMap;
+	railAxis : FB_PositioningAxis;
+	liftAxis : FB_PositioningAxis;
+	recipe : ST_MoverControl;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('ARetrieveOrderReturnsTheLocationToTheFreePool');
+
+map.Reserve(Aisle := 1, Side := 1, Level := 8, Position := 13);
+map.Store(Index := 153, Barcode := 'C-000153', StoredAt := DT#2026-08-05-06:00:00);
+Arrange(mover := mover, map := map, railAxis := railAxis, liftAxis := liftAxis, recipe := recipe);
+
+AssertTrue(Condition := mover.RetrieveContainer(Index := 153),
+           Message := 'a retrieval order for an occupied location was refused');
+
+AssertTrue(Condition := RunUntil(mover := mover, map := map, railAxis := railAxis, liftAxis := liftAxis,
+                                 Target := E_MoverState.HOOKS_ENGAGING),
+           Message := 'the shuttle never reached the rack face');
+AssertFalse(Condition := mover.RaiseCylinder,
+            Message := 'a retrieval approached with the hooks already up, above the container it came for');
+
+AssertTrue(Condition := RunUntil(mover := mover, map := map, railAxis := railAxis, liftAxis := liftAxis,
+                                 Target := E_MoverState.LIFTING),
+           Message := 'the hooks never latched the container');
+AssertTrue(Condition := mover.RaiseCylinder,
+           Message := 'the transfer stroke did not take the container off its shelf');
+AssertEquals_INT(Expected := E_LocationState.OCCUPIED,
+                 Actual := map.StateAt(Index := 153),
+                 Message := 'the map was told the container had gone mid-transfer');
+
+AssertTrue(Condition := RunUntil(mover := mover, map := map, railAxis := railAxis, liftAxis := liftAxis,
+                                 Target := E_MoverState.AT_TARGET),
+           Message := 'the retrieval never finished');
+
+AssertEquals_INT(Expected := E_LocationState.FREE,
+                 Actual := map.StateAt(Index := 153),
+                 Message := 'the emptied location never went back to the free pool');
+AssertEquals_STRING(Expected := '',
+                    Actual := map.BarcodeAt(Index := 153),
+                    Message := 'the barcode of a container that has left the warehouse');
+AssertEquals_UINT(Expected := 1800, Actual := map.FreeCount, Message := 'FreeCount after the retrieval');
+AssertEquals_UINT(Expected := 0, Actual := map.OccupiedCount, Message := 'OccupiedCount after the retrieval');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="TheHooksMayNotReachIntoTheRackUntilTheyAreHome" Id="{5e4501d0-0037-4d19-9a41-000000000009}">
+      <Declaration><![CDATA[// Hooks that never reported themselves home hold the sequence at the end of
+// the travel however long the shuttle stands there. HooksReleased is its own
+// sensor rather than NOT HooksEngaged precisely so that a manipulator stopped
+// half way out reads as neither, and this is the interlock that reads it.
+METHOD PRIVATE TheHooksMayNotReachIntoTheRackUntilTheyAreHome
+VAR
+	mover : FB_ContainerMover;
+	map : FB_StorageLocationMap;
+	railAxis : FB_PositioningAxis;
+	liftAxis : FB_PositioningAxis;
+	recipe : ST_MoverControl;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('TheHooksMayNotReachIntoTheRackUntilTheyAreHome');
+
+map.Reserve(Aisle := 1, Side := 1, Level := 8, Position := 13);
+Arrange(mover := mover, map := map, railAxis := railAxis, liftAxis := liftAxis, recipe := recipe);
+
+// A shuttle carrying a container, with its hooks stopped somewhere between
+// engaged and home.
+mover.HooksReleased := FALSE;
+mover.CylinderRaised := TRUE;
+mover.CylinderLowered := FALSE;
+
+mover.StoreContainer(Index := 153, Barcode := 'C-000153', StoredAt := DT#2026-08-05-06:00:00);
+ScanTimes(mover := mover, map := map, railAxis := railAxis, liftAxis := liftAxis, Count := 60);
+
+AssertTrue(Condition := railAxis.InPosition, Message := 'the rail never arrived');
+AssertTrue(Condition := liftAxis.InPosition, Message := 'the mast never arrived');
+AssertEquals_INT(Expected := E_MoverState.MOVE_VERTICAL,
+                 Actual := mover.CurrentState,
+                 Message := 'the hooks reached into the rack without ever having come home');
+AssertFalse(Condition := mover.EngageHooks, Message := 'the hooks were commanded out past the interlock');
+
+mover.HooksReleased := TRUE;
+Scan(mover := mover, map := map, railAxis := railAxis, liftAxis := liftAxis);
+
+AssertEquals_INT(Expected := E_MoverState.HOOKS_ENGAGING,
+                 Actual := mover.CurrentState,
+                 Message := 'the hooks did not reach once they reported themselves home');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="TheHooksMayNotReachIntoTheRackUntilTheCylinderIsSet" Id="{5e4501d0-0037-4d19-9a41-00000000000a}">
+      <Declaration><![CDATA[// The second half of the same interlock. A store is carrying its container
+// above shelf height, so the cylinder has to be up before the hooks push it
+// in; with the cylinder still down the container would be driven into the
+// shelf edge rather than over it.
+METHOD PRIVATE TheHooksMayNotReachIntoTheRackUntilTheCylinderIsSet
+VAR
+	mover : FB_ContainerMover;
+	map : FB_StorageLocationMap;
+	railAxis : FB_PositioningAxis;
+	liftAxis : FB_PositioningAxis;
+	recipe : ST_MoverControl;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('TheHooksMayNotReachIntoTheRackUntilTheCylinderIsSet');
+
+map.Reserve(Aisle := 1, Side := 1, Level := 8, Position := 13);
+// Arrange leaves the shuttle at rest with its cylinder down, which is the
+// wrong end for a store.
+Arrange(mover := mover, map := map, railAxis := railAxis, liftAxis := liftAxis, recipe := recipe);
+
+mover.StoreContainer(Index := 153, Barcode := 'C-000153', StoredAt := DT#2026-08-05-06:00:00);
+AssertTrue(Condition := mover.RaiseCylinder, Message := 'a store did not command the approach stroke');
+
+ScanTimes(mover := mover, map := map, railAxis := railAxis, liftAxis := liftAxis, Count := 60);
+
+AssertEquals_INT(Expected := E_MoverState.MOVE_VERTICAL,
+                 Actual := mover.CurrentState,
+                 Message := 'the hooks pushed a container in with the cylinder still down');
+
+mover.CylinderRaised := TRUE;
+mover.CylinderLowered := FALSE;
+Scan(mover := mover, map := map, railAxis := railAxis, liftAxis := liftAxis);
+
+AssertEquals_INT(Expected := E_MoverState.HOOKS_ENGAGING,
+                 Actual := mover.CurrentState,
+                 Message := 'the hooks did not reach once the cylinder had made its approach stroke');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="TheOrderIsNotCompleteUntilTheHooksAreBackFromTheRack" Id="{5e4501d0-0037-4d19-9a41-00000000000b}">
+      <Declaration><![CDATA[// The last interlock in the sequence, and the one that decides when the map is
+// written. A shuttle that called the order done with its hooks still out would
+// be free to accept the next order and set off along the rail with a hook
+// inside a rack face.
+METHOD PRIVATE TheOrderIsNotCompleteUntilTheHooksAreBackFromTheRack
+VAR
+	mover : FB_ContainerMover;
+	map : FB_StorageLocationMap;
+	railAxis : FB_PositioningAxis;
+	liftAxis : FB_PositioningAxis;
+	recipe : ST_MoverControl;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('TheOrderIsNotCompleteUntilTheHooksAreBackFromTheRack');
+
+map.Reserve(Aisle := 1, Side := 1, Level := 8, Position := 13);
+Arrange(mover := mover, map := map, railAxis := railAxis, liftAxis := liftAxis, recipe := recipe);
+mover.StoreContainer(Index := 153, Barcode := 'C-000153', StoredAt := DT#2026-08-05-06:00:00);
+
+AssertTrue(Condition := RunUntil(mover := mover, map := map, railAxis := railAxis, liftAxis := liftAxis,
+                                 Target := E_MoverState.HOOKS_RELEASING),
+           Message := 'the transfer never reached the point of letting go');
+
+// From here the manipulator is left unattended, so the hooks never report
+// themselves home.
+ScanTimes(mover := mover, map := map, railAxis := railAxis, liftAxis := liftAxis, Count := 20);
+
+AssertEquals_INT(Expected := E_MoverState.HOOKS_RELEASING,
+                 Actual := mover.CurrentState,
+                 Message := 'the order completed with the hooks still in the rack');
+AssertEquals_INT(Expected := E_LocationState.RESERVED,
+                 Actual := map.StateAt(Index := 153),
+                 Message := 'the map was written while the hooks were still in the rack');
+AssertTrue(Condition := mover.Busy, Message := 'a shuttle with a hook still out reported itself free');
+
+mover.HooksReleased := TRUE;
+Scan(mover := mover, map := map, railAxis := railAxis, liftAxis := liftAxis);
+
+AssertEquals_INT(Expected := E_MoverState.AT_TARGET,
+                 Actual := mover.CurrentState,
+                 Message := 'the hooks coming home did not finish the order');
+AssertEquals_INT(Expected := E_LocationState.OCCUPIED,
+                 Actual := map.StateAt(Index := 153),
+                 Message := 'the finished order never reached the map');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="AnOrderForALocationTheRackingDoesNotHaveIsFaulted" Id="{5e4501d0-0037-4d19-9a41-00000000000c}">
+      <Declaration><![CDATA[// An index the map cannot resolve is a MES and a PLC that disagree about how
+// big the warehouse is. It is refused before the shuttle moves, and it is a
+// FAULT rather than a quiet refusal: a machine that silently declined those
+// would keep taking orders while the disagreement got worse, and the container
+// on its deck would have nowhere to go either way.
+METHOD PRIVATE AnOrderForALocationTheRackingDoesNotHaveIsFaulted
+VAR
+	mover : FB_ContainerMover;
+	map : FB_StorageLocationMap;
+	railAxis : FB_PositioningAxis;
+	liftAxis : FB_PositioningAxis;
+	recipe : ST_MoverControl;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('AnOrderForALocationTheRackingDoesNotHaveIsFaulted');
+
+Arrange(mover := mover, map := map, railAxis := railAxis, liftAxis := liftAxis, recipe := recipe);
+
+AssertFalse(Condition := mover.StoreContainer(Index := 1801,
+                                              Barcode := 'C-000000',
+                                              StoredAt := DT#2026-08-05-06:00:00),
+            Message := 'an order past the last location of the racking was accepted');
+
+Scan(mover := mover, map := map, railAxis := railAxis, liftAxis := liftAxis);
+
+AssertTrue(Condition := mover.Fault, Message := 'an order the racking cannot serve did not fault the shuttle');
+AssertEquals_UDINT(Expected := 16#85010002,
+                   Actual := mover.ErrorID,
+                   Message := 'ErrorID for a location outside the racking');
+AssertEquals_INT(Expected := E_MoverState.FAULT,
+                 Actual := mover.CurrentState,
+                 Message := 'state after an order the racking cannot serve');
+AssertFalse(Condition := mover.Busy, Message := 'a faulted shuttle reported an order in flight');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="AnOrderForAnotherAislesRackIsFaulted" Id="{5e4501d0-0037-4d19-9a41-00000000000d}">
+      <Declaration><![CDATA[// A shuttle runs on one rail in one aisle and physically cannot reach the
+// others, so an order for aisle two is another shuttle's work. The location is
+// perfectly valid, which is the point: nothing about the index says it is out
+// of reach, only the recipe does.
+METHOD PRIVATE AnOrderForAnotherAislesRackIsFaulted
+VAR
+	mover : FB_ContainerMover;
+	map : FB_StorageLocationMap;
+	railAxis : FB_PositioningAxis;
+	liftAxis : FB_PositioningAxis;
+	recipe : ST_MoverControl;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('AnOrderForAnotherAislesRackIsFaulted');
+
+map.Reserve(Aisle := 2, Side := 1, Level := 1, Position := 1);
+Arrange(mover := mover, map := map, railAxis := railAxis, liftAxis := liftAxis, recipe := recipe);
+
+AssertFalse(Condition := mover.StoreContainer(Index := 601,
+                                              Barcode := 'C-000601',
+                                              StoredAt := DT#2026-08-05-06:00:00),
+            Message := 'the aisle-one shuttle accepted an order in aisle two');
+
+Scan(mover := mover, map := map, railAxis := railAxis, liftAxis := liftAxis);
+
+AssertEquals_UDINT(Expected := 16#85010003,
+                   Actual := mover.ErrorID,
+                   Message := 'ErrorID for a location in another aisle');
+AssertEquals_INT(Expected := E_LocationState.RESERVED,
+                 Actual := map.StateAt(Index := 601),
+                 Message := 'the refused order disturbed the location it named');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="StoringIntoALocationNobodyReservedIsFaulted" Id="{5e4501d0-0037-4d19-9a41-00000000000e}">
+      <Declaration><![CDATA[// The map is asked what a location holds BEFORE the shuttle sets off, and a
+// store may only go to one that was set aside for it. Storing into a free
+// location would mean the container arrived somewhere the allocator can hand
+// out from under it, and the next order would send a second container to the
+// same shelf.
+METHOD PRIVATE StoringIntoALocationNobodyReservedIsFaulted
+VAR
+	mover : FB_ContainerMover;
+	map : FB_StorageLocationMap;
+	railAxis : FB_PositioningAxis;
+	liftAxis : FB_PositioningAxis;
+	recipe : ST_MoverControl;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('StoringIntoALocationNobodyReservedIsFaulted');
+
+Arrange(mover := mover, map := map, railAxis := railAxis, liftAxis := liftAxis, recipe := recipe);
+
+AssertFalse(Condition := mover.StoreContainer(Index := 153,
+                                              Barcode := 'C-000153',
+                                              StoredAt := DT#2026-08-05-06:00:00),
+            Message := 'a store into a location nobody reserved was accepted');
+
+Scan(mover := mover, map := map, railAxis := railAxis, liftAxis := liftAxis);
+
+AssertEquals_UDINT(Expected := 16#85010004,
+                   Actual := mover.ErrorID,
+                   Message := 'ErrorID for a store into an unreserved location');
+AssertEquals_INT(Expected := E_LocationState.FREE,
+                 Actual := map.StateAt(Index := 153),
+                 Message := 'the refused store wrote to the map anyway');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="RetrievingFromAnEmptyLocationIsFaulted" Id="{5e4501d0-0037-4d19-9a41-00000000000f}">
+      <Declaration><![CDATA[// The mirror of the store check, and it asks the map for the opposite answer.
+// A shuttle sent after a container that is not there would come back empty and
+// report success, and the container the order was really about would stay
+// wherever it is with nothing looking for it.
+METHOD PRIVATE RetrievingFromAnEmptyLocationIsFaulted
+VAR
+	mover : FB_ContainerMover;
+	map : FB_StorageLocationMap;
+	railAxis : FB_PositioningAxis;
+	liftAxis : FB_PositioningAxis;
+	recipe : ST_MoverControl;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('RetrievingFromAnEmptyLocationIsFaulted');
+
+// Reserved, not free: a location that has been allocated still has nothing in
+// it, and a retrieval that accepted one would race the container on its way.
+map.Reserve(Aisle := 1, Side := 1, Level := 8, Position := 13);
+Arrange(mover := mover, map := map, railAxis := railAxis, liftAxis := liftAxis, recipe := recipe);
+
+AssertFalse(Condition := mover.RetrieveContainer(Index := 153),
+            Message := 'a retrieval from a location holding nothing was accepted');
+
+Scan(mover := mover, map := map, railAxis := railAxis, liftAxis := liftAxis);
+
+AssertEquals_UDINT(Expected := 16#85010005,
+                   Actual := mover.ErrorID,
+                   Message := 'ErrorID for a retrieval from an empty location');
+AssertEquals_INT(Expected := E_MoverState.FAULT,
+                 Actual := mover.CurrentState,
+                 Message := 'state after a retrieval from an empty location');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="ATargetOutsideTheAxisEnvelopeIsFaulted" Id="{5e4501d0-0037-4d19-9a41-000000000010}">
+      <Declaration><![CDATA[// A surveyed position beyond the travel the shuttle physically has means the
+// rack model and the machine no longer describe each other - a rack extended
+// without the survey being redone, or a shuttle swapped for a shorter one. The
+// check is on the way in rather than on the axis, because an axis refusing a
+// move it has already started is too late to stop it reaching its end stop.
+METHOD PRIVATE ATargetOutsideTheAxisEnvelopeIsFaulted
+VAR
+	mover : FB_ContainerMover;
+	map : FB_StorageLocationMap;
+	railAxis : FB_PositioningAxis;
+	liftAxis : FB_PositioningAxis;
+	recipe : ST_MoverControl;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('ATargetOutsideTheAxisEnvelopeIsFaulted');
+
+// A rail that stops short of the far half of the aisle.
+recipe.PositionReferences.RailMaximum := 15000.0;
+
+map.Reserve(Aisle := 1, Side := 1, Level := 8, Position := 13);
+Arrange(mover := mover, map := map, railAxis := railAxis, liftAxis := liftAxis, recipe := recipe);
+
+AssertFalse(Condition := mover.StoreContainer(Index := 153,
+                                              Barcode := 'C-000153',
+                                              StoredAt := DT#2026-08-05-06:00:00),
+            Message := 'an order beyond the end of the rail was accepted');
+
+Scan(mover := mover, map := map, railAxis := railAxis, liftAxis := liftAxis);
+
+AssertEquals_UDINT(Expected := 16#85010006,
+                   Actual := mover.ErrorID,
+                   Message := 'ErrorID for a target outside the travel the shuttle has');
+AssertEquals_LREAL(Expected := 0.0,
+                   Actual := railAxis.CommandedPosition,
+                   Delta := 0.001,
+                   Message := 'the rail was commanded past its own end stop');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="AnOrderArrivingWhileTheShuttleIsBusyIsRefusedWithoutFaulting" Id="{5e4501d0-0037-4d19-9a41-000000000011}">
+      <Declaration><![CDATA[// The one refusal that is NOT a fault. A second order arriving mid-move is
+// ordinary flow control - the unit above simply re-offers it when the shuttle
+// is free - and faulting on it would stop a machine that has nothing wrong
+// with it every time two orders landed close together.
+METHOD PRIVATE AnOrderArrivingWhileTheShuttleIsBusyIsRefusedWithoutFaulting
+VAR
+	mover : FB_ContainerMover;
+	map : FB_StorageLocationMap;
+	railAxis : FB_PositioningAxis;
+	liftAxis : FB_PositioningAxis;
+	recipe : ST_MoverControl;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('AnOrderArrivingWhileTheShuttleIsBusyIsRefusedWithoutFaulting');
+
+map.Reserve(Aisle := 1, Side := 1, Level := 8, Position := 13);
+map.Reserve(Aisle := 1, Side := 1, Level := 8, Position := 14);
+Arrange(mover := mover, map := map, railAxis := railAxis, liftAxis := liftAxis, recipe := recipe);
+
+mover.StoreContainer(Index := 153, Barcode := 'C-000153', StoredAt := DT#2026-08-05-06:00:00);
+ScanTimes(mover := mover, map := map, railAxis := railAxis, liftAxis := liftAxis, Count := 4);
+
+AssertFalse(Condition := mover.StoreContainer(Index := 154,
+                                              Barcode := 'C-000154',
+                                              StoredAt := DT#2026-08-05-06:05:00),
+            Message := 'a second order was accepted on top of one in flight');
+
+AssertFalse(Condition := mover.Fault, Message := 'a second order faulted a shuttle that was working normally');
+AssertEquals_UDINT(Expected := 0, Actual := mover.ErrorID, Message := 'ErrorID after a refused second order');
+AssertEquals_UINT(Expected := 153,
+                  Actual := mover.TargetIndex,
+                  Message := 'the refused order took over the one in flight');
+
+AssertTrue(Condition := RunUntil(mover := mover, map := map, railAxis := railAxis, liftAxis := liftAxis,
+                                 Target := E_MoverState.AT_TARGET),
+           Message := 'the order in flight did not survive the refusal');
+AssertEquals_INT(Expected := E_LocationState.OCCUPIED,
+                 Actual := map.StateAt(Index := 153),
+                 Message := 'the order in flight never reached the map');
+AssertEquals_INT(Expected := E_LocationState.RESERVED,
+                 Actual := map.StateAt(Index := 154),
+                 Message := 'the refused order reached the map anyway');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="ADriveFaultLatchesUntilItIsAcknowledged" Id="{5e4501d0-0037-4d19-9a41-000000000012}">
+      <Declaration><![CDATA[// The latch is the whole point: a drive drops its error the moment the cause
+// goes away, and a shuttle that resumed a move on that would be a machine that
+// restarts by itself with a container half way into a rack face. The fault
+// outlives its cause and is cleared by a person, not by the drive.
+//
+// The reference goes with it. A shuttle cannot know what moved while it was
+// faulted, so the next order re-homes before it travels - which is asserted
+// here rather than assumed, because a mover that kept Homed through a fault
+// would look identical until the first time an axis really had slipped.
+METHOD PRIVATE ADriveFaultLatchesUntilItIsAcknowledged
+VAR
+	mover : FB_ContainerMover;
+	map : FB_StorageLocationMap;
+	railAxis : FB_PositioningAxis;
+	liftAxis : FB_PositioningAxis;
+	recipe : ST_MoverControl;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('ADriveFaultLatchesUntilItIsAcknowledged');
+
+map.Reserve(Aisle := 1, Side := 1, Level := 8, Position := 13);
+Arrange(mover := mover, map := map, railAxis := railAxis, liftAxis := liftAxis, recipe := recipe);
+mover.StoreContainer(Index := 153, Barcode := 'C-000153', StoredAt := DT#2026-08-05-06:00:00);
+ScanTimes(mover := mover, map := map, railAxis := railAxis, liftAxis := liftAxis, Count := 4);
+
+railAxis.DriveFault := TRUE;
+Scan(mover := mover, map := map, railAxis := railAxis, liftAxis := liftAxis);
+
+AssertTrue(Condition := mover.Fault, Message := 'a tripped drive did not fault the shuttle');
+AssertEquals_UDINT(Expected := 16#85010007,
+                   Actual := mover.ErrorID,
+                   Message := 'ErrorID for a drive fault');
+AssertEquals_INT(Expected := E_MoverState.FAULT,
+                 Actual := mover.CurrentState,
+                 Message := 'state after a drive fault');
+AssertFalse(Condition := mover.Homed, Message := 'a faulted shuttle kept a reference it can no longer trust');
+AssertFalse(Condition := mover.Busy, Message := 'a faulted shuttle still reported an order in flight');
+AssertEquals_INT(Expected := E_LocationState.RESERVED,
+                 Actual := map.StateAt(Index := 153),
+                 Message := 'the abandoned order wrote to the map on its way out');
+
+// The cause goes away on its own, which the machine must not treat as an
+// acknowledgement.
+railAxis.DriveFault := FALSE;
+ScanTimes(mover := mover, map := map, railAxis := railAxis, liftAxis := liftAxis, Count := 5);
+
+AssertTrue(Condition := mover.Fault, Message := 'the fault cleared itself when its cause went away');
+AssertEquals_UDINT(Expected := 16#85010007,
+                   Actual := mover.ErrorID,
+                   Message := 'ErrorID while the fault is still standing');
+
+mover.Reset := TRUE;
+Scan(mover := mover, map := map, railAxis := railAxis, liftAxis := liftAxis);
+mover.Reset := FALSE;
+
+AssertFalse(Condition := mover.Fault, Message := 'the acknowledgement did not release the latch');
+AssertEquals_UDINT(Expected := 0, Actual := mover.ErrorID, Message := 'ErrorID after the acknowledgement');
+AssertEquals_INT(Expected := E_MoverState.IDLE,
+                 Actual := mover.CurrentState,
+                 Message := 'state after the acknowledgement');
+
+AssertTrue(Condition := mover.StoreContainer(Index := 153,
+                                             Barcode := 'C-000153',
+                                             StoredAt := DT#2026-08-05-07:00:00),
+           Message := 'an acknowledged shuttle refused the order again');
+
+Scan(mover := mover, map := map, railAxis := railAxis, liftAxis := liftAxis);
+
+AssertEquals_INT(Expected := E_MoverState.HOMING,
+                 Actual := mover.CurrentState,
+                 Message := 'the shuttle set off again without re-establishing its reference');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="TheCoordinatedMoveReportsTheLongerOfItsTwoLegsAsRemaining" Id="{5e4501d0-0037-4d19-9a41-000000000013}">
+      <Declaration><![CDATA[// TravelRemaining is what a coordinated move has left, which is the longer of
+// the two legs and not their sum: the axes run at the same time, so the move
+// is over when the one with furthest to go arrives. Adding them would nearly
+// double every estimate the shuttle publishes, and the numbers here are chosen
+// so that the sum, the shorter leg and the longer leg are three different
+// answers.
+METHOD PRIVATE TheCoordinatedMoveReportsTheLongerOfItsTwoLegsAsRemaining
+VAR
+	mover : FB_ContainerMover;
+	map : FB_StorageLocationMap;
+	railAxis : FB_PositioningAxis;
+	liftAxis : FB_PositioningAxis;
+	recipe : ST_MoverControl;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('TheCoordinatedMoveReportsTheLongerOfItsTwoLegsAsRemaining');
+
+map.Reserve(Aisle := 1, Side := 1, Level := 8, Position := 13);
+Arrange(mover := mover, map := map, railAxis := railAxis, liftAxis := liftAxis, recipe := recipe);
+mover.StoreContainer(Index := 153, Barcode := 'C-000153', StoredAt := DT#2026-08-05-06:00:00);
+
+AssertTrue(Condition := RunUntil(mover := mover, map := map, railAxis := railAxis, liftAxis := liftAxis,
+                                 Target := E_MoverState.MOVE_HORIZONTAL),
+           Message := 'the shuttle never set off');
+
+AssertEquals_LREAL(Expected := 15804.5,
+                   Actual := mover.TravelRemaining,
+                   Delta := 0.001,
+                   Message := 'the travel a move of 15804.5 mm and 6253.5 mm still has to run');
+
+// Thirteen scans at 500 mm each puts the mast exactly on its target and leaves
+// the rail at 6500 mm.
+ScanTimes(mover := mover, map := map, railAxis := railAxis, liftAxis := liftAxis, Count := 13);
+
+AssertEquals_LREAL(Expected := 6253.5,
+                   Actual := liftAxis.ActualPosition,
+                   Delta := 0.001,
+                   Message := 'the mast overshot its target on its last step');
+AssertEquals_LREAL(Expected := 9304.5,
+                   Actual := mover.TravelRemaining,
+                   Delta := 0.001,
+                   Message := 'the travel remaining once the shorter leg has finished');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="Arrange" Id="{5e4501d0-0037-4d19-9a41-000000000014}">
+      <Declaration><![CDATA[// Puts a shuttle in the state one is found in at the start of a shift: at
+// rest at the aisle end, hooks home, cylinder down, nothing on the deck, and
+// its map bound.
+//
+// The map is bound by CALLING the mover, not by writing a field, because it is
+// a VAR_IN_OUT: it has to travel on every invocation, and this is the one that
+// establishes it before the first order method reads it.
+//
+// The caller sets any recipe field it cares about BEFORE calling this.
+METHOD PRIVATE Arrange
+VAR_IN_OUT
+	mover : FB_ContainerMover;
+	map : FB_StorageLocationMap;
+	railAxis : FB_PositioningAxis;
+	liftAxis : FB_PositioningAxis;
+END_VAR
+VAR_INPUT
+	recipe : ST_MoverControl;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[mover.HooksReleased := TRUE;
+mover.HooksEngaged := FALSE;
+mover.CylinderLowered := TRUE;
+mover.CylinderRaised := FALSE;
+
+railAxis();
+liftAxis();
+mover(railAxis := railAxis, liftAxis := liftAxis, Control := recipe, locationMap := map);]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="Scan" Id="{5e4501d0-0037-4d19-9a41-000000000015}">
+      <Declaration><![CDATA[// One PLC scan of the whole run, in the order a real task would: the control
+// modules first, so the equipment module reads a world that has already
+// answered its previous commands, and never the other way round.
+//
+// Only the map is re-supplied. The axes are interface inputs and hold the
+// reference Arrange gave them, but a VAR_IN_OUT has to be passed on every
+// call.
+METHOD PRIVATE Scan
+VAR_IN_OUT
+	mover : FB_ContainerMover;
+	map : FB_StorageLocationMap;
+	railAxis : FB_PositioningAxis;
+	liftAxis : FB_PositioningAxis;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[railAxis();
+liftAxis();
+mover(locationMap := map);]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="ScanTimes" Id="{5e4501d0-0037-4d19-9a41-000000000016}">
+      <Declaration><![CDATA[// Runs the shuttle for a fixed number of scans with the manipulator left
+// unattended, so the hooks and the cylinder report whatever the case last set
+// them to. That is what makes an interlock observable: an actuator that never
+// answers is exactly the thing an interlock stands in front of.
+METHOD PRIVATE ScanTimes
+VAR_IN_OUT
+	mover : FB_ContainerMover;
+	map : FB_StorageLocationMap;
+	railAxis : FB_PositioningAxis;
+	liftAxis : FB_PositioningAxis;
+END_VAR
+VAR_INPUT
+	Count : UINT;
+END_VAR
+VAR
+	i : UINT;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[FOR i := 1 TO Count DO
+	Scan(mover := mover, map := map, railAxis := railAxis, liftAxis := liftAxis);
+END_FOR]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="ServeManipulator" Id="{5e4501d0-0037-4d19-9a41-000000000017}">
+      <Declaration><![CDATA[// The hook and cylinder control modules answering the commands they were given
+// on the previous scan.
+//
+// One scan of lag, and it is what makes the hook sequence a sequence rather
+// than a single cycle: every step in it waits on an actuator that only reports
+// itself after the mover has asked. Instant feedback would collapse all three
+// transfer states into one scan and the ordering between them would stop being
+// observable at all.
+METHOD PRIVATE ServeManipulator
+VAR_IN_OUT
+	mover : FB_ContainerMover;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[mover.HooksEngaged := mover.EngageHooks;
+mover.HooksReleased := NOT mover.EngageHooks;
+mover.CylinderRaised := mover.RaiseCylinder;
+mover.CylinderLowered := NOT mover.RaiseCylinder;]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="RunUntil" Id="{5e4501d0-0037-4d19-9a41-000000000018}">
+      <Declaration><![CDATA[// Scans the run, with the manipulator answering, until the shuttle reaches
+// Target. FALSE if it faulted or never got there.
+//
+// Returning a verdict rather than simply stopping is what keeps a case honest:
+// a run that never arrived would otherwise leave the assertions below it
+// reading whatever state the loop gave up in, and several of them would still
+// pass.
+METHOD PRIVATE RunUntil : BOOL
+VAR_IN_OUT
+	mover : FB_ContainerMover;
+	map : FB_StorageLocationMap;
+	railAxis : FB_PositioningAxis;
+	liftAxis : FB_PositioningAxis;
+END_VAR
+VAR_INPUT
+	Target : E_MoverState;
+END_VAR
+VAR
+	guard : UINT;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[RunUntil := FALSE;
+
+// The bound is far above the ~40 scans the longest move in this suite takes,
+// and exists only so a machine that stopped advancing ends the case instead of
+// the run.
+FOR guard := 1 TO 400 DO
+	IF mover.CurrentState = Target THEN
+		RunUntil := TRUE;
+		EXIT;
+	END_IF
+
+	IF mover.Fault THEN
+		EXIT;
+	END_IF
+
+	ServeManipulator(mover := mover);
+	Scan(mover := mover, map := map, railAxis := railAxis, liftAxis := liftAxis);
+END_FOR]]></ST>
+      </Implementation>
+    </Method>
+  </POU>
+</TcPlcObject>

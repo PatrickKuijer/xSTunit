@@ -1,0 +1,517 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4026.18">
+  <POU Name="FB_ContainerMover" Id="{5e4501d0-0036-4d19-9a41-000000000001}" SpecialFunc="None">
+    <Declaration><![CDATA[(*
+    The container mover equipment module: one shuttle, its two axes and its
+    manipulator, taking a container between the aisle end and a storage
+    location.
+
+    There is one of these per aisle. The rail is horizontal along the aisle,
+    the mast is vertical, and the manipulator on the deck reaches into the rack
+    on either side of the rail - which is why an order names a side and why the
+    hook reach is signed.
+
+    THE STATE MODEL, in the order it walks:
+
+      IDLE             powered, no order, position not to be trusted;
+      HOMING           driving both axes to the home reference;
+      MOVE_HORIZONTAL  travelling, with the rail the axis still outstanding;
+      MOVE_VERTICAL    travelling, with the mast the axis still outstanding;
+      HOOKS_ENGAGING   hooks reaching into the rack and latching a container;
+      LIFTING          the cylinder stroke that transfers the container's
+                       weight - up off the shelf for a retrieval, down onto it
+                       for a store;
+      HOOKS_RELEASING  hooks letting go and coming home clear of the racking;
+      AT_TARGET        order complete, resting where it finished;
+      FAULT            latched, and going nowhere until it is acknowledged.
+
+    THE MOVE IS COORDINATED, NOT SEQUENTIAL. Both axes are given their targets
+    on the same scan and travel at the same time; MOVE_HORIZONTAL and
+    MOVE_VERTICAL are which axis is still the laggard, not two moves one after
+    the other. A shuttle that drove its rail and then its mast would take the
+    sum of the two legs on every order instead of the longer of them, which on
+    a machine this size is most of a shift.
+
+    THE LOAD TRANSFER IS INTERLOCKED. Three actuators cross into the racking
+    and none of them may move while another is out there: the axes may not
+    travel unless the hooks report themselves home, and the hooks may not reach
+    unless both axes report themselves in position and the cylinder is at the
+    end its stroke starts from. Every one of those is a sensor, not a timer,
+    because the thing being guarded against is a hook that did not come back.
+
+    THE MAP IS THE AUTHORITY on what is in a location, and this block does not
+    keep a second copy. An order is checked against it before the shuttle
+    moves, and the map is told what happened only once the container has
+    actually changed hands - a location marked occupied by an order that was
+    still in flight is a location the next allocation will refuse for a
+    container that never arrived.
+*)
+FUNCTION_BLOCK FB_ContainerMover
+VAR_INPUT
+	// The rail. Commanded every scan, never pulsed.
+	railAxis : I_PositioningAxis;
+	// The mast.
+	liftAxis : I_PositioningAxis;
+	// The hooks are latched onto a container.
+	HooksEngaged : BOOL;
+	// The hooks are home and clear of the racking. Deliberately its own sensor
+	// rather than NOT HooksEngaged: half way out both are false, and that is
+	// exactly the position in which the axes must not be allowed to travel.
+	HooksReleased : BOOL;
+	// The lifting cylinder is at the top of its stroke - a container on the
+	// hooks is clear of the shelf it came off.
+	CylinderRaised : BOOL;
+	// The lifting cylinder is at the bottom of its stroke - a container on the
+	// hooks is resting on the shelf.
+	CylinderLowered : BOOL;
+	Control : ST_MoverControl;
+	// The PackML Reset. Acknowledges the drives and releases the fault latch -
+	// the single point at which a tripped shuttle becomes orderable again.
+	Reset : BOOL;
+END_VAR
+VAR_IN_OUT
+	// The warehouse's own picture of itself, shared with everything else that
+	// reads or writes it. IN_OUT rather than a copy for the obvious reason: a
+	// shuttle that stored a container into its own private map would leave the
+	// real one saying the location was still waiting for it.
+	locationMap : FB_StorageLocationMap;
+END_VAR
+VAR_OUTPUT
+	CurrentState : E_MoverState;
+	// The axes have been driven to a known reference since the last fault.
+	Homed : BOOL;
+	// An order is in flight. Not the same as "not at target": a shuttle that
+	// has finished is resting, and a shuttle that has faulted is not working.
+	Busy : BOOL;
+	Fault : BOOL;
+	// Why the shuttle faulted. Zero while it has not. The first cause to
+	// arrive is the one kept, so a timeout that then trips a drive still
+	// reports the timeout - the drive tripped because the move was already
+	// wrong, not the other way round.
+	ErrorID : UDINT;
+	// The flat index of the location the order named, so a caller reading this
+	// block alone can say which location a fault was about.
+	TargetIndex : UINT;
+	RailTarget : LREAL;
+	LiftTarget : LREAL;
+	// How far the hooks must reach, and which way. Negative is the near rack
+	// face of the aisle, positive the far one.
+	HookReach : LREAL;
+	// The travel left on the LONGER of the two axes, in mm. The distance a
+	// coordinated move still has to run, which is not the sum of the two legs.
+	TravelRemaining : LREAL;
+	EngageHooks : BOOL;
+	// The end of its stroke the lifting cylinder is being held at. Set on the
+	// approach to whichever end the order arrives in - raised for a store,
+	// because the container is on the deck being carried above shelf height,
+	// lowered for a retrieval, because the hooks have to come in under one
+	// already on a shelf - and flipped exactly once, when the container changes
+	// hands. It is never released afterwards: the cylinder is what is holding
+	// whatever the hooks have.
+	RaiseCylinder : BOOL;
+END_VAR
+VAR
+	order : E_MoveOrder;
+	barcode : STRING(32);
+	storedAt : DATE_AND_TIME;
+	railDemand : LREAL;
+	liftDemand : LREAL;
+	railRemaining : LREAL;
+	liftRemaining : LREAL;
+	faultRequest : BOOL;
+	moveTimer : TON;
+	faultLatch : RS;
+END_VAR
+VAR CONSTANT
+	// The shuttle stood in one move for longer than the recipe allows.
+	ERROR_MOVE_TIMEOUT : UDINT := 16#85010001;
+	// The order named a flat index the racking does not have.
+	ERROR_TARGET_NOT_IN_RACKING : UDINT := 16#85010002;
+	// The order named a location in an aisle this shuttle cannot reach.
+	ERROR_TARGET_IN_ANOTHER_AISLE : UDINT := 16#85010003;
+	// A store order for a location nobody set aside for the container.
+	ERROR_TARGET_NOT_RESERVED : UDINT := 16#85010004;
+	// A retrieval order for a location the map says holds nothing.
+	ERROR_TARGET_NOT_OCCUPIED : UDINT := 16#85010005;
+	// The surveyed position of the target is outside the travel the shuttle
+	// physically has.
+	ERROR_TARGET_OUTSIDE_ENVELOPE : UDINT := 16#85010006;
+	ERROR_AXIS_FAULT : UDINT := 16#85010007;
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[// Drive
+// Power is re-requested every scan rather than once, so a drive that comes up
+// late - or comes back after a trip has been acknowledged - is live again
+// without needing a fresh order.
+railAxis.Enable();
+liftAxis.Enable();
+
+IF Reset THEN
+	railAxis.Reset();
+	liftAxis.Reset();
+END_IF
+
+// Fault
+// One allowance over the whole move. IsMoving is the set of states in which
+// the shuttle owes somebody a container, so the timer is armed by having work
+// outstanding rather than by any one actuator being commanded - a sequence
+// stuck waiting on a hook sensor is just as overdue as one stuck on an axis.
+moveTimer(IN := IsMoving(), PT := Control.MoveTimeout);
+
+IF moveTimer.Q THEN
+	RaiseFault(Code := ERROR_MOVE_TIMEOUT);
+END_IF
+
+IF railAxis.Error OR liftAxis.Error THEN
+	RaiseFault(Code := ERROR_AXIS_FAULT);
+END_IF
+
+// Reset-dominant, so a drive stuck reporting a fault cannot make the module
+// permanently unclearable - it re-latches on the next scan through the axis,
+// which is the drive's answer rather than the latch's.
+faultLatch(SET := faultRequest, RESET1 := Reset);
+faultRequest := FALSE;
+Fault := faultLatch.Q1;
+
+IF NOT Fault THEN
+	ErrorID := 0;
+END_IF
+
+// Statemachine
+IF Fault THEN
+	IF CurrentState <> E_MoverState.FAULT THEN
+		// The order dies with the fault rather than resuming on acknowledgement:
+		// whatever the shuttle was carrying has to be found by a person before
+		// the machine is told what to do with it. Homed goes with it because
+		// the shuttle cannot know what moved while it was faulted, and re-homing
+		// is cheap next to reaching into a rack from the wrong level.
+		order := E_MoveOrder.NONE;
+		Homed := FALSE;
+		CurrentState := E_MoverState.FAULT;
+	END_IF
+ELSE
+	CASE CurrentState OF
+		E_MoverState.IDLE:
+			IF order <> E_MoveOrder.NONE THEN
+				CurrentState := E_MoverState.HOMING;
+			END_IF
+
+		E_MoverState.HOMING:
+			IF railAxis.InPosition AND liftAxis.InPosition THEN
+				Homed := TRUE;
+				IF order <> E_MoveOrder.NONE THEN
+					CurrentState := E_MoverState.MOVE_HORIZONTAL;
+				ELSE
+					CurrentState := E_MoverState.IDLE;
+				END_IF
+			END_IF
+
+		E_MoverState.MOVE_HORIZONTAL:
+			IF railAxis.InPosition THEN
+				CurrentState := E_MoverState.MOVE_VERTICAL;
+			END_IF
+
+		E_MoverState.MOVE_VERTICAL:
+			// The interlock sits on the way OUT of the travel rather than in a
+			// state of its own, because it is one question - is anything of this
+			// shuttle still out in the racking, and is the cylinder set for the
+			// transfer it is about to make - and the answer has to be yes before
+			// the hooks are allowed to move at all.
+			IF liftAxis.InPosition AND HooksReleased AND CylinderAtCommandedEnd() THEN
+				CurrentState := E_MoverState.HOOKS_ENGAGING;
+			END_IF
+
+		E_MoverState.HOOKS_ENGAGING:
+			IF HooksEngaged THEN
+				// The one flip in the whole order: the cylinder now strokes the
+				// other way, and that stroke IS the transfer - up for a
+				// retrieval, taking the container off its shelf, down for a
+				// store, setting it onto one.
+				RaiseCylinder := order = E_MoveOrder.RETRIEVE;
+				CurrentState := E_MoverState.LIFTING;
+			END_IF
+
+		E_MoverState.LIFTING:
+			IF CylinderAtCommandedEnd() THEN
+				CurrentState := E_MoverState.HOOKS_RELEASING;
+			END_IF
+
+		E_MoverState.HOOKS_RELEASING:
+			// The map is told the container has arrived on the scan the hooks
+			// come home, and not before: everything up to here is a container
+			// still in the shuttle's hands.
+			IF HooksReleased THEN
+				CompleteOrder();
+				CurrentState := E_MoverState.AT_TARGET;
+			END_IF
+
+		E_MoverState.AT_TARGET:
+			// A resting state, not a pulse. The next order goes straight to
+			// travel - the shuttle is already homed and standing at a location.
+			IF order <> E_MoveOrder.NONE THEN
+				CurrentState := E_MoverState.MOVE_HORIZONTAL;
+			END_IF
+
+		E_MoverState.FAULT:
+			// Only reached with the latch already clear, since a standing fault
+			// is handled above the CASE. Back to IDLE rather than to AT_TARGET,
+			// because an acknowledged shuttle has no order and no reference: the
+			// next order re-homes it before it goes anywhere.
+			CurrentState := E_MoverState.IDLE;
+	END_CASE
+END_IF
+
+// Feedback
+IF CurrentState = E_MoverState.HOMING THEN
+	railDemand := Control.PositionReferences.HomeRail;
+	liftDemand := Control.PositionReferences.HomeLift;
+ELSE
+	railDemand := RailTarget;
+	liftDemand := LiftTarget;
+END_IF
+
+// Both axes get their demand on the same scan, which is what makes the move
+// coordinated: neither waits for the other to finish its leg.
+railAxis.MoveAbsolute(Position := railDemand);
+liftAxis.MoveAbsolute(Position := liftDemand);
+
+EngageHooks := CurrentState = E_MoverState.HOOKS_ENGAGING
+	OR CurrentState = E_MoverState.LIFTING;
+
+// Status
+railRemaining := railDemand - railAxis.ActualPosition;
+IF railRemaining < 0.0 THEN
+	railRemaining := 0.0 - railRemaining;
+END_IF
+
+liftRemaining := liftDemand - liftAxis.ActualPosition;
+IF liftRemaining < 0.0 THEN
+	liftRemaining := 0.0 - liftRemaining;
+END_IF
+
+// The longer leg, not the sum: the axes run at the same time, so the move is
+// over when the one with furthest to go arrives.
+IF railRemaining > liftRemaining THEN
+	TravelRemaining := railRemaining;
+ELSE
+	TravelRemaining := liftRemaining;
+END_IF
+
+Busy := IsMoving();]]></ST>
+    </Implementation>
+    <Method Name="IsMoving" Id="{5e4501d0-0036-4d19-9a41-000000000002}">
+      <Declaration><![CDATA[// The shuttle owes somebody a container: an order has been accepted and has
+// not finished. IDLE, AT_TARGET and FAULT are all places it is standing with
+// nothing outstanding, which is the same set the move timeout must not run in.
+METHOD PRIVATE IsMoving : BOOL]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[IsMoving := CurrentState = E_MoverState.HOMING
+	OR CurrentState = E_MoverState.MOVE_HORIZONTAL
+	OR CurrentState = E_MoverState.MOVE_VERTICAL
+	OR CurrentState = E_MoverState.HOOKS_ENGAGING
+	OR CurrentState = E_MoverState.LIFTING
+	OR CurrentState = E_MoverState.HOOKS_RELEASING;]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="CylinderAtCommandedEnd" Id="{5e4501d0-0036-4d19-9a41-000000000003}">
+      <Declaration><![CDATA[// The lifting cylinder has reached the end of its stroke that it is currently
+// being held at.
+//
+// Asked twice for two different reasons - before the hooks reach into the
+// rack, and again to decide the transfer has completed - and it is one method
+// because it is one question. A cylinder that has not got there is not a
+// fault; it is a stroke that has not finished, and the move timeout is what
+// turns it into one if it never does.
+METHOD PRIVATE CylinderAtCommandedEnd : BOOL]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[IF RaiseCylinder THEN
+	CylinderAtCommandedEnd := CylinderRaised;
+ELSE
+	CylinderAtCommandedEnd := CylinderLowered;
+END_IF]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="RaiseFault" Id="{5e4501d0-0036-4d19-9a41-000000000004}">
+      <Declaration><![CDATA[// Asks for the fault latch to be set on the next pass through the body, and
+// records why.
+//
+// A request rather than a direct write to the latch, because this is called
+// from order methods that run between scans as well as from the body: the
+// latch is driven in exactly one place so that Reset stays dominant over every
+// cause, however it arrived.
+METHOD PRIVATE RaiseFault
+VAR_INPUT
+	Code : UDINT;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[// First cause wins. A shuttle that timed out and then tripped its drive on the
+// way to a stop must report the timeout: the drive tripped because the move had
+// already gone wrong, and reporting it would send a technician to the amplifier.
+IF faultRequest OR faultLatch.Q1 THEN
+	RETURN;
+END_IF
+
+faultRequest := TRUE;
+ErrorID := Code;]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="StoreContainer" Id="{5e4501d0-0036-4d19-9a41-000000000005}">
+      <Declaration><![CDATA[// Take the container on the deck to the location the MES assigned it. FALSE
+// if the order was not accepted - either refused because the shuttle is busy,
+// or faulted because the order and the map disagree about the warehouse.
+//
+// The barcode and the timestamp travel with the order rather than being read
+// here, because they are the container's and the shuttle never sees it: the
+// registration station scanned it, and the map is told both only once the
+// container is actually in the rack.
+METHOD StoreContainer : BOOL
+VAR_INPUT
+	Index : UINT;
+	Barcode : STRING(32);
+	StoredAt : DATE_AND_TIME;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[StoreContainer := AcceptOrder(Kind := E_MoveOrder.STORE, Index := Index);
+
+IF StoreContainer THEN
+	barcode := Barcode;
+	storedAt := StoredAt;
+END_IF]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="RetrieveContainer" Id="{5e4501d0-0036-4d19-9a41-000000000006}">
+      <Declaration><![CDATA[// Fetch the container in a location back to the shuttle deck. FALSE if the
+// order was not accepted.
+METHOD RetrieveContainer : BOOL
+VAR_INPUT
+	Index : UINT;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[RetrieveContainer := AcceptOrder(Kind := E_MoveOrder.RETRIEVE, Index := Index);]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="AcceptOrder" Id="{5e4501d0-0036-4d19-9a41-000000000007}">
+      <Declaration><![CDATA[// Checks an order against the map and the racking, and turns the location it
+// names into the two axis targets the sequencer drives to.
+//
+// Every check happens BEFORE the shuttle moves, and that is the point of doing
+// it here rather than in the state machine: a target the machine cannot serve
+// costs a refusal, not a trip into the racking that has to be aborted halfway.
+//
+// The division of outcomes is deliberate. A busy shuttle REFUSES - an order
+// arriving while one is in flight is ordinary flow control and the unit above
+// re-offers it. Everything else FAULTS, because each one means the MES and the
+// PLC disagree about the warehouse, and a machine that silently declined those
+// would keep taking orders while the disagreement got worse.
+METHOD PRIVATE AcceptOrder : BOOL
+VAR_INPUT
+	Kind : E_MoveOrder;
+	Index : UINT;
+END_VAR
+VAR
+	aisle : UINT;
+	side : UINT;
+	level : UINT;
+	position : UINT;
+	rail : LREAL;
+	lift : LREAL;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[AcceptOrder := FALSE;
+
+IF Fault OR faultRequest OR order <> E_MoveOrder.NONE THEN
+	RETURN;
+END_IF
+
+IF NOT locationMap.AddressOf(FlatIndex := Index,
+                             Aisle => aisle,
+                             Side => side,
+                             Level => level,
+                             Position => position) THEN
+	RaiseFault(Code := ERROR_TARGET_NOT_IN_RACKING);
+	RETURN;
+END_IF
+
+IF aisle <> Control.AisleServed THEN
+	RaiseFault(Code := ERROR_TARGET_IN_ANOTHER_AISLE);
+	RETURN;
+END_IF
+
+// The two orders ask the map for opposite answers, and both are interlocks
+// rather than sanity checks: storing into a location nobody set aside means
+// the next allocation can hand that slot out from under the container, and
+// retrieving from an empty one sends the shuttle after nothing while the
+// container it was meant to fetch stays where it is.
+IF Kind = E_MoveOrder.STORE AND locationMap.StateAt(Index := Index) <> E_LocationState.RESERVED THEN
+	RaiseFault(Code := ERROR_TARGET_NOT_RESERVED);
+	RETURN;
+END_IF
+
+IF Kind = E_MoveOrder.RETRIEVE AND locationMap.StateAt(Index := Index) <> E_LocationState.OCCUPIED THEN
+	RaiseFault(Code := ERROR_TARGET_NOT_OCCUPIED);
+	RETURN;
+END_IF
+
+rail := Control.PositionReferences.StoragePositions[position];
+lift := Control.PositionReferences.LevelHeights[level];
+
+// A surveyed position outside the travel the shuttle has is a rack model and a
+// machine that no longer describe each other - a rack extended without the
+// table being re-surveyed, or the other way round. Refusing here is what stops
+// the axis being commanded to drive into its own end stop.
+IF rail < Control.PositionReferences.RailMinimum
+	OR rail > Control.PositionReferences.RailMaximum
+	OR lift < Control.PositionReferences.LiftMinimum
+	OR lift > Control.PositionReferences.LiftMaximum THEN
+	RaiseFault(Code := ERROR_TARGET_OUTSIDE_ENVELOPE);
+	RETURN;
+END_IF
+
+order := Kind;
+TargetIndex := Index;
+RailTarget := rail;
+LiftTarget := lift;
+
+// The approach stroke, which is the one the order arrives in: a store is
+// carrying its container on raised hooks, a retrieval is going to fetch one
+// off a shelf and must come in under it.
+RaiseCylinder := Kind = E_MoveOrder.STORE;
+
+// The near face of the aisle is reached the other way from the far one, and
+// the sign is the whole of that difference - the reach itself is the same.
+IF side = 1 THEN
+	HookReach := 0.0 - Control.PositionReferences.SideReach;
+ELSE
+	HookReach := Control.PositionReferences.SideReach;
+END_IF
+
+AcceptOrder := TRUE;]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="CompleteOrder" Id="{5e4501d0-0036-4d19-9a41-000000000008}">
+      <Declaration><![CDATA[// Tells the map what the shuttle just did, and clears the order.
+//
+// This is the only place the map is written, and it runs on the scan the hooks
+// come home - the first moment at which the container is somewhere it will
+// stay if the machine stops.
+METHOD PRIVATE CompleteOrder]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[IF order = E_MoveOrder.STORE THEN
+	locationMap.Store(Index := TargetIndex, Barcode := barcode, StoredAt := storedAt);
+ELSIF order = E_MoveOrder.RETRIEVE THEN
+	// A retrieved container is on the deck and out of the warehouse's
+	// inventory, so the location goes back to the free pool with the
+	// container's details cleared off it.
+	locationMap.Release(Index := TargetIndex);
+END_IF
+
+order := E_MoveOrder.NONE;]]></ST>
+      </Implementation>
+    </Method>
+  </POU>
+</TcPlcObject>

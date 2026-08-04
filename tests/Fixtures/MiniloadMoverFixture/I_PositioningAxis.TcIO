@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4026.18">
+  <Itf Name="I_PositioningAxis" Id="{5e4501d0-0034-4d19-9a41-000000000001}">
+    <Declaration><![CDATA[(*
+    The drive contract a shuttle axis is commanded through: power, an absolute
+    target, an acknowledgement, and the position feedback a sequencer needs to
+    know whether it has arrived.
+
+    A belt drive is asked how FAST it is going; a shuttle axis is asked WHERE
+    it is. That is the whole difference between this contract and the velocity
+    one a conveyor run uses, and it is why the horizontal and vertical axes of
+    the mover are the same block twice rather than a special case of the belt.
+
+    A consumer commands EVERY scan. MoveAbsolute is a level, not a one-shot:
+    the equipment module re-asserts its target each cycle, so a drive that
+    resets, or a link that drops and returns, converges back on the commanded
+    position instead of waiting for a fresh edge.
+
+    InPosition is a COMPARISON, not a latch, and a consumer may rely on that.
+    Commanding a new target drops it in the same call, so a sequencer that
+    changes target and then reads InPosition on the same scan cannot be told it
+    has arrived at somewhere it has not yet set off for.
+*)
+INTERFACE I_PositioningAxis]]></Declaration>
+    <Method Name="Enable" Id="{5e4501d0-0034-4d19-9a41-000000000002}">
+      <Declaration><![CDATA[// Requests drive power. Returns whether the drive is live yet, which is not
+// the same as the request having been accepted, so a caller that needs power
+// re-asserts rather than assuming.
+METHOD Enable : BOOL]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="MoveAbsolute" Id="{5e4501d0-0034-4d19-9a41-000000000003}">
+      <Declaration><![CDATA[METHOD MoveAbsolute : BOOL
+VAR_INPUT
+	// Target in mm on this axis' own reference, which is the same reference
+	// the position table is surveyed in.
+	Position : LREAL;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="Reset" Id="{5e4501d0-0034-4d19-9a41-000000000004}">
+      <Declaration><![CDATA[// Acknowledges a drive fault. Clears Error only if whatever raised it has
+// gone away; a standing fault survives the acknowledgement.
+METHOD Reset : BOOL]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[]]></ST>
+      </Implementation>
+    </Method>
+    <Property Name="Error" Id="{5e4501d0-0034-4d19-9a41-000000000005}">
+      <Declaration><![CDATA[// A drive-side fault is standing. Held until Reset is called AND the cause
+// has cleared, so a consumer may treat it as a level rather than an event.
+PROPERTY Error : BOOL]]></Declaration>
+      <Get Name="Get" Id="{5e4501d0-0034-4d19-9a41-000000000006}">
+        <Declaration><![CDATA[]]></Declaration>
+        <Implementation>
+          <ST><![CDATA[]]></ST>
+        </Implementation>
+      </Get>
+    </Property>
+    <Property Name="ActualPosition" Id="{5e4501d0-0034-4d19-9a41-000000000007}">
+      <Declaration><![CDATA[// Measured position in the same units MoveAbsolute is commanded in.
+PROPERTY ActualPosition : LREAL]]></Declaration>
+      <Get Name="Get" Id="{5e4501d0-0034-4d19-9a41-000000000008}">
+        <Declaration><![CDATA[]]></Declaration>
+        <Implementation>
+          <ST><![CDATA[]]></ST>
+        </Implementation>
+      </Get>
+    </Property>
+    <Property Name="CommandedPosition" Id="{5e4501d0-0034-4d19-9a41-000000000009}">
+      <Declaration><![CDATA[// The target the axis is currently working towards. Readable so that a
+// coordinated move can be observed as coordinated: an axis carrying its
+// target while another axis is the one still travelling is the difference
+// between two axes moving together and two moving one after the other.
+PROPERTY CommandedPosition : LREAL]]></Declaration>
+      <Get Name="Get" Id="{5e4501d0-0034-4d19-9a41-00000000000a}">
+        <Declaration><![CDATA[]]></Declaration>
+        <Implementation>
+          <ST><![CDATA[]]></ST>
+        </Implementation>
+      </Get>
+    </Property>
+    <Property Name="InPosition" Id="{5e4501d0-0034-4d19-9a41-00000000000b}">
+      <Declaration><![CDATA[// The axis is standing within its in-position window of the commanded target.
+// False on an unpowered or faulted drive whatever the encoder says, because
+// an axis nobody is holding is not standing anywhere on purpose.
+PROPERTY InPosition : BOOL]]></Declaration>
+      <Get Name="Get" Id="{5e4501d0-0034-4d19-9a41-00000000000c}">
+        <Declaration><![CDATA[]]></Declaration>
+        <Implementation>
+          <ST><![CDATA[]]></ST>
+        </Implementation>
+      </Get>
+    </Property>
+  </Itf>
+</TcPlcObject>

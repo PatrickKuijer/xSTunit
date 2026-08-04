@@ -1,0 +1,726 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4026.18">
+  <POU Name="FB_StorageLocationMapTests" Id="{5e4501d0-0032-4d19-9a41-000000000001}" SpecialFunc="None">
+    <Declaration><![CDATA[(*
+    Suite over FB_StorageLocationMap: the 1800-location map, the arithmetic
+    that joins a flat index to a four-part address, and the allocator that only
+    exists for the MES being down.
+
+    Nothing here depends on elapsed time. Every state change in the map arrives
+    as a method call and the timestamps it stores are values a caller hands it,
+    so the whole suite runs with the clock frozen and needs no simulated-time
+    intrinsic.
+
+    The allocator cases all set MesOnline := FALSE first, and that is not
+    boilerplate - it is the property under test. While the MES is answering,
+    the address the caller passes is the only one considered, so a suite that
+    forgot the flag would be asserting against the MES path and would go green
+    for the wrong reason.
+
+    The two cases that walk all 1800 elements assert once, on the first index
+    that misbehaved, rather than once per element: 1800 passing assertions per
+    case would bury every other verdict in the run, and a count is no use when
+    what you need is the index to go and look at.
+*)
+FUNCTION_BLOCK FB_StorageLocationMapTests EXTENDS TcUnit.FB_TestSuite]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[AFreshMapIsEntirelyFree();
+EveryLocationCarriesTheAddressItsIndexResolvesTo();
+TheFlatIndexWalksOnePositionAtATime();
+AnAddressOutsideTheRackingHasNoIndex();
+MesAssignsTheLocationAndTheContainerIsStoredThere();
+ALocationThatIsNotFreeCannotBeReservedAgain();
+StoringNeedsAReservationFirst();
+ReleaseReturnsTheLocationAndTheStoredTotalSurvivesIt();
+ReleasingAnEmptyLocationIsRefused();
+TheAllocatorIsUnreachableWhileMesIsOnline();
+TheFallbackAllocatorHandsOutTheLowestFreeLocation();
+TheFallbackAllocatorSkipsEverythingThatIsNotFree();
+AFullWarehouseRefusesTheFallbackAllocation();]]></ST>
+    </Implementation>
+    <Method Name="AFreshMapIsEntirelyFree" Id="{5e4501d0-0032-4d19-9a41-000000000002}">
+      <Declaration><![CDATA[// A map that has only been scanned, never written to, must already describe an
+// empty warehouse. The 1800 elements get no per-element initialiser, so if the
+// first-use stamping were skipped the block would report a warehouse with zero
+// free locations - and the allocator would refuse the very first container.
+METHOD PRIVATE AFreshMapIsEntirelyFree
+VAR
+	map : FB_StorageLocationMap;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('AFreshMapIsEntirelyFree');
+
+map();
+
+AssertEquals_UINT(Expected := 1800,
+                  Actual := map.FreeCount,
+                  Message := 'fresh map FreeCount');
+
+AssertEquals_UINT(Expected := 0,
+                  Actual := map.ReservedCount,
+                  Message := 'fresh map ReservedCount');
+
+AssertEquals_UINT(Expected := 0,
+                  Actual := map.OccupiedCount,
+                  Message := 'fresh map OccupiedCount');
+
+AssertEquals_UINT(Expected := 0,
+                  Actual := map.StoredTotal,
+                  Message := 'fresh map StoredTotal');
+
+AssertFalse(Condition := map.Full,
+            Message := 'an empty warehouse reported itself full');
+
+AssertEquals_INT(Expected := E_LocationState.FREE,
+                 Actual := map.StateAt(Index := 1),
+                 Message := 'first location of a fresh map');
+
+AssertEquals_INT(Expected := E_LocationState.FREE,
+                 Actual := map.StateAt(Index := 1800),
+                 Message := 'last location of a fresh map');
+
+AssertEquals_STRING(Expected := '',
+                    Actual := map.BarcodeAt(Index := 1),
+                    Message := 'a free location carried a barcode');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="EveryLocationCarriesTheAddressItsIndexResolvesTo" Id="{5e4501d0-0032-4d19-9a41-000000000003}">
+      <Declaration><![CDATA[// The whole 1800-element map, checked against itself in both directions: the
+// address stamped into each element - written by the nested loops over the
+// array bounds - must be the one that the flat-index arithmetic turns back
+// into that same index.
+//
+// The two answers are produced by different code, which is what makes this
+// worth walking. An off-by-one in the arithmetic, or a transposed pair of
+// dimensions, would leave the map reading and writing different elements for
+// the same address, and every allocation would silently land next door.
+METHOD PRIVATE EveryLocationCarriesTheAddressItsIndexResolvesTo
+VAR
+	map : FB_StorageLocationMap;
+	index : UINT;
+	aisle : UINT;
+	side : UINT;
+	level : UINT;
+	position : UINT;
+	firstBad : UINT;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('EveryLocationCarriesTheAddressItsIndexResolvesTo');
+
+FOR index := 1 TO 1800 DO
+	IF NOT map.AddressOf(FlatIndex := index,
+	                     Aisle => aisle,
+	                     Side => side,
+	                     Level => level,
+	                     Position => position) THEN
+		firstBad := index;
+		EXIT;
+	END_IF
+
+	IF map.FlatIndexOf(Aisle := aisle, Side := side, Level := level, Position := position) <> index THEN
+		firstBad := index;
+		EXIT;
+	END_IF
+END_FOR
+
+AssertEquals_UINT(Expected := 0,
+                  Actual := firstBad,
+                  Message := 'first index whose stamped address does not resolve back to it');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="TheFlatIndexWalksOnePositionAtATime" Id="{5e4501d0-0032-4d19-9a41-000000000004}">
+      <Declaration><![CDATA[// Which component varies fastest, pinned at the four places it changes over.
+// The ordering is a real decision and not an arbitrary one: consecutive
+// indices run along a single rack face, so the allocator handing out the
+// lowest free index also hands out the shortest shuttle move. Reordering the
+// arithmetic would keep the round trip above green while destroying that.
+METHOD PRIVATE TheFlatIndexWalksOnePositionAtATime
+VAR
+	map : FB_StorageLocationMap;
+	aisle : UINT;
+	side : UINT;
+	level : UINT;
+	position : UINT;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('TheFlatIndexWalksOnePositionAtATime');
+
+AssertEquals_UINT(Expected := 1,
+                  Actual := map.FlatIndexOf(Aisle := 1, Side := 1, Level := 1, Position := 1),
+                  Message := 'first location');
+
+AssertEquals_UINT(Expected := 20,
+                  Actual := map.FlatIndexOf(Aisle := 1, Side := 1, Level := 1, Position := 20),
+                  Message := 'last position of the first level');
+
+AssertEquals_UINT(Expected := 21,
+                  Actual := map.FlatIndexOf(Aisle := 1, Side := 1, Level := 2, Position := 1),
+                  Message := 'first position of the second level');
+
+AssertEquals_UINT(Expected := 300,
+                  Actual := map.FlatIndexOf(Aisle := 1, Side := 1, Level := 15, Position := 20),
+                  Message := 'last location of the first rack face');
+
+AssertEquals_UINT(Expected := 301,
+                  Actual := map.FlatIndexOf(Aisle := 1, Side := 2, Level := 1, Position := 1),
+                  Message := 'first location of the far side of aisle one');
+
+AssertEquals_UINT(Expected := 601,
+                  Actual := map.FlatIndexOf(Aisle := 2, Side := 1, Level := 1, Position := 1),
+                  Message := 'first location of aisle two');
+
+AssertEquals_UINT(Expected := 1800,
+                  Actual := map.FlatIndexOf(Aisle := 3, Side := 2, Level := 15, Position := 20),
+                  Message := 'last location');
+
+map.AddressOf(FlatIndex := 301, Aisle => aisle, Side => side, Level => level, Position => position);
+AssertEquals_UINT(Expected := 1, Actual := aisle, Message := 'aisle at index 301');
+AssertEquals_UINT(Expected := 2, Actual := side, Message := 'side at index 301');
+AssertEquals_UINT(Expected := 1, Actual := level, Message := 'level at index 301');
+AssertEquals_UINT(Expected := 1, Actual := position, Message := 'position at index 301');
+
+map.AddressOf(FlatIndex := 900, Aisle => aisle, Side => side, Level => level, Position => position);
+AssertEquals_UINT(Expected := 2, Actual := aisle, Message := 'aisle at index 900');
+AssertEquals_UINT(Expected := 1, Actual := side, Message := 'side at index 900');
+AssertEquals_UINT(Expected := 15, Actual := level, Message := 'level at index 900');
+AssertEquals_UINT(Expected := 20, Actual := position, Message := 'position at index 900');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="AnAddressOutsideTheRackingHasNoIndex" Id="{5e4501d0-0032-4d19-9a41-000000000005}">
+      <Declaration><![CDATA[// Every bound, from both sides. An MES with a stale rack model asking for
+// level 16 has to be refused: clamping it into level 15 would put a container
+// where nothing is looking for it, and wrapping it would overwrite a location
+// that already holds one.
+//
+// An index outside the racking reads as Blocked rather than Free for the same
+// reason - of the four states it is the only one a caller cannot mistake for
+// room.
+METHOD PRIVATE AnAddressOutsideTheRackingHasNoIndex
+VAR
+	map : FB_StorageLocationMap;
+	aisle : UINT;
+	side : UINT;
+	level : UINT;
+	position : UINT;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('AnAddressOutsideTheRackingHasNoIndex');
+
+AssertEquals_UINT(Expected := 0,
+                  Actual := map.FlatIndexOf(Aisle := 0, Side := 1, Level := 1, Position := 1),
+                  Message := 'aisle below the first');
+
+AssertEquals_UINT(Expected := 0,
+                  Actual := map.FlatIndexOf(Aisle := 4, Side := 1, Level := 1, Position := 1),
+                  Message := 'aisle past the last');
+
+AssertEquals_UINT(Expected := 0,
+                  Actual := map.FlatIndexOf(Aisle := 1, Side := 0, Level := 1, Position := 1),
+                  Message := 'side below the first');
+
+AssertEquals_UINT(Expected := 0,
+                  Actual := map.FlatIndexOf(Aisle := 1, Side := 3, Level := 1, Position := 1),
+                  Message := 'side past the last');
+
+AssertEquals_UINT(Expected := 0,
+                  Actual := map.FlatIndexOf(Aisle := 1, Side := 1, Level := 0, Position := 1),
+                  Message := 'level below the first');
+
+AssertEquals_UINT(Expected := 0,
+                  Actual := map.FlatIndexOf(Aisle := 1, Side := 1, Level := 16, Position := 1),
+                  Message := 'level past the last');
+
+AssertEquals_UINT(Expected := 0,
+                  Actual := map.FlatIndexOf(Aisle := 1, Side := 1, Level := 1, Position := 0),
+                  Message := 'position below the first');
+
+AssertEquals_UINT(Expected := 0,
+                  Actual := map.FlatIndexOf(Aisle := 1, Side := 1, Level := 1, Position := 21),
+                  Message := 'position past the last');
+
+AssertFalse(Condition := map.AddressOf(FlatIndex := 0,
+                                       Aisle => aisle,
+                                       Side => side,
+                                       Level => level,
+                                       Position => position),
+            Message := 'index zero resolved to an address');
+AssertEquals_UINT(Expected := 0, Actual := aisle, Message := 'aisle left behind by index zero');
+
+AssertFalse(Condition := map.AddressOf(FlatIndex := 1801,
+                                       Aisle => aisle,
+                                       Side => side,
+                                       Level => level,
+                                       Position => position),
+            Message := 'an index past the last location resolved to an address');
+
+AssertEquals_INT(Expected := E_LocationState.BLOCKED,
+                 Actual := map.StateAt(Index := 0),
+                 Message := 'state at index zero');
+
+AssertEquals_INT(Expected := E_LocationState.BLOCKED,
+                 Actual := map.StateAt(Index := 1801),
+                 Message := 'state past the last location');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="MesAssignsTheLocationAndTheContainerIsStoredThere" Id="{5e4501d0-0032-4d19-9a41-000000000006}">
+      <Declaration><![CDATA[// The normal day, end to end: the MES names a location, the map reserves it,
+// the shuttle delivers and the map records the container. Marking a location
+// occupied is one of the four behaviours the map exists for.
+//
+// Reserve and Store are separate steps because allocation and arrival are
+// minutes apart; the counts must follow the location through both, so a
+// warehouse mid-move is described as neither emptier nor fuller than it is.
+METHOD PRIVATE MesAssignsTheLocationAndTheContainerIsStoredThere
+VAR
+	map : FB_StorageLocationMap;
+	slot : UINT;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('MesAssignsTheLocationAndTheContainerIsStoredThere');
+
+slot := map.Reserve(Aisle := 2, Side := 2, Level := 7, Position := 13);
+
+AssertEquals_UINT(Expected := 1033,
+                  Actual := slot,
+                  Message := 'the index MES-assigned address 2/2/7/13 reserves');
+
+AssertEquals_INT(Expected := E_LocationState.RESERVED,
+                 Actual := map.StateAt(Index := slot),
+                 Message := 'state after reserving');
+
+AssertEquals_UINT(Expected := 1799, Actual := map.FreeCount, Message := 'FreeCount after reserving');
+AssertEquals_UINT(Expected := 1, Actual := map.ReservedCount, Message := 'ReservedCount after reserving');
+AssertEquals_UINT(Expected := 0, Actual := map.OccupiedCount, Message := 'OccupiedCount after reserving');
+
+AssertEquals_UINT(Expected := 2, Actual := map.LastAllocated.Aisle, Message := 'LastAllocated aisle');
+AssertEquals_UINT(Expected := 2, Actual := map.LastAllocated.Side, Message := 'LastAllocated side');
+AssertEquals_UINT(Expected := 7, Actual := map.LastAllocated.Level, Message := 'LastAllocated level');
+AssertEquals_UINT(Expected := 13, Actual := map.LastAllocated.Position, Message := 'LastAllocated position');
+
+AssertTrue(Condition := map.Store(Index := slot,
+                                  Barcode := 'C-000123',
+                                  StoredAt := DT#2026-08-04-06:15:00),
+           Message := 'storing into the location just reserved');
+
+AssertEquals_INT(Expected := E_LocationState.OCCUPIED,
+                 Actual := map.StateAt(Index := slot),
+                 Message := 'state after storing');
+
+AssertEquals_STRING(Expected := 'C-000123',
+                    Actual := map.BarcodeAt(Index := slot),
+                    Message := 'barcode of the stored container');
+
+AssertEquals_DATE_AND_TIME(Expected := DT#2026-08-04-06:15:00,
+                           Actual := map.StoredTimeAt(Index := slot),
+                           Message := 'time the container was stored');
+
+AssertEquals_UINT(Expected := 1799, Actual := map.FreeCount, Message := 'FreeCount after storing');
+AssertEquals_UINT(Expected := 0, Actual := map.ReservedCount, Message := 'ReservedCount after storing');
+AssertEquals_UINT(Expected := 1, Actual := map.OccupiedCount, Message := 'OccupiedCount after storing');
+AssertEquals_UINT(Expected := 1, Actual := map.StoredTotal, Message := 'StoredTotal after storing');
+AssertFalse(Condition := map.Full, Message := 'one container filled the warehouse');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="ALocationThatIsNotFreeCannotBeReservedAgain" Id="{5e4501d0-0032-4d19-9a41-000000000007}">
+      <Declaration><![CDATA[// The interlock the Reserved state exists for. A second order for a location
+// the first container is still on its way to has to be refused - accepted, it
+// would send two containers to the same slot, and the map would have no record
+// that it had.
+//
+// Blocked and Occupied are refused by the same guard, and blocking a location
+// that holds something is refused in turn: a container in a slot marked out of
+// service is one nothing will ever be sent to collect.
+METHOD PRIVATE ALocationThatIsNotFreeCannotBeReservedAgain
+VAR
+	map : FB_StorageLocationMap;
+	slot : UINT;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('ALocationThatIsNotFreeCannotBeReservedAgain');
+
+slot := map.Reserve(Aisle := 1, Side := 1, Level := 1, Position := 4);
+AssertEquals_UINT(Expected := 4, Actual := slot, Message := 'first reservation');
+
+AssertEquals_UINT(Expected := 0,
+                  Actual := map.Reserve(Aisle := 1, Side := 1, Level := 1, Position := 4),
+                  Message := 'reserving a location that is already reserved');
+
+AssertEquals_UINT(Expected := 1799, Actual := map.FreeCount, Message := 'FreeCount after a refused reservation');
+AssertEquals_UINT(Expected := 1, Actual := map.ReservedCount, Message := 'ReservedCount after a refused reservation');
+
+map.Store(Index := 4, Barcode := 'C-000456', StoredAt := DT#2026-08-04-06:20:00);
+
+AssertEquals_UINT(Expected := 0,
+                  Actual := map.Reserve(Aisle := 1, Side := 1, Level := 1, Position := 4),
+                  Message := 'reserving a location that is occupied');
+
+AssertFalse(Condition := map.MarkBlocked(Index := 4),
+            Message := 'blocked a location with a container in it');
+
+AssertTrue(Condition := map.MarkBlocked(Index := 5),
+           Message := 'blocking a free location');
+
+AssertEquals_INT(Expected := E_LocationState.BLOCKED,
+                 Actual := map.StateAt(Index := 5),
+                 Message := 'state after blocking');
+
+AssertEquals_UINT(Expected := 0,
+                  Actual := map.Reserve(Aisle := 1, Side := 1, Level := 1, Position := 5),
+                  Message := 'reserving a location that is blocked');
+
+AssertEquals_UINT(Expected := 1798, Actual := map.FreeCount, Message := 'FreeCount with one stored and one blocked');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="StoringNeedsAReservationFirst" Id="{5e4501d0-0032-4d19-9a41-000000000008}">
+      <Declaration><![CDATA[// A container may only be recorded into a location that was allocated for it.
+// Storing into a free one would mean it arrived somewhere nobody set aside,
+// and the next allocation would hand that same slot out from under it.
+METHOD PRIVATE StoringNeedsAReservationFirst
+VAR
+	map : FB_StorageLocationMap;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('StoringNeedsAReservationFirst');
+
+AssertFalse(Condition := map.Store(Index := 42,
+                                   Barcode := 'C-000789',
+                                   StoredAt := DT#2026-08-04-06:25:00),
+            Message := 'stored into a location nobody reserved');
+
+AssertEquals_INT(Expected := E_LocationState.FREE,
+                 Actual := map.StateAt(Index := 42),
+                 Message := 'state of the location a refused store named');
+
+AssertEquals_STRING(Expected := '',
+                    Actual := map.BarcodeAt(Index := 42),
+                    Message := 'barcode left by a refused store');
+
+AssertEquals_UINT(Expected := 0, Actual := map.OccupiedCount, Message := 'OccupiedCount after a refused store');
+AssertEquals_UINT(Expected := 0, Actual := map.StoredTotal, Message := 'StoredTotal after a refused store');
+
+AssertFalse(Condition := map.Store(Index := 0,
+                                   Barcode := 'C-000789',
+                                   StoredAt := DT#2026-08-04-06:25:00),
+            Message := 'stored at index zero');
+
+AssertFalse(Condition := map.Store(Index := 1801,
+                                   Barcode := 'C-000789',
+                                   StoredAt := DT#2026-08-04-06:25:00),
+            Message := 'stored past the last location');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="ReleaseReturnsTheLocationAndTheStoredTotalSurvivesIt" Id="{5e4501d0-0032-4d19-9a41-000000000009}">
+      <Declaration><![CDATA[// Retrieval, which is the other half of the warehouse: the location goes back
+// into the free pool and the container's details go with the container. A
+// barcode left behind on a free location is what a retrieval order chases
+// after the container has already shipped.
+//
+// StoredTotal is a lifetime throughput figure and must not follow the
+// inventory back down, or a shift's work would disappear as it was picked.
+METHOD PRIVATE ReleaseReturnsTheLocationAndTheStoredTotalSurvivesIt
+VAR
+	map : FB_StorageLocationMap;
+	slot : UINT;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('ReleaseReturnsTheLocationAndTheStoredTotalSurvivesIt');
+
+slot := map.Reserve(Aisle := 2, Side := 2, Level := 7, Position := 13);
+map.Store(Index := slot, Barcode := 'C-000123', StoredAt := DT#2026-08-04-06:15:00);
+
+AssertTrue(Condition := map.Release(Index := slot),
+           Message := 'releasing an occupied location');
+
+AssertEquals_INT(Expected := E_LocationState.FREE,
+                 Actual := map.StateAt(Index := slot),
+                 Message := 'state after releasing');
+
+AssertEquals_STRING(Expected := '',
+                    Actual := map.BarcodeAt(Index := slot),
+                    Message := 'barcode left behind by a release');
+
+AssertEquals_DATE_AND_TIME(Expected := DT#1970-01-01-00:00:00,
+                           Actual := map.StoredTimeAt(Index := slot),
+                           Message := 'timestamp left behind by a release');
+
+AssertEquals_UINT(Expected := 1800, Actual := map.FreeCount, Message := 'FreeCount after releasing');
+AssertEquals_UINT(Expected := 0, Actual := map.OccupiedCount, Message := 'OccupiedCount after releasing');
+AssertEquals_UINT(Expected := 1, Actual := map.StoredTotal, Message := 'a release discarded the lifetime total');
+
+// A reservation the container never arrived for is cancelled the same way,
+// or an order abandoned mid-flight would hold its location out of the pool
+// for the rest of the run.
+slot := map.Reserve(Aisle := 1, Side := 1, Level := 1, Position := 1);
+AssertTrue(Condition := map.Release(Index := slot),
+           Message := 'cancelling a reservation');
+
+AssertEquals_UINT(Expected := 0, Actual := map.ReservedCount, Message := 'ReservedCount after a cancelled reservation');
+AssertEquals_UINT(Expected := 1800, Actual := map.FreeCount, Message := 'FreeCount after a cancelled reservation');
+AssertEquals_UINT(Expected := 1, Actual := map.StoredTotal, Message := 'a cancelled reservation disturbed the lifetime total');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="ReleasingAnEmptyLocationIsRefused" Id="{5e4501d0-0032-4d19-9a41-00000000000a}">
+      <Declaration><![CDATA[// A caller releasing a location that holds nothing disagrees with the map
+// about what the warehouse contains, and silently absorbing that would let
+// FreeCount climb past the capacity of the racking.
+//
+// A blocked location IS releasable, and that is deliberate: maintenance has to
+// be able to put a repaired rack face back into service, and a hold nothing
+// can take off would shrink the warehouse permanently.
+METHOD PRIVATE ReleasingAnEmptyLocationIsRefused
+VAR
+	map : FB_StorageLocationMap;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('ReleasingAnEmptyLocationIsRefused');
+
+AssertFalse(Condition := map.Release(Index := 50),
+            Message := 'released a location that was already free');
+
+AssertEquals_UINT(Expected := 1800, Actual := map.FreeCount, Message := 'FreeCount after a refused release');
+
+AssertFalse(Condition := map.Release(Index := 0),
+            Message := 'released index zero');
+
+AssertFalse(Condition := map.Release(Index := 1801),
+            Message := 'released past the last location');
+
+map.MarkBlocked(Index := 50);
+AssertEquals_UINT(Expected := 1799, Actual := map.FreeCount, Message := 'FreeCount after blocking');
+
+AssertTrue(Condition := map.Release(Index := 50),
+           Message := 'returning a blocked location to service');
+
+AssertEquals_INT(Expected := E_LocationState.FREE,
+                 Actual := map.StateAt(Index := 50),
+                 Message := 'state after releasing a blocked location');
+
+AssertEquals_UINT(Expected := 1800, Actual := map.FreeCount, Message := 'FreeCount after unblocking');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="TheAllocatorIsUnreachableWhileMesIsOnline" Id="{5e4501d0-0032-4d19-9a41-00000000000b}">
+      <Declaration><![CDATA[// The split between the two allocation paths, asserted from the side that is
+// easy to lose. While the MES is answering, the address it assigned is the
+// only one considered - a request the racking cannot satisfy is refused
+// outright rather than quietly turned into the next free location.
+//
+// Without this, a map that always fell back would pass every other case in the
+// suite: each of them would just get a location, and none of them would notice
+// it was not the one asked for.
+METHOD PRIVATE TheAllocatorIsUnreachableWhileMesIsOnline
+VAR
+	map : FB_StorageLocationMap;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('TheAllocatorIsUnreachableWhileMesIsOnline');
+
+AssertEquals_UINT(Expected := 0,
+                  Actual := map.Reserve(Aisle := 0, Side := 0, Level := 0, Position := 0),
+                  Message := 'an unusable MES address fell back to the allocator');
+
+AssertEquals_UINT(Expected := 1800, Actual := map.FreeCount, Message := 'FreeCount after a refused MES address');
+AssertEquals_UINT(Expected := 0, Actual := map.ReservedCount, Message := 'ReservedCount after a refused MES address');
+
+AssertEquals_UINT(Expected := 1,
+                  Actual := map.Reserve(Aisle := 1, Side := 1, Level := 1, Position := 1),
+                  Message := 'first MES-assigned reservation');
+
+AssertEquals_UINT(Expected := 0,
+                  Actual := map.Reserve(Aisle := 1, Side := 1, Level := 1, Position := 1),
+                  Message := 'a taken MES address fell back to the next free location');
+
+AssertEquals_UINT(Expected := 1799, Actual := map.FreeCount, Message := 'FreeCount after the refused repeat');
+AssertEquals_INT(Expected := E_LocationState.FREE,
+                 Actual := map.StateAt(Index := 2),
+                 Message := 'the refused repeat allocated the next location instead');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="TheFallbackAllocatorHandsOutTheLowestFreeLocation" Id="{5e4501d0-0032-4d19-9a41-00000000000c}">
+      <Declaration><![CDATA[// Find-next-free, reachable only with the MES link down. The answer is the
+// lowest free index and not the nearest to the shuttle, because it has to be
+// the same answer every time it is asked: an allocator that depended on where
+// the shuttle happened to be would give two runs of the same warehouse two
+// different layouts.
+//
+// The address passed in is ignored outright while the link is down, and that
+// is asserted here with an address that would have been perfectly valid - an
+// address from a MES that is not answering is stale by definition.
+METHOD PRIVATE TheFallbackAllocatorHandsOutTheLowestFreeLocation
+VAR
+	map : FB_StorageLocationMap;
+	slot : UINT;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('TheFallbackAllocatorHandsOutTheLowestFreeLocation');
+
+map.MesOnline := FALSE;
+
+slot := map.Reserve(Aisle := 0, Side := 0, Level := 0, Position := 0);
+AssertEquals_UINT(Expected := 1, Actual := slot, Message := 'first fallback allocation');
+
+AssertEquals_UINT(Expected := 1, Actual := map.LastAllocated.Aisle, Message := 'aisle the allocator chose');
+AssertEquals_UINT(Expected := 1, Actual := map.LastAllocated.Side, Message := 'side the allocator chose');
+AssertEquals_UINT(Expected := 1, Actual := map.LastAllocated.Level, Message := 'level the allocator chose');
+AssertEquals_UINT(Expected := 1, Actual := map.LastAllocated.Position, Message := 'position the allocator chose');
+
+map.Store(Index := slot, Barcode := 'C-000001', StoredAt := DT#2026-08-04-07:00:00);
+
+slot := map.Reserve(Aisle := 3, Side := 2, Level := 15, Position := 20);
+AssertEquals_UINT(Expected := 2,
+                  Actual := slot,
+                  Message := 'the allocator used the stale address it was handed');
+
+map.Store(Index := slot, Barcode := 'C-000002', StoredAt := DT#2026-08-04-07:01:00);
+
+AssertTrue(Condition := map.Release(Index := 1),
+           Message := 'releasing the first location');
+
+AssertEquals_UINT(Expected := 1,
+                  Actual := map.Reserve(Aisle := 0, Side := 0, Level := 0, Position := 0),
+                  Message := 'the allocator skipped the location that had just been freed');
+
+AssertEquals_UINT(Expected := 2, Actual := map.StoredTotal, Message := 'StoredTotal over the fallback stores');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="TheFallbackAllocatorSkipsEverythingThatIsNotFree" Id="{5e4501d0-0032-4d19-9a41-00000000000d}">
+      <Declaration><![CDATA[// Free is the only state the allocator may hand out, and all three of the
+// others have to be stepped over. Reserved is the one that matters most: it
+// describes a container in transit, so an allocator that only avoided Occupied
+// locations would send the second container of every pair after the first one.
+METHOD PRIVATE TheFallbackAllocatorSkipsEverythingThatIsNotFree
+VAR
+	map : FB_StorageLocationMap;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('TheFallbackAllocatorSkipsEverythingThatIsNotFree');
+
+map.Reserve(Aisle := 1, Side := 1, Level := 1, Position := 1);
+
+map.Reserve(Aisle := 1, Side := 1, Level := 1, Position := 2);
+map.Store(Index := 2, Barcode := 'C-000002', StoredAt := DT#2026-08-04-07:05:00);
+
+map.MarkBlocked(Index := 3);
+
+AssertEquals_INT(Expected := E_LocationState.RESERVED, Actual := map.StateAt(Index := 1), Message := 'location one');
+AssertEquals_INT(Expected := E_LocationState.OCCUPIED, Actual := map.StateAt(Index := 2), Message := 'location two');
+AssertEquals_INT(Expected := E_LocationState.BLOCKED, Actual := map.StateAt(Index := 3), Message := 'location three');
+
+map.MesOnline := FALSE;
+
+AssertEquals_UINT(Expected := 4,
+                  Actual := map.Reserve(Aisle := 0, Side := 0, Level := 0, Position := 0),
+                  Message := 'the first location the allocator would hand out');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="AFullWarehouseRefusesTheFallbackAllocation" Id="{5e4501d0-0032-4d19-9a41-00000000000e}">
+      <Declaration><![CDATA[// The allocator's one failure mode, and the reason it returns an index rather
+// than an address: a full warehouse has no location to name. Refusing is the
+// whole answer - a container that cannot be put away has to stay on the
+// registration station, not be sent to a slot that already holds one.
+//
+// The warehouse is filled through the MES path, which costs one call per
+// location rather than a scan per location, and the last of those 1800
+// reservations is itself the proof that every index the arithmetic produces is
+// a distinct location.
+METHOD PRIVATE AFullWarehouseRefusesTheFallbackAllocation
+VAR
+	map : FB_StorageLocationMap;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('AFullWarehouseRefusesTheFallbackAllocation');
+
+FillWarehouse(map := map);
+
+AssertEquals_UINT(Expected := 0, Actual := map.FreeCount, Message := 'FreeCount of a full warehouse');
+AssertEquals_UINT(Expected := 1800, Actual := map.OccupiedCount, Message := 'OccupiedCount of a full warehouse');
+AssertEquals_UINT(Expected := 1800, Actual := map.StoredTotal, Message := 'StoredTotal after filling the warehouse');
+AssertTrue(Condition := map.Full, Message := 'a full warehouse did not report itself full');
+
+map.MesOnline := FALSE;
+
+AssertEquals_UINT(Expected := 0,
+                  Actual := map.Reserve(Aisle := 0, Side := 0, Level := 0, Position := 0),
+                  Message := 'the allocator found room in a full warehouse');
+
+AssertTrue(Condition := map.Full, Message := 'a refused allocation cleared the full flag');
+AssertEquals_UINT(Expected := 1800, Actual := map.OccupiedCount, Message := 'OccupiedCount after a refused allocation');
+
+AssertTrue(Condition := map.Release(Index := 900),
+           Message := 'picking one container out of a full warehouse');
+
+AssertFalse(Condition := map.Full, Message := 'the warehouse stayed full after a retrieval');
+
+AssertEquals_UINT(Expected := 900,
+                  Actual := map.Reserve(Aisle := 0, Side := 0, Level := 0, Position := 0),
+                  Message := 'the one free location the allocator had to find');
+
+AssertEquals_UINT(Expected := 2, Actual := map.LastAllocated.Aisle, Message := 'aisle of the one free location');
+AssertEquals_UINT(Expected := 1, Actual := map.LastAllocated.Side, Message := 'side of the one free location');
+AssertEquals_UINT(Expected := 15, Actual := map.LastAllocated.Level, Message := 'level of the one free location');
+AssertEquals_UINT(Expected := 20, Actual := map.LastAllocated.Position, Message := 'position of the one free location');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="FillWarehouse" Id="{5e4501d0-0032-4d19-9a41-00000000000f}">
+      <Declaration><![CDATA[// Reserves and stores a container into every location, over the MES path, so
+// the caller inherits a warehouse with nothing left to allocate.
+METHOD PRIVATE FillWarehouse
+VAR_IN_OUT
+	map : FB_StorageLocationMap;
+END_VAR
+VAR
+	index : UINT;
+	aisle : UINT;
+	side : UINT;
+	level : UINT;
+	position : UINT;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[FOR index := 1 TO 1800 DO
+	map.AddressOf(FlatIndex := index, Aisle => aisle, Side => side, Level => level, Position => position);
+	map.Reserve(Aisle := aisle, Side := side, Level := level, Position := position);
+	map.Store(Index := index, Barcode := 'C-FILL', StoredAt := DT#2026-08-04-08:00:00);
+END_FOR]]></ST>
+      </Implementation>
+    </Method>
+  </POU>
+</TcPlcObject>

@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4026.18">
+  <DUT Name="ST_LocationAddress" Id="{5e4501d0-0030-4d19-9a41-000000000002}">
+    <Declaration><![CDATA[(*
+    Where one storage location is, in the four terms the machine is built in.
+
+    Three aisles, each with its own shuttle on its own horizontal rail, and
+    each rail serving the rack on either side of it - which is what six racks
+    and a single-rail shuttle mean together. Side therefore selects between the
+    two racks one shuttle can reach without leaving its rail, and is not
+    interchangeable with Aisle: a container one aisle over is a different
+    shuttle's work entirely.
+
+    Level and Position are the coordinates inside one rack face, 15 by 20.
+
+    Every component is one-based, matching the array bounds of the map. Zero is
+    the "no location" value the map returns when it has none to give.
+*)
+TYPE ST_LocationAddress :
+STRUCT
+	Aisle : UINT;
+	Side : UINT;
+	Level : UINT;
+	Position : UINT;
+END_STRUCT
+END_TYPE
+]]></Declaration>
+  </DUT>
+</TcPlcObject>

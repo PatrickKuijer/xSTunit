@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4026.18">
+  <DUT Name="E_LocationState" Id="{5e4501d0-0030-4d19-9a41-000000000001}">
+    <Declaration><![CDATA[// What one storage location in the racking environment currently is.
+//
+// Reserved sits between Free and Occupied because allocation and arrival are
+// minutes apart: the location is spoken for the moment it is handed out, long
+// before the shuttle has put a container in it, and a second allocation in
+// that window would send two containers to the same slot.
+//
+// Free is deliberately the zero value. The map holds 1800 of these and there
+// is no declaration that gives 1800 elements an initial value one by one, so
+// whichever state a never-written location reads as is the one that has to be
+// zero - and an empty warehouse is empty.
+TYPE E_LocationState :
+(
+	FREE := 0,
+	RESERVED := 1,
+	OCCUPIED := 2,
+	BLOCKED := 3
+);
+END_TYPE
+]]></Declaration>
+  </DUT>
+</TcPlcObject>

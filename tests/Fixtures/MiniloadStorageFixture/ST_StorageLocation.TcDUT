@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4026.18">
+  <DUT Name="ST_StorageLocation" Id="{5e4501d0-0030-4d19-9a41-000000000003}">
+    <Declaration><![CDATA[(*
+    One slot in the racking environment, and everything the PLC knows about it.
+
+    The address is carried in the element as well as being the array index that
+    reaches it. That is not redundant: a location handed to a shuttle, an HMI
+    or the MES travels as a value, and a value that does not say where it is
+    cannot be acted on. The map stamps the address into every element once, so
+    the two can never disagree.
+
+    Barcode and StoredAt are the container's, not the slot's, and are cleared
+    when the slot is released - a stale barcode on a free location is how a
+    retrieval order gets sent after a container that left yesterday.
+*)
+TYPE ST_StorageLocation :
+STRUCT
+	Address : ST_LocationAddress;
+	State : E_LocationState;
+	Barcode : STRING(32);
+	StoredAt : DATE_AND_TIME;
+END_STRUCT
+END_TYPE
+]]></Declaration>
+  </DUT>
+</TcPlcObject>

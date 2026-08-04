@@ -28,8 +28,10 @@ namespace xStunit.Interpreter.Tests
         private static readonly string[] PilotFixtureDirs =
         {
             TestFixtures.MiniloadConveyorFixtureDir(),
+            TestFixtures.MiniloadMoverFixtureDir(),
             TestFixtures.MiniloadPackMLFixtureDir(),
             TestFixtures.MiniloadSensorFixtureDir(),
+            TestFixtures.MiniloadStorageFixtureDir(),
         };
 
         // POUs that sit inside a pilot fixture directory but are declared
@@ -37,7 +39,7 @@ namespace xStunit.Interpreter.Tests
         // POU earns a place here only when running on the target is not a
         // property it ever claimed.
         private static readonly string[] DeclaredXstunitOnlyPous =
-            { "FB_ConveyorTimingTests", "FB_DigitalInputTimingTests" };
+            { "FB_ConveyorTimingTests", "FB_ContainerMoverTimingTests", "FB_DigitalInputTimingTests" };
 
         [Fact]
         public void PilotSetPous_CallNoIntrinsicTheTargetLacks()

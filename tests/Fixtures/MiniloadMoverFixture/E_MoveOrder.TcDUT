@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4026.18">
+  <DUT Name="E_MoveOrder" Id="{5e4501d0-0033-4d19-9a41-000000000002}">
+    <Declaration><![CDATA[// What the shuttle was asked to do with the container, which is the one thing
+// that differs between two otherwise identical runs of the same state machine:
+// it decides which way the lifting cylinder strokes, and which answer the
+// location map has to give before the order is accepted at all.
+//
+// NONE is the zero value and means no order is in flight, so a mover that has
+// just powered up is not holding a store order for location zero.
+TYPE E_MoveOrder :
+(
+	NONE := 0,
+	STORE := 1,
+	RETRIEVE := 2
+);
+END_TYPE
+]]></Declaration>
+  </DUT>
+</TcPlcObject>

@@ -1,0 +1,520 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Architecture review — xSTunit</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script type="module">
+      import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+      mermaid.initialize({ startOnLoad: true, theme: "neutral", securityLevel: "loose" });
+    </script>
+    <style>
+      .seam { stroke-dasharray: 5 5; }
+      .deep { background: linear-gradient(135deg, #0f172a, #1e293b); }
+      .hatch {
+        background-image: repeating-linear-gradient(45deg, #fecaca 0 6px, #fee2e2 6px 12px);
+      }
+      .mermaid { display: flex; justify-content: center; }
+    </style>
+  </head>
+  <body class="bg-stone-50 text-slate-900 font-sans antialiased">
+    <main class="max-w-5xl mx-auto px-6 py-12 space-y-14">
+
+      <!-- ─────────────────────────── header ─────────────────────────── -->
+      <header class="border-b border-stone-300 pb-8">
+        <div class="flex items-baseline justify-between flex-wrap gap-3">
+          <h1 class="font-serif text-4xl tracking-tight">Architecture review — <span class="text-emerald-700">xSTunit</span></h1>
+          <p class="font-mono text-xs text-slate-500">2026-08-02 · master @ 9f89832</p>
+        </div>
+        <p class="mt-3 text-sm text-slate-600 max-w-2xl">
+          Scoped to the hot spots of the last 40 commits: the byte-layout / sizing cluster,
+          <span class="font-mono text-xs">CliRunner</span>, and the native-stub seam.
+        </p>
+        <p class="mt-3 text-sm text-slate-700 max-w-2xl bg-emerald-50 ring-1 ring-emerald-200 rounded px-3 py-2">
+          <span class="font-medium text-emerald-800">Filed.</span> All six are in the tracker — bead IDs on each card.
+          Two candidates were <span class="font-medium">wrong as first written</span> and are corrected below:
+          <a href="#c4" class="underline underline-offset-2">4</a> overstated the duplication, and
+          <a href="#c5" class="underline underline-offset-2">5</a>'s headline described work that had already shipped.
+        </p>
+
+        <div class="mt-6 grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+          <div class="flex items-center gap-2"><span class="inline-block w-8 h-5 border-2 border-slate-800 rounded-sm bg-white"></span> module</div>
+          <div class="flex items-center gap-2"><svg width="32" height="20"><line class="seam" x1="0" y1="10" x2="32" y2="10" stroke="#475569" stroke-width="2"/></svg> seam</div>
+          <div class="flex items-center gap-2"><svg width="32" height="20"><line x1="0" y1="10" x2="28" y2="10" stroke="#dc2626" stroke-width="2"/><path d="M28 6 L32 10 L28 14 Z" fill="#dc2626"/></svg> leakage</div>
+          <div class="flex items-center gap-2"><span class="inline-block w-8 h-5 rounded-sm deep"></span> deep module</div>
+        </div>
+      </header>
+
+      <!-- ─────────────────────────── candidates ─────────────────────────── -->
+      <section id="candidates" class="space-y-16">
+
+        <!-- ══════════ 1 ══════════ -->
+        <article id="c1" class="scroll-mt-8">
+          <div class="flex items-center gap-3 flex-wrap">
+            <h2 class="font-serif text-2xl">1 · Give the layout module the bytes, not just the byte count</h2>
+            <span class="px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800 ring-1 ring-emerald-300">Strong</span>
+            <span class="px-2 py-0.5 rounded-full text-xs font-mono bg-slate-100 text-slate-600 ring-1 ring-slate-300">in-process</span>
+            <span class="px-2 py-0.5 rounded-full text-xs font-mono bg-indigo-50 text-indigo-800 ring-1 ring-indigo-300">xstunit-08zk · .1 .2 .3</span>
+          </div>
+
+          <ul class="mt-4 font-mono text-sm text-slate-600 space-y-0.5">
+            <li>src/xStunit.Interpreter/Types/TypeLayout.cs</li>
+            <li>src/xStunit.Interpreter/Engine/Engine.ByteLayout.cs <span class="text-slate-400">(346 lines)</span></li>
+            <li>src/xStunit.Interpreter/Engine/Engine.SizeOf.cs</li>
+            <li>src/xStunit.Interpreter/Loaders/StructBoundaryBuilder.cs</li>
+          </ul>
+
+          <!-- before / after: mass diagram -->
+          <div class="mt-6 grid md:grid-cols-2 gap-5">
+            <div class="rounded-lg border border-slate-200 bg-white p-5">
+              <p class="text-xs uppercase tracking-wider text-slate-500 mb-4">Before</p>
+              <div class="flex items-end gap-6 h-64">
+                <div class="flex flex-col items-center">
+                  <div class="w-28 border-2 border-slate-800 bg-white rounded-t-sm h-14 flex items-center justify-center text-[10px] uppercase tracking-wider text-center leading-tight">SizeOf<br/>Fields</div>
+                  <div class="w-28 border-2 border-t-0 border-slate-800 bg-slate-100 rounded-b-sm h-24 flex items-center justify-center text-[10px] text-slate-500">rules</div>
+                  <p class="mt-2 text-[10px] uppercase tracking-wider text-slate-500">TypeLayout</p>
+                </div>
+                <svg width="40" height="200" class="self-center"><line x1="2" y1="80" x2="34" y2="80" stroke="#dc2626" stroke-width="2"/><path d="M34 75 L40 80 L34 85 Z" fill="#dc2626"/><text x="0" y="70" font-size="9" fill="#dc2626">restates</text></svg>
+                <div class="flex flex-col items-center">
+                  <div class="w-32 border-2 border-slate-800 bg-white rounded-t-sm h-14 flex items-center justify-center text-[10px] uppercase tracking-wider text-center leading-tight">Pack<br/>Unpack</div>
+                  <div class="w-32 border-2 border-t-0 border-slate-800 hatch rounded-b-sm h-40 flex items-center justify-center text-[10px] text-red-800 text-center px-1">same 5-shape walk<br/>array fold ×2<br/>string +1 ×2<br/>scalar widths ×2</div>
+                  <p class="mt-2 text-[10px] uppercase tracking-wider text-slate-500">Engine.ByteLayout</p>
+                </div>
+              </div>
+            </div>
+
+            <div class="rounded-lg border border-slate-200 bg-white p-5">
+              <p class="text-xs uppercase tracking-wider text-slate-500 mb-4">After</p>
+              <div class="flex items-end gap-6 h-64">
+                <div class="flex flex-col items-center">
+                  <div class="w-40 border-2 border-slate-900 bg-white rounded-t-sm h-10 flex items-center justify-center text-[10px] uppercase tracking-wider text-center leading-tight">SizeOf · Fields<br/>Pack · Unpack</div>
+                  <div class="w-40 border-2 border-t-0 border-slate-900 deep rounded-b-sm h-48 flex items-center justify-center text-[10px] text-emerald-300 text-center px-2">one 5-shape walk<br/>one array fold<br/>one <span class="font-mono">+1</span> terminator<br/>one scalar table</div>
+                  <p class="mt-2 text-[10px] uppercase tracking-wider text-slate-500">TypeLayout</p>
+                </div>
+                <div class="flex flex-col items-center">
+                  <div class="w-24 border-2 border-slate-400 bg-white rounded-sm h-14 flex items-center justify-center text-[10px] uppercase tracking-wider text-center text-slate-500 leading-tight">Cell ⇄<br/>buffer</div>
+                  <p class="mt-2 text-[10px] uppercase tracking-wider text-slate-400">Engine.ByteLayout</p>
+                  <p class="text-[10px] text-slate-400">adapter</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <dl class="mt-6 space-y-3 text-sm">
+            <div><dt class="font-semibold inline">Problem — </dt><dd class="inline">TypeLayout is the declared authority on layout but its interface answers only <em>how many bytes</em>; the byte <em>content</em> rules leak into Engine, where <span class="font-mono text-xs">PackValue</span>/<span class="font-mono text-xs">UnpackValue</span> re-walk the same five type shapes and independently restate the array stride fold, the string <span class="font-mono text-xs">+1</span> terminator and every scalar width.</dd></div>
+            <div><dt class="font-semibold inline">Solution — </dt><dd class="inline">Move packing and unpacking behind the same interface as sizing, driven by the same <span class="font-mono text-xs">Func&lt;string,int&gt;</span> bound-resolver seam the constructor already takes. Engine.ByteLayout keeps only Cell⇄buffer adaptation and the Commit write-back.</dd></div>
+          </dl>
+
+          <div class="mt-4 grid sm:grid-cols-2 gap-x-8 gap-y-1 text-sm">
+            <p class="flex gap-2"><span class="text-emerald-600">▸</span> locality: layout bugs land in one module</p>
+            <p class="flex gap-2"><span class="text-emerald-600">▸</span> leverage: one walk, three consumers</p>
+            <p class="flex gap-2"><span class="text-emerald-600">▸</span> new IEC type = one edit, not three</p>
+            <p class="flex gap-2"><span class="text-emerald-600">▸</span> tests drop Engine, Frame and ST fixtures</p>
+          </div>
+
+          <p class="mt-4 text-xs text-slate-500 border-l-2 border-slate-300 pl-3">
+            Deletion test: yes — deleting Engine.ByteLayout's pack/unpack concentrates the rules rather than moving them.
+            Today the only test of byte packing is <span class="font-mono">MemIntrinsicsTests</span>, which reaches it through <span class="font-mono">MEMCPY</span> in an ST fixture.
+          </p>
+          <p class="mt-3 text-xs text-slate-600 bg-indigo-50 ring-1 ring-indigo-200 rounded px-3 py-2">
+            Sliced by type shape, not by direction — each child moves one shape through <em>both</em> pack and unpack and lands with a test needing no Engine.
+            <span class="font-mono">08zk.1</span> (scalars + BOOL) is the tracer bullet and the seam everything else waits on.
+          </p>
+        </article>
+
+        <!-- ══════════ 2 ══════════ -->
+        <article id="c2" class="scroll-mt-8">
+          <div class="flex items-center gap-3 flex-wrap">
+            <h2 class="font-serif text-2xl">2 · Target platform has no home in the layout module</h2>
+            <span class="px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800 ring-1 ring-emerald-300">Strong</span>
+            <span class="px-2 py-0.5 rounded-full text-xs font-mono bg-slate-100 text-slate-600 ring-1 ring-slate-300">in-process</span>
+            <span class="px-2 py-0.5 rounded-full text-xs font-mono bg-indigo-50 text-indigo-800 ring-1 ring-indigo-300">xstunit-229.30 · 5i6j</span>
+          </div>
+
+          <ul class="mt-4 font-mono text-sm text-slate-600 space-y-0.5">
+            <li>src/xStunit.Interpreter/Types/TypeLayout.cs<span class="text-slate-400">:85-87</span></li>
+            <li>src/xStunit.Interpreter/Conformance/LayoutOracle.cs<span class="text-slate-400">:24-26, 228-229</span></li>
+            <li>tests/Fixtures/LayoutChecklistFixture/LayoutChecklist.x64.diff.txt</li>
+          </ul>
+
+          <div class="mt-6 grid md:grid-cols-2 gap-5">
+            <div class="rounded-lg border border-slate-200 bg-white p-4">
+              <p class="text-xs uppercase tracking-wider text-slate-500 mb-3">Before — the oracle compares two different targets</p>
+              <pre class="mermaid">
+flowchart TB
+  M[".tmc ModuleLayout<br/>TargetPlatform = x64"] --> O["LayoutOracle"]
+  O -->|declared side<br/>target-aware| D["DeclaredBits<br/>BitSizeX64"]
+  O -->|computed side| T["TypeLayout"]
+  T --> P["POINTER TO := (4,4)<br/>hard-coded x86"]
+  D -.mismatch.-> P
+  classDef leak fill:#fee2e2,stroke:#dc2626,stroke-width:2px;
+  class P leak
+              </pre>
+            </div>
+            <div class="rounded-lg border border-slate-200 bg-white p-4">
+              <p class="text-xs uppercase tracking-wider text-slate-500 mb-3">After — one target flows into both sides</p>
+              <pre class="mermaid">
+flowchart TB
+  M[".tmc ModuleLayout<br/>TargetPlatform = x64"] --> O["LayoutOracle"]
+  O --> TT["TargetModel<br/>pointerWidth = 8"]
+  TT --> D["declared side"]
+  TT --> T["TypeLayout(registry, target)"]
+  T --> P["POINTER TO := (8,8)"]
+  classDef deep fill:#0f172a,color:#a7f3d0,stroke:#0f172a,stroke-width:2px;
+  class TT deep
+              </pre>
+            </div>
+          </div>
+
+          <dl class="mt-6 space-y-3 text-sm">
+            <div><dt class="font-semibold inline">Problem — </dt><dd class="inline">Pointer width is a layout rule that depends on the compile target, but TypeLayout takes no target and hard-codes 4 bytes. LayoutOracle picks the x64 declared width while asking TypeLayout for an x86 computed width, so every x64 module reports pointer-width findings that are an artefact of the seam, not of the rules.</dd></div>
+            <div><dt class="font-semibold inline">Solution — </dt><dd class="inline">Give the layout module a target parameter (pointer width, and whatever else turns out to vary) alongside the registry. The oracle passes the target it read from the <span class="font-mono text-xs">.tmc</span>; the interpreter passes its own default.</dd></div>
+          </dl>
+
+          <div class="mt-4 grid sm:grid-cols-2 gap-x-8 gap-y-1 text-sm">
+            <p class="flex gap-2"><span class="text-emerald-600">▸</span> oracle measures rules, not the seam</p>
+            <p class="flex gap-2"><span class="text-emerald-600">▸</span> x64 SIZEOF becomes expressible</p>
+            <p class="flex gap-2"><span class="text-emerald-600">▸</span> target is a value, testable per case</p>
+            <p class="flex gap-2"><span class="text-emerald-600">▸</span> smallest diff of the six candidates</p>
+          </div>
+
+          <p class="mt-4 text-xs text-slate-600 bg-indigo-50 ring-1 ring-indigo-200 rounded px-3 py-2">
+            Answered already, no investigation needed: the tracker records the x64 mismatch as a <em>known gap</em>, not a disagreement about a rule —
+            <span class="font-mono">xstunit-229.31/.32</span> both state it, and <span class="font-mono">229.30</span>'s acceptance criteria already require the x64 diff to come clean.
+          </p>
+
+          <p class="mt-3 text-xs text-slate-500 border-l-2 border-red-400 pl-3">
+            <span class="font-medium text-red-700">Upgraded to a bug</span> (<span class="font-mono">xstunit-5i6j</span>): the <span class="font-mono">POINTER TO</span> / <span class="font-mono">REFERENCE TO</span> prefix test is spelled three times with three <em>different</em> comparisons —
+            <span class="font-mono">TypeLayout.cs:85</span> (Ordinal), <span class="font-mono">Engine.Defaults.cs:48</span> (OrdinalIgnoreCase), <span class="font-mono">Engine.Cells.cs:121</span> (none, so culture-sensitive).
+            A POU declaring <span class="font-mono">pointer to BYTE</span> gets a pointer default from Engine.Defaults, culture-dependent behaviour from <span class="font-mono">__ISVALIDREF</span>, and a refusal from TypeLayout.
+            Gates <span class="font-mono">229.30</span> — single-source the predicate before its return value changes.
+          </p>
+        </article>
+
+        <!-- ══════════ 3 ══════════ -->
+        <article id="c3" class="scroll-mt-8">
+          <div class="flex items-center gap-3 flex-wrap">
+            <h2 class="font-serif text-2xl">3 · The wire contract has no module</h2>
+            <span class="px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800 ring-1 ring-emerald-300">Strong</span>
+            <span class="px-2 py-0.5 rounded-full text-xs font-mono bg-slate-100 text-slate-600 ring-1 ring-slate-300">in-process</span>
+            <span class="px-2 py-0.5 rounded-full text-xs font-mono bg-indigo-50 text-indigo-800 ring-1 ring-indigo-300">xstunit-e7vb · .1 .2</span>
+          </div>
+
+          <ul class="mt-4 font-mono text-sm text-slate-600 space-y-0.5">
+            <li>src/xStunit.Cli/CliRunner.cs <span class="text-slate-400">(987 lines; Run = 434; DTOs = 350)</span></li>
+            <li>tests/xStunit.Cli.Tests/ <span class="text-slate-400">(19 files, all end-to-end)</span></li>
+            <li>src/xStunit.Vsix/TestRunner/XstunitModels.cs <span class="text-slate-400">(the other end of the same contract)</span></li>
+          </ul>
+
+          <!-- cross-section -->
+          <div class="mt-6 grid md:grid-cols-2 gap-5">
+            <div class="rounded-lg border border-slate-200 bg-white p-5">
+              <p class="text-xs uppercase tracking-wider text-slate-500 mb-4">Before — one entry point, everything inside it</p>
+              <div class="space-y-1.5">
+                <div class="h-9 border-2 border-slate-800 bg-white rounded-sm flex items-center px-3 text-[10px] uppercase tracking-wider">CliRunner.Run — the only public surface</div>
+                <div class="pl-5 space-y-1">
+                  <div class="h-7 border-l-4 border-slate-300 bg-slate-50 flex items-center px-3 text-[10px] text-slate-600">arg parse · format validation · exit 2</div>
+                  <div class="h-7 border-l-4 border-slate-300 bg-slate-50 flex items-center px-3 text-[10px] text-slate-600">POU / DUT / GVL load · dedupe · registry · suite filter</div>
+                  <div class="h-7 border-l-4 border-slate-300 bg-slate-50 flex items-center px-3 text-[10px] text-slate-600">suite execution · broad-catch isolation</div>
+                  <div class="h-7 border-l-4 border-red-400 bg-red-50 flex items-center px-3 text-[10px] text-red-800">WriteError · ReportTests — <span class="font-mono ml-1">local functions</span></div>
+                  <div class="h-7 border-l-4 border-red-400 bg-red-50 flex items-center px-3 text-[10px] text-red-800">text · json · NDJSON emit, ×3 at each site</div>
+                  <div class="h-16 border-l-4 border-red-400 bg-red-50 flex items-center px-3 text-[10px] text-red-800">11 <span class="font-mono mx-1">private sealed class</span> DTOs — the JSON contract, unaddressable</div>
+                </div>
+              </div>
+              <p class="mt-3 text-[10px] text-slate-500">Every test constructs a <span class="font-mono">StringWriter</span> and asserts on stdout.</p>
+            </div>
+
+            <div class="rounded-lg border border-slate-200 bg-white p-5">
+              <p class="text-xs uppercase tracking-wider text-slate-500 mb-4">After — three modules, three test surfaces</p>
+              <div class="space-y-3">
+                <div class="border-2 border-slate-400 rounded-sm">
+                  <div class="h-9 bg-white flex items-center px-3 text-[10px] uppercase tracking-wider">CliRunner — parse args, orchestrate, exit code</div>
+                </div>
+                <div class="border-2 border-slate-900 rounded-sm deep">
+                  <div class="h-9 flex items-center px-3 text-[10px] uppercase tracking-wider text-emerald-300">Workspace load — dirs ⟶ registry + skips</div>
+                  <div class="px-3 pb-2 text-[10px] text-slate-400">POU · DUT · alias · enum · GVL · dedupe</div>
+                </div>
+                <div class="border-2 border-slate-900 rounded-sm deep">
+                  <div class="h-9 flex items-center px-3 text-[10px] uppercase tracking-wider text-emerald-300">Run report — the wire contract</div>
+                  <div class="px-3 pb-2 text-[10px] text-slate-400">public DTOs · guidance · text/json/NDJSON writers</div>
+                </div>
+              </div>
+              <p class="mt-3 text-[10px] text-slate-500">NDJSON schema and guidance text get direct tests; end-to-end tests stay for the exit-code contract.</p>
+            </div>
+          </div>
+
+          <dl class="mt-6 space-y-3 text-sm">
+            <div><dt class="font-semibold inline">Problem — </dt><dd class="inline">The JSON and NDJSON output is a published contract — the VSIX parses it — yet it exists only as private classes inside a 987-line file, and its two formatters are local functions capturing <span class="font-mono text-xs">asJson</span>/<span class="font-mono text-xs">streaming</span>/three counters. Nothing behind that entry point can be reached by a test.</dd></div>
+            <div><dt class="font-semibold inline">Solution — </dt><dd class="inline">Two modules out of Run: a workspace-load module returning the loaded set plus its skips, and a run-report module owning the DTOs, the guidance rules, and one writer per format. CliRunner keeps arg parsing, suite iteration, and the exit-code decision.</dd></div>
+          </dl>
+
+          <div class="mt-4 grid sm:grid-cols-2 gap-x-8 gap-y-1 text-sm">
+            <p class="flex gap-2"><span class="text-emerald-600">▸</span> the wire contract becomes a test surface</p>
+            <p class="flex gap-2"><span class="text-emerald-600">▸</span> one shape, three writers — not three inline</p>
+            <p class="flex gap-2"><span class="text-emerald-600">▸</span> VSIX models can share the seam</p>
+            <p class="flex gap-2"><span class="text-emerald-600">▸</span> locality: skip accumulation stops threading</p>
+          </div>
+
+          <p class="mt-4 text-xs text-slate-500 border-l-2 border-slate-300 pl-3">
+            Scope note: the comments in <span class="font-mono">CliRunner.cs</span> are unusually load-bearing — they record why the broad catch, the pre-scan, and the exit-code rules are what they are. Any split has to carry them, not drop them.
+          </p>
+        </article>
+
+        <!-- ══════════ 4 ══════════ -->
+        <article id="c4" class="scroll-mt-8">
+          <div class="flex items-center gap-3 flex-wrap">
+            <h2 class="font-serif text-2xl">4 · Four mechanisms for one concept: “a PLC-visible native thing”</h2>
+            <span class="px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800 ring-1 ring-amber-300">Worth exploring</span>
+            <span class="px-2 py-0.5 rounded-full text-xs font-mono bg-slate-100 text-slate-600 ring-1 ring-slate-300">local-substitutable</span>
+            <span class="px-2 py-0.5 rounded-full text-xs font-mono bg-indigo-50 text-indigo-800 ring-1 ring-indigo-300">xstunit-fvyq</span>
+          </div>
+
+          <p class="mt-4 text-xs text-red-800 bg-red-50 ring-1 ring-red-200 rounded px-3 py-2">
+            <span class="font-medium">Corrected.</span> The first draft claimed <span class="font-mono">IsNativeFbTypeName</span> was a duplicate copy of the host name list, and that the five
+            <span class="font-mono">Hosts/*.cs</span> types had no direct test references. Both false.
+            <span class="font-mono">Engine.NativeHost.cs:199-204</span> reads the <em>same</em> four <span class="font-mono">HashSet</span>s, and the comment above it explains why the two queries differ;
+            the hosts are named directly by <span class="font-mono">NativeFbCaseInsensitivityTests</span>, <span class="font-mono">LongTimerFbTests</span> and <span class="font-mono">CounterFbTests</span>.
+            The multi-edit cost is real only when adding a new <em>kind</em>, not a new type name.
+          </p>
+
+          <ul class="mt-4 font-mono text-sm text-slate-600 space-y-0.5">
+            <li>src/xStunit.Interpreter/Engine/Engine.NativeHost.cs · Engine.Invocation.cs</li>
+            <li>src/xStunit.Interpreter/Hosts/NativeMethodBridge.cs</li>
+            <li>src/xStunit.Interpreter/Extensibility/NativeFunctionRegistry.cs</li>
+          </ul>
+
+          <div class="mt-6 grid md:grid-cols-2 gap-5">
+            <div class="rounded-lg border border-slate-200 bg-white p-4">
+              <p class="text-xs uppercase tracking-wider text-slate-500 mb-3">Before — three switch arms, one registry</p>
+              <pre class="mermaid">
+flowchart TB
+  C["Engine.CallMethod"] --> H["native FB hosts<br/>4 HashSets + Classify + switch"]
+  C --> L["loopback faults<br/>own name set + own switch"]
+  C --> B["NativeMethodBridge<br/>CanInvoke ∥ Invoke"]
+  C --> R["NativeFunctionRegistry<br/>name ⟶ handler"]
+  B -.prefix rules + 2 local sets<br/>still hand-matched.-> B2["Invoke's own walk"]
+  classDef leak fill:#fee2e2,stroke:#dc2626,stroke-width:2px;
+  classDef ok fill:#d1fae5,stroke:#059669,stroke-width:2px;
+  class H,L,B,B2 leak
+  class R ok
+              </pre>
+            </div>
+            <div class="rounded-lg border border-slate-200 bg-white p-4">
+              <p class="text-xs uppercase tracking-wider text-slate-500 mb-3">After — internal registry; plugin seam untouched</p>
+              <pre class="mermaid">
+flowchart TB
+  C["Engine.CallMethod"] --> R["internal native registry<br/>name ⟶ handler"]
+  R --> H["timer · counter · edge<br/>latch · loopback"]
+  R --> S["TcUnit suite bridge"]
+  C --> P["IXstunitNativeFunction<br/>unchanged public seam"]
+  classDef deep fill:#0f172a,color:#a7f3d0,stroke:#0f172a,stroke-width:2px;
+  classDef ok fill:#d1fae5,stroke:#059669,stroke-width:2px;
+  class R deep
+  class P ok
+              </pre>
+            </div>
+          </div>
+
+          <dl class="mt-6 space-y-3 text-sm">
+            <div><dt class="font-semibold inline">Problem — </dt><dd class="inline">Adding a new native host <em>kind</em> means editing a name set, <span class="font-mono text-xs">ClassifyNativeHost</span>, and an invocation switch arm. Loopback faults carry a second name set and a second switch. The TcUnit bridge has the hazard written into its own comment — <em>“CanInvoke MUST stay in agreement with Invoke's dispatch below; the two are separate walks”</em> — and while the scalar asserts are now registry-driven and test-locked, the prefix rules and two local sets are still hand-matched on both sides. Only the plugin registry is deep.</dd></div>
+            <div><dt class="font-semibold inline">Solution — </dt><dd class="inline">Unify the three switch-based mechanisms behind one <em>internal</em> registry that can carry the <span class="font-mono text-xs">FbInstance</span> and <span class="font-mono text-xs">Frame</span> a host needs. Leave <span class="font-mono text-xs">IXstunitNativeFunction</span> exactly as it is.</dd></div>
+          </dl>
+
+          <div class="mt-4 grid sm:grid-cols-2 gap-x-8 gap-y-1 text-sm">
+            <p class="flex gap-2"><span class="text-amber-600">▸</span> new host kind = one registration</p>
+            <p class="flex gap-2"><span class="text-amber-600">▸</span> deletes a name set and two switches</p>
+            <p class="flex gap-2"><span class="text-amber-600">▸</span> CanInvoke and dispatch stop diverging</p>
+            <p class="flex gap-2"><span class="text-amber-600">▸</span> dispatch precedence stated once</p>
+          </div>
+
+          <div class="mt-4 text-xs bg-emerald-50 ring-1 ring-emerald-200 rounded px-3 py-2 text-emerald-900">
+            <span class="font-medium">Decided.</span> The open question was whether to widen the plugin interface itself.
+            Answer: <span class="font-medium">no</span> — <span class="font-mono">IXstunitNativeFunction</span> / <span class="font-mono">NativeCallContext</span> take pre-evaluated CLR values on purpose and are the only surface an outside plugin author writes against.
+            Unify mechanisms 1–3 behind an internal registry; leave the public seam alone. No implementation bead filed until that lands as the bead's resolution.
+          </div>
+        </article>
+
+        <!-- ══════════ 5 ══════════ -->
+        <article id="c5" class="scroll-mt-8">
+          <div class="flex items-center gap-3 flex-wrap">
+            <h2 class="font-serif text-2xl"><s class="text-slate-400 decoration-red-400">5 · The TcUnit assert surface is spelled three times</s></h2>
+            <span class="px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800 ring-1 ring-red-300">Withdrawn</span>
+            <span class="px-2 py-0.5 rounded-full text-xs font-mono bg-indigo-50 text-indigo-800 ring-1 ring-indigo-300">xstunit-f3rb</span>
+          </div>
+
+          <h3 class="mt-2 font-serif text-xl text-slate-700">What actually remains: does <span class="font-mono text-base">SuiteRunner</span> earn its keep?</h3>
+
+          <p class="mt-4 text-xs text-red-800 bg-red-50 ring-1 ring-red-200 rounded px-3 py-2">
+            <span class="font-medium">Corrected — the headline was false.</span> The consolidation already shipped.
+            <span class="font-mono">FB_TestSuite.AssertEqualsScalar</span> (:262) is table-driven off <span class="font-mono">ScalarAssertType.Registry</span>, and each of the 19
+            <span class="font-mono">AssertEquals_&lt;TYPE&gt;</span> methods is a <em>one-line forward into it</em>. The comment at :257-261 states why they stay:
+            they are the compile-time API surface C# fixtures call by name, plus a verbatim upstream TcUnit name contract.
+            <span class="font-mono">SuiteHost</span> is a <span class="font-mono">protected</span>→<span class="font-mono">public</span> visibility bridge across a project seam, not a rename layer.
+            The earlier “25 hand-written methods” was a miscount of forwards.
+          </p>
+
+          <ul class="mt-4 font-mono text-sm text-slate-600 space-y-0.5">
+            <li>src/xStunit.Runner/SuiteRunner.cs <span class="text-slate-400">(one forwarding line)</span></li>
+            <li>src/xStunit.Interpreter/Engine/Engine.cs<span class="text-slate-400">:153 — the real path, calls host.Collect() directly</span></li>
+          </ul>
+
+          <!-- what survived: a single dangling module -->
+          <div class="mt-6 rounded-lg border border-slate-200 bg-white p-5">
+            <div class="grid md:grid-cols-2 gap-8">
+              <div>
+                <p class="text-xs uppercase tracking-wider text-slate-500 mb-4">Already deep — leave alone</p>
+                <div class="border-2 border-slate-900 rounded-sm p-3 deep">
+                  <p class="text-[10px] uppercase tracking-wider text-emerald-300">TcUnit suite stub</p>
+                  <p class="mt-2 text-[10px] text-slate-400 leading-relaxed">
+                    ScalarAssertType.Registry — one comparison table<br/>
+                    AssertEqualsScalar — one dispatcher<br/>
+                    19 AssertEquals_&lt;TYPE&gt; — 1-line forwards, <em>contract</em><br/>
+                    SuiteHost — visibility bridge across a project seam
+                  </p>
+                </div>
+              </div>
+              <div>
+                <p class="text-xs uppercase tracking-wider text-slate-500 mb-4">The one live question</p>
+                <div class="border-2 border-dashed border-red-400 rounded-sm p-3 bg-red-50">
+                  <p class="text-[10px] uppercase tracking-wider text-red-800">SuiteRunner.RunAll</p>
+                  <p class="mt-2 text-[10px] text-red-900 leading-relaxed font-mono">
+                    RunAll(FB_TestSuite s) =&gt; s.Run();
+                  </p>
+                  <p class="mt-2 text-[10px] text-red-800">
+                    Not on the real execution path — <span class="font-mono">Engine.cs:153</span> calls <span class="font-mono">host.Collect()</span> directly.
+                    Referenced by three test files and nothing else.
+                  </p>
+                </div>
+                <p class="mt-3 text-[10px] text-slate-500">Deletion test: deleting it moves nothing — the three tests call <span class="font-mono">suite.Run()</span> instead.</p>
+              </div>
+            </div>
+          </div>
+
+          <dl class="mt-6 space-y-3 text-sm">
+            <div><dt class="font-semibold inline">Problem — </dt><dd class="inline">One module exists solely to forward a single call, and only tests reach it. A module whose only callers are tests describes the tests, not the system.</dd></div>
+            <div><dt class="font-semibold inline">Solution — </dt><dd class="inline">Delete <span class="font-mono text-xs">SuiteRunner</span>; point its three test callers at <span class="font-mono text-xs">FB_TestSuite.Run()</span>. Filed low priority — this is tidying, not deepening.</dd></div>
+          </dl>
+
+          <p class="mt-4 text-xs text-slate-500 border-l-2 border-slate-300 pl-3">
+            Explicitly <span class="font-medium">not</span> filed as work: collapsing <span class="font-mono">SuiteHost</span> into the bridge would require making <span class="font-mono">FB_TestSuite</span>'s protected surface public.
+            Recorded on <span class="font-mono">xstunit-f3rb</span> as a constraint so it is not re-raised by the next review.
+          </p>
+        </article>
+
+        <!-- ══════════ 6 ══════════ -->
+        <article id="c6" class="scroll-mt-8">
+          <div class="flex items-center gap-3 flex-wrap">
+            <h2 class="font-serif text-2xl">6 · A second, Engine-free copy of default construction</h2>
+            <span class="px-2 py-0.5 rounded-full text-xs font-medium bg-slate-200 text-slate-700 ring-1 ring-slate-400">Speculative</span>
+            <span class="px-2 py-0.5 rounded-full text-xs font-mono bg-slate-100 text-slate-600 ring-1 ring-slate-300">in-process</span>
+            <span class="px-2 py-0.5 rounded-full text-xs font-mono bg-indigo-50 text-indigo-800 ring-1 ring-indigo-300">xstunit-8018</span>
+          </div>
+
+          <ul class="mt-4 font-mono text-sm text-slate-600 space-y-0.5">
+            <li>src/xStunit.Interpreter/Loaders/StructBoundaryBuilder.cs<span class="text-slate-400">:52-56, 131-166</span></li>
+            <li>src/xStunit.Interpreter/Engine/Engine.Defaults.cs</li>
+            <li>src/xStunit.Interpreter/Engine/Engine.Expressions.cs</li>
+          </ul>
+
+          <div class="mt-6 rounded-lg border border-slate-200 bg-white p-5">
+            <div class="grid md:grid-cols-2 gap-8 items-center">
+              <div>
+                <p class="text-xs uppercase tracking-wider text-slate-500 mb-3">Before</p>
+                <div class="flex items-center gap-4">
+                  <div class="flex-1 border-2 border-slate-800 rounded-sm p-3 bg-white text-[10px] leading-relaxed">
+                    <p class="uppercase tracking-wider mb-1">Engine</p>
+                    BuildStructDefault<br/>BuildArrayDefault<br/>Evaluate
+                  </div>
+                  <svg width="44" height="30"><line class="seam" x1="0" y1="15" x2="44" y2="15" stroke="#dc2626" stroke-width="2"/><text x="4" y="11" font-size="8" fill="#dc2626">copy</text></svg>
+                  <div class="flex-1 border-2 border-slate-800 rounded-sm p-3 hatch text-[10px] leading-relaxed text-red-900">
+                    <p class="uppercase tracking-wider mb-1">StructBoundaryBuilder</p>
+                    same 0/false/"" rules<br/>own EvaluateConstExpr
+                  </div>
+                </div>
+                <p class="mt-3 text-[10px] text-slate-500">The duplication is acknowledged in the source: <em>“Reproduces Engine.BuildStructDefault… without an Engine instance.”</em></p>
+              </div>
+              <div>
+                <p class="text-xs uppercase tracking-wider text-slate-500 mb-3">After</p>
+                <div class="flex items-center gap-4">
+                  <div class="flex-1 border-2 border-slate-400 rounded-sm p-3 bg-white text-[10px] text-slate-500 leading-relaxed">
+                    <p class="uppercase tracking-wider mb-1">Engine</p>
+                    delegates
+                  </div>
+                  <svg width="44" height="30"><line x1="0" y1="15" x2="38" y2="15" stroke="#475569" stroke-width="2"/><path d="M38 11 L44 15 L38 19 Z" fill="#475569"/></svg>
+                  <div class="flex-1 border-2 border-slate-900 rounded-sm p-3 deep text-[10px] text-emerald-300 leading-relaxed">
+                    <p class="uppercase tracking-wider mb-1">Default construction</p>
+                    one rule set<br/>bound resolver as seam
+                  </div>
+                </div>
+                <p class="mt-3 text-[10px] text-slate-500">Same <span class="font-mono">Func&lt;string,int&gt;</span> seam candidate 1 uses — one adapter for the Engine, one for the loader.</p>
+              </div>
+            </div>
+          </div>
+
+          <dl class="mt-6 space-y-3 text-sm">
+            <div><dt class="font-semibold inline">Problem — </dt><dd class="inline">Two implementations of “what is the default value of type T”, and two constant-expression evaluators, kept in step by hand.</dd></div>
+            <div><dt class="font-semibold inline">Solution — </dt><dd class="inline">Extract default construction into the module that already owns the type rules, with the frame-dependent part passed in as the resolver seam.</dd></div>
+          </dl>
+
+          <div class="mt-4 grid sm:grid-cols-2 gap-x-8 gap-y-1 text-sm">
+            <p class="flex gap-2"><span class="text-slate-500">▸</span> two adapters justify the seam</p>
+            <p class="flex gap-2"><span class="text-slate-500">▸</span> one place for 0 / FALSE / ""</p>
+          </div>
+
+          <p class="mt-4 text-xs text-slate-500 border-l-2 border-slate-300 pl-3">
+            Speculative: the second evaluator is a deliberately smaller subset, and the source says so. Do candidate 1 first — it establishes the resolver seam this one would reuse.
+          </p>
+        </article>
+
+      </section>
+
+      <!-- ─────────────────────────── top recommendation ─────────────────────────── -->
+      <section id="top-recommendation">
+        <div class="rounded-xl border-2 border-emerald-700 bg-white p-8">
+          <p class="text-xs uppercase tracking-wider text-emerald-700 mb-2">Top recommendation</p>
+          <h2 class="font-serif text-3xl">
+            <a href="#c1" class="hover:underline decoration-emerald-500 decoration-2 underline-offset-4">1 · Give the layout module the bytes, not just the byte count</a>
+          </h2>
+          <p class="mt-4 text-slate-700 max-w-3xl">
+            It is where the codebase is hottest — the last five commits all touch byte layout — and it is the only candidate that
+            deepens a module the other candidates then build on. The bound-resolver seam it establishes is what makes
+            <a href="#c2" class="underline decoration-slate-300 underline-offset-2">candidate 2</a> a parameter rather than a rewrite, and
+            <a href="#c6" class="underline decoration-slate-300 underline-offset-2">candidate 6</a> a delegation rather than a third copy.
+            It also turns the layout rules into a test surface that needs no Engine, no Frame and no ST fixture — today
+            <span class="font-mono text-sm">StringTypeInfo</span>, the string-sizing authority, has no direct test at all.
+          </p>
+          <p class="mt-4 text-sm text-slate-500">
+            Then <a href="#c2" class="underline decoration-slate-300 underline-offset-2">2</a> (small, and the oracle currently
+            grades itself against its own seam), then <a href="#c3" class="underline decoration-slate-300 underline-offset-2">3</a>.
+          </p>
+
+          <div class="mt-6 pt-5 border-t border-stone-200">
+            <p class="text-xs uppercase tracking-wider text-slate-500 mb-3">Ready queue</p>
+            <ol class="space-y-2 text-sm">
+              <li class="flex gap-3">
+                <span class="font-mono text-xs bg-emerald-100 text-emerald-800 rounded px-1.5 py-0.5 shrink-0">xstunit-08zk.1</span>
+                <span class="text-slate-700">P1 — scalars + BOOL through both pack and unpack. Highest unblocking power filed: releases <span class="font-mono text-xs">08zk.2</span>, <span class="font-mono text-xs">08zk.3</span>, <span class="font-mono text-xs">8018</span> and <span class="font-mono text-xs">229.30</span>, which in turn gates <span class="font-mono text-xs">229.33</span>.</span>
+              </li>
+              <li class="flex gap-3">
+                <span class="font-mono text-xs bg-slate-100 text-slate-700 rounded px-1.5 py-0.5 shrink-0">xstunit-5i6j</span>
+                <span class="text-slate-700">P2 — small, a real bug, and the other gate on <span class="font-mono text-xs">229.30</span>.</span>
+              </li>
+              <li class="flex gap-3">
+                <span class="font-mono text-xs bg-slate-100 text-slate-700 rounded px-1.5 py-0.5 shrink-0">xstunit-e7vb.1</span>
+                <span class="text-slate-700">P2 — the lower-risk CLI slice: no published-contract surface, so it proves the extraction shape before <span class="font-mono text-xs">e7vb.2</span> moves the bytes the VSIX parses.</span>
+              </li>
+            </ol>
+          </div>
+        </div>
+      </section>
+
+      <footer class="pt-6 border-t border-stone-300 text-xs text-slate-500">
+        <p>No <span class="font-mono">CONTEXT.md</span> and no <span class="font-mono">docs/adr/</span> in this repo — no ADR conflicts to flag, and the domain terms above come from the code itself (suite, POU, layout, native host, wire contract).</p>
+        <p class="mt-2">Unrelated to the above, worth a broom (<span class="font-mono">xstunit-2o9.14</span>): the nine <span class="font-mono">src/TcXunit.*</span> and <span class="font-mono">tests/TcXunit.*</span> directories hold nothing but stale <span class="font-mono">bin/</span> and <span class="font-mono">obj/</span> from the pre-rename projects; zero references in <span class="font-mono">xStunit.sln</span>.</p>
+        <p class="mt-2 text-slate-400">Two findings in this report were wrong when first written and are struck through or boxed in red where they appear. Both were caught by checking the claims against the source rather than by taking the first read at face value.</p>
+      </footer>
+
+    </main>
+  </body>
+</html>

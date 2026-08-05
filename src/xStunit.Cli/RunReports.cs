@@ -11,6 +11,11 @@ namespace xStunit.Cli
     // consumers holding no reference to these types (see
     // src/xStunit.Vsix/TestRunner/XstunitModels.cs). Renaming a type here is
     // free; renaming a property is a break.
+    //
+    // Plain text is a rendering of these same reports rather than a second
+    // derivation from the runner's results, so a few properties below carry
+    // what only the console needs and are marked [JsonIgnore]: they are part of
+    // the model, not of the contract.
     internal static class RunReportJson
     {
         // The `--format json` shape: one indented object for the whole run.
@@ -189,6 +194,7 @@ namespace xStunit.Cli
             string name,
             string filePath,
             string error,
+            string detail,
             string kind,
             string construct,
             IReadOnlyList<TestReport> tests,
@@ -203,6 +209,7 @@ namespace xStunit.Cli
             Name = name;
             FilePath = filePath;
             Error = error;
+            Detail = detail;
             Kind = kind;
             Construct = construct;
             Tests = tests;
@@ -224,9 +231,25 @@ namespace xStunit.Cli
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public string Outcome { get; }
 
+        // The suite reported on its own --stream line and the same suite inside
+        // the summary's suites[] are one report; only the two discriminators
+        // that mark a standalone line differ. Copying rather than rebuilding is
+        // what stops the two from describing the suite differently.
+        public SuiteReport AsStreamEvent(string streamEvent, string outcome) =>
+            new SuiteReport(
+                Name, FilePath, Error, Detail, Kind, Construct, Tests, DurationMs, FileLine, CallStack,
+                streamEvent, outcome);
+
         public string Name { get; }
         public string FilePath { get; }
         public string Error { get; }
+
+        // The same fault as Error, rendered for a console instead of for a
+        // consumer holding one JSON object: no guidance appended, and read as a
+        // sentence ("in FB_Y.MethodZ(3): ..."). Null for a suite that didn't
+        // fail.
+        [JsonIgnore]
+        public string Detail { get; }
 
         // The machine-readable counterpart to Error - one of the
         // FailureKind constants, null for a suite that didn't fail. The
@@ -262,13 +285,23 @@ namespace xStunit.Cli
 
     internal sealed class CallStackFrameReport
     {
-        public CallStackFrameReport(string pouTypeName, string methodName, int? line, int? bodyLine)
+        public CallStackFrameReport(
+            string pouTypeName, string methodName, int? line, int? bodyLine, string locationWithLine)
         {
             PouTypeName = pouTypeName;
             MethodName = methodName;
             Line = line;
             BodyLine = bodyLine;
+            LocationWithLine = locationWithLine;
         }
+
+        // AssertSite's own "location(line)" rendering, carried rather than
+        // recomposed from the fields below: text output prints its frames from
+        // this report, and a second composition here is exactly what would let a
+        // frame in a console log and the same frame inside an exception message
+        // drift apart.
+        [JsonIgnore]
+        public string LocationWithLine { get; }
 
         public string PouTypeName { get; }
 
@@ -306,6 +339,7 @@ namespace xStunit.Cli
     {
         public FailureReport(
             string message,
+            string detail,
             string kind,
             string construct,
             string assert,
@@ -320,6 +354,7 @@ namespace xStunit.Cli
         {
             CallStack = callStack;
             Message = message;
+            Detail = detail;
             Kind = kind;
             Construct = construct;
             Assert = assert;
@@ -332,10 +367,15 @@ namespace xStunit.Cli
             Line = line;
         }
 
-        // For an assert failure, verbatim what text output prints; for a
+        // For an assert failure, the formatted TcUnit line verbatim; for a
         // fault charged to this test, the located message plus that kind's
         // guidance.
         public string Message { get; }
+
+        // Message without the guidance: what text output prints, and for an
+        // assert failure the same string as Message, which carries none.
+        [JsonIgnore]
+        public string Detail { get; }
 
         // One of the FailureKind constants - the same vocabulary, under the
         // same key, that the top-level error and suites[].kind use.

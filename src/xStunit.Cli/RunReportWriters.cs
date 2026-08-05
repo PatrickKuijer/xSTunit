@@ -85,8 +85,9 @@ namespace xStunit.Cli
             var reports = new List<TestReport>();
             foreach (var result in results)
             {
-                WriteTest(result);
-                reports.Add(Reports.Test(result));
+                var report = Reports.Test(result);
+                reports.Add(report);
+                WriteTest(report);
                 if (result.Passed)
                     PassCount++;
                 else
@@ -98,19 +99,19 @@ namespace xStunit.Cli
             return reports;
         }
 
-        protected virtual void WriteTest(TestCaseResult result)
+        protected virtual void WriteTest(TestReport test)
         {
         }
 
         public void SuiteCompleted(
             string suiteName, string filePath, IReadOnlyList<TestReport> tests, long durationMs)
         {
-            _suites.Add(Reports.Suite(suiteName, filePath, tests, durationMs));
-            WriteSuiteCompleted(suiteName, filePath, tests, durationMs);
+            var suite = Reports.Suite(suiteName, filePath, tests, durationMs);
+            _suites.Add(suite);
+            WriteSuiteCompleted(suite);
         }
 
-        protected virtual void WriteSuiteCompleted(
-            string suiteName, string filePath, IReadOnlyList<TestReport> tests, long durationMs)
+        protected virtual void WriteSuiteCompleted(SuiteReport suite)
         {
         }
 
@@ -120,18 +121,19 @@ namespace xStunit.Cli
             string suiteName, string filePath, Exception exception, IReadOnlyList<TestReport> completedTests)
         {
             var fault = SuiteFault.Classify(exception);
-            _suites.Add(Reports.SuiteError(
-                suiteName, filePath, fault.Error, fault.Kind, fault.Construct, completedTests, fault.Located));
+            var suite = Reports.SuiteError(
+                suiteName, filePath, fault.Error, fault.Detail, fault.Kind, fault.Construct, completedTests,
+                fault.Located);
+            _suites.Add(suite);
             // The suite-level fault is a failure in its own right, on top of
             // whatever the tests above reported: a run cannot pass just because
             // everything that got to run passed.
             FailCount++;
             _anyFailed = true;
-            WriteSuiteFailed(suiteName, filePath, fault, completedTests);
+            WriteSuiteFailed(suite);
         }
 
-        protected virtual void WriteSuiteFailed(
-            string suiteName, string filePath, SuiteFault fault, IReadOnlyList<TestReport> completedTests)
+        protected virtual void WriteSuiteFailed(SuiteReport suite)
         {
         }
 
@@ -176,36 +178,20 @@ namespace xStunit.Cli
                 Output.WriteLine($"plugin: {plugin}");
         }
 
-        protected override void WriteTest(TestCaseResult result)
+        protected override void WriteTest(TestReport test)
         {
-            Output.WriteLine(result.ToString());
+            Output.WriteLine(test.Passed
+                ? $"{test.Name}: PASS"
+                : $"{test.Name}: FAIL ({string.Join("; ", test.Failures.Select(f => f.Detail))})");
 
-            foreach (var failure in result.Failures)
-            {
-                if (failure.CallStack == null)
-                    continue;
-                foreach (var frame in failure.CallStack)
-                    Output.WriteLine($"    at {frame.LocationWithLine}");
-            }
+            foreach (var failure in test.Failures)
+                WriteCallStack(failure.CallStack);
         }
 
-        protected override void WriteSuiteFailed(
-            string suiteName, string filePath, SuiteFault fault, IReadOnlyList<TestReport> completedTests)
+        protected override void WriteSuiteFailed(SuiteReport suite)
         {
-            // located.Message rather than a locally composed location + inner
-            // message: the exception owns the one rendering of "where", shared
-            // with the JSON error string, so there are never two formatters to
-            // keep in step.
-            var detail = fault.Located != null ? $"in {fault.Located.Message}" : fault.Exception.Message;
-            Output.WriteLine($"{suiteName}: FAIL ({detail})");
-
-            // Frames print beneath the FAIL line, never instead of it: a text
-            // consumer that reads only the FAIL line must keep working.
-            if (fault.Located != null)
-            {
-                foreach (var frame in fault.Located.CallStack)
-                    Output.WriteLine($"    at {frame.LocationWithLine}");
-            }
+            Output.WriteLine($"{suite.Name}: FAIL ({suite.Detail})");
+            WriteCallStack(suite.CallStack);
         }
 
         protected override void WriteSummary(
@@ -216,6 +202,18 @@ namespace xStunit.Cli
                 ? $"{PassCount} passed, {FailCount} failed, {skipped.Count} skipped"
                 : $"{PassCount} passed, {FailCount} failed");
             WriteCoverageLines(coverage);
+        }
+
+        // Frames print beneath the line they belong to, never instead of it: a
+        // consumer that reads only the PASS/FAIL line must keep working. Null
+        // for a failure that never entered an ST body.
+        private void WriteCallStack(IReadOnlyList<CallStackFrameReport> frames)
+        {
+            if (frames == null)
+                return;
+
+            foreach (var frame in frames)
+                Output.WriteLine($"    at {frame.LocationWithLine}");
         }
 
         private void WriteCoverageLines(IReadOnlyList<PouCoverage> coverage)
@@ -276,22 +274,17 @@ namespace xStunit.Cli
         public override void SuiteStart(string suiteName) =>
             Output.WriteLine(RunReportJson.Line(RunReportBuilder.SuiteStart(suiteName)));
 
-        protected override void WriteSuiteCompleted(
-            string suiteName, string filePath, IReadOnlyList<TestReport> tests, long durationMs)
+        protected override void WriteSuiteCompleted(SuiteReport suite)
         {
-            var outcome = tests.Any(t => !t.Passed) ? "fail" : "pass";
-            Output.WriteLine(RunReportJson.Line(
-                Reports.Suite(suiteName, filePath, tests, durationMs, "suite-result", outcome)));
+            var outcome = suite.Tests.Any(t => !t.Passed) ? "fail" : "pass";
+            Output.WriteLine(RunReportJson.Line(suite.AsStreamEvent("suite-result", outcome)));
         }
 
-        protected override void WriteSuiteFailed(
-            string suiteName, string filePath, SuiteFault fault, IReadOnlyList<TestReport> completedTests) =>
+        protected override void WriteSuiteFailed(SuiteReport suite) =>
             // A suite that never ran to completion still emits exactly one
             // suite-result line, so a --stream consumer's "waiting" list always
             // empties out.
-            Output.WriteLine(RunReportJson.Line(Reports.SuiteError(
-                suiteName, filePath, fault.Error, fault.Kind, fault.Construct, completedTests, fault.Located,
-                "suite-result", "fail")));
+            Output.WriteLine(RunReportJson.Line(suite.AsStreamEvent("suite-result", "fail")));
 
         protected override void WriteSummary(
             int exitCode, IReadOnlyList<SkippedFile> skipped, IReadOnlyList<PouCoverage> coverage) =>

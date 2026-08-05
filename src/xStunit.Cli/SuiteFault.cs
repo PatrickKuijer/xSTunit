@@ -10,11 +10,11 @@ namespace xStunit.Cli
     internal sealed class SuiteFault
     {
         private SuiteFault(
-            Exception exception, PlcSourceLocationException located, string error, string kind, string construct)
+            PlcSourceLocationException located, string error, string detail, string kind, string construct)
         {
-            Exception = exception;
             Located = located;
             Error = error;
+            Detail = detail;
             Kind = kind;
             Construct = construct;
         }
@@ -43,14 +43,22 @@ namespace xStunit.Cli
             // consumer never has to have read this repo to know whether to edit
             // the POU or stop and escalate.
             var error = FailureGuidance.For(ex.Message, kind, isVerbatim: false, bodyLine);
-            return new SuiteFault(ex, located, error, kind, construct);
+            // located.Message rather than a locally composed location + inner
+            // message: the exception owns the one rendering of "where", shared
+            // with Error above, so there are never two formatters to keep in
+            // step.
+            var detail = located != null ? "in " + located.Message : ex.Message;
+            return new SuiteFault(located, error, detail, kind, construct);
         }
-
-        public Exception Exception { get; }
 
         public PlcSourceLocationException Located { get; }
 
         public string Error { get; }
+
+        // The same fault as Error, rendered for a human at a console: no
+        // guidance, because the terminal around it is the context a structured
+        // consumer lacks.
+        public string Detail { get; }
 
         public string Kind { get; }
 

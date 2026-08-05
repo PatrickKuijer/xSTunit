@@ -253,6 +253,67 @@ namespace xStunit.Cli.Tests
         }
 
         [Fact]
+        public void Text_AFaultedSuite_PrintsTheLocatedFailLineWithItsFramesBeneath()
+        {
+            var output = new StringWriter();
+            var writer = RunReportWriter.Create(output, asJson: false, streaming: false);
+            var frames = new[]
+            {
+                new PlcCallStackFrame("FB_Counter", "Add", 12, 3),
+                new PlcCallStackFrame("FB_CounterTests", "CounterAdds", 8, 2)
+            };
+            var fault = new PlcSourceLocationException(
+                "FB_Counter", "Add", 12, 3, frames, new InvalidOperationException("division by zero"));
+
+            writer.SuiteFailed("FB_CounterTests", SuitePath, fault, new TestReport[0]);
+            var exitCode = writer.Summary(NoSkips, coverage: null);
+
+            // Frames print beneath the FAIL line, never instead of it, innermost
+            // first: a consumer that reads only the FAIL line must keep working,
+            // and a reordered chain points the reader at the wrong source line.
+            Assert.Equal(1, exitCode);
+            Assert.Equal(
+                new[]
+                {
+                    "FB_CounterTests: FAIL (in FB_Counter.Add(3): division by zero)",
+                    "    at FB_Counter.Add(3)",
+                    "    at FB_CounterTests.CounterAdds(2)",
+                    "0 passed, 1 failed"
+                },
+                Lines(output));
+        }
+
+        [Fact]
+        public void Text_AFaultChargedToATest_PrintsTheFactualLineWithoutTheGuidanceTheWireCarries()
+        {
+            var output = new StringWriter();
+            var writer = RunReportWriter.Create(output, asJson: false, streaming: false);
+            var site = new AssertSite("FB_Counter", "Add", 12, 3);
+            var fault = AssertionFailure.Fault(
+                "FB_Counter.Add(3): TcUnit native call 'SEL' isn't supported yet",
+                FailureKind.UnsupportedConstruct,
+                "SEL",
+                site,
+                new[] { site });
+
+            writer.ReportTests(new[] { new TestCaseResult("CounterAdds", new[] { fault }, 5) });
+
+            // Guidance - "STOP: escalate it as a grammar gap", and the rest of
+            // the sentence FailureKind carries - belongs to the structured
+            // shapes, whose consumer has nothing else to go on. A human at a
+            // console has the terminal around it and reads the factual line.
+            var lines = Lines(output);
+            Assert.Equal(
+                new[]
+                {
+                    "CounterAdds: FAIL (FB_Counter.Add(3): TcUnit native call 'SEL' isn't supported yet)",
+                    "    at FB_Counter.Add(3)"
+                },
+                lines);
+            Assert.DoesNotContain("escalate", string.Join(string.Empty, lines));
+        }
+
+        [Fact]
         public void Text_UnderStreamingOrJson_NeverInterleavesAPlainLine()
         {
             foreach (var streaming in new[] { true, false })

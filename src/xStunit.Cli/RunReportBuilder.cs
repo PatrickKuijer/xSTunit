@@ -66,13 +66,8 @@ namespace xStunit.Cli
         // A suite that ran to completion: no error, and so none of the fields
         // that only an error populates.
         public SuiteReport Suite(
-            string name,
-            string filePath,
-            IReadOnlyList<TestReport> tests,
-            long durationMs,
-            string streamEvent = null,
-            string outcome = null) =>
-            new SuiteReport(name, filePath, null, null, null, tests, durationMs, null, null, streamEvent, outcome);
+            string name, string filePath, IReadOnlyList<TestReport> tests, long durationMs) =>
+            new SuiteReport(name, filePath, null, null, null, null, tests, durationMs, null, null);
 
         // A suite that faulted. `located` is null unless an interpreted ST body
         // actually faulted - a load-level failure has no PLC location - and
@@ -81,24 +76,22 @@ namespace xStunit.Cli
             string name,
             string filePath,
             string error,
+            string detail,
             string kind,
             string construct,
             IReadOnlyList<TestReport> completedTests,
-            PlcSourceLocationException located,
-            string streamEvent = null,
-            string outcome = null) =>
+            PlcSourceLocationException located) =>
             new SuiteReport(
                 name,
                 filePath,
                 error,
+                detail,
                 kind,
                 construct,
                 completedTests,
                 null,
                 located != null ? NullableLine(located.Line) : null,
-                located?.CallStack.Select(frame => ToCallStackFrameReport(frame.Site)).ToArray(),
-                streamEvent,
-                outcome);
+                located?.CallStack.Select(frame => ToCallStackFrameReport(frame.Site)).ToArray());
 
         public static DiscoveryEvent Discovery(
             IReadOnlyList<string> suiteNames, IReadOnlyDictionary<string, string> filePathsByTypeName)
@@ -119,6 +112,7 @@ namespace xStunit.Cli
         private FailureReport ToFailureReport(AssertionFailure failure) =>
             new FailureReport(
                 _failureGuidance(failure),
+                failure.Message,
                 failure.Kind,
                 failure.Construct,
                 failure.Assert,
@@ -132,7 +126,12 @@ namespace xStunit.Cli
                 failure.CallStack?.Select(ToCallStackFrameReport).ToArray());
 
         private static CallStackFrameReport ToCallStackFrameReport(AssertSite site) =>
-            new CallStackFrameReport(site.PouTypeName, site.MethodName, NullableLine(site.Line), NullableLine(site.BodyLine));
+            new CallStackFrameReport(
+                site.PouTypeName,
+                site.MethodName,
+                NullableLine(site.Line),
+                NullableLine(site.BodyLine),
+                site.LocationWithLine);
 
         // The one place the UnknownLine sentinel becomes a JSON null, so every
         // line field on the wire uses null - never 0 - for "not known".

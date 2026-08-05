@@ -137,12 +137,11 @@ namespace xStunit.Cli.Tests
                 "FB_WidgetTests",
                 "/POUs/FB_WidgetTests.TcPOU",
                 "boom",
+                "in FB_Widget.Step(3): boom",
                 FailureKind.PlcFault,
                 null,
                 new TestReport[0],
-                located,
-                "suite-result",
-                "fail");
+                located).AsStreamEvent("suite-result", "fail");
 
             using var doc = JsonDocument.Parse(RunReportJson.Line(suite));
             var root = doc.RootElement;
@@ -215,7 +214,9 @@ namespace xStunit.Cli.Tests
             {
                 RunReportJson.Line(RunReportBuilder.Discovery(new[] { "FB_CounterTests", "FB_UnknownTests" }, filePaths)),
                 RunReportJson.Line(RunReportBuilder.SuiteStart("FB_CounterTests")),
-                RunReportJson.Line(builder.Suite("FB_CounterTests", "/POUs/FB_CounterTests.TcPOU", new TestReport[0], 4, "suite-result", "pass")),
+                RunReportJson.Line(builder
+                    .Suite("FB_CounterTests", "/POUs/FB_CounterTests.TcPOU", new TestReport[0], 4)
+                    .AsStreamEvent("suite-result", "pass")),
                 RunReportJson.Line(builder.Summary(new SuiteReport[0], 0, 0, 0, NoSkips, null, "summary")),
                 RunReportJson.Line(builder.Error("bad path", NoSkips, null, "error"))
             };

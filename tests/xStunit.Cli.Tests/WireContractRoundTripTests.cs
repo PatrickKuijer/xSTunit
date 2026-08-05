@@ -263,8 +263,9 @@ namespace xStunit.Cli.Tests
                 9));
             var passing = builder.Test(new TestCaseResult("EncodesSingleRecord", new AssertionFailure[0], 3));
 
-            return builder.Suite(
-                "FB_WireRecordTests", RanSuitePath, new[] { failing, passing }, 12, streamEvent, outcome);
+            return builder
+                .Suite("FB_WireRecordTests", RanSuitePath, new[] { failing, passing }, 12)
+                .AsStreamEvent(streamEvent, outcome);
         }
 
         // A suite that faulted: it has an error, a kind, a construct and a call
@@ -286,12 +287,11 @@ namespace xStunit.Cli.Tests
                 "FB_ChecksumTests",
                 FaultedSuitePath,
                 FaultMessage,
+                "in " + located.Message,
                 FailureKind.UnsupportedConstruct,
                 "SEL",
                 new TestReport[0],
-                located,
-                streamEvent,
-                outcome);
+                located).AsStreamEvent(streamEvent, outcome);
         }
 
         private static void AssertBothSuitesSurvived(List<XstunitSuiteResult> suites)

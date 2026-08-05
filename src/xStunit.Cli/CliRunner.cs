@@ -276,7 +276,7 @@ Options:
                         Tc2_Utilities.F_CheckSum16).
   --target x86|x64      Machine the code under test is compiled for, which
                         is what makes a POINTER TO / REFERENCE TO 4 bytes or
-                        8 wherever SIZEOF or a byte image sees one. x86 is
+                        8 wherever SIZEOF or a byte image sees one. x64 is
                         the default; nothing else in the layout rules differs
                         between the two.
   --coverage            Additionally report which non-suite POUs are

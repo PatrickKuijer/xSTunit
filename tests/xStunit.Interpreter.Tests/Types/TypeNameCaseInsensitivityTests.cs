@@ -156,7 +156,9 @@ namespace xStunit.Interpreter.Tests
             var frame = new Frame(instance, "FB_Holder");
 
             Assert.Null(instance.Fields["pData"].Value);
-            Assert.Equal(4, engine.Evaluate(Parser.ParseExpression("SIZEOF(pData)"), frame));
+            Assert.Equal(
+                TargetPlatform.Default.AddressSize,
+                engine.Evaluate(Parser.ParseExpression("SIZEOF(pData)"), frame));
         }
     }
 }

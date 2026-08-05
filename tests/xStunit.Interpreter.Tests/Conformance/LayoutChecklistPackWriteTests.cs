@@ -194,8 +194,9 @@ namespace xStunit.Interpreter.Tests.Conformance
             nativeFunctions.RegisterAll(new IXstunitNativeFunction[] { new ReadableByteCounter() });
 
             // The three-argument overload on purpose: the two-argument one
-            // hard-defaults to x86, which would leave every claim below an
-            // x86-only claim no matter what the theory row asked for.
+            // takes the default target, which would leave every claim below a
+            // claim about that one machine no matter what the theory row asked
+            // for.
             var engine = new Engine(BuildRegistry(holder), nativeFunctions, Target(targetName));
             var instance = engine.NewInstance("FB_PackHolder");
             return (engine, instance, new Frame(instance, "FB_PackHolder"));

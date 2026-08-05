@@ -7,16 +7,22 @@ namespace xStunit.Interpreter.Tests
     // and what happens to a name that is neither.
     public class TargetPlatformTests
     {
-        // The default is a compatibility promise, not an implementation
-        // detail: every SIZEOF answer xStunit gave before targets existed was
-        // computed at 4-byte addresses, so a run that names no target must
-        // keep giving those answers. Changing this changes results for every
-        // existing caller, which is why it is pinned as a number here.
+        // The default decides the answers of every caller who never names a
+        // target, so it is a product promise rather than an implementation
+        // detail: real TwinCAT 3 machines are x64, and a run that says nothing
+        // must match one. Pinned as a number as well as an instance so that
+        // reverting it - however indirectly - goes red here first.
         [Fact]
-        public void Default_IsTheThirtyTwoBitTarget()
+        public void Default_IsTheSixtyFourBitTarget()
         {
-            Assert.Same(TargetPlatform.X86, TargetPlatform.Default);
-            Assert.Equal(4, TargetPlatform.Default.AddressSize);
+            Assert.Same(TargetPlatform.X64, TargetPlatform.Default);
+            Assert.Equal(8, TargetPlatform.Default.AddressSize);
+        }
+
+        [Fact]
+        public void X86_SizesAnAddressAtFourBytes()
+        {
+            Assert.Equal(4, TargetPlatform.X86.AddressSize);
         }
 
         [Fact]

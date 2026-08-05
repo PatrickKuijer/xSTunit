@@ -303,8 +303,8 @@ END_TYPE");
 
         // An Engine built without a target is the one every other test here
         // uses, so what it assumes is part of the layout contract rather than
-        // an implementation detail: 4-byte addresses, the width every SIZEOF
-        // answer xStunit has given so far was computed at.
+        // an implementation detail: the default target's width, which
+        // TargetPlatformTests pins to x64's 8 bytes.
         [Fact]
         public void SizeOf_AddressWithNoTargetSelected_IsTheDefaultTargetsAddressWidth()
         {

@@ -14,10 +14,11 @@ namespace xStunit.Interpreter
 
         public static readonly TargetPlatform X64 = new TargetPlatform("x64", addressSize: 8);
 
-        // What a run computes at when nothing selected a target. x86 is the
-        // width every SIZEOF answer xStunit has ever given was computed at, so
-        // defaulting to it changes no result that was already right.
-        public static TargetPlatform Default => X86;
+        // What a run computes at when nothing selected a target. Real TwinCAT 3
+        // targets are overwhelmingly x64, so a caller who names none gets the
+        // machine they are actually running against rather than one they would
+        // have had to know to ask for.
+        public static TargetPlatform Default => X64;
 
         private TargetPlatform(string name, int addressSize)
         {

@@ -170,7 +170,7 @@ namespace xStunit.Cli
             Suites = suites;
         }
 
-        public string Event => "discovery";
+        public string Event => StreamEventNames.Discovery;
         public IReadOnlyList<SuiteDiscoveryEntry> Suites { get; }
     }
 
@@ -184,7 +184,7 @@ namespace xStunit.Cli
             Suite = suite;
         }
 
-        public string Event => "suite-start";
+        public string Event => StreamEventNames.SuiteStart;
         public string Suite { get; }
     }
 

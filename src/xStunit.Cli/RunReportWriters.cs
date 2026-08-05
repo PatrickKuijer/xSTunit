@@ -265,7 +265,7 @@ namespace xStunit.Cli
             string message, IReadOnlyList<SkippedFile> skipped, IReadOnlyList<PouCoverage> coverage) =>
             // Stands alone: this can fire before any discovery or suite event
             // has been emitted (a bad path, "no suites found").
-            Output.WriteLine(RunReportJson.Line(Reports.Error(message, skipped, coverage, "error")));
+            Output.WriteLine(RunReportJson.Line(Reports.Error(message, skipped, coverage, StreamEventNames.Error)));
 
         public override void Discovery(
             IReadOnlyList<string> suiteNames, IReadOnlyDictionary<string, string> filePathsByTypeName) =>
@@ -275,17 +275,17 @@ namespace xStunit.Cli
             Output.WriteLine(RunReportJson.Line(RunReportBuilder.SuiteStart(suiteName)));
 
         protected override void WriteSuiteCompleted(SuiteReport suite) =>
-            Output.WriteLine(RunReportJson.Line(suite.AsStreamEvent("suite-result")));
+            Output.WriteLine(RunReportJson.Line(suite.AsStreamEvent(StreamEventNames.SuiteResult)));
 
         protected override void WriteSuiteFailed(SuiteReport suite) =>
             // A suite that never ran to completion still emits exactly one
             // suite-result line, so a --stream consumer's "waiting" list always
             // empties out.
-            Output.WriteLine(RunReportJson.Line(suite.AsStreamEvent("suite-result")));
+            Output.WriteLine(RunReportJson.Line(suite.AsStreamEvent(StreamEventNames.SuiteResult)));
 
         protected override void WriteSummary(
             int exitCode, IReadOnlyList<SkippedFile> skipped, IReadOnlyList<PouCoverage> coverage) =>
             Output.WriteLine(RunReportJson.Line(
-                Reports.Summary(Suites, PassCount, FailCount, exitCode, skipped, coverage, "summary")));
+                Reports.Summary(Suites, PassCount, FailCount, exitCode, skipped, coverage, StreamEventNames.Summary)));
     }
 }

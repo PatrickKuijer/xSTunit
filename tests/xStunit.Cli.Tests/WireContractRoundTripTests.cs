@@ -30,7 +30,10 @@ namespace xStunit.Cli.Tests
     // the CLI also emits coverage, and per-failure kind/construct/assert/
     // expected/actual/assertMessage/pou/method/bodyLine/line/callStack, which
     // the extension deliberately does not model (XstunitFailure carries the
-    // message alone); RunReportTests is what guards those keys. Nothing here
+    // message alone); RunReportTests is what guards those keys. The suite
+    // outcome is one of those for now on the summary's suites[]: only the
+    // extension's stream-event model declares it, so the round trip below pins
+    // it on the suite-result line alone. Nothing here
     // executes the CLI, so how a real run populates a report is out of scope,
     // as is anything the WebView2 page does with the JSON afterwards. And a
     // field that is null on BOTH sides of a shape - the run-level error and kind
@@ -151,20 +154,22 @@ namespace xStunit.Cli.Tests
         [Fact]
         public void StreamLine_SuiteResultOfASuiteThatRan_CarriesItsTestsAndDuration()
         {
-            var line = RunReportJson.Line(RanSuite(Builder(), "suite-result", "pass"));
+            var line = RunReportJson.Line(RanSuite(Builder(), "suite-result"));
 
             var suite = Assert.IsType<XstunitSuiteResultEvent>(new XstunitEventStream().Append(line));
 
             var expected = RanSuiteFields();
             expected["Event"] = XstunitStreamEventNames.SuiteResult;
-            expected["Outcome"] = "pass";
+            // The CLI derives this from the failing test the suite carries; the
+            // call site above cannot dictate it.
+            expected["Outcome"] = "fail";
             AssertEveryFieldSurvives(suite, expected);
         }
 
         [Fact]
         public void StreamLine_SuiteResultOfASuiteThatFaulted_CarriesItsKindConstructAndCallStack()
         {
-            var line = RunReportJson.Line(FaultedSuite(Builder(), "suite-result", "fail"));
+            var line = RunReportJson.Line(FaultedSuite(Builder(), "suite-result"));
 
             var suite = Assert.IsType<XstunitSuiteResultEvent>(new XstunitEventStream().Append(line));
 
@@ -245,8 +250,7 @@ namespace xStunit.Cli.Tests
 
         // A suite that ran to completion: it has a duration and tests, and none
         // of the fields only a fault populates.
-        private static SuiteReport RanSuite(
-            RunReportBuilder builder, string streamEvent = null, string outcome = null)
+        private static SuiteReport RanSuite(RunReportBuilder builder, string streamEvent = null)
         {
             var failing = builder.Test(new TestCaseResult(
                 "RetriesOnTimeout",
@@ -265,15 +269,14 @@ namespace xStunit.Cli.Tests
 
             return builder
                 .Suite("FB_WireRecordTests", RanSuitePath, new[] { failing, passing }, 12)
-                .AsStreamEvent(streamEvent, outcome);
+                .AsStreamEvent(streamEvent);
         }
 
         // A suite that faulted: it has an error, a kind, a construct and a call
         // stack, and no duration - it never finished, so there is nothing to
         // time. Between this suite and the one above, every field the
         // extension's suite model declares arrives populated at least once.
-        private static SuiteReport FaultedSuite(
-            RunReportBuilder builder, string streamEvent = null, string outcome = null)
+        private static SuiteReport FaultedSuite(RunReportBuilder builder, string streamEvent = null)
         {
             var frames = new[]
             {
@@ -291,7 +294,7 @@ namespace xStunit.Cli.Tests
                 FailureKind.UnsupportedConstruct,
                 "SEL",
                 new TestReport[0],
-                located).AsStreamEvent(streamEvent, outcome);
+                located).AsStreamEvent(streamEvent);
         }
 
         private static void AssertBothSuitesSurvived(List<XstunitSuiteResult> suites)

@@ -22,6 +22,13 @@ namespace xStunit.Cli
 
         public delegate string FailureGuidanceRule(AssertionFailure failure);
 
+        // The two suite outcomes on the wire. Which one a suite gets is decided
+        // in this file and nowhere else: the CLI owns the exit-code policy, so
+        // a consumer deciding for itself what a failed suite is can only
+        // disagree with the exit code it was handed.
+        private const string Pass = "pass";
+        private const string Fail = "fail";
+
         private readonly GuidanceRule _guidance;
         private readonly FailureGuidanceRule _failureGuidance;
 
@@ -67,7 +74,9 @@ namespace xStunit.Cli
         // that only an error populates.
         public SuiteReport Suite(
             string name, string filePath, IReadOnlyList<TestReport> tests, long durationMs) =>
-            new SuiteReport(name, filePath, null, null, null, null, tests, durationMs, null, null);
+            new SuiteReport(
+                name, filePath, null, null, null, null, tests, durationMs, null, null,
+                tests.Any(test => !test.Passed) ? Fail : Pass);
 
         // A suite that faulted. `located` is null unless an interpreted ST body
         // actually faulted - a load-level failure has no PLC location - and
@@ -91,7 +100,11 @@ namespace xStunit.Cli
                 completedTests,
                 null,
                 located != null ? NullableLine(located.Line) : null,
-                located?.CallStack.Select(frame => ToCallStackFrameReport(frame.Site)).ToArray());
+                located?.CallStack.Select(frame => ToCallStackFrameReport(frame.Site)).ToArray(),
+                // Regardless of how the tests that got to run turned out: the
+                // fault is a failure in its own right, and the run's exit code
+                // already counts it as one.
+                Fail);
 
         public static DiscoveryEvent Discovery(
             IReadOnlyList<string> suiteNames, IReadOnlyDictionary<string, string> filePathsByTypeName)

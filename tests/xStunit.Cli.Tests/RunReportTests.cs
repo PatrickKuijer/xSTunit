@@ -73,7 +73,11 @@ namespace xStunit.Cli.Tests
 
             var suiteElement = root.GetProperty("suites").EnumerateArray().Single();
             Assert.Equal(
-                new[] { "name", "filePath", "error", "kind", "construct", "tests", "durationMs", "fileLine", "callStack" },
+                new[]
+                {
+                    "outcome", "name", "filePath", "error", "kind", "construct", "tests", "durationMs",
+                    "fileLine", "callStack"
+                },
                 KeysOf(suiteElement));
             Assert.Equal("FB_CounterTests", suiteElement.GetProperty("name").GetString());
             Assert.Equal("/POUs/FB_CounterTests.TcPOU", suiteElement.GetProperty("filePath").GetString());
@@ -112,6 +116,44 @@ namespace xStunit.Cli.Tests
             Assert.Equal(42, failure.GetProperty("line").GetInt32());
         }
 
+        // Whether a suite failed is decided here, on the side that owns the exit
+        // code, and travels on the wire. A consumer that re-derives it from
+        // `error` and `tests` is the thing this makes unnecessary - and the
+        // faulted suite below is where a re-derivation from `tests` alone gets
+        // it wrong, because every test it got to run passed.
+        [Fact]
+        public void Summary_EverySuite_CarriesAnOutcomeIncludingOneThatFaultedWithAllTestsPassing()
+        {
+            var builder = Builder();
+            var passing = builder.Test(new TestCaseResult("CounterResets", new AssertionFailure[0], 2));
+            var failing = builder.Test(
+                new TestCaseResult("CounterAdds", new[] { new AssertionFailure("EXP: 3, ACT: 2") }, 5));
+            var suites = new[]
+            {
+                builder.Suite("FB_PassingTests", "/POUs/FB_PassingTests.TcPOU", new[] { passing }, 3),
+                builder.Suite("FB_FailingTests", "/POUs/FB_FailingTests.TcPOU", new[] { passing, failing }, 8),
+                builder.SuiteError(
+                    "FB_FaultedTests",
+                    "/POUs/FB_FaultedTests.TcPOU",
+                    "boom",
+                    "in FB_Widget.Step(3): boom",
+                    FailureKind.PlcFault,
+                    null,
+                    new[] { passing },
+                    new PlcSourceLocationException("FB_Widget", "Step", 12, 3, new InvalidOperationException("boom")))
+            };
+
+            var json = RunReportJson.Blob(
+                builder.Summary(suites, passed: 3, failed: 2, exitCode: 1, NoSkips, coverage: null));
+
+            using var doc = JsonDocument.Parse(json);
+            Assert.Equal(
+                new[] { "pass", "fail", "fail" },
+                doc.RootElement.GetProperty("suites").EnumerateArray()
+                    .Select(suite => suite.GetProperty("outcome").GetString())
+                    .ToArray());
+        }
+
         [Fact]
         public void Test_FailureWithNoKnownLocation_EmitsNullsRatherThanZeroLines()
         {
@@ -141,7 +183,7 @@ namespace xStunit.Cli.Tests
                 FailureKind.PlcFault,
                 null,
                 new TestReport[0],
-                located).AsStreamEvent("suite-result", "fail");
+                located).AsStreamEvent("suite-result");
 
             using var doc = JsonDocument.Parse(RunReportJson.Line(suite));
             var root = doc.RootElement;
@@ -216,7 +258,7 @@ namespace xStunit.Cli.Tests
                 RunReportJson.Line(RunReportBuilder.SuiteStart("FB_CounterTests")),
                 RunReportJson.Line(builder
                     .Suite("FB_CounterTests", "/POUs/FB_CounterTests.TcPOU", new TestReport[0], 4)
-                    .AsStreamEvent("suite-result", "pass")),
+                    .AsStreamEvent("suite-result")),
                 RunReportJson.Line(builder.Summary(new SuiteReport[0], 0, 0, 0, NoSkips, null, "summary")),
                 RunReportJson.Line(builder.Error("bad path", NoSkips, null, "error"))
             };

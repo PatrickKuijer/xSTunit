@@ -201,8 +201,8 @@ namespace xStunit.Cli
             long? durationMs,
             int? fileLine,
             IReadOnlyList<CallStackFrameReport> callStack,
-            string streamEvent = null,
-            string outcome = null)
+            string outcome,
+            string streamEvent = null)
         {
             Event = streamEvent;
             Outcome = outcome;
@@ -224,21 +224,22 @@ namespace xStunit.Cli
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public string Event { get; }
 
-        // "pass"/"fail" on that same standalone line, null everywhere else.
-        // A suite that never ran to completion reports "fail" rather than a
-        // third "skip" state: it already counts toward the exit code like
-        // any failing TEST(), and `kind` is what says why.
-        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        // "pass"/"fail", on every shape that carries a suite - the standalone
+        // --stream line and the suites[] entry alike - so no consumer has to
+        // decide for itself what a failed suite is. A suite that never ran to
+        // completion reports "fail" rather than a third "skip" state: it
+        // already counts toward the exit code like any failing TEST(), and
+        // `kind` is what says why.
         public string Outcome { get; }
 
         // The suite reported on its own --stream line and the same suite inside
-        // the summary's suites[] are one report; only the two discriminators
-        // that mark a standalone line differ. Copying rather than rebuilding is
+        // the summary's suites[] are one report; only the discriminator that
+        // marks a standalone line differs. Copying rather than rebuilding is
         // what stops the two from describing the suite differently.
-        public SuiteReport AsStreamEvent(string streamEvent, string outcome) =>
+        public SuiteReport AsStreamEvent(string streamEvent) =>
             new SuiteReport(
                 Name, FilePath, Error, Detail, Kind, Construct, Tests, DurationMs, FileLine, CallStack,
-                streamEvent, outcome);
+                Outcome, streamEvent);
 
         public string Name { get; }
         public string FilePath { get; }

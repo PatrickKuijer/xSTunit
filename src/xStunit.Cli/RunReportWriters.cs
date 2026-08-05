@@ -274,17 +274,14 @@ namespace xStunit.Cli
         public override void SuiteStart(string suiteName) =>
             Output.WriteLine(RunReportJson.Line(RunReportBuilder.SuiteStart(suiteName)));
 
-        protected override void WriteSuiteCompleted(SuiteReport suite)
-        {
-            var outcome = suite.Tests.Any(t => !t.Passed) ? "fail" : "pass";
-            Output.WriteLine(RunReportJson.Line(suite.AsStreamEvent("suite-result", outcome)));
-        }
+        protected override void WriteSuiteCompleted(SuiteReport suite) =>
+            Output.WriteLine(RunReportJson.Line(suite.AsStreamEvent("suite-result")));
 
         protected override void WriteSuiteFailed(SuiteReport suite) =>
             // A suite that never ran to completion still emits exactly one
             // suite-result line, so a --stream consumer's "waiting" list always
             // empties out.
-            Output.WriteLine(RunReportJson.Line(suite.AsStreamEvent("suite-result", "fail")));
+            Output.WriteLine(RunReportJson.Line(suite.AsStreamEvent("suite-result")));
 
         protected override void WriteSummary(
             int exitCode, IReadOnlyList<SkippedFile> skipped, IReadOnlyList<PouCoverage> coverage) =>

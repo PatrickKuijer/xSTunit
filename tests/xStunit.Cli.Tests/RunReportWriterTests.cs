@@ -230,6 +230,11 @@ namespace xStunit.Cli.Tests
                 new[] { "suites", "passed", "failed", "exitCode", "skipped" },
                 KeysOf(blob.RootElement));
             Assert.Equal(1, blob.RootElement.GetProperty("exitCode").GetInt32());
+            // The outcome the --stream suite-result line carries is on the
+            // blob's suite too, so a consumer of either shape reads the CLI's
+            // verdict rather than deciding for itself what a failed suite is.
+            var suite = blob.RootElement.GetProperty("suites").EnumerateArray().Single();
+            Assert.Equal("fail", suite.GetProperty("outcome").GetString());
             Assert.Contains("\n", output.ToString());
         }
 

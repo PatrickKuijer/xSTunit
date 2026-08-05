@@ -23,9 +23,9 @@ namespace xStunit.Cli.Tests
     public class RunReportTests
     {
         // The wording of the guidance appended to a message belongs to
-        // CliRunner, which owns the failure-kind rules; these stand-ins carry
-        // just enough shape to pin WHERE the builder applies it - once, on the
-        // way in - without restating that prose here.
+        // FailureGuidance, which owns the failure-kind rules; these stand-ins
+        // carry just enough shape to pin WHERE the builder applies it - once,
+        // on the way in - without restating that prose here.
         private static RunReportBuilder Builder() =>
             new RunReportBuilder(
                 (message, kind, isVerbatim, bodyLine) => isVerbatim ? message : message + " -- " + kind,

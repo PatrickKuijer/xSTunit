@@ -45,7 +45,7 @@ namespace xStunit.Cli.Tests
         private const string AssertMessage = "FAILED TEST 'RetriesOnTimeout', EXP: 3, ACT: 1, MSG: retries";
         private const string FaultMessage = "TcUnit native call 'SEL' isn't supported yet";
 
-        // Identity guidance. What CliRunner appends to a message is its own rule
+        // Identity guidance. What FailureGuidance appends to a message is its own rule
         // with its own tests; a value that arrives here changed is a mapping
         // fault, and a guidance suffix in the middle would hide one.
         private static RunReportBuilder Builder() =>

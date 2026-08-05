@@ -1,0 +1,301 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using xStunit.Interpreter;
+using xStunit.Parser;
+using xStunit.Runner.TcUnitStub;
+
+namespace xStunit.Cli
+{
+    // Everything a run has to say, as events: the run reports what happened,
+    // one of the subclasses below decides what that looks like on stdout.
+    //
+    // Format is chosen once, by Create, and never again. Under --stream stdout
+    // must stay one JSON object per line, and a single plain text line
+    // interleaved with the NDJSON breaks that; dispatching on the writer's type
+    // rather than re-testing a flag at every write site is what makes the wrong
+    // line impossible rather than merely guarded against.
+    //
+    // The tally and the assembled suite list live here, not in the subclasses:
+    // which tests passed is not a rendering decision, and the summary of a run
+    // must not depend on how it was printed.
+    internal abstract class RunReportWriter
+    {
+        private readonly List<SuiteReport> _suites = new List<SuiteReport>();
+        private bool _anyFailed;
+
+        protected RunReportWriter(TextWriter output)
+        {
+            Output = output;
+            // Both FailureGuidance overloads are handed over: the report module
+            // owns the shape of what goes on the wire, the guidance rules own
+            // the wording that goes inside it.
+            Reports = new RunReportBuilder(FailureGuidance.For, FailureGuidance.For);
+        }
+
+        public static RunReportWriter Create(TextWriter output, bool asJson, bool streaming)
+        {
+            if (streaming)
+                return new NdjsonRunReportWriter(output);
+            return asJson ? (RunReportWriter)new JsonRunReportWriter(output) : new TextRunReportWriter(output);
+        }
+
+        protected TextWriter Output { get; }
+
+        protected RunReportBuilder Reports { get; }
+
+        protected IReadOnlyList<SuiteReport> Suites => _suites;
+
+        protected int PassCount { get; private set; }
+
+        protected int FailCount { get; private set; }
+
+        // Returns the exit code for a usage or discovery error, because
+        // reporting one and exiting 2 are the same decision: this is the only
+        // path that produces a run with no results at all.
+        public int Error(string message, IReadOnlyList<SkippedFile> skipped, IReadOnlyList<PouCoverage> coverage)
+        {
+            WriteError(message, skipped, coverage);
+            return 2;
+        }
+
+        protected abstract void WriteError(
+            string message, IReadOnlyList<SkippedFile> skipped, IReadOnlyList<PouCoverage> coverage);
+
+        public virtual void PluginsLoaded(IReadOnlyList<string> plugins)
+        {
+        }
+
+        public virtual void Discovery(
+            IReadOnlyList<string> suiteNames, IReadOnlyDictionary<string, string> filePathsByTypeName)
+        {
+        }
+
+        public virtual void SuiteStart(string suiteName)
+        {
+        }
+
+        // Shared by the two paths that have test results to report: a suite
+        // that ran to completion, and one that faulted after some of its tests
+        // had already finished. Counting them in one place is what keeps
+        // `passed`/`failed` describing the same tests the report lists.
+        public IReadOnlyList<TestReport> ReportTests(IReadOnlyList<TestCaseResult> results)
+        {
+            var reports = new List<TestReport>();
+            foreach (var result in results)
+            {
+                WriteTest(result);
+                reports.Add(Reports.Test(result));
+                if (result.Passed)
+                    PassCount++;
+                else
+                {
+                    FailCount++;
+                    _anyFailed = true;
+                }
+            }
+            return reports;
+        }
+
+        protected virtual void WriteTest(TestCaseResult result)
+        {
+        }
+
+        public void SuiteCompleted(
+            string suiteName, string filePath, IReadOnlyList<TestReport> tests, long durationMs)
+        {
+            _suites.Add(Reports.Suite(suiteName, filePath, tests, durationMs));
+            WriteSuiteCompleted(suiteName, filePath, tests, durationMs);
+        }
+
+        protected virtual void WriteSuiteCompleted(
+            string suiteName, string filePath, IReadOnlyList<TestReport> tests, long durationMs)
+        {
+        }
+
+        // `completedTests` are the tests that finished before the fault, in the
+        // order they happened; the fault came after them.
+        public void SuiteFailed(
+            string suiteName, string filePath, Exception exception, IReadOnlyList<TestReport> completedTests)
+        {
+            var fault = SuiteFault.Classify(exception);
+            _suites.Add(Reports.SuiteError(
+                suiteName, filePath, fault.Error, fault.Kind, fault.Construct, completedTests, fault.Located));
+            // The suite-level fault is a failure in its own right, on top of
+            // whatever the tests above reported: a run cannot pass just because
+            // everything that got to run passed.
+            FailCount++;
+            _anyFailed = true;
+            WriteSuiteFailed(suiteName, filePath, fault, completedTests);
+        }
+
+        protected virtual void WriteSuiteFailed(
+            string suiteName, string filePath, SuiteFault fault, IReadOnlyList<TestReport> completedTests)
+        {
+        }
+
+        // Returns the run's exit code. Skipped files must never change it: a
+        // run that skipped unsupported POUs but ran everything else is still a
+        // completed run (0 or 1 by test outcome). Exit 2 stays reserved for
+        // usage and discovery errors that produced no results at all; the skip
+        // list is what tells the caller coverage was reduced.
+        public int Summary(IReadOnlyList<SkippedFile> skipped, IReadOnlyList<PouCoverage> coverage)
+        {
+            var exitCode = _anyFailed ? 1 : 0;
+            WriteSummary(exitCode, skipped, coverage);
+            return exitCode;
+        }
+
+        protected abstract void WriteSummary(
+            int exitCode, IReadOnlyList<SkippedFile> skipped, IReadOnlyList<PouCoverage> coverage);
+    }
+
+    // What a human reads at a console: results as they finish, then a count.
+    internal sealed class TextRunReportWriter : RunReportWriter
+    {
+        public TextRunReportWriter(TextWriter output)
+            : base(output)
+        {
+        }
+
+        protected override void WriteError(
+            string message, IReadOnlyList<SkippedFile> skipped, IReadOnlyList<PouCoverage> coverage)
+        {
+            WriteSkipLines(skipped);
+            // The bare message, without the guidance the structured shapes
+            // append: this line is read by a human at a console who has the
+            // rest of the terminal for context.
+            Output.WriteLine($"error: {message}");
+            WriteCoverageLines(coverage);
+        }
+
+        public override void PluginsLoaded(IReadOnlyList<string> plugins)
+        {
+            foreach (var plugin in plugins)
+                Output.WriteLine($"plugin: {plugin}");
+        }
+
+        protected override void WriteTest(TestCaseResult result)
+        {
+            Output.WriteLine(result.ToString());
+
+            foreach (var failure in result.Failures)
+            {
+                if (failure.CallStack == null)
+                    continue;
+                foreach (var frame in failure.CallStack)
+                    Output.WriteLine($"    at {frame.LocationWithLine}");
+            }
+        }
+
+        protected override void WriteSuiteFailed(
+            string suiteName, string filePath, SuiteFault fault, IReadOnlyList<TestReport> completedTests)
+        {
+            // located.Message rather than a locally composed location + inner
+            // message: the exception owns the one rendering of "where", shared
+            // with the JSON error string, so there are never two formatters to
+            // keep in step.
+            var detail = fault.Located != null ? $"in {fault.Located.Message}" : fault.Exception.Message;
+            Output.WriteLine($"{suiteName}: FAIL ({detail})");
+
+            // Frames print beneath the FAIL line, never instead of it: a text
+            // consumer that reads only the FAIL line must keep working.
+            if (fault.Located != null)
+            {
+                foreach (var frame in fault.Located.CallStack)
+                    Output.WriteLine($"    at {frame.LocationWithLine}");
+            }
+        }
+
+        protected override void WriteSummary(
+            int exitCode, IReadOnlyList<SkippedFile> skipped, IReadOnlyList<PouCoverage> coverage)
+        {
+            WriteSkipLines(skipped);
+            Output.WriteLine(skipped.Count > 0
+                ? $"{PassCount} passed, {FailCount} failed, {skipped.Count} skipped"
+                : $"{PassCount} passed, {FailCount} failed");
+            WriteCoverageLines(coverage);
+        }
+
+        private void WriteCoverageLines(IReadOnlyList<PouCoverage> coverage)
+        {
+            if (coverage == null)
+                return;
+
+            foreach (var entry in coverage)
+                Output.WriteLine($"{entry.PouTypeName}  suites: {(entry.IsCovered ? string.Join(", ", entry.SuiteTypeNames) : "(none)")}");
+        }
+
+        private void WriteSkipLines(IReadOnlyList<SkippedFile> skipped)
+        {
+            foreach (var skip in skipped)
+                Output.WriteLine($"skipped: {skip.FileKey} ({skip.Message})");
+        }
+    }
+
+    // `--format json`: one blob at the end, so nothing is written until the run
+    // has an exit code to report alongside it.
+    internal sealed class JsonRunReportWriter : RunReportWriter
+    {
+        public JsonRunReportWriter(TextWriter output)
+            : base(output)
+        {
+        }
+
+        protected override void WriteError(
+            string message, IReadOnlyList<SkippedFile> skipped, IReadOnlyList<PouCoverage> coverage) =>
+            Output.WriteLine(RunReportJson.Blob(Reports.Error(message, skipped, coverage)));
+
+        protected override void WriteSummary(
+            int exitCode, IReadOnlyList<SkippedFile> skipped, IReadOnlyList<PouCoverage> coverage) =>
+            Output.WriteLine(RunReportJson.Blob(
+                Reports.Summary(Suites, PassCount, FailCount, exitCode, skipped, coverage)));
+    }
+
+    // `--stream`: one NDJSON event per line as the run proceeds. Every method
+    // here writes exactly one line, and nothing else on this writer writes at
+    // all, which is the whole of the one-object-per-line contract.
+    internal sealed class NdjsonRunReportWriter : RunReportWriter
+    {
+        public NdjsonRunReportWriter(TextWriter output)
+            : base(output)
+        {
+        }
+
+        protected override void WriteError(
+            string message, IReadOnlyList<SkippedFile> skipped, IReadOnlyList<PouCoverage> coverage) =>
+            // Stands alone: this can fire before any discovery or suite event
+            // has been emitted (a bad path, "no suites found").
+            Output.WriteLine(RunReportJson.Line(Reports.Error(message, skipped, coverage, "error")));
+
+        public override void Discovery(
+            IReadOnlyList<string> suiteNames, IReadOnlyDictionary<string, string> filePathsByTypeName) =>
+            Output.WriteLine(RunReportJson.Line(RunReportBuilder.Discovery(suiteNames, filePathsByTypeName)));
+
+        public override void SuiteStart(string suiteName) =>
+            Output.WriteLine(RunReportJson.Line(RunReportBuilder.SuiteStart(suiteName)));
+
+        protected override void WriteSuiteCompleted(
+            string suiteName, string filePath, IReadOnlyList<TestReport> tests, long durationMs)
+        {
+            var outcome = tests.Any(t => !t.Passed) ? "fail" : "pass";
+            Output.WriteLine(RunReportJson.Line(
+                Reports.Suite(suiteName, filePath, tests, durationMs, "suite-result", outcome)));
+        }
+
+        protected override void WriteSuiteFailed(
+            string suiteName, string filePath, SuiteFault fault, IReadOnlyList<TestReport> completedTests) =>
+            // A suite that never ran to completion still emits exactly one
+            // suite-result line, so a --stream consumer's "waiting" list always
+            // empties out.
+            Output.WriteLine(RunReportJson.Line(Reports.SuiteError(
+                suiteName, filePath, fault.Error, fault.Kind, fault.Construct, completedTests, fault.Located,
+                "suite-result", "fail")));
+
+        protected override void WriteSummary(
+            int exitCode, IReadOnlyList<SkippedFile> skipped, IReadOnlyList<PouCoverage> coverage) =>
+            Output.WriteLine(RunReportJson.Line(
+                Reports.Summary(Suites, PassCount, FailCount, exitCode, skipped, coverage, "summary")));
+    }
+}

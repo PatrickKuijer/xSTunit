@@ -163,7 +163,7 @@ namespace xStunit.Interpreter
                 cell = new Cell();
                 frame.Locals[name] = cell;
             }
-            cell.Value = CoerceForAssignment(cell.Value, value);
+            cell.Value = CoerceForAssignment(cell.Value, value, cell.DeclaredTypeName);
         }
 
         // Assignment-target dispatch: identifiers go through SetVariable (may
@@ -182,7 +182,7 @@ namespace xStunit.Interpreter
                     {
                         if (!gvlFields.TryGetValue(fieldAccess.FieldName, out var gvlCell))
                             throw new InvalidOperationException($"Unknown field '{fieldAccess.FieldName}'");
-                        gvlCell.Value = CoerceForAssignment(gvlCell.Value, value);
+                        gvlCell.Value = CoerceForAssignment(gvlCell.Value, value, gvlCell.DeclaredTypeName);
                         break;
                     }
 
@@ -190,7 +190,7 @@ namespace xStunit.Interpreter
                     var fields = FieldsOf(receiverValue, fieldAccess.FieldName);
                     if (fields.TryGetValue(fieldAccess.FieldName, out var cell))
                     {
-                        cell.Value = CoerceForAssignment(cell.Value, value);
+                        cell.Value = CoerceForAssignment(cell.Value, value, cell.DeclaredTypeName);
                         break;
                     }
 
@@ -226,7 +226,10 @@ namespace xStunit.Interpreter
 
                     var array = (ArrayValue)receiverValue;
                     var flat = FlattenIndex(array, index.Indices, frame);
-                    array.SetElement(flat, CoerceForAssignment(array.Elements[flat], value));
+                    // An array element has no Cell of its own to carry a
+                    // declared type, so the element type is taken from the
+                    // ARRAY declaration itself.
+                    array.SetElement(flat, CoerceForAssignment(array.Elements[flat], value, array.ElementTypeName));
                     break;
                 }
                 default:
@@ -330,8 +333,8 @@ namespace xStunit.Interpreter
             return flat;
         }
 
-        private static object CoerceForAssignment(object existing, object incoming) =>
-            NumericCoercion.CoerceForAssignment(existing, incoming);
+        private static object CoerceForAssignment(object existing, object incoming, string declaredTypeName) =>
+            NumericCoercion.CoerceForAssignment(existing, incoming, declaredTypeName);
 
         // TwinCAT ST extension: a STRING can be indexed directly (s[n],
         // 0-based) to read or write individual bytes, most commonly

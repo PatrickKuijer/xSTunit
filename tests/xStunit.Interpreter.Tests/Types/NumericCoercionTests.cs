@@ -331,5 +331,59 @@ namespace xStunit.Interpreter.Tests
             Assert.IsType<uint>(result);
             Assert.Equal(uint.MaxValue - 1u, result);
         }
+
+        // UDINT/DWORD and LINT are the same box and different widths, so the
+        // declared type name is the only thing that can separate them here. The
+        // 32-bit pair rolls over at its declared width for the same reason the
+        // TIME/DATE narrowing above does; the 64-bit one keeps every bit.
+        [Theory]
+        [InlineData("UDINT")]
+        [InlineData("DWORD")]
+        [InlineData("udint")]
+        public void CoerceForAssignment_DeclaredThirtyTwoBitUnsignedTypeAboveRange_Wraps(string declaredTypeName)
+        {
+            var result = NumericCoercion.CoerceForAssignment(0L, 8000000000L, declaredTypeName);
+
+            Assert.IsType<long>(result);
+            Assert.Equal(3705032704L, result);
+        }
+
+        [Theory]
+        [InlineData("UDINT")]
+        [InlineData("DWORD")]
+        public void CoerceForAssignment_DeclaredThirtyTwoBitUnsignedTypeBelowRange_WrapsToTheTopOfTheRange(
+            string declaredTypeName)
+        {
+            var result = NumericCoercion.CoerceForAssignment(0L, -2L, declaredTypeName);
+
+            Assert.IsType<long>(result);
+            Assert.Equal(uint.MaxValue - 1L, result);
+        }
+
+        [Fact]
+        public void CoerceForAssignment_DeclaredLintAboveThirtyTwoBits_KeepsFullValue()
+        {
+            var result = NumericCoercion.CoerceForAssignment(0L, 8000000000L, "LINT");
+
+            Assert.IsType<long>(result);
+            Assert.Equal(8000000000L, result);
+        }
+
+        // A Cell with no declaration behind it (a native host field, an array
+        // element) and a declaration this table does not recognise (an ALIAS
+        // DUT, "REFERENCE TO UDINT", a STRUCT name) both have to leave the value
+        // exactly as the box-only rules produced it. Guessing a width from an
+        // unrecognised name would corrupt values the box already handles.
+        [Theory]
+        [InlineData(null)]
+        [InlineData("T_Counter")]
+        [InlineData("REFERENCE TO UDINT")]
+        public void CoerceForAssignment_UnknownOrAbsentDeclaredType_LeavesValueUnwrapped(string declaredTypeName)
+        {
+            var result = NumericCoercion.CoerceForAssignment(0L, 8000000000L, declaredTypeName);
+
+            Assert.IsType<long>(result);
+            Assert.Equal(8000000000L, result);
+        }
     }
 }

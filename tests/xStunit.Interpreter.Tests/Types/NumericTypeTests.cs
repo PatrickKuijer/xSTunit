@@ -540,6 +540,107 @@ namespace xStunit.Interpreter.Tests
             Assert.Equal(4000000000UL, instance.Fields["wide"].Value);
         }
 
+        // UDINT is 32 bits wide on the target, so a sum past 4294967295 rolls
+        // over there rather than growing into a 33-bit total. It boxes as long
+        // here, which LINT does too, so the box alone cannot say which of them
+        // this cell is - only the declared type reaching the assignment can. If
+        // this goes red the cell is holding a value its own declared type
+        // cannot represent, and every later read of it diverges from the PLC.
+        [Fact]
+        public void ExecuteStatements_UdintFieldSumPastThirtyTwoBitMaximum_WrapsToDeclaredWidth()
+        {
+            var pou = new PouAst(
+                "FB_Udint",
+                null,
+                "VAR\n\tvalue : UDINT;\nEND_VAR",
+                "",
+                new List<MethodAst>());
+
+            var engine = new Engine(new TypeRegistry(new[] { pou }));
+            var instance = engine.NewInstance("FB_Udint");
+            instance.Fields["value"].Value = 4000000000L;
+            var frame = new Frame(instance, "FB_Udint");
+
+            engine.ExecuteStatements(Parser.ParseStatements("value := value + value;"), frame);
+
+            Assert.IsType<long>(instance.Fields["value"].Value);
+            Assert.Equal(3705032704L, instance.Fields["value"].Value);
+        }
+
+        // DWORD shares UDINT's range and its box, so it wraps at the same width
+        // for the same reason - a bitstring type that silently grew past its
+        // declared width would put a value in the cell that no DWORD register
+        // could hold.
+        [Fact]
+        public void ExecuteStatements_DwordFieldSumPastThirtyTwoBitMaximum_WrapsToDeclaredWidth()
+        {
+            var pou = new PouAst(
+                "FB_Dword",
+                null,
+                "VAR\n\tvalue : DWORD;\nEND_VAR",
+                "",
+                new List<MethodAst>());
+
+            var engine = new Engine(new TypeRegistry(new[] { pou }));
+            var instance = engine.NewInstance("FB_Dword");
+            instance.Fields["value"].Value = 4000000000L;
+            var frame = new Frame(instance, "FB_Dword");
+
+            engine.ExecuteStatements(Parser.ParseStatements("value := value + value;"), frame);
+
+            Assert.IsType<long>(instance.Fields["value"].Value);
+            Assert.Equal(3705032704L, instance.Fields["value"].Value);
+        }
+
+        // The scope bound on the wrap above. LINT boxes as long exactly like
+        // UDINT and DWORD but is genuinely 64 bits wide, so the same sum has to
+        // come out at full width. If this goes red the narrowing is keying off
+        // the box instead of the declared type and is clamping every long-boxed
+        // cell indiscriminately.
+        [Fact]
+        public void ExecuteStatements_LintFieldSumPastThirtyTwoBitMaximum_KeepsFullSixtyFourBitRange()
+        {
+            var pou = new PouAst(
+                "FB_Lint",
+                null,
+                "VAR\n\tvalue : LINT;\nEND_VAR",
+                "",
+                new List<MethodAst>());
+
+            var engine = new Engine(new TypeRegistry(new[] { pou }));
+            var instance = engine.NewInstance("FB_Lint");
+            instance.Fields["value"].Value = 4000000000L;
+            var frame = new Frame(instance, "FB_Lint");
+
+            engine.ExecuteStatements(Parser.ParseStatements("value := value + value;"), frame);
+
+            Assert.IsType<long>(instance.Fields["value"].Value);
+            Assert.Equal(8000000000L, instance.Fields["value"].Value);
+        }
+
+        // The other half of the scope bound: ULINT is 64 bits wide too, and its
+        // ulong box must not pick up the 32-bit wrap on the way past.
+        [Fact]
+        public void ExecuteStatements_UlintFieldSumPastThirtyTwoBitMaximum_KeepsFullSixtyFourBitRange()
+        {
+            var pou = new PouAst(
+                "FB_Ulint",
+                null,
+                "VAR\n\tvalue : ULINT;\nEND_VAR",
+                "",
+                new List<MethodAst>());
+
+            var engine = new Engine(new TypeRegistry(new[] { pou }));
+            var instance = engine.NewInstance("FB_Ulint");
+            instance.Fields["value"].Value = 4000000000UL;
+            var frame = new Frame(instance, "FB_Ulint");
+
+            engine.ExecuteStatements(Parser.ParseStatements("value := value + value;"), frame);
+
+            Assert.IsType<ulong>(instance.Fields["value"].Value);
+            Assert.Equal(8000000000UL, instance.Fields["value"].Value);
+        }
+
         [Fact]
         public void ExecuteStatements_AssignIntLiteralIntoUlintField_Widens()
         {

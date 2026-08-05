@@ -156,5 +156,49 @@ namespace xStunit.Interpreter
 
             return incoming;
         }
+
+        // The overload for callers that know what the destination was declared
+        // as. UDINT, DWORD and LINT all box as long, so the rules above cannot
+        // tell a 32-bit cell from a 64-bit one; the declared type name is what
+        // separates them. The two-argument entry point stands for "no
+        // declaration behind this slot" and keeps the box-only behaviour.
+        public static object CoerceForAssignment(object existing, object incoming, string declaredTypeName)
+        {
+            var coerced = CoerceForAssignment(existing, incoming);
+            return coerced is long widened ? WrapToDeclaredRange(declaredTypeName, widened) : coerced;
+        }
+
+        // UDINT and DWORD box as long because their range overflows Int32, but
+        // on the target they are 32 bits wide: a sum past 4294967295 rolls over
+        // there. Wrapping rather than throwing is the same call the TIME/DATE
+        // narrowing above makes - rejecting would leave this a stricter machine
+        // than the one it stands in for. LINT shares the box and is genuinely
+        // 64 bits, so its own bounds admit every value and it is never touched.
+        //
+        // A slot with no declaration behind it, or one naming something this
+        // table does not know (an ALIAS DUT, "REFERENCE TO UDINT", a STRUCT),
+        // is left exactly as the box-only rules produced it: a guessed width
+        // would corrupt values that were already right.
+        //
+        // Long-boxed types only, on purpose. SINT/USINT/BYTE/INT/UINT/WORD/DINT
+        // share the int box, and whether those narrow on assignment is a
+        // separate question this rule must not answer by accident.
+        private static object WrapToDeclaredRange(string declaredTypeName, long value)
+        {
+            if (declaredTypeName == null ||
+                !IecNumericType.TryGetBounds(declaredTypeName, out var bounds) ||
+                !(bounds.Min is long min) || !(bounds.Max is long max) ||
+                (value >= min && value <= max))
+                return value;
+
+            // Modular over the declared range, so an overflow rolls to the
+            // bottom and an underflow to the top, matching the target's
+            // two's-complement rollover. The width cannot overflow its own
+            // arithmetic here: a range as wide as long's has already returned
+            // above, because no value falls outside it.
+            var size = max - min + 1;
+            var offset = (value - min) % size;
+            return min + (offset < 0 ? offset + size : offset);
+        }
     }
 }

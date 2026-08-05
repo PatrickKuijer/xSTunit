@@ -37,7 +37,7 @@ namespace xStunit.Interpreter
             {
                 var initValue = Evaluate(Parser.ParseExpression(decl.DefaultValueText), new Frame(owningInstance, typeName));
                 return IecNumericType.TryGetDefault(typeName, out var initNumericDefault)
-                    ? CoerceForAssignment(initNumericDefault, initValue)
+                    ? CoerceForAssignment(initNumericDefault, initValue, typeName)
                     : initValue;
             }
 
@@ -192,7 +192,7 @@ namespace xStunit.Interpreter
         // recurse into the matching overlay so partial initializers compose
         // (e.g. an ARRAY-of-STRUCT field overriding only some elements).
         // Anything else is a plain evaluate + assignment-coerce.
-        private object OverlayOrEvaluate(object existingDefault, Expr expr, Frame frame)
+        private object OverlayOrEvaluate(object existingDefault, Expr expr, Frame frame, string declaredTypeName)
         {
             if (expr is StructLiteralExpr structLit && existingDefault is StructInstance structInst)
             {
@@ -206,7 +206,7 @@ namespace xStunit.Interpreter
                 return arrayVal;
             }
 
-            return CoerceForAssignment(existingDefault, Evaluate(expr, frame));
+            return CoerceForAssignment(existingDefault, Evaluate(expr, frame), declaredTypeName);
         }
 
         private void OverlayStruct(StructInstance instance, StructLiteralExpr lit, Frame frame)
@@ -215,14 +215,14 @@ namespace xStunit.Interpreter
             {
                 if (!instance.Fields.TryGetValue(init.Name, out var cell))
                     throw new InvalidOperationException($"Unknown field '{init.Name}' on struct '{instance.TypeName}'");
-                cell.Value = OverlayOrEvaluate(cell.Value, init.Value, frame);
+                cell.Value = OverlayOrEvaluate(cell.Value, init.Value, frame, cell.DeclaredTypeName);
             }
         }
 
         private void OverlayArray(ArrayValue array, ArrayLiteralExpr lit, Frame frame)
         {
             for (var i = 0; i < lit.Elements.Count && i < array.Elements.Length; i++)
-                array.SetElement(i, OverlayOrEvaluate(array.Elements[i], lit.Elements[i], frame));
+                array.SetElement(i, OverlayOrEvaluate(array.Elements[i], lit.Elements[i], frame, array.ElementTypeName));
         }
     }
 }

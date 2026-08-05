@@ -230,9 +230,6 @@ namespace xStunit.Cli
                     // inner exceptions) goes to the log, so diagnosing a
                     // failure needs no re-instrumenting.
                     XstunitLog.LogException($"CliRunner.Run: suite '{suiteName}' failed to run", ex);
-                    // Reported before the fault, in the order they happened:
-                    // these tests ran and finished, and the fault came after
-                    // them.
                     var completedReports = writer.ReportTests(completedTests);
                     suiteFilePaths.TryGetValue(suiteName, out var failFilePath);
                     writer.SuiteFailed(suiteName, failFilePath, ex, completedReports);

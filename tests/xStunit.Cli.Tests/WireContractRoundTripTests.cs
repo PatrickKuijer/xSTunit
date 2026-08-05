@@ -12,19 +12,19 @@ using Xunit;
 
 namespace xStunit.Cli.Tests
 {
-    // The two halves of the CLI's published wire contract, joined for the first
-    // time: the CLI's own serializer writes, the VSIX's own models and
-    // deserializer read, and nothing hand-written sits between them.
+    // The two halves of the CLI's published wire contract, joined: the CLI's
+    // own serializer writes, the VSIX's own models and deserializer read, and
+    // nothing hand-written sits between them.
     //
-    // Until this existed, each side was pinned against its own literal -
+    // Each side is otherwise pinned only against its own literal -
     // RunReportTests against the key sequence the CLI emits,
-    // XstunitModelsDeserializationTests against a JSON blob typed by hand - and
-    // the two could drift into agreement with nothing at all. The extension has
+    // XstunitModelsDeserializationTests against a JSON blob typed by hand - so
+    // the two can drift into agreement with nothing at all. The extension has
     // no reference to the CLI (it shells out and reads stdout), so a renamed
     // property breaks no build; it produces a silently null field and a results
-    // tree that renders a blank. That is the failure these tests exist to turn
-    // red: rename a property on either side, or change an event name, and the
-    // round trip stops arriving.
+    // tree that renders a blank. That is the failure these tests turn red:
+    // rename a property on either side, or change an event name, and the round
+    // trip stops arriving.
     //
     // WHAT THESE DO NOT CATCH. Only fields the VSIX models declare are checked -
     // the CLI also emits coverage, and per-failure kind/construct/assert/
@@ -392,10 +392,9 @@ namespace xStunit.Cli.Tests
         // Compares the model's DECLARED properties against the expected set
         // before comparing any value, so a property added to an extension model
         // and left uncovered fails here by name instead of passing unnoticed -
-        // which is the exact way a silently-null field got onto the wire before
-        // these tests existed. `notOnTheWire` is for a property the CLI never
-        // emits, and every use of it is a claim that has to be argued at the
-        // call site.
+        // an uncovered property is exactly how a silently-null field reaches the
+        // wire. `notOnTheWire` is for a property the CLI never emits, and every
+        // use of it is a claim that has to be argued at the call site.
         private static void AssertEveryFieldSurvives(
             object model, IReadOnlyDictionary<string, object> expected, params string[] notOnTheWire)
         {

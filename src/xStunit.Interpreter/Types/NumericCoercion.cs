@@ -124,7 +124,7 @@ namespace xStunit.Interpreter
             {
                 if (ulongForLong > long.MaxValue)
                     throw new InvalidOperationException(
-                        $"Cannot assign ULINT/LWORD value {ulongForLong} to a LINT/UDINT/DWORD (signed 64-bit) variable");
+                        $"Cannot assign ULINT/LWORD value {ulongForLong} to a LINT/UDINT/DWORD variable: it is out of range for all three");
                 return (long)ulongForLong;
             }
             if (existing is ulong && incoming is long longForULong)

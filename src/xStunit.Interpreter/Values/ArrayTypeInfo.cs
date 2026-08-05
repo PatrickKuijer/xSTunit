@@ -52,6 +52,12 @@ namespace xStunit.Interpreter
             return (dims, match.Groups["elementType"].Value.Trim());
         }
 
+        // The fold over the declared spans, stated once so sizing an array,
+        // laying it out and filling it cannot disagree about how many elements
+        // it has.
+        public static int ElementCount(IReadOnlyList<(int Lo, int Hi)> dimensions) =>
+            dimensions.Aggregate(1, (acc, d) => acc * (d.Hi - d.Lo + 1));
+
         private static (int Lo, int Hi) ParseDim(string dimText, Func<string, int> resolveBound)
         {
             var parts = dimText.Split(new[] { ".." }, StringSplitOptions.None);

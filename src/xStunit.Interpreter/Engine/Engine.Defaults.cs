@@ -1,5 +1,4 @@
 using System;
-using System.Linq;
 
 namespace xStunit.Interpreter
 {
@@ -41,22 +40,12 @@ namespace xStunit.Interpreter
                     : initValue;
             }
 
-            // The elementary non-numeric defaults (STRING/W?STRING(n), BOOL,
-            // TIME/LTIME, DATE-family) are owned by IecElementaryDefault,
-            // shared with SeedReturnCell so the two seeding sites can't drift
-            // apart.
-            if (IecElementaryDefault.TryGetDefault(typeName, out var elementaryDefault))
-                return elementaryDefault;
-
             // An address type starts unbound rather than at a value, which is
             // what makes __ISVALIDREF's null test meaningful.
             if (AddressTypeInfo.IsAddressType(typeName))
                 return null;
 
-            if (IecNumericType.TryGetDefault(typeName, out var numericDefault))
-                return numericDefault;
-
-            return 0;
+            return DeclaredDefault.ForElementaryType(typeName);
         }
 
         // The declaration's own defaults first, then the struct literal
@@ -116,20 +105,14 @@ namespace xStunit.Interpreter
         // literal's own partial-initialization shorthand.
         private ArrayValue BuildArrayDefault(VarDecl decl, FbInstance owningInstance)
         {
-            var (dimensions, elementTypeName) = ArrayTypeInfo.Parse(
-                decl.TypeName, boundText => ResolveArrayBound(boundText, owningInstance));
-            var count = dimensions.Aggregate(1, (acc, d) => acc * (d.Hi - d.Lo + 1));
-            var elementDecl = new VarDecl(null, elementTypeName, null, VarSection.Local);
-
-            var elements = new object[count];
-            for (var i = 0; i < count; i++)
-                elements[i] = DefaultValue(elementDecl, owningInstance);
-
-            var array = new ArrayValue(
-                dimensions, elementTypeName, elements, ResolveStringCapacity(elementTypeName, owningInstance));
+            var array = DeclaredDefault.NewArray(
+                _registry,
+                decl.TypeName,
+                boundText => ResolveArrayBound(boundText, owningInstance),
+                elementDecl => DefaultValue(elementDecl, owningInstance));
 
             if (decl.DefaultValueText != null && Parser.ParseExpression(decl.DefaultValueText) is ArrayLiteralExpr lit)
-                OverlayArray(array, lit, new Frame(owningInstance, elementTypeName));
+                OverlayArray(array, lit, new Frame(owningInstance, array.ElementTypeName));
 
             return array;
         }

@@ -49,11 +49,12 @@ namespace xStunit.Interpreter
             return instance;
         }
 
-        // Reproduces Engine.BuildStructDefault/BuildArrayDefault's
-        // "0/false/empty" defaults without an Engine instance, because the
-        // builder runs before any FbInstance exists. Nested structs recurse
-        // with no overrides of their own; arrays fill every element at its
-        // element type's in-range default.
+        // The "0/false/empty" rule and the every-element-defaulted ARRAY come
+        // from DeclaredDefault, the same module the Engine's own defaults go
+        // through; this side of the seam resolves a bound out of TypeRegistry
+        // rather than a live Frame, because the builder runs before any
+        // FbInstance exists. Nested structs recurse with no overrides of their
+        // own.
         private object InRangeDefault(VarDecl field)
         {
             // Resolved once up front so every branch below sees the underlying
@@ -61,22 +62,12 @@ namespace xStunit.Interpreter
             var typeName = _registry.ResolveAlias(field.TypeName);
 
             if (ArrayTypeInfo.IsArrayType(typeName))
-                return BuildArrayInRange(typeName);
+                return DeclaredDefault.NewArray(_registry, typeName, ResolveArrayBound, InRangeDefault);
 
-            var nestedStruct = _registry.GetStruct(typeName);
-            if (nestedStruct != null)
+            if (_registry.GetStruct(typeName) != null)
                 return Build(typeName);
 
-            if (StringTypeInfo.IsStringType(typeName))
-                return "";
-
-            if (typeName == "BOOL")
-                return false;
-
-            if (IecNumericType.TryGetDefault(typeName, out var numericDefault))
-                return numericDefault;
-
-            return 0;
+            return DeclaredDefault.ForElementaryType(typeName);
         }
 
         private object BoundaryValue(VarDecl field, Boundary boundary)
@@ -100,23 +91,6 @@ namespace xStunit.Interpreter
                 $"Field '{field.Name}' of type '{field.TypeName}' has no boundary value - " +
                 "ARRAY bounds are fixed at declaration and STRUCT fields have no scalar boundary; " +
                 "target a numeric/STRING field (e.g. a paired count field) instead.");
-        }
-
-        private ArrayValue BuildArrayInRange(string arrayTypeName)
-        {
-            var (dimensions, elementTypeName) = ArrayTypeInfo.Parse(arrayTypeName, ResolveArrayBound);
-            var count = dimensions.Aggregate(1, (acc, d) => acc * (d.Hi - d.Lo + 1));
-            var elementDecl = new VarDecl(null, elementTypeName, null, VarSection.Local);
-
-            var elements = new object[count];
-            for (var i = 0; i < count; i++)
-                elements[i] = InRangeDefault(elementDecl);
-
-            return new ArrayValue(
-                dimensions,
-                elementTypeName,
-                elements,
-                StringTypeInfo.ResolveCapacity(_registry.ResolveAlias(elementTypeName), ResolveArrayBound));
         }
 
         // Resolves a non-literal ARRAY bound (e.g. a GVL-qualified constant

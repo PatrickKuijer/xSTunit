@@ -30,6 +30,29 @@ END_TYPE");
             Assert.Equal("", instance.Fields["label"].Value);
         }
 
+        // The builder answers "what does this type start at" out of the same
+        // rule the Engine's declarations use, so a duration or calendar field
+        // arrives boxed as the unsigned tick count the rest of the interpreter
+        // expects rather than as a bare int 0 only this builder produced.
+        [Fact]
+        public void Build_NoOverrides_DurationAndCalendarFieldsGetTheirElementaryDefault()
+        {
+            var registry = NewRegistry(@"TYPE ST_Msg :
+STRUCT
+	elapsed : TIME;
+	precise : LTIME;
+	stamp : DATE_AND_TIME;
+END_STRUCT
+END_TYPE");
+            var builder = new StructBoundaryBuilder(registry);
+
+            var instance = builder.Build("ST_Msg");
+
+            Assert.Equal(0u, instance.Fields["elapsed"].Value);
+            Assert.Equal(0ul, instance.Fields["precise"].Value);
+            Assert.Equal(0u, instance.Fields["stamp"].Value);
+        }
+
         [Fact]
         public void Build_NumericFieldOverrideMin_PushesFieldToTypeMinKeepsRestDefault()
         {

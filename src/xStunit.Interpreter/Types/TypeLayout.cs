@@ -107,10 +107,8 @@ namespace xStunit.Interpreter
         }
 
         // The wire format of one declared ARRAY: how many elements its
-        // dimensions span and how far apart consecutive elements sit. Count
-        // states the fold over the declared spans once, so sizing an array and
-        // walking its elements cannot disagree about how many there are, and
-        // the stride is the element's whole declared size - an element's own
+        // dimensions span and how far apart consecutive elements sit. The
+        // stride is the element's whole declared size - an element's own
         // trailing padding lies inside the array, never between its elements.
         private readonly struct ArrayShape
         {
@@ -131,7 +129,7 @@ namespace xStunit.Interpreter
 
             public int ElementAlign { get; }
 
-            public int Count => Dimensions.Aggregate(1, (acc, d) => acc * (d.Hi - d.Lo + 1));
+            public int Count => ArrayTypeInfo.ElementCount(Dimensions);
 
             public int OffsetOf(int index) => index * ElementSize;
         }

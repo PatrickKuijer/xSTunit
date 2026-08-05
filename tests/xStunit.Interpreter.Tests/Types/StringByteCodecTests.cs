@@ -222,6 +222,26 @@ namespace xStunit.Interpreter.Tests
             Assert.Contains("cLimits.MAX_NAME", ex.Message);
         }
 
+        // Capacity is not sizing. The same unresolvable size that refuses a
+        // pack leaves the slot it seats UNBOUNDED instead of sinking the
+        // declaration: a size whose constants have no value yet is not a size
+        // the declaration got wrong, and a slot that never has its bytes read
+        // must not pay for one.
+        [Fact]
+        public void ConstantExpressionLength_WithNoBoundResolver_SeatsAnUnboundedSlot()
+        {
+            var union = new StructAst(
+                "U_Labelled",
+                new[] { new VarDecl("label", "STRING(cLimits.MAX_NAME)", null, VarSection.Local) },
+                isUnion: true);
+            var layout = new TypeLayout(
+                new TypeRegistry(Array.Empty<PouAst>(), new[] { union }), TargetPlatform.Default);
+
+            var instance = layout.NewUnionInstance(union);
+
+            Assert.Equal(Cell.Unbounded, instance.Fields["label"].StringCapacity);
+        }
+
         // A non-string is not this codec's to pack, and saying so with false
         // rather than an exception is what lets the caller fall through to its
         // own STRUCT/ARRAY/scalar handling.

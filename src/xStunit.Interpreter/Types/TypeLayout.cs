@@ -476,26 +476,8 @@ namespace xStunit.Interpreter
             return new ArrayShape(dimensions, elementTypeName, elementSize, elementAlign);
         }
 
-        // The capacity a STRING/WSTRING declaration imposes on the slot its
-        // value is unpacked back into. A size whose constants have no value yet
-        // leaves the slot unbounded rather than sinking the unpack, for the same
-        // reason the declaration itself was seated unbounded: a GVL constant has
-        // no value until the constants converge.
-        private int StringCapacityOf(string typeName)
-        {
-            var resolved = _registry.ResolveAlias(typeName);
-            if (!StringTypeInfo.IsStringType(resolved))
-                return Cell.Unbounded;
-
-            try
-            {
-                return StringTypeInfo.CapacityOf(ParseStringLength(resolved));
-            }
-            catch (InvalidOperationException)
-            {
-                return Cell.Unbounded;
-            }
-        }
+        private int StringCapacityOf(string typeName) =>
+            StringTypeInfo.ResolveCapacity(_registry.ResolveAlias(typeName), _resolveBound);
 
         // The value a UNION instantiates as: one backing buffer, and one typed
         // view per member onto it. Every construction site goes through here -

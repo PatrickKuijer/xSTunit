@@ -155,26 +155,14 @@ namespace xStunit.Interpreter
         // every ARRAY gets its capacity from here, so Cell.StringCapacity and
         // PackValue's own truncation cannot disagree about a declaration.
         //
-        // A size naming an identifier that does not resolve leaves the cell
-        // Unbounded instead of sinking the declaration: GVL cells are allocated
-        // before any GVL constant has a value, so a size expression referring
-        // to one is genuinely unresolvable on the first pass, and the Engine
-        // constructor re-resolves it once the constants converge. Anything else
-        // the evaluator throws - an overflowing or non-numeric size - is left
-        // to surface.
-        private int ResolveStringCapacity(string declaredTypeName, FbInstance owningInstance)
-        {
-            try
-            {
-                return StringTypeInfo.ResolveCapacity(
-                    _registry.ResolveAlias(declaredTypeName),
-                    sizeText => ResolveArrayBound(sizeText, owningInstance));
-            }
-            catch (InvalidOperationException)
-            {
-                return Cell.Unbounded;
-            }
-        }
+        // GVL cells are allocated before any GVL constant has a value, so a
+        // size expression referring to one is genuinely unresolvable on the
+        // first pass - it seats an Unbounded cell, and the Engine constructor
+        // re-resolves once the constants converge.
+        private int ResolveStringCapacity(string declaredTypeName, FbInstance owningInstance) =>
+            StringTypeInfo.ResolveCapacity(
+                _registry.ResolveAlias(declaredTypeName),
+                sizeText => ResolveArrayBound(sizeText, owningInstance));
 
         // Every VarDecl-driven Cell construction goes through here, so no
         // declaration site can forget to resolve its capacity and silently

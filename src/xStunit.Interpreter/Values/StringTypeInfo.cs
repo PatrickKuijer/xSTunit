@@ -69,16 +69,38 @@ namespace xStunit.Interpreter
         // so a caller can ask about any declared type without classifying it
         // first. Pass an alias-resolved type name - this does not resolve ALIAS
         // DUTs, having no registry to resolve them with.
-        public static int ResolveCapacity(string resolvedTypeName, Func<string, int> resolveExpr) =>
-            IsStringType(resolvedTypeName)
-                ? CapacityOf(ParseLength(resolvedTypeName, resolveExpr))
-                : Cell.Unbounded;
+        //
+        // A size whose constants have no value yet leaves the slot UNBOUNDED
+        // rather than sinking the declaration that seats it: a GVL constant has
+        // no value until the constants converge, and a caller holding one
+        // re-resolves once they do. A null resolveExpr is the same answer
+        // reached sooner - the caller has no way to settle a constant
+        // expression at all. Anything else a resolver throws - an overflowing
+        // or non-numeric size - is left to surface.
+        public static int ResolveCapacity(string resolvedTypeName, Func<string, int> resolveExpr)
+        {
+            if (!IsStringType(resolvedTypeName))
+                return Cell.Unbounded;
+
+            try
+            {
+                return CapacityOf(ParseLength(resolvedTypeName, resolveExpr ?? Unresolvable));
+            }
+            catch (InvalidOperationException)
+            {
+                return Cell.Unbounded;
+            }
+        }
+
+        private static int Unresolvable(string sizeText) =>
+            throw new InvalidOperationException(
+                $"STRING/WSTRING size '{sizeText}' has no resolver to settle it");
 
         // A size that resolves to zero or less is reported as Unbounded rather
         // than as a capacity: it means a constant in the size expression has no
         // value yet, and a zero capacity would silently empty every string
         // assigned to the declaration.
-        public static int CapacityOf(int declaredLength) =>
+        private static int CapacityOf(int declaredLength) =>
             declaredLength > 0 ? declaredLength : Cell.Unbounded;
 
         public static int ParseLength(string typeName, Func<string, int> resolveExpr)

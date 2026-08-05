@@ -3,7 +3,7 @@ using System.IO;
 using System.Linq;
 using System.Xml.Linq;
 
-namespace xStunit.Parser
+namespace xStunit.Interpreter.Tests.Conformance
 {
     /// <summary>
     /// Reads the declared byte layout out of a TwinCAT <c>.tmc</c> module

@@ -1,4 +1,4 @@
-﻿namespace xStunit.Interpreter.Conformance
+﻿namespace xStunit.Interpreter.Tests.Conformance
 {
     internal enum LayoutFindingKind
     {

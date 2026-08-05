@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using xStunit.Parser;
 
-namespace xStunit.Interpreter.Conformance
+namespace xStunit.Interpreter.Tests.Conformance
 {
     // Diffs the byte layout a TwinCAT compiler declared in a .tmc against the
     // layout xStunit's own math computes for the same types.

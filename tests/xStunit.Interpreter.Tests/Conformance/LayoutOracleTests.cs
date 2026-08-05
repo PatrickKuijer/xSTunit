@@ -1,6 +1,4 @@
 using System.IO;
-using xStunit.Interpreter.Conformance;
-using xStunit.Parser;
 using Xunit;
 
 namespace xStunit.Interpreter.Tests.Conformance

@@ -5,7 +5,7 @@ using System.Linq;
 namespace xStunit.Interpreter
 {
     // Where a field lands inside its struct, as the layout rules place it.
-    internal readonly struct FieldPlacement
+    public readonly struct FieldPlacement
     {
         public FieldPlacement(VarDecl field, int offset, int size, int align)
         {
@@ -37,7 +37,7 @@ namespace xStunit.Interpreter
     // up to its largest member's alignment. A struct's {attribute 'pack_mode'
     // := 'N'} pragma caps that per-field alignment at N bytes instead - see
     // PackBound below.
-    internal sealed class TypeLayout
+    public sealed class TypeLayout
     {
         // A scalar's byte width and the codec that reads and writes those
         // bytes, held together so that a type this table sizes is a type it can

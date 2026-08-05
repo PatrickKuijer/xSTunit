@@ -1,6 +1,6 @@
 using System.Collections.Generic;
 
-namespace xStunit.Parser
+namespace xStunit.Interpreter.Tests.Conformance
 {
     /// <summary>
     /// One dimension of a declared array member: its lower bound and how many

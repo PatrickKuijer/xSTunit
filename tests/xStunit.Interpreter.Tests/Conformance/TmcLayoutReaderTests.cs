@@ -1,9 +1,8 @@
 using System.Linq;
 using System.Xml;
-using xStunit.Parser;
 using Xunit;
 
-namespace xStunit.Parser.Tests
+namespace xStunit.Interpreter.Tests.Conformance
 {
     // Every case below is XML shaped exactly as a real .tmc writes it. The
     // reader's job is to hand a consumer what the compiler declared without

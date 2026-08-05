@@ -2,7 +2,7 @@
 using System.Linq;
 using System.Text;
 
-namespace xStunit.Interpreter.Conformance
+namespace xStunit.Interpreter.Tests.Conformance
 {
     // What LayoutOracle.Compare found: every disagreement between a .tmc's
     // declared layout and xStunit's, plus every declared type the comparison

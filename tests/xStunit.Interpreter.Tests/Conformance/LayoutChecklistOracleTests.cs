@@ -3,7 +3,6 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using xStunit.Interpreter.Conformance;
 using xStunit.Parser;
 using Xunit;
 

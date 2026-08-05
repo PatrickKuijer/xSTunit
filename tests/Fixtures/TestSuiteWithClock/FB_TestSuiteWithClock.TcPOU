@@ -1,0 +1,30 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4026.18">
+  <POU Name="FB_TestSuiteWithClock" Id="{267d7f54-cead-459f-9b43-6ee4e810c1a1}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_TestSuiteWithClock EXTENDS TcUnit.FB_TestSuite
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[]]></ST>
+    </Implementation>
+    <Method Name="AdvanceClockMs" Id="{4a5b9e20-07bf-4e8f-bdf8-7f689e559b77}">
+      <Declaration><![CDATA[METHOD PROTECTED AdvanceClockMs
+VAR_INPUT
+	Duration : TIME;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[// No Op; xSTunit compatibility adapter.]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="AdvanceClockNs" Id="{472b7be4-8c4e-4d86-959f-59c18551dcbb}">
+      <Declaration><![CDATA[METHOD PROTECTED AdvanceClockNs
+VAR_INPUT
+	Duration : LTIME;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[// No Op; xSTunit compatibility adapter.]]></ST>
+      </Implementation>
+    </Method>
+  </POU>
+</TcPlcObject>

@@ -124,3 +124,7 @@ Full worked example, argument/return type table, and guarantees: [`samples/xStun
 ## Issue tracking
 
 This project uses `bd` (beads). Run `bd prime` for workflow context, `bd ready` for available work.
+
+## License
+
+Apache License 2.0 — see [LICENSE](LICENSE).

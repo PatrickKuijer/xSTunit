@@ -182,6 +182,47 @@ namespace xStunit.Cli.Tests
             Assert.Equal(1, root.GetProperty("skipped").GetArrayLength());
         }
 
+        // A POU drawn in a graphical language is understood and deliberately
+        // not run, not broken: its skip line has to read like the Tc2_System
+        // one - naming the POU and the language - with no "Failed to parse"
+        // wrapper and nothing about a null reference.
+        [Fact]
+        public void Run_GraphicalPouAlongsideSuite_SkipReadsAsUnsupportedConstructNotParseFailure()
+        {
+            File.WriteAllText(Path.Combine(_tempDir, "FB_Graphical.TcPOU"), GraphicalPouXml);
+            var output = new StringWriter();
+
+            var exitCode = CliRunner.Run(new[] { _tempDir }, output);
+
+            var text = output.ToString();
+            Assert.Equal(0, exitCode);
+            Assert.Contains("1 passed, 0 failed, 2 skipped", text);
+            Assert.Contains(
+                "'FB_Graphical' has no ST body (implementation language 'NWL'), " +
+                "which is outside the v1 parse subset (not yet implemented).",
+                text);
+            Assert.DoesNotContain("Failed to parse 'FB_Graphical.TcPOU'", text);
+            Assert.DoesNotContain("Object reference not set", text);
+        }
+
+        // The POU-body case is the one real trees hit today; a graphical METHOD
+        // on an otherwise ST-bodied FB is the same defect one level down, and
+        // reaches the user through the same skip line.
+        [Fact]
+        public void Run_GraphicalMethodAlongsideSuite_SkipNamesTheMethodAndTheLanguage()
+        {
+            File.WriteAllText(Path.Combine(_tempDir, "FB_MixedLanguages.TcPOU"), GraphicalMethodPouXml);
+            var output = new StringWriter();
+
+            var exitCode = CliRunner.Run(new[] { _tempDir }, output);
+
+            var text = output.ToString();
+            Assert.Equal(0, exitCode);
+            Assert.Contains("FB_MixedLanguages.TcPOU", text);
+            Assert.Contains("'DrawnInLadder' has no ST body (implementation language 'NWL')", text);
+            Assert.DoesNotContain("Object reference not set", text);
+        }
+
         // Production-shaped POU the parser rejects outright, on account of the
         // library call in its body.
         private const string UnsupportedPouXml = @"<?xml version=""1.0"" encoding=""utf-8""?>
@@ -194,6 +235,56 @@ END_VAR]]></Declaration>
     <Implementation>
       <ST><![CDATA[Tc2_System.GETCURTASKINDEX();]]></ST>
     </Implementation>
+  </POU>
+</TcPlcObject>";
+
+        // How TwinCAT writes an LD/FBD body: a network list where the <ST>
+        // element would be.
+        private const string GraphicalPouXml = @"<?xml version=""1.0"" encoding=""utf-8""?>
+<TcPlcObject Version=""1.1.0.1"">
+  <POU Name=""FB_Graphical"" Id=""{00000000-0000-0000-0000-0000000000c0}"" SpecialFunc=""None"">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_Graphical
+VAR
+	bFlag : BOOL;
+END_VAR]]></Declaration>
+    <Implementation>
+      <NWL>
+        <XmlArchive>
+          <Data>
+            <o xml:space=""preserve"" t=""NWLImplementationObject"">
+              <v n=""NetworkListComment"">""""</v>
+            </o>
+          </Data>
+        </XmlArchive>
+      </NWL>
+    </Implementation>
+  </POU>
+</TcPlcObject>";
+
+        private const string GraphicalMethodPouXml = @"<?xml version=""1.0"" encoding=""utf-8""?>
+<TcPlcObject Version=""1.1.0.1"">
+  <POU Name=""FB_MixedLanguages"" Id=""{00000000-0000-0000-0000-0000000000c1}"" SpecialFunc=""None"">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_MixedLanguages
+VAR
+	bFlag : BOOL;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[bFlag := TRUE;]]></ST>
+    </Implementation>
+    <Method Name=""DrawnInLadder"" Id=""{00000000-0000-0000-0000-0000000000c2}"">
+      <Declaration><![CDATA[METHOD PUBLIC DrawnInLadder : BOOL]]></Declaration>
+      <Implementation>
+        <NWL>
+          <XmlArchive>
+            <Data>
+              <o xml:space=""preserve"" t=""NWLImplementationObject"">
+                <v n=""NetworkListComment"">""""</v>
+              </o>
+            </Data>
+          </XmlArchive>
+        </NWL>
+      </Implementation>
+    </Method>
   </POU>
 </TcPlcObject>";
 

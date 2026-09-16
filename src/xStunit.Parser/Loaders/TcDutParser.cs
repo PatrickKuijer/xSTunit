@@ -1,3 +1,4 @@
+using System.Xml;
 using System.Xml.Linq;
 
 namespace xStunit.Parser
@@ -29,9 +30,12 @@ namespace xStunit.Parser
         public static DutAst Parse(string xml)
         {
             var doc = XDocument.Parse(xml);
-            var dut = doc.Root.Element("DUT");
-            var name = dut.Attribute("Name").Value;
-            var declarationText = dut.Element("Declaration").Value;
+            var dut = doc.Root?.Element("DUT")
+                ?? throw new XmlException("the file has no <DUT> element.");
+            var name = dut.Attribute("Name")?.Value
+                ?? throw new XmlException("<DUT> has no Name attribute.");
+            var declarationText = (dut.Element("Declaration")
+                ?? throw new XmlException($"{name} has no <Declaration> element.")).Value;
             return new DutAst(name, declarationText);
         }
     }

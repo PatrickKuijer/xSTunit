@@ -865,19 +865,40 @@ namespace xStunit.Interpreter
             // _TO_STRING is deliberately scoped to numeric source types only:
             // a non-numeric prefix like BOOL_TO_STRING or TIME_TO_STRING falls
             // through to CallMethod/native-bridge dispatch and keeps its
-            // "Method not found" error rather than being silently formatted.
+            // unresolved-call error rather than being silently formatted.
             //
             // Invariant culture, for the same reason as
             // ScalarAssertType.FormatDouble: a CurrentCulture of de-DE would
-            // render '.' as ','. Plain digits - no attempt at TwinCAT-exact
-            // digit-count or exponent parity.
-            else if (toType == "STRING" &&
-                     (fromType == "REAL" || fromType == "LREAL" || IntegerCastTargets.Contains(fromType)))
+            // render '.' as ','.
+            else if (toType == "STRING" && (fromType == "REAL" || fromType == "LREAL"))
+                result = FormatRealAsString(value);
+            else if (toType == "STRING" && IntegerCastTargets.Contains(fromType))
                 result = Convert.ToString(value, System.Globalization.CultureInfo.InvariantCulture);
             else
                 return false;
 
             return true;
         }
+
+        // A whole-valued REAL still has to read as a REAL. TwinCAT writes 19.0
+        // as '19.0'; formatting it as '19' made every REAL_TO_STRING-shaped
+        // assertion compare against a shape the target runtime never produces,
+        // as likely to go red on correct code as green on wrong code.
+        //
+        // Only the missing point is supplied. Digit COUNT and exponent parity
+        // with TwinCAT are NOT attempted - settling those needs a hardware
+        // capture this has not had - so the round-trippable shortest form is
+        // left exactly as .NET produces it. Anything already carrying a point
+        // or an exponent, and the non-finite NaN/Infinity spellings, are passed
+        // through untouched: 'NaN.0' is not a number in any notation.
+        private static string FormatRealAsString(object value)
+        {
+            var text = Convert.ToString(value, System.Globalization.CultureInfo.InvariantCulture);
+            return WholeDecimalPattern.IsMatch(text) ? text + ".0" : text;
+        }
+
+        private static readonly System.Text.RegularExpressions.Regex WholeDecimalPattern =
+            new System.Text.RegularExpressions.Regex(
+                @"^-?[0-9]+$", System.Text.RegularExpressions.RegexOptions.Compiled);
     }
 }

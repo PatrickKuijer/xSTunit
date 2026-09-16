@@ -22,6 +22,8 @@ Behavior is taken from the vendor documentation, not guessed:
 | `F_CreateAmsNetId` | function | six octets → the dotted decimal `T_AmsNetID` text |
 | `F_ToASC` / `F_ToCHR` | functions | character ↔ Latin-1 byte, on the interpreter's own narrow-STRING model |
 | `F_GetSystemTime` / `F_GetTaskTime` | functions | the simulated clock, never wall time; 100 ns intervals since 1601 |
+| `SETBIT32` / `CLEARBIT32` / `GETBIT32` / `CSETBIT32` | functions | `bitNo` wraps modulo 32, as documented |
+| `MEMCMP` | function | `16#FF` for a null pointer or zero length, not a fault |
 
 ## Using it
 

@@ -1,0 +1,174 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4026.18">
+  <POU Name="FB_BitAndMemoryPluginTests" Id="{b2c3d4e5-6k20-4a1a-8b1b-000000000040}" SpecialFunc="None">
+    <Declaration><![CDATA[(*
+    Tc2_System's DWORD bit helpers and MEMCMP, supplied by
+    samples/xStunit.SystemLibraryPlugins.
+
+    MEMCMP is the one member of the memory family that is not already an
+    interpreter intrinsic (MEMCPY/MEMSET/MEMMOVE are), so it is the only one
+    that can be reached through a plugin at all.
+
+    Two documented behaviours here are the kind that look like defects if
+    someone "tidies" them later: bitNo is taken modulo 32 rather than
+    rejected, and MEMCMP answers 16#FF for parameters it cannot work with
+    instead of faulting.
+*)
+FUNCTION_BLOCK FB_BitAndMemoryPluginTests EXTENDS TcUnit.FB_TestSuite]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[BitsSetClearAndRead();
+ConditionalSetFollowsItsFlag();
+BitNumberWrapsAtThirtyTwo();
+MemCmpOrdersByTheFirstDifferingByte();
+MemCmpRejectsAZeroLength();]]></ST>
+    </Implementation>
+    <Method Name="BitsSetClearAndRead" Id="{b2c3d4e5-6k20-4a1a-8b1b-000000000041}">
+      <Declaration><![CDATA[METHOD PRIVATE BitsSetClearAndRead
+VAR
+	nSet		: DWORD;
+	nCleared	: DWORD;
+	bHigh		: BOOL;
+	bLow		: BOOL;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('BitsSetClearAndRead');
+
+nSet := SETBIT32(16#00000001, 31);
+nCleared := CLEARBIT32(16#FFFFFFFF, 0);
+bHigh := GETBIT32(16#80000000, 31);
+bLow := GETBIT32(16#80000000, 30);
+
+(* Bit 31 is where a result that leaked into the upper half of the value
+   carrying it would show up. *)
+AssertEquals_DWORD(Expected := 16#80000001,
+                    Actual := nSet,
+                    Message := 'the top bit sets without widening the value');
+AssertEquals_DWORD(Expected := 16#FFFFFFFE,
+                    Actual := nCleared,
+                    Message := 'clearing bit 0 leaves the rest alone');
+AssertEquals_BOOL(Expected := TRUE,
+                   Actual := bHigh,
+                   Message := 'a set bit reads TRUE');
+AssertEquals_BOOL(Expected := FALSE,
+                   Actual := bLow,
+                   Message := 'a clear bit reads FALSE');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="ConditionalSetFollowsItsFlag" Id="{b2c3d4e5-6k20-4a1a-8b1b-000000000042}">
+      <Declaration><![CDATA[METHOD PRIVATE ConditionalSetFollowsItsFlag
+VAR
+	nOn			: DWORD;
+	nOff		: DWORD;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('ConditionalSetFollowsItsFlag');
+
+nOn := CSETBIT32(16#00000000, 4, TRUE);
+nOff := CSETBIT32(16#00000010, 4, FALSE);
+
+AssertEquals_DWORD(Expected := 16#00000010,
+                    Actual := nOn,
+                    Message := 'CSETBIT32 with TRUE sets the bit');
+AssertEquals_DWORD(Expected := 16#00000000,
+                    Actual := nOff,
+                    Message := 'CSETBIT32 with FALSE clears it');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="BitNumberWrapsAtThirtyTwo" Id="{b2c3d4e5-6k20-4a1a-8b1b-000000000043}">
+      <Declaration><![CDATA[METHOD PRIVATE BitNumberWrapsAtThirtyTwo
+VAR
+	nWrapped	: DWORD;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('BitNumberWrapsAtThirtyTwo');
+
+(* Documented: bitNo is converted to a modulo 32 value before execution, so
+   an out-of-range number wraps rather than faulting. Source computing a bit
+   index from an offset relies on it. *)
+nWrapped := SETBIT32(16#00000000, 34);
+
+AssertEquals_DWORD(Expected := 16#00000004,
+                    Actual := nWrapped,
+                    Message := 'bit 34 is bit 2');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="MemCmpOrdersByTheFirstDifferingByte" Id="{b2c3d4e5-6k20-4a1a-8b1b-000000000044}">
+      <Declaration><![CDATA[METHOD PRIVATE MemCmpOrdersByTheFirstDifferingByte
+VAR
+	aLeft		: ARRAY[0..3] OF BYTE;
+	aRight		: ARRAY[0..3] OF BYTE;
+	nSame		: DINT;
+	nLower		: DINT;
+	nHigher		: DINT;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('MemCmpOrdersByTheFirstDifferingByte');
+
+aLeft[0] := 1;
+aLeft[1] := 2;
+aLeft[2] := 3;
+aLeft[3] := 4;
+aRight[0] := 1;
+aRight[1] := 2;
+aRight[2] := 3;
+aRight[3] := 4;
+
+nSame := MEMCMP(ADR(aLeft), ADR(aRight), SIZEOF(aLeft));
+
+(* Byte 2 differs and byte 3 disagrees the other way, so a comparison that
+   looked at the last difference rather than the first would come out
+   backwards. *)
+aLeft[2] := 3;
+aRight[2] := 9;
+aLeft[3] := 200;
+aRight[3] := 1;
+nLower := MEMCMP(ADR(aLeft), ADR(aRight), SIZEOF(aLeft));
+nHigher := MEMCMP(ADR(aRight), ADR(aLeft), SIZEOF(aLeft));
+
+AssertEquals_DINT(Expected := 0,
+                   Actual := nSame,
+                   Message := 'identical buffers compare equal');
+AssertEquals_DINT(Expected := -1,
+                   Actual := nLower,
+                   Message := 'the first differing byte decides, and it is lower');
+AssertEquals_DINT(Expected := 1,
+                   Actual := nHigher,
+                   Message := 'swapping the operands swaps the sign');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="MemCmpRejectsAZeroLength" Id="{b2c3d4e5-6k20-4a1a-8b1b-000000000045}">
+      <Declaration><![CDATA[METHOD PRIVATE MemCmpRejectsAZeroLength
+VAR
+	aBuf		: ARRAY[0..3] OF BYTE;
+	nResult		: DINT;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('MemCmpRejectsAZeroLength');
+
+(* 16#FF, not 0 and not a fault: a length computed at run time can legitimately
+   come out zero, and the caller is expected to see that in the return value
+   rather than have the suite die. *)
+nResult := MEMCMP(ADR(aBuf), ADR(aBuf), 0);
+
+AssertEquals_DINT(Expected := 16#FF,
+                   Actual := nResult,
+                   Message := 'a zero length reports invalid parameters');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+  </POU>
+</TcPlcObject>

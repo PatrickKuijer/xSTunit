@@ -50,7 +50,7 @@ namespace xStunit.Cli.Tests
             // The count, not just "0 failed": a fixture that stopped being
             // discovered would pass a zero-failure assertion while testing
             // nothing at all.
-            Assert.Contains("10 passed, 0 failed", text);
+            Assert.Contains("15 passed, 0 failed", text);
         }
 
         [Fact]

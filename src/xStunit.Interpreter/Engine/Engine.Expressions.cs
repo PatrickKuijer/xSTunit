@@ -38,8 +38,13 @@ namespace xStunit.Interpreter
                 case IdentifierExpr id:
                 {
                     var cell = frame.ResolveCell(id.Name);
-                    if (cell == null && !TryResolveGlobalCell(id.Name, out cell))
-                        throw new InvalidOperationException($"Unknown variable '{id.Name}'");
+                    if (cell == null)
+                    {
+                        if (!TryResolveGlobalCell(id.Name, out cell))
+                            throw new InvalidOperationException($"Unknown variable '{id.Name}'");
+                        NoteGlobalRead(cell);
+                    }
+
                     return cell.Value;
                 }
                 case ThisRefExpr:
@@ -47,7 +52,14 @@ namespace xStunit.Interpreter
                 case SuperRefExpr:
                     return frame.Instance;
                 case DerefExpr deref:
-                    return ((Pointer)Evaluate(deref.Inner, frame)).Target.Value;
+                {
+                    // The pointee is reached without passing the identifier or
+                    // GvlName.field branches, so this is where a pointer-
+                    // mediated read of a global gets noted.
+                    var target = ((Pointer)Evaluate(deref.Inner, frame)).Target;
+                    NoteGlobalRead(target);
+                    return target.Value;
+                }
                 case IndexExpr index:
                 {
                     var receiverValue = Evaluate(index.Receiver, frame);
@@ -90,6 +102,8 @@ namespace xStunit.Interpreter
                     {
                         if (!gvlFields.TryGetValue(fieldAccess.FieldName, out var gvlCell))
                             throw new InvalidOperationException($"Unknown field '{fieldAccess.FieldName}'");
+
+                        NoteGlobalRead(gvlCell);
                         return gvlCell.Value;
                     }
 

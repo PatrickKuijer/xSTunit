@@ -23,6 +23,14 @@ namespace xStunit.Interpreter
         // zero-initialized storage per declared type.
         private readonly Dictionary<string, Dictionary<string, Cell>> _globals = new Dictionary<string, Dictionary<string, Cell>>();
 
+        // Global Cells whose own default value is not settled yet. Membership
+        // is reference identity, Cell declaring no value equality of its own.
+        // Populated during construction and emptied when it finishes, so it
+        // costs nothing once the Engine is running.
+        private readonly HashSet<Cell> _unsettledGlobals = new HashSet<Cell>();
+        private bool _settlingGlobals;
+        private bool _readUnsettledGlobal;
+
         // One simulated clock for the whole Engine, not one per instance: the
         // TON/TOF/TP and LTON/LTOF/LTP native hosts read Clock.TotalNs whenever
         // they are invoked, and ns is the base unit so the LTIME trio can
@@ -66,7 +74,12 @@ namespace xStunit.Interpreter
             {
                 var fields = new Dictionary<string, Cell>();
                 foreach (var decl in _registry.GetGvlDecls(gvlName))
-                    fields[decl.Name] = new Cell { DeclaredTypeName = decl.TypeName };
+                {
+                    var cell = new Cell { DeclaredTypeName = decl.TypeName };
+                    fields[decl.Name] = cell;
+                    _unsettledGlobals.Add(cell);
+                }
+
                 _globals[gvlName] = fields;
             }
 
@@ -75,40 +88,85 @@ namespace xStunit.Interpreter
             // every other GVL and suite, mirroring SuiteCaseRunner's per-suite
             // discovery isolation.
             //
-            // Convergence cannot be detected from exceptions: a forward
+            // Convergence cannot be detected from exceptions alone: a forward
             // reference to another GVL's constant doesn't throw, because the
             // allocation pass above already created that Cell - it silently
-            // reads a not-yet-computed value. So every decl is instead
-            // recomputed on every pass (safe, since default-value expressions
-            // are side-effect-free reads of constants and literals) for one
-            // pass per decl, an upper bound on the longest possible dependency
-            // chain. Anything still throwing after that is genuinely
-            // unresolvable and keeps its zero-initialized (null) value.
-            var allDecls = new List<(string GvlName, VarDecl Decl)>();
+            // reads a not-yet-computed value. What makes a value final is
+            // therefore not that it evaluated, but that it evaluated without
+            // reading anything still unsettled, which is what _unsettledGlobals
+            // and NoteGlobalRead track. A decl clearing that bar is settled and
+            // never revisited, so the number of passes follows the depth of the
+            // dependency chains rather than the number of globals - the
+            // difference between linear and quadratic work in how many globals
+            // a workspace happens to declare.
+            var pending = new List<(string GvlName, VarDecl Decl)>();
             foreach (var gvlName in _registry.GvlNames)
                 foreach (var decl in _registry.GetGvlDecls(gvlName))
-                    allDecls.Add((gvlName, decl));
+                    pending.Add((gvlName, decl));
 
-            for (var pass = 0; pass < allDecls.Count; pass++)
+            _settlingGlobals = true;
+            try
             {
-                foreach (var (gvlName, decl) in allDecls)
+                while (pending.Count > 0)
                 {
-                    try
+                    var unsettled = new List<(string GvlName, VarDecl Decl)>();
+                    foreach (var entry in pending)
                     {
-                        // Capacity is re-resolved on every pass for the same
-                        // reason the value is: a STRING sized by another GVL's
-                        // constant cannot be settled until that constant has
-                        // one, and the allocation pass above deliberately ran
-                        // before any of them did.
-                        var cell = _globals[gvlName][decl.Name];
-                        cell.StringCapacity = ResolveStringCapacity(decl.TypeName, null);
-                        cell.Value = DefaultValue(decl, null);
+                        var cell = _globals[entry.GvlName][entry.Decl.Name];
+                        _readUnsettledGlobal = false;
+                        try
+                        {
+                            // Capacity is re-resolved alongside the value for
+                            // the same reason: a STRING sized by another GVL's
+                            // constant cannot be settled until that constant
+                            // has one, and the allocation pass above
+                            // deliberately ran before any of them did.
+                            cell.StringCapacity = ResolveStringCapacity(entry.Decl.TypeName, null);
+                            cell.Value = DefaultValue(entry.Decl, null);
+                        }
+                        catch (Exception)
+                        {
+                            unsettled.Add(entry);
+                            continue;
+                        }
+
+                        // The value is written through even when it turns out
+                        // to be unsettled, so it stands as this pass's best
+                        // effort if the loop stops short of resolving it.
+                        if (_readUnsettledGlobal)
+                            unsettled.Add(entry);
+                        else
+                            _unsettledGlobals.Remove(cell);
                     }
-                    catch (Exception)
-                    {
-                    }
+
+                    // A pass that settles nothing new never will: nothing
+                    // outside this set can change between passes, so every
+                    // decl still here - whether blocked on a cycle, on a
+                    // reference nothing defines, or on an initializer that
+                    // throws for reasons of its own - would evaluate exactly
+                    // the same way again. They keep the zero-initialized
+                    // (null) or best-effort value they already hold.
+                    if (unsettled.Count == pending.Count)
+                        break;
+
+                    pending = unsettled;
                 }
             }
+            finally
+            {
+                _settlingGlobals = false;
+                _unsettledGlobals.Clear();
+            }
+        }
+
+        // Records that a global Cell read while construction was seeding
+        // defaults has no settled default of its own yet, which disqualifies
+        // the value being computed around it from counting as final. Safe to
+        // call with any Cell: one that is not an unsettled global is ignored.
+        private void NoteGlobalRead(Cell cell)
+        {
+            if (_settlingGlobals && _unsettledGlobals.Contains(cell))
+                _readUnsettledGlobal = true;
         }
 
         public IReadOnlyList<TestCaseResult> RunSuite(string suiteTypeName) =>

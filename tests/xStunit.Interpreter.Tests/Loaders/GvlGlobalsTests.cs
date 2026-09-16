@@ -141,6 +141,77 @@ namespace xStunit.Interpreter.Tests
             Assert.Equal(16, frame.Locals["result"].Value);
         }
 
+        // Settling a global's default takes one pass per link in the chain it
+        // depends on, so a chain longer than the one or two links a hand-built
+        // fixture usually has is the case separating "iterate until nothing
+        // new settles" from "iterate a fixed couple of times". Declared back
+        // to front as well, so no link can settle by luck of registration
+        // order.
+        [Fact]
+        public void UnqualifiedRead_ChainOfGvlConstants_ResolvesEveryLinkRegardlessOfDepth()
+        {
+            var gvls = new[]
+            {
+                new GvlAst("cLevel4", "VAR_GLOBAL CONSTANT\n\tLEVEL_4 : UINT := LEVEL_3 + 1;\nEND_VAR"),
+                new GvlAst("cLevel3", "VAR_GLOBAL CONSTANT\n\tLEVEL_3 : UINT := LEVEL_2 + 1;\nEND_VAR"),
+                new GvlAst("cLevel2", "VAR_GLOBAL CONSTANT\n\tLEVEL_2 : UINT := LEVEL_1 + 1;\nEND_VAR"),
+                new GvlAst("cLevel1", "VAR_GLOBAL CONSTANT\n\tLEVEL_1 : UINT := LEVEL_0 + 1;\nEND_VAR"),
+                new GvlAst("cLevel0", "VAR_GLOBAL CONSTANT\n\tLEVEL_0 : UINT := 10;\nEND_VAR"),
+            };
+            var engine = NewEngine("", gvls);
+            var instance = engine.NewInstance("FB_Suite");
+            var frame = new Frame(instance, "FB_Suite");
+
+            engine.ExecuteStatements(Parser.ParseStatements("result := cLevel4.LEVEL_4;"), frame);
+
+            Assert.Equal(14, frame.Locals["result"].Value);
+        }
+
+        // An ARRAY bound is settled by the same loop as the value, but reaches
+        // the constant through the type text rather than an initializer
+        // expression. A global sized by a constant a later GVL declares has to
+        // wait for it just the same, and settling early is silent here: the
+        // array simply comes out the length the constant read as before it
+        // had one, so the top index is what catches it.
+        [Fact]
+        public void QualifiedRead_GvlArraySizedByLaterGvlConstant_BuildsArrayOfDeclaredLength()
+        {
+            var gvls = new[]
+            {
+                new GvlAst("gScratchGlobals", "VAR_GLOBAL\n\taUnits : ARRAY[1..cScratchConstants.MAX_UNITS] OF INT;\nEND_VAR"),
+                new GvlAst("cScratchConstants", "VAR_GLOBAL CONSTANT\n\tMAX_UNITS : UINT := 12;\nEND_VAR"),
+            };
+            var engine = NewEngine("", gvls);
+            var instance = engine.NewInstance("FB_Suite");
+            var frame = new Frame(instance, "FB_Suite");
+
+            engine.ExecuteStatements(Parser.ParseStatements("result := gScratchGlobals.aUnits[12];"), frame);
+
+            Assert.Equal(0, frame.Locals["result"].Value);
+        }
+
+        // STRING capacity settles through the same loop and is equally silent
+        // when it settles early: an unresolved size seats an Unbounded cell,
+        // which keeps a value longer than the declaration instead of dropping
+        // what does not fit the way TwinCAT does.
+        [Fact]
+        public void QualifiedWrite_GvlStringSizedByLaterGvlConstant_ClampsToDeclaredCapacity()
+        {
+            var gvls = new[]
+            {
+                new GvlAst("gScratchGlobals", "VAR_GLOBAL\n\tsLabel : STRING(cScratchConstants.LABEL_LEN);\nEND_VAR"),
+                new GvlAst("cScratchConstants", "VAR_GLOBAL CONSTANT\n\tLABEL_LEN : UINT := 4;\nEND_VAR"),
+            };
+            var engine = NewEngine("", gvls);
+            var instance = engine.NewInstance("FB_Suite");
+            var frame = new Frame(instance, "FB_Suite");
+
+            engine.ExecuteStatements(Parser.ParseStatements(
+                "gScratchGlobals.sLabel := 'abcdefgh';\nresult := gScratchGlobals.sLabel;"), frame);
+
+            Assert.Equal("abcd", frame.Locals["result"].Value);
+        }
+
         // An ARRAY bound is any IEC 61131-3 constant expression, not just an
         // integer literal, so a GVL-qualified constant is legal there and has
         // to go through the GVL lookup instead of being parsed as a number.

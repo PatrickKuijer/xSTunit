@@ -267,27 +267,27 @@ namespace xStunit.Interpreter
                 //
                 // An UNQUALIFIED call could have meant either a method on THIS
                 // or a bare FUNCTION, and once neither resolved there is no way
-                // to tell which was intended - so it says both, rather than
-                // pointing only at the enclosing FB. That FB is usually
-                // irrelevant: the common cause is a compiled-only vendor
-                // function with no .TcPOU to parse, and naming the type instead
-                // of the remedy sends the reader looking for a method that was
-                // never supposed to exist.
+                // to tell which was intended - so it names both. The enclosing
+                // FB alone would be the wrong place to point: the common cause
+                // is a compiled-only vendor function with no .TcPOU to parse,
+                // whose remedy is a plugin rather than a method on that type.
                 //
                 // startType is null for a call made from a global FUNCTION body -
                 // no instance, so no ancestry was ever searched - and "from type
                 // ''" would be nonsense there.
+                if (startType != null && !unqualified)
+                    throw new InvalidOperationException(
+                        $"Method '{methodName}' not found starting from type '{startType}'");
+
+                var searched = startType == null
+                    ? $"Function '{methodName}' not found: "
+                    : $"'{methodName}' not found: type '{startType}' and its bases declare no method of that name, ";
+
                 throw new InvalidOperationException(
-                    startType == null
-                        ? $"Function '{methodName}' not found: no FUNCTION/FUNCTION_BLOCK POU of that name was " +
-                          "loaded, and no native function is registered for it. If it comes from a compiled-only " +
-                          "TwinCAT library, supply it via a native-function plugin."
-                        : unqualified
-                            ? $"'{methodName}' not found: type '{startType}' and its bases declare no method of " +
-                              "that name, no FUNCTION/FUNCTION_BLOCK POU of that name was loaded, and no native " +
-                              "function is registered for it. If it comes from a compiled-only TwinCAT library, " +
-                              "supply it via a native-function plugin."
-                            : $"Method '{methodName}' not found starting from type '{startType}'");
+                    searched +
+                    "no FUNCTION/FUNCTION_BLOCK POU of that name was loaded, and no native function is " +
+                    "registered for it. If it comes from a compiled-only TwinCAT library, supply it via a " +
+                    "native-function plugin.");
             }
 
             // definingType, not instance.ActualTypeName: it is the POU owning

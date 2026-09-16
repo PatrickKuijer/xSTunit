@@ -446,7 +446,15 @@ namespace xStunit.Interpreter
         private object TestAndSet(Expr lockExpr, Frame frame)
         {
             var cell = ResolveCellForLValue(lockExpr, frame);
-            var priorValue = Convert.ToBoolean(cell.Value);
+
+            // Refused rather than converted: TestAndSet is declared over BOOL,
+            // and coercing a numeric operand would write a bool into a numeric
+            // cell, surfacing a call-site mistake as a wrong value somewhere
+            // else entirely.
+            if (!(cell.Value is bool priorValue))
+                throw new InvalidOperationException(
+                    $"TestAndSet requires a BOOL operand, got {cell.Value?.GetType().Name ?? "null"}");
+
             cell.Value = true;
             return priorValue;
         }
@@ -880,17 +888,16 @@ namespace xStunit.Interpreter
             return true;
         }
 
-        // A whole-valued REAL still has to read as a REAL. TwinCAT writes 19.0
-        // as '19.0'; formatting it as '19' made every REAL_TO_STRING-shaped
-        // assertion compare against a shape the target runtime never produces,
-        // as likely to go red on correct code as green on wrong code.
+        // A whole-valued REAL still has to read as a REAL: TwinCAT writes 19.0
+        // as '19.0', and an assertion checked against '19' is checking a shape
+        // the target runtime never produces.
         //
         // Only the missing point is supplied. Digit COUNT and exponent parity
-        // with TwinCAT are NOT attempted - settling those needs a hardware
-        // capture this has not had - so the round-trippable shortest form is
-        // left exactly as .NET produces it. Anything already carrying a point
-        // or an exponent, and the non-finite NaN/Infinity spellings, are passed
-        // through untouched: 'NaN.0' is not a number in any notation.
+        // with TwinCAT are unconfirmed against the runtime and deliberately not
+        // guessed at, so the round-trippable shortest form is left exactly as
+        // .NET produces it. Anything already carrying a point or an exponent,
+        // and the non-finite NaN/Infinity spellings, pass through untouched:
+        // 'NaN.0' is not a number in any notation.
         private static string FormatRealAsString(object value)
         {
             var text = Convert.ToString(value, System.Globalization.CultureInfo.InvariantCulture);

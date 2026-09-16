@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using xStunit.Parser;
 using Xunit;
@@ -101,6 +102,33 @@ namespace xStunit.Interpreter.Tests
 
             Assert.Equal(false, instance.Fields["bPrior"].Value);
             Assert.Equal(true, instance.Fields["sbBlocked"].Value);
+        }
+
+        // TestAndSet is declared over BOOL and nothing else. Converting a
+        // numeric operand instead of refusing it would write a bool into a
+        // numeric cell and corrupt the variable, turning a call-site mistake
+        // into a wrong value several statements away.
+        [Fact]
+        public void Evaluate_TestAndSetOnANonBooleanOperand_ThrowsAndLeavesItAlone()
+        {
+            var fb = new PouAst(
+                "FB_Widget",
+                null,
+                "VAR\n\tnCount : INT := 3;\nEND_VAR",
+                "",
+                new List<MethodAst>
+                {
+                    new MethodAst("Take", "METHOD Take", "TestAndSet(nCount);"),
+                });
+
+            var engine = new Engine(new TypeRegistry(new[] { fb }));
+            var instance = engine.NewInstance("FB_Widget");
+
+            var ex = Assert.Throws<InvalidOperationException>(
+                () => engine.CallMethod(instance, "Take", new Expr[0], new NamedArg[0], null, null));
+
+            Assert.Contains("TestAndSet", ex.Message);
+            Assert.Equal(3, instance.Fields["nCount"].Value);
         }
 
         // A struct member or GVL flag is as ordinary a lock operand as a local,

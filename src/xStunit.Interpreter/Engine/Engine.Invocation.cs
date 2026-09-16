@@ -14,7 +14,8 @@ namespace xStunit.Interpreter
             IReadOnlyList<NamedArg> namedArgs,
             Frame callerFrame,
             string dispatchStartTypeOverride,
-            bool optionalIfMissing = false)
+            bool optionalIfMissing = false,
+            bool unqualified = false)
         {
             // instance is null when the calling body is a global FUNCTION's
             // rather than an FB method's: a FUNCTION has no THIS, so an
@@ -259,15 +260,34 @@ namespace xStunit.Interpreter
                 if (instance?.NativeKind == NativeHostKind.Suite && NativeMethodBridge.LooksLikeTcUnitApiName(methodName))
                     throw NativeMethodBridge.NotSupported(methodName);
 
+                // Three shapes, because the reader needs a different next step
+                // in each. A QUALIFIED call (fbWidget.Foo(), THIS^.Foo()) named
+                // a method and only a method, so it gets the ancestry it was
+                // searched against and nothing else.
+                //
+                // An UNQUALIFIED call could have meant either a method on THIS
+                // or a bare FUNCTION, and once neither resolved there is no way
+                // to tell which was intended - so it says both, rather than
+                // pointing only at the enclosing FB. That FB is usually
+                // irrelevant: the common cause is a compiled-only vendor
+                // function with no .TcPOU to parse, and naming the type instead
+                // of the remedy sends the reader looking for a method that was
+                // never supposed to exist.
+                //
                 // startType is null for a call made from a global FUNCTION body -
                 // no instance, so no ancestry was ever searched - and "from type
                 // ''" would be nonsense there.
                 throw new InvalidOperationException(
-                    startType != null
-                        ? $"Method '{methodName}' not found starting from type '{startType}'"
-                        : $"Function '{methodName}' not found: no FUNCTION/FUNCTION_BLOCK POU of that name was " +
+                    startType == null
+                        ? $"Function '{methodName}' not found: no FUNCTION/FUNCTION_BLOCK POU of that name was " +
                           "loaded, and no native function is registered for it. If it comes from a compiled-only " +
-                          "TwinCAT library, supply it via a native-function plugin.");
+                          "TwinCAT library, supply it via a native-function plugin."
+                        : unqualified
+                            ? $"'{methodName}' not found: type '{startType}' and its bases declare no method of " +
+                              "that name, no FUNCTION/FUNCTION_BLOCK POU of that name was loaded, and no native " +
+                              "function is registered for it. If it comes from a compiled-only TwinCAT library, " +
+                              "supply it via a native-function plugin."
+                            : $"Method '{methodName}' not found starting from type '{startType}'");
             }
 
             // definingType, not instance.ActualTypeName: it is the POU owning

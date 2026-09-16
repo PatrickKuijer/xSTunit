@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
@@ -34,7 +34,7 @@ namespace xStunit.Cli.Tests
             Assert.Contains(
                 $"FaultsDeepInAHelper: FAIL (FB_FailingLineHelper.ThrowsFromNestedCall({FaultBodyLine()}): ",
                 text);
-            Assert.Contains("Method 'ThisMethodDoesNotExist' not found", text);
+            Assert.Contains("'ThisMethodDoesNotExist' not found", text);
         }
 
         [Fact]

@@ -44,6 +44,58 @@ namespace xStunit.Interpreter.Tests
             Assert.Contains("F_NotAnywhere", ex.Message);
         }
 
+        // An unqualified call inside an FB method can be either a call on THIS
+        // or a bare FUNCTION, and the interpreter cannot tell which was meant
+        // once neither resolves. Reporting it as a method lookup alone pointed
+        // the reader at the enclosing FB - a type that has nothing to do with a
+        // missing compiled-only library function - and buried the one remedy
+        // that fixes it.
+        [Fact]
+        public void CallMethod_UnresolvedUnqualifiedCallInsideAnFbMethod_NamesBothPossibilitiesAndThePluginRemedy()
+        {
+            var caller = new MethodAst("bDoWork", "METHOD bDoWork : BOOL", "bDoWork := TestAndSetTheOther(bFlag);");
+            var fb = new PouAst(
+                "FB_AccessGuard",
+                null,
+                "VAR\n\tbFlag : BOOL;\nEND_VAR",
+                "",
+                new List<MethodAst> { caller });
+
+            var engine = new Engine(new TypeRegistry(new[] { fb }));
+            var instance = engine.NewInstance("FB_AccessGuard");
+
+            var ex = Assert.Throws<InvalidOperationException>(
+                () => engine.CallMethod(instance, "bDoWork", new Expr[0], new NamedArg[0], null, null));
+
+            Assert.Contains("TestAndSetTheOther", ex.Message);
+            Assert.Contains("FB_AccessGuard", ex.Message);
+            Assert.Contains("native function", ex.Message);
+            Assert.DoesNotContain("not found starting from type", ex.Message);
+        }
+
+        // A call through an explicit receiver is unambiguously a method lookup,
+        // so it keeps the shorter diagnostic that says so.
+        [Fact]
+        public void CallMethod_UnresolvedQualifiedCall_StillReportsAMethodLookup()
+        {
+            var caller = new MethodAst("bDoWork", "METHOD bDoWork : BOOL", "inner.NoSuchMethod();");
+            var inner = new PouAst("FB_Inner", null, "", "", new List<MethodAst>());
+            var fb = new PouAst(
+                "FB_Outer",
+                null,
+                "VAR\n\tinner : FB_Inner;\nEND_VAR",
+                "",
+                new List<MethodAst> { caller });
+
+            var engine = new Engine(new TypeRegistry(new[] { fb, inner }));
+            var instance = engine.NewInstance("FB_Outer");
+
+            var ex = Assert.Throws<InvalidOperationException>(
+                () => engine.CallMethod(instance, "bDoWork", new Expr[0], new NamedArg[0], null, null));
+
+            Assert.Equal("Method 'NoSuchMethod' not found starting from type 'FB_Inner'", ex.Message);
+        }
+
         [Fact]
         public void RunSuite_UnresolvedCallInsideGlobalFunctionBody_KeepsTheFullCallChain()
         {

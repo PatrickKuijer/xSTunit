@@ -425,6 +425,32 @@ namespace xStunit.Interpreter
         // ABS(IN := x) binds the same way ABS(x) does.
         private static readonly string[] AbsParamNames = { "IN" };
 
+        // Tc2_System's TestAndSet names its VAR_IN_OUT operand Lock.
+        private static readonly string[] TestAndSetParamNames = { "Lock" };
+
+        // Tc2_System's TestAndSet: answers with the operand's PRIOR value and
+        // leaves it TRUE, so the first caller sees FALSE (it took the lock) and
+        // every later one sees TRUE until the holder clears the flag.
+        //
+        // An intrinsic rather than a native-function plugin, despite being a
+        // compiled-only library function like F_CheckSum16: the plugin contract
+        // hands an implementation evaluated argument VALUES, and this one's
+        // entire purpose is to write its VAR_IN_OUT operand back. Resolving the
+        // Cell is what makes the write land where the next reader looks, and
+        // only the engine can do that.
+        //
+        // Atomicity needs no modelling here. The interpreter runs one PLC task
+        // on one thread, so the read and the write cannot be torn apart by
+        // anything the code under test can observe - which is exactly the
+        // guarantee the real primitive buys on hardware.
+        private object TestAndSet(Expr lockExpr, Frame frame)
+        {
+            var cell = ResolveCellForLValue(lockExpr, frame);
+            var priorValue = Convert.ToBoolean(cell.Value);
+            cell.Value = true;
+            return priorValue;
+        }
+
         // ABS is overloaded over ANY_NUM and returns its argument's own type,
         // not a widened one: ABS of a DINT is a DINT, of a REAL a REAL. The
         // interpreter's type model is the CLR box (see IecNumericType), so
@@ -746,6 +772,12 @@ namespace xStunit.Interpreter
                         frame);
                 }
 
+                if (call.MethodName == "TestAndSet")
+                {
+                    var args = ResolveIntrinsicArgs(TestAndSetParamNames, call.PositionalArgs, call.NamedArgs);
+                    return TestAndSet(RequireIntrinsicArg("TestAndSet", "Lock", args), frame);
+                }
+
                 if (call.MethodName == "AdvanceClock")
                 {
                     var args = ResolveIntrinsicArgs(AdvanceClockParamNames, call.PositionalArgs, call.NamedArgs);
@@ -779,7 +811,7 @@ namespace xStunit.Interpreter
                 if (TryEvaluateCast(call, frame, out var castResult))
                     return castResult;
 
-                return CallMethod(frame.Instance, call.MethodName, call.PositionalArgs, call.NamedArgs, frame, null);
+                return CallMethod(frame.Instance, call.MethodName, call.PositionalArgs, call.NamedArgs, frame, null, unqualified: true);
             }
 
             if (call.Receiver is ThisRefExpr)

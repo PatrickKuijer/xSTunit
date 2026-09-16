@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using xStunit.Interpreter;
 using xStunit.Parser;
@@ -482,14 +482,15 @@ namespace xStunit.Interpreter.Tests
         // BOOL is not a numeric cast source, so BOOL_TO_STRING is not a cast
         // at all and must keep falling through to ordinary method dispatch.
         [Fact]
-        public void Evaluate_BoolToStringCall_StillThrowsMethodNotFound()
+        public void Evaluate_BoolToStringCall_StillThrowsUnresolvedCall()
         {
             var engine = NewEngine();
 
             var ex = Assert.Throws<InvalidOperationException>(
                 () => engine.Evaluate(Parser.ParseExpression("BOOL_TO_STRING(TRUE)"), NewFrame()));
 
-            Assert.Equal("Method 'BOOL_TO_STRING' not found starting from type 'Test'", ex.Message);
+            Assert.Contains("'BOOL_TO_STRING' not found", ex.Message);
+            Assert.Contains("'Test'", ex.Message);
         }
 
         [Fact]

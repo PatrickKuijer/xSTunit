@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using xStunit.Interpreter;
@@ -83,7 +83,7 @@ namespace xStunit.Interpreter.Tests
             var ex = Assert.Throws<PlcSourceLocationException>(() => engine.RunSuite("FB_MySuite"));
 
             var inner = Assert.IsType<InvalidOperationException>(ex.InnerException);
-            Assert.Equal("Method 'ThisMethodDoesNotExist' not found starting from type 'FB_Deep'", inner.Message);
+            Assert.Contains("'ThisMethodDoesNotExist' not found", inner.Message);
             // The "(1)" is the body-relative line: hand-built MethodAsts take
             // BodyStartLine's default of 1 and Level3's body is one line, so it
             // coincides with the file line. The inner message must survive
@@ -221,7 +221,7 @@ namespace xStunit.Interpreter.Tests
             var ex = Assert.Throws<InvalidOperationException>(
                 () => engine.CallMethod(instance, "Level1", new Expr[0], new NamedArg[0], null, null));
 
-            Assert.Equal("Method 'ThisMethodDoesNotExist' not found starting from type 'FB_Deep'", ex.Message);
+            Assert.Contains("'ThisMethodDoesNotExist' not found", ex.Message);
         }
 
         // AssertConverges/AssertConvergesAndLatches throw rather than record a

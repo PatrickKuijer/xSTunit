@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.IO;
 using System.Text.Json;
 using xStunit.Cli;
@@ -37,7 +37,7 @@ namespace xStunit.Cli.Tests
             // CliRunnerFailureLineTests' subject.
             Assert.Contains("ThisThrows: FAIL (FB_DeepHelper.Level3(", text);
             // The original message survives verbatim after the location.
-            Assert.Contains("Method 'ThisMethodDoesNotExist' not found", text);
+            Assert.Contains("'ThisMethodDoesNotExist' not found", text);
         }
 
         [Fact]
@@ -55,7 +55,7 @@ namespace xStunit.Cli.Tests
             var message = suite.GetProperty("tests")[0].GetProperty("failures")[0].GetProperty("message");
             Assert.Equal(JsonValueKind.String, message.ValueKind);
             Assert.StartsWith("FB_DeepHelper.Level3(", message.GetString());
-            Assert.Contains("Method 'ThisMethodDoesNotExist' not found", message.GetString());
+            Assert.Contains("'ThisMethodDoesNotExist' not found", message.GetString());
         }
 
         private const string DeepHelperXml = @"<?xml version=""1.0"" encoding=""utf-8""?>

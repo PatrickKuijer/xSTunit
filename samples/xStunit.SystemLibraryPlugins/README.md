@@ -24,6 +24,8 @@ Behavior is taken from the vendor documentation, not guessed:
 | `F_GetSystemTime` / `F_GetTaskTime` | functions | the simulated clock, never wall time; 100 ns intervals since 1601 |
 | `SETBIT32` / `CLEARBIT32` / `GETBIT32` / `CSETBIT32` | functions | `bitNo` wraps modulo 32, as documented |
 | `MEMCMP` | function | `16#FF` for a null pointer or zero length, not a fault |
+| `ADSLOGSTR` / `ADSLOGDINT` / `ADSLOGLREAL` | functions | recorded into a sink a suite can assert on |
+| `F_AdsLogCount` / `F_AdsLogClear` / `F_AdsLogMask` / `F_AdsLogFormat` / `F_AdsLog*Arg` | functions | **xStunit's own**, not vendor symbols — the read side of that sink |
 
 ## Using it
 
@@ -31,6 +33,22 @@ Behavior is taken from the vendor documentation, not guessed:
 dotnet build samples/xStunit.SystemLibraryPlugins -c Release
 xstunit <path-to-POUs> --plugins samples/xStunit.SystemLibraryPlugins/bin/Release/netstandard2.0
 ```
+
+## The ADS log sink
+
+The `ADSLOG*` functions have no return value worth computing: their entire
+effect on a real system is a side effect a suite cannot see. They are recorded
+here instead, so a test can assert that a POU logged what it should have rather
+than merely that the call did not fault.
+
+What is recorded is the mask, the format string **unsubstituted**, and the
+argument in its own type. TwinCAT's `%s`/`%d`/`%f` substitution is C printf
+formatting whose exact rendering is not documented and has not been measured
+against a real PLC, so nothing here claims one.
+
+The sink is process-wide and outlives a suite — a native `FUNCTION` has no
+instance to hang state on, and the CLI loads one set of plugins for a whole
+run. A test asserting on a count calls `F_AdsLogClear()` first.
 
 ## Why these live in a plugin rather than the interpreter
 

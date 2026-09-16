@@ -1,0 +1,115 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4026.18">
+  <POU Name="FB_AdsLogPluginTests" Id="{b2c3d4e5-6k20-4a1a-8b1b-000000000050}" SpecialFunc="None">
+    <Declaration><![CDATA[(*
+    Tc2_System's ADSLOGSTR / ADSLOGDINT / ADSLOGLREAL, supplied by
+    samples/xStunit.SystemLibraryPlugins.
+
+    On a real system their entire effect is a side effect a suite cannot see -
+    an event-log entry or a message box - so without a sink the only thing a
+    test could assert is that the call did not fault, which is no assertion at
+    all. The plugin records what was logged and exposes it through F_AdsLog*
+    readers; those readers are xStunit's own, not vendor symbols, because on a
+    real system the log is not the PLC's to read back.
+
+    The control-mask constants (ADSLOG_MSGTYPE_ERROR and friends) live in a
+    Tc2_System GVL that is compiled-only like the rest of the library, so these
+    tests pass the raw DWORD values.
+*)
+FUNCTION_BLOCK FB_AdsLogPluginTests EXTENDS TcUnit.FB_TestSuite]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[StringLogIsRecordedWithItsMaskAndFormat();
+NumericLogsKeepTheirOwnArgumentType();
+ClearResetsTheSink();]]></ST>
+    </Implementation>
+    <Method Name="StringLogIsRecordedWithItsMaskAndFormat" Id="{b2c3d4e5-6k20-4a1a-8b1b-000000000051}">
+      <Declaration><![CDATA[METHOD PRIVATE StringLogIsRecordedWithItsMaskAndFormat
+VAR
+	nResult		: DINT;
+	nCount		: UDINT;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('StringLogIsRecordedWithItsMaskAndFormat');
+
+(* The sink outlives a suite - one plugin set serves a whole run - so a test
+   asserting on a count has to start from a known state. *)
+F_AdsLogClear();
+
+nResult := ADSLOGSTR(16#00000002, 'conveyor %s stalled', 'M14');
+nCount := F_AdsLogCount();
+
+AssertEquals_DINT(Expected := 0,
+                   Actual := nResult,
+                   Message := 'a successful log returns the vendor success code');
+AssertEquals_UDINT(Expected := 1,
+                    Actual := nCount,
+                    Message := 'the call was recorded');
+AssertEquals_DWORD(Expected := 16#00000002,
+                    Actual := F_AdsLogMask(0),
+                    Message := 'the severity mask is what the caller passed');
+AssertEquals_STRING(Expected := 'conveyor %s stalled',
+                     Actual := F_AdsLogFormat(0),
+                     Message := 'the format string is recorded unsubstituted');
+AssertEquals_STRING(Expected := 'M14',
+                     Actual := F_AdsLogStringArg(0),
+                     Message := 'the argument is recorded alongside it');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="NumericLogsKeepTheirOwnArgumentType" Id="{b2c3d4e5-6k20-4a1a-8b1b-000000000052}">
+      <Declaration><![CDATA[METHOD PRIVATE NumericLogsKeepTheirOwnArgumentType
+VAR
+	nCount		: UDINT;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('NumericLogsKeepTheirOwnArgumentType');
+
+F_AdsLogClear();
+
+ADSLOGDINT(16#00000001, 'cycle count %d', 4711);
+ADSLOGLREAL(16#00000001, 'measured %f mm', 12.5);
+
+nCount := F_AdsLogCount();
+
+(* Entries are addressed in the order they were logged, and each overload
+   records its own argument type - a DINT read back as an LREAL, or vice
+   versa, is a mistake worth a clear failure rather than a coerced value. *)
+AssertEquals_UDINT(Expected := 2,
+                    Actual := nCount,
+                    Message := 'both calls were recorded');
+AssertEquals_DINT(Expected := 4711,
+                   Actual := F_AdsLogDintArg(0),
+                   Message := 'the DINT argument survives');
+AssertEquals_LREAL(Expected := 12.5,
+                    Actual := F_AdsLogRealArg(1),
+                    Delta := 0.0,
+                    Message := 'the LREAL argument survives');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="ClearResetsTheSink" Id="{b2c3d4e5-6k20-4a1a-8b1b-000000000053}">
+      <Declaration><![CDATA[METHOD PRIVATE ClearResetsTheSink
+VAR
+	nCount		: UDINT;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('ClearResetsTheSink');
+
+ADSLOGSTR(16#00000004, 'hint %s', 'ignored');
+F_AdsLogClear();
+nCount := F_AdsLogCount();
+
+AssertEquals_UDINT(Expected := 0,
+                    Actual := nCount,
+                    Message := 'clearing empties the sink');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+  </POU>
+</TcPlcObject>

@@ -1,3 +1,4 @@
+using System.Xml;
 using xStunit.Parser;
 using Xunit;
 
@@ -43,6 +44,20 @@ END_VAR]]></Declaration>
 
             Assert.Equal("cScratchConstants", ast.Name);
             Assert.Contains("VAR_GLOBAL CONSTANT", ast.DeclarationText);
+        }
+
+        // Truncated or foreign XML has to name the part it is missing: a bare
+        // NullReferenceException in a per-file skip line tells the reader
+        // nothing about which file element was absent.
+        [Theory]
+        [InlineData("<TcPlcObject Version=\"1.1.0.1\" />", "GVL")]
+        [InlineData("<TcPlcObject Version=\"1.1.0.1\"><GVL Id=\"x\" /></TcPlcObject>", "Name")]
+        [InlineData("<TcPlcObject Version=\"1.1.0.1\"><GVL Name=\"gTruncated\" /></TcPlcObject>", "Declaration")]
+        public void Parse_StructurallyIncompleteFile_ThrowsNamingTheMissingPart(string xml, string expectedInMessage)
+        {
+            var ex = Assert.Throws<XmlException>(() => TcGvlParser.Parse(xml));
+
+            Assert.Contains(expectedInMessage, ex.Message);
         }
     }
 }

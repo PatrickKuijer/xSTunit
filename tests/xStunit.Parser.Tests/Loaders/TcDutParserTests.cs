@@ -1,4 +1,3 @@
-using System;
 using System.Xml;
 using xStunit.Parser;
 using Xunit;
@@ -94,8 +93,11 @@ END_TYPE]]></Declaration>
             Assert.Throws<XmlException>(() => TcDutParser.Parse(xml));
         }
 
+        // Each of the three structural gaps below reaches the reader as a
+        // per-file skip line, so the message has to name the element or
+        // attribute that was absent - a dereference failure names nothing.
         [Fact]
-        public void Parse_XmlWithoutDutElement_ThrowsNullReferenceException()
+        public void Parse_XmlWithoutDutElement_ThrowsNamingTheMissingElement()
         {
             const string xml = @"<?xml version=""1.0"" encoding=""utf-8""?>
 <TcPlcObject Version=""1.1.0.1"" ProductVersion=""3.1.4026.18"">
@@ -107,11 +109,12 @@ END_TYPE]]></Declaration>
   </POU>
 </TcPlcObject>";
 
-            Assert.Throws<NullReferenceException>(() => TcDutParser.Parse(xml));
+            var ex = Assert.Throws<XmlException>(() => TcDutParser.Parse(xml));
+            Assert.Contains("DUT", ex.Message);
         }
 
         [Fact]
-        public void Parse_DutMissingNameAttribute_ThrowsNullReferenceException()
+        public void Parse_DutMissingNameAttribute_ThrowsNamingTheMissingAttribute()
         {
             const string xml = @"<?xml version=""1.0"" encoding=""utf-8""?>
 <TcPlcObject Version=""1.1.0.1"" ProductVersion=""3.1.4026.18"">
@@ -124,11 +127,12 @@ END_TYPE]]></Declaration>
   </DUT>
 </TcPlcObject>";
 
-            Assert.Throws<NullReferenceException>(() => TcDutParser.Parse(xml));
+            var ex = Assert.Throws<XmlException>(() => TcDutParser.Parse(xml));
+            Assert.Contains("Name", ex.Message);
         }
 
         [Fact]
-        public void Parse_DutMissingDeclarationElement_ThrowsNullReferenceException()
+        public void Parse_DutMissingDeclarationElement_ThrowsNamingTheMissingElement()
         {
             const string xml = @"<?xml version=""1.0"" encoding=""utf-8""?>
 <TcPlcObject Version=""1.1.0.1"" ProductVersion=""3.1.4026.18"">
@@ -136,7 +140,8 @@ END_TYPE]]></Declaration>
   </DUT>
 </TcPlcObject>";
 
-            Assert.Throws<NullReferenceException>(() => TcDutParser.Parse(xml));
+            var ex = Assert.Throws<XmlException>(() => TcDutParser.Parse(xml));
+            Assert.Contains("Declaration", ex.Message);
         }
     }
 }

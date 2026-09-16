@@ -1,4 +1,6 @@
 using System.Linq;
+using System.Xml;
+using xStunit.Parser;
 using Xunit;
 
 namespace xStunit.Parser.Tests
@@ -101,6 +103,43 @@ namespace xStunit.Parser.Tests
             var debounce = itf.Properties.Single(p => p.Name == "DebounceTime");
             Assert.True(debounce.HasGet);
             Assert.True(debounce.HasSet);
+        }
+
+        // A .TcIO that is truncated, or is some other file type entirely, has
+        // to name the element or attribute it is missing: the parse failure
+        // surfaces as a per-file skip line and a dereference names nothing.
+        [Theory]
+        [InlineData("<TcPlcObject Version=\"1.1.0.1\" />", "Itf")]
+        [InlineData("<TcPlcObject Version=\"1.1.0.1\"><Itf Id=\"x\" /></TcPlcObject>", "Name")]
+        [InlineData("<TcPlcObject Version=\"1.1.0.1\"><Itf Name=\"I_Truncated\" /></TcPlcObject>", "Declaration")]
+        public void Parse_StructurallyIncompleteFile_ThrowsNamingTheMissingPart(string xml, string expectedInMessage)
+        {
+            var ex = Assert.Throws<XmlException>(() => TcItfParser.Parse(xml));
+
+            Assert.Contains(expectedInMessage, ex.Message);
+        }
+
+        // Same tolerance as the method case above, on the accessor path: an
+        // accessor carries no body an interface cares about, so an empty <Get>
+        // still has to report the getter the contract demands.
+        [Fact]
+        public void Parse_PropertyAccessorWithoutImplementationElement_StillParses()
+        {
+            const string xml = @"<?xml version=""1.0"" encoding=""utf-8""?>
+<TcPlcObject Version=""1.1.0.1"">
+  <Itf Name=""I_Terse"" Id=""{00000000-0000-0000-0000-00000000000a}"">
+    <Declaration><![CDATA[INTERFACE I_Terse]]></Declaration>
+    <Property Name=""Ready"" Id=""{00000000-0000-0000-0000-00000000000c}"">
+      <Declaration><![CDATA[PROPERTY Ready : BOOL]]></Declaration>
+      <Get Name=""Get"" Id=""{00000000-0000-0000-0000-00000000000d}"" />
+    </Property>
+  </Itf>
+</TcPlcObject>";
+
+            var property = Assert.Single(TcItfParser.Parse(xml).Properties);
+
+            Assert.True(property.HasGet);
+            Assert.False(property.HasSet);
         }
     }
 }

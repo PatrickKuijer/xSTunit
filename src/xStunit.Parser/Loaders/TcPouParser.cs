@@ -22,17 +22,23 @@ namespace xStunit.Parser
 
         /// <exception cref="TcPouRejectedException">
         /// The POU's own body, or one of its methods or property accessors,
-        /// uses a construct outside the supported subset.
+        /// uses a construct outside the supported subset, or is written in a
+        /// graphical language and so has no ST body at all.
+        /// </exception>
+        /// <exception cref="XmlException">
+        /// The XML is malformed, or is missing an element or attribute the
+        /// .TcPOU shape requires - a broken file rather than an unsupported
+        /// one.
         /// </exception>
         public static PouAst Parse(string xml)
         {
             // SetLineInfo is what lets a failure be reported against a line in
             // the user's .TcPOU rather than a line in an extracted string.
             var doc = XDocument.Parse(xml, LoadOptions.SetLineInfo);
-            var pou = doc.Root.Element("POU");
-            var name = pou.Attribute("Name").Value;
-            var declarationText = pou.Element("Declaration").Value;
-            var st = pou.Element("Implementation").Element("ST");
+            var pou = RequiredElement(doc.Root, "POU", "the file");
+            var name = RequiredAttribute(pou, "Name", "<POU>");
+            var declarationText = RequiredElement(pou, "Declaration", name).Value;
+            var st = RequiredStBody(pou, name);
             var implementationText = st.Value;
             RejectIfUnsupported(name, implementationText);
 
@@ -47,9 +53,9 @@ namespace xStunit.Parser
 
         private static MethodAst ParseMethod(XElement method)
         {
-            var name = method.Attribute("Name").Value;
-            var declarationText = method.Element("Declaration").Value;
-            var st = method.Element("Implementation").Element("ST");
+            var name = RequiredAttribute(method, "Name", "<Method>");
+            var declarationText = RequiredElement(method, "Declaration", name).Value;
+            var st = RequiredStBody(method, name);
             var implementationText = st.Value;
             RejectIfUnsupported(name, implementationText);
 
@@ -70,11 +76,11 @@ namespace xStunit.Parser
 
         private static PropertyAst ParseProperty(XElement property)
         {
-            var name = property.Attribute("Name").Value;
+            var name = RequiredAttribute(property, "Name", "<Property>");
             var declarationText = property.Element("Declaration")?.Value ?? string.Empty;
 
-            var getImplementationText = ParseAccessorImplementation(property.Element("Get"));
-            var setImplementationText = ParseAccessorImplementation(property.Element("Set"));
+            var getImplementationText = ParseAccessorImplementation(property.Element("Get"), $"{name}.Get");
+            var setImplementationText = ParseAccessorImplementation(property.Element("Set"), $"{name}.Set");
 
             // Scope each rejection to "<name>.Get"/"<name>.Set": a property has
             // two independent bodies, so the ambiguous property name alone
@@ -88,9 +94,40 @@ namespace xStunit.Parser
         }
 
         // Null (not an exception) for an accessor the POU never declared, so
-        // PropertyAst.HasGet/HasSet can tell that apart from an empty body.
-        private static string ParseAccessorImplementation(XElement accessor) =>
-            accessor?.Element("Implementation")?.Element("ST")?.Value;
+        // PropertyAst.HasGet/HasSet can tell that apart from an empty body. An
+        // accessor that IS declared but carries no ST body is a rejection
+        // instead: chaining past it to null would report a graphical accessor
+        // as one the POU never wrote.
+        private static string ParseAccessorImplementation(XElement accessor, string scopeName) =>
+            accessor == null ? null : RequiredStBody(accessor, scopeName).Value;
+
+        // A body drawn in LD/FBD/SFC/CFC/IL is written as a <NWL>/<CFC>/...
+        // child instead of <ST>: well-formed and TwinCAT-valid, but carrying no
+        // ST text this tool could interpret even in principle. Naming the
+        // element TwinCAT did write is what makes every graphical language read
+        // sensibly in the skip line.
+        private static XElement RequiredStBody(XElement owner, string scopeName)
+        {
+            var implementation = RequiredElement(owner, "Implementation", scopeName);
+            var st = implementation.Element("ST");
+            if (st != null)
+                return st;
+
+            var language = implementation.Elements().FirstOrDefault()?.Name.LocalName ?? "unknown";
+            throw new TcPouRejectedException(
+                $"'{scopeName}' has no ST body (implementation language '{language}'), " +
+                "which is outside the v1 parse subset (not yet implemented).");
+        }
+
+        // A structural gap surfaces as XmlException: the message is all a
+        // skipped file gets, so it has to name what was missing and where.
+        private static XElement RequiredElement(XElement parent, string elementName, string scopeName) =>
+            parent?.Element(elementName)
+                ?? throw new XmlException($"{scopeName} has no <{elementName}> element.");
+
+        private static string RequiredAttribute(XElement element, string attributeName, string scopeName) =>
+            element.Attribute(attributeName)?.Value
+                ?? throw new XmlException($"{scopeName} has no {attributeName} attribute.");
 
         private static void RejectIfUnsupported(string scopeName, string implementationText)
         {

@@ -26,6 +26,7 @@ Behavior is taken from the vendor documentation, not guessed:
 | `MEMCMP` | function | `16#FF` for a null pointer or zero length, not a fault |
 | `ADSLOGSTR` / `ADSLOGDINT` / `ADSLOGLREAL` | functions | recorded into a sink a suite can assert on |
 | `F_AdsLogCount` / `F_AdsLogClear` / `F_AdsLogMask` / `F_AdsLogFormat` / `F_AdsLog*Arg` | functions | **xStunit's own**, not vendor symbols — the read side of that sink |
+| `FB_IecCriticalSection` | block | enter/leave bookkeeping; mutual exclusion is not modelled |
 
 ## Using it
 
@@ -49,6 +50,16 @@ against a real PLC, so nothing here claims one.
 The sink is process-wide and outlives a suite — a native `FUNCTION` has no
 instance to hang state on, and the CLI loads one set of plugins for a whole
 run. A test asserting on a count calls `F_AdsLogClear()` first.
+
+## What `FB_IecCriticalSection` does not model
+
+xStunit runs one interpreted task and has no scheduler, so `Enter` can never be
+blocked by another task and mutual exclusion is not simulated. What is
+reproduced is the bookkeeping the vendor documents — `Leave` answers `FALSE`
+for a section that was not previously entered — because an unbalanced
+`Enter`/`Leave` on some error path is a real defect that shows up without any
+concurrency at all. Nesting is counted rather than collapsed, so correct nested
+code does not read as a failure.
 
 ## Why these live in a plugin rather than the interpreter
 

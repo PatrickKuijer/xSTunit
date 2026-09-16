@@ -1,0 +1,135 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4026.18">
+  <POU Name="FB_CriticalSectionPluginTests" Id="{b2c3d4e5-6k20-4a1a-8b1b-000000000060}" SpecialFunc="None">
+    <Declaration><![CDATA[(*
+    Tc2_System's FB_IecCriticalSection, supplied by
+    samples/xStunit.SystemLibraryPlugins - and the first stateful plugin FB
+    reached purely through METHOD calls rather than a cyclic invocation.
+
+    What is testable here is the BOOKKEEPING, not mutual exclusion: xStunit
+    runs one interpreted task and has no scheduler, so Enter can never be
+    blocked by another task. A POU that leaves a section it never entered, or
+    returns from a path without leaving one it did, is a real defect that shows
+    up without any concurrency - and that is what these pin.
+*)
+FUNCTION_BLOCK FB_CriticalSectionPluginTests EXTENDS TcUnit.FB_TestSuite]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[EnterThenLeaveBothSucceed();
+LeaveWithoutEnterIsRejected();
+NestedSectionsAreCounted();
+SectionsAreIndependentPerInstance();]]></ST>
+    </Implementation>
+    <Method Name="EnterThenLeaveBothSucceed" Id="{b2c3d4e5-6k20-4a1a-8b1b-000000000061}">
+      <Declaration><![CDATA[METHOD PRIVATE EnterThenLeaveBothSucceed
+VAR
+	fbSection	: FB_IecCriticalSection;
+	bEntered	: BOOL;
+	bLeft		: BOOL;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('EnterThenLeaveBothSucceed');
+
+bEntered := fbSection.Enter();
+bLeft := fbSection.Leave();
+
+AssertEquals_BOOL(Expected := TRUE,
+                   Actual := bEntered,
+                   Message := 'a free section is entered');
+AssertEquals_BOOL(Expected := TRUE,
+                   Actual := bLeft,
+                   Message := 'a held section is left');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="LeaveWithoutEnterIsRejected" Id="{b2c3d4e5-6k20-4a1a-8b1b-000000000062}">
+      <Declaration><![CDATA[METHOD PRIVATE LeaveWithoutEnterIsRejected
+VAR
+	fbSection	: FB_IecCriticalSection;
+	bLeft		: BOOL;
+	bLeftAgain	: BOOL;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('LeaveWithoutEnterIsRejected');
+
+(* The vendor documents FALSE for a section that was not previously entered,
+   and this is the defect the FB can actually catch here: an unbalanced Leave
+   on some error path. *)
+bLeft := fbSection.Leave();
+
+fbSection.Enter();
+fbSection.Leave();
+bLeftAgain := fbSection.Leave();
+
+AssertEquals_BOOL(Expected := FALSE,
+                   Actual := bLeft,
+                   Message := 'leaving a section never entered fails');
+AssertEquals_BOOL(Expected := FALSE,
+                   Actual := bLeftAgain,
+                   Message := 'leaving one time too many fails');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="NestedSectionsAreCounted" Id="{b2c3d4e5-6k20-4a1a-8b1b-000000000063}">
+      <Declaration><![CDATA[METHOD PRIVATE NestedSectionsAreCounted
+VAR
+	fbSection	: FB_IecCriticalSection;
+	bInner		: BOOL;
+	bOuter		: BOOL;
+	bExtra		: BOOL;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('NestedSectionsAreCounted');
+
+(* Collapsing a nested pair would make the inner Leave release the outer
+   section, turning correct nested code into a spurious failure on the third
+   call below. *)
+fbSection.Enter();
+fbSection.Enter();
+bInner := fbSection.Leave();
+bOuter := fbSection.Leave();
+bExtra := fbSection.Leave();
+
+AssertEquals_BOOL(Expected := TRUE,
+                   Actual := bInner,
+                   Message := 'the inner leave succeeds');
+AssertEquals_BOOL(Expected := TRUE,
+                   Actual := bOuter,
+                   Message := 'the outer leave succeeds');
+AssertEquals_BOOL(Expected := FALSE,
+                   Actual := bExtra,
+                   Message := 'a third leave has nothing left to release');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="SectionsAreIndependentPerInstance" Id="{b2c3d4e5-6k20-4a1a-8b1b-000000000064}">
+      <Declaration><![CDATA[METHOD PRIVATE SectionsAreIndependentPerInstance
+VAR
+	fbFirst		: FB_IecCriticalSection;
+	fbSecond	: FB_IecCriticalSection;
+	bOther		: BOOL;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('SectionsAreIndependentPerInstance');
+
+(* Two declared sections are two sections. Sharing state would let one
+   POU's Enter satisfy another's Leave, which is exactly the bug this FB
+   exists to catch. *)
+fbFirst.Enter();
+bOther := fbSecond.Leave();
+
+AssertEquals_BOOL(Expected := FALSE,
+                   Actual := bOther,
+                   Message := 'entering one section does not hold another');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+  </POU>
+</TcPlcObject>

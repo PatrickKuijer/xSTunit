@@ -70,14 +70,11 @@ namespace xStunit.Interpreter
 
         public Engine(
             TypeRegistry registry, Extensibility.NativeFunctionRegistry nativeFunctions, TargetPlatform target)
-            : this(registry, PluginsWith(nativeFunctions), target)
+            // The registry is adopted rather than copied, so its own
+            // duplicate-message attribution survives the wrapping.
+            : this(registry, new Extensibility.NativePlugins(nativeFunctions), target)
         {
         }
-
-        // Adopted rather than copied, so the registry's own duplicate-message
-        // attribution survives the wrapping.
-        private static Extensibility.NativePlugins PluginsWith(Extensibility.NativeFunctionRegistry nativeFunctions) =>
-            new Extensibility.NativePlugins(nativeFunctions);
 
         public Engine(TypeRegistry registry, Extensibility.NativePlugins plugins)
             : this(registry, plugins, TargetPlatform.Default)

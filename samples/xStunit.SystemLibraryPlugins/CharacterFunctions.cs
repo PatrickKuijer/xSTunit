@@ -26,7 +26,13 @@ namespace xStunit.SystemLibraryPlugins
             // agrees with s[0] and with the MEMCPY byte image on what the first
             // byte of a narrow STRING is - and raises on text that has no
             // one-byte encoding instead of silently returning its low half.
-            return text.Length == 0 ? 0 : NarrowStringByte.FromChar(text[0]);
+            //
+            // Widened to int on the way out because that is how the value model
+            // boxes BYTE, along with every other narrow integer type. Returning
+            // the byte NarrowStringByte hands back would differ from the
+            // empty-string branch's 0 and read as the wrong type to
+            // AssertEquals(ANY), which resolves on the box.
+            return text.Length == 0 ? 0 : (int)NarrowStringByte.FromChar(text[0]);
         }
     }
 

@@ -179,6 +179,37 @@ namespace xStunit.Interpreter.Tests
         }
 
         [Fact]
+        public void LibraryQualifiedBaseType_ResolvesToTheSameBlock()
+        {
+            // EXTENDS carries a library qualifier in real source, and the
+            // qualifier names a namespace no registry could ever hold. It is
+            // stripped only after the spelling as written has missed, so a
+            // plugin registered under the qualified name still wins for it.
+            //
+            // EXTENDS rather than a VAR declaration because that is the shape
+            // that reaches here today: VarBlockParser's type alternation is
+            // \w+, so a dotted type on a VAR line does not match and the
+            // variable is dropped before any of this runs.
+            var derived = new PouAst(
+                "FB_Derived",
+                "SomeLibrary.FB_Accumulate",
+                "VAR\n\tnOwn : INT;\nEND_VAR",
+                "",
+                new List<MethodAst>());
+
+            var engine = new Engine(
+                new TypeRegistry(new[] { derived }),
+                new NativePlugins(null, RegistryWith(new AccumulatorBlock())));
+
+            var instance = engine.NewInstance("FB_Derived");
+
+            Assert.Equal(NativeHostKind.Plugin, instance.NativeKind);
+            // The plugin's declared fields are seeded on the instance, which is
+            // what a suite reads its outputs back through.
+            Assert.True(instance.Fields.ContainsKey("nTotal"));
+        }
+
+        [Fact]
         public void DeclaredFieldType_IsHonouredLikeARealDeclaration()
         {
             // A field that names STRING(4) truncates at 4 the way the

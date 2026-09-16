@@ -17,7 +17,16 @@ namespace xStunit.SystemLibraryPlugins
 
         // A DateTime tick IS a 100 ns interval, so the subtraction already
         // produces the vendor's unit with no scaling to get wrong.
-        public static ulong From(DateTime utc) => (ulong)(utc - Epoch).Ticks;
+        //
+        // Clamped at the epoch because the result is UNSIGNED: a context built
+        // outside the interpreter carries a default SimulatedTime, whose UtcNow
+        // is DateTime.MinValue, and casting that negative difference would
+        // report a time near the end of the ULINT range rather than the start.
+        public static ulong From(DateTime utc)
+        {
+            var ticks = (utc - Epoch).Ticks;
+            return ticks <= 0 ? 0UL : (ulong)ticks;
+        }
     }
 
     // Reading wall time here would make every suite that touches it

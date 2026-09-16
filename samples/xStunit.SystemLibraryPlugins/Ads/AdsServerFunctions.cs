@@ -34,7 +34,7 @@ namespace xStunit.SystemLibraryPlugins.Ads
             AdsServer.SetData(
                 context.RequireInt64("nIdxGrp", 0),
                 context.RequireInt64("nIdxOffs", 1),
-                AdsServer.ToBytes(context.RequireString("sText", 2)));
+                NarrowText.ToBytes(context.RequireString("sText", 2)));
 
             return 0;
         }
@@ -45,7 +45,7 @@ namespace xStunit.SystemLibraryPlugins.Ads
         public string Name => "F_AdsServerGetText";
 
         public object Invoke(NativeCallContext context) =>
-            AdsServer.ToText(AdsServer.Read(
+            NarrowText.FromBytes(AdsServer.Read(
                 context.RequireInt64("nIdxGrp", 0),
                 context.RequireInt64("nIdxOffs", 1)));
     }

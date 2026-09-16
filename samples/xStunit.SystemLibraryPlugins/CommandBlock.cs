@@ -122,7 +122,8 @@ namespace xStunit.SystemLibraryPlugins
             }
         }
 
-        /// <returns>False to stay busy and be asked again on the next invocation.</returns>
+        // Returns false to stay busy and be asked again on the next
+        // invocation, which is how a scripted timeout waits.
         protected abstract bool Execute(NativeFunctionBlockCall call);
 
         // Called on the invocation that starts the command, for a block that

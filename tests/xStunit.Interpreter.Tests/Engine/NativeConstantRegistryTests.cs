@@ -76,6 +76,24 @@ namespace xStunit.Interpreter.Tests
         }
 
         [Fact]
+        public void LibraryQualifier_IsTransparent()
+        {
+            // Real source writes a library constant both ways, and the
+            // qualifier names a namespace rather than anything in scope. The
+            // bare spelling is tried only after the qualified one misses, so a
+            // constant registered under an ENUM name still wins for it.
+            var engine = EngineWith(
+                "VAR\n\tnMode : DWORD;\nEND_VAR",
+                "nMode := SomeLibrary.FOPEN_MODEREAD;",
+                new NativeConstant("FOPEN_MODEREAD", 1L));
+
+            var instance = engine.NewInstance("FB_Widget");
+            Step(engine, instance);
+
+            Assert.Equal(1L, instance.Fields["nMode"].Value);
+        }
+
+        [Fact]
         public void Lookup_IsCaseInsensitive()
         {
             var engine = EngineWith(

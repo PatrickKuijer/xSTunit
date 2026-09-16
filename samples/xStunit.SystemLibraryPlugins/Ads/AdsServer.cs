@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using xStunit.Interpreter;
 
 namespace xStunit.SystemLibraryPlugins.Ads
 {
@@ -118,26 +117,6 @@ namespace xStunit.SystemLibraryPlugins.Ads
         {
             At(group, offset, create: true).Data = data;
             WriteCount++;
-        }
-
-        public static bool Has(long group, long offset) => Variables.ContainsKey((group, offset));
-
-        public static string ToText(byte[] bytes)
-        {
-            var text = new char[bytes.Length];
-            for (var i = 0; i < bytes.Length; i++)
-                text[i] = NarrowStringByte.ToChar(bytes[i]);
-
-            return new string(text);
-        }
-
-        public static byte[] ToBytes(string text)
-        {
-            var bytes = new byte[text.Length];
-            for (var i = 0; i < text.Length; i++)
-                bytes[i] = NarrowStringByte.FromChar(text[i]);
-
-            return bytes;
         }
 
         private static ScriptedVariable At(long group, long offset, bool create)

@@ -178,6 +178,59 @@ namespace xStunit.Interpreter.Tests
         }
 
         [Fact]
+        public void CallMethod_LibraryQualifiedCallResolvesToTheSameFunction()
+        {
+            // Real source writes a library call both ways. The qualifier names
+            // a namespace rather than a variable, so evaluating it as a
+            // receiver would fail with "Unknown variable" - the qualifier is
+            // dropped instead, and only when a native function of that name is
+            // actually registered.
+            var caller = new MethodAst(
+                "bDoWork",
+                "METHOD bDoWork : BOOL",
+                "nResult := SomeLibrary.F_Triple(nValue);");
+
+            var fb = new PouAst(
+                "FB_Widget",
+                null,
+                "VAR\n\tnValue : INT := 14;\n\tnResult : INT;\nEND_VAR",
+                "",
+                new List<MethodAst> { caller });
+
+            var engine = new Engine(
+                new TypeRegistry(new[] { fb }),
+                RegistryWith(new StubFunction("F_Triple", ctx => ctx.RequireInt32("nIn", 0) * 3)));
+
+            var instance = engine.NewInstance("FB_Widget");
+            engine.CallMethod(instance, "bDoWork", new Expr[0], new NamedArg[0], null, null);
+
+            Assert.Equal(42, instance.Fields["nResult"].Value);
+        }
+
+        [Fact]
+        public void CallMethod_QualifiedCallWithNoRegisteredFunction_StillFailsOnTheReceiver()
+        {
+            // The qualifier-stripping branch is guarded on a registered
+            // function so it stays strictly additive. Without one, this is an
+            // ordinary call on a receiver that does not exist, and must keep
+            // saying so rather than reporting a missing function.
+            var caller = new MethodAst("bDoWork", "METHOD bDoWork : BOOL", "nResult := SomeLibrary.F_Absent(nValue);");
+            var fb = new PouAst(
+                "FB_Widget",
+                null,
+                "VAR\n\tnValue : INT := 14;\n\tnResult : INT;\nEND_VAR",
+                "",
+                new List<MethodAst> { caller });
+
+            var engine = new Engine(new TypeRegistry(new[] { fb }));
+            var instance = engine.NewInstance("FB_Widget");
+
+            var ex = Assert.ThrowsAny<Exception>(
+                () => engine.CallMethod(instance, "bDoWork", new Expr[0], new NamedArg[0], null, null));
+            Assert.Contains("SomeLibrary", ex.ToString());
+        }
+
+        [Fact]
         public void CallMethod_NativeFunctionReadsAnArrayPassedByValue()
         {
             // The other way a library function takes a buffer: the array

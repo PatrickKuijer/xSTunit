@@ -198,7 +198,7 @@ namespace xStunit.Interpreter
             // The registered object is the prototype; what an instance is
             // backed by is its own CreateInstance product, so two variables of
             // one plugin type share no state.
-            if (_nativeFunctionBlocks.TryGet(nativeBaseTypeName, out var prototype))
+            if (TryGetNativeFunctionBlock(nativeBaseTypeName, out var prototype))
             {
                 var fields = new List<NativeFieldDeclaration>();
                 foreach (var field in prototype.Fields)
@@ -226,6 +226,27 @@ namespace xStunit.Interpreter
             || NativeBistableLatchTypes.Contains(typeName)
             || NativeCounterTypes.Contains(typeName)
             || string.Equals(typeName, NativeLoopbackType, StringComparison.OrdinalIgnoreCase)
-            || _nativeFunctionBlocks.Contains(typeName);
+            || TryGetNativeFunctionBlock(typeName, out _);
+
+        // A library namespace qualifier is transparent: Tc2_System.FB_FileOpen
+        // names the same block FB_FileOpen does, and real source writes both.
+        // Tried only after the spelling as written has missed, so a plugin
+        // registered under the qualified name still wins for it.
+        //
+        // Safe against a false match because it is reached at all only for a
+        // type the TypeRegistry could not resolve: there is no interpreted
+        // source of any name left for the tail to shadow.
+        private bool TryGetNativeFunctionBlock(string typeName, out IXstunitNativeFunctionBlock prototype) =>
+            _nativeFunctionBlocks.TryGet(typeName, out prototype)
+            || _nativeFunctionBlocks.TryGet(UnqualifiedTail(typeName), out prototype);
+
+        // The segment after the last dot, or null when the name carries no
+        // qualifier. Null rather than the name itself, so a caller that already
+        // tried the unqualified spelling does not try it twice.
+        internal static string UnqualifiedTail(string name)
+        {
+            var dot = name?.LastIndexOf('.') ?? -1;
+            return dot >= 0 ? name.Substring(dot + 1) : null;
+        }
     }
 }

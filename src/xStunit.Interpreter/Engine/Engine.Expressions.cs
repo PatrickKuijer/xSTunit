@@ -125,9 +125,14 @@ namespace xStunit.Interpreter
                     // E_OpenPath.PATH_GENERIC. Tried before the receiver is
                     // evaluated, because evaluating it would throw on the type
                     // name, which is not a variable.
+                    // The qualified spelling first, so a constant registered
+                    // under E_OpenPath.PATH_GENERIC wins for it; then the bare
+                    // member, which is what makes a LIBRARY qualifier
+                    // transparent (Tc2_System.FOPEN_MODEREAD).
                     if (fieldAccess.Receiver is IdentifierExpr nativeEnumTypeId &&
                         frame.ResolveCell(nativeEnumTypeId.Name) == null &&
-                        _nativeConstants.TryGet($"{nativeEnumTypeId.Name}.{fieldAccess.FieldName}", out var nativeConstant))
+                        (_nativeConstants.TryGet($"{nativeEnumTypeId.Name}.{fieldAccess.FieldName}", out var nativeConstant) ||
+                         _nativeConstants.TryGet(fieldAccess.FieldName, out nativeConstant)))
                     {
                         return nativeConstant;
                     }
@@ -854,6 +859,24 @@ namespace xStunit.Interpreter
             {
                 var baseType = _registry.Get(frame.DeclaringTypeName)?.BaseTypeName;
                 return CallMethod(frame.Instance, call.MethodName, call.PositionalArgs, call.NamedArgs, frame, baseType);
+            }
+
+            // Qualifier.Function(...) where the qualifier names a compiled-only
+            // LIBRARY rather than anything in scope - Tc2_System.F_CreateAmsNetId.
+            // Evaluating that receiver would throw "Unknown variable", so the
+            // qualifier is dropped and the call dispatched as the unqualified
+            // one it is equivalent to.
+            //
+            // Requires a registered native function of that name, which keeps
+            // the branch strictly additive: without one this path threw anyway,
+            // and a receiver that resolves to anything at all never reaches it.
+            if (call.Receiver is IdentifierExpr libraryQualifier &&
+                frame.ResolveCell(libraryQualifier.Name) == null &&
+                !TryResolveGlobalCell(libraryQualifier.Name, out _) &&
+                _nativeFunctions.TryGet(call.MethodName, out _))
+            {
+                return CallMethod(
+                    frame.Instance, call.MethodName, call.PositionalArgs, call.NamedArgs, frame, null, unqualified: true);
             }
 
             var receiver = Evaluate(call.Receiver, frame);

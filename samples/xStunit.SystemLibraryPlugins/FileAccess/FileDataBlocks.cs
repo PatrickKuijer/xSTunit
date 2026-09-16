@@ -134,7 +134,7 @@ namespace xStunit.SystemLibraryPlugins.FileAccess
         {
             var line = VirtualFileSystem.ReadLine(HandleOf(call));
 
-            call.SetField("sLine", VirtualFileSystem.ToText(line));
+            call.SetField("sLine", NarrowText.FromBytes(line));
 
             // Same rule as FB_FileRead: end of file only when nothing came
             // back, so the final line of a file without a trailing newline is
@@ -171,7 +171,7 @@ namespace xStunit.SystemLibraryPlugins.FileAccess
             var text = Convert.ToString(call.GetField("sLine")) ?? string.Empty;
             NarrowStringByte.RequireRepresentable(text);
 
-            VirtualFileSystem.Write(HandleOf(call), VirtualFileSystem.ToBytes(text));
+            VirtualFileSystem.Write(HandleOf(call), NarrowText.ToBytes(text));
         }
     }
 }

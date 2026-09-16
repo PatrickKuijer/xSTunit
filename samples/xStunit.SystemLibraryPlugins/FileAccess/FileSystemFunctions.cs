@@ -36,7 +36,7 @@ namespace xStunit.SystemLibraryPlugins.FileAccess
         {
             VirtualFileSystem.WriteAll(
                 context.RequireString("sPath", 0),
-                VirtualFileSystem.ToBytes(context.RequireString("sText", 1)));
+                NarrowText.ToBytes(context.RequireString("sText", 1)));
 
             return 0;
         }
@@ -47,7 +47,7 @@ namespace xStunit.SystemLibraryPlugins.FileAccess
         public string Name => "F_FileSystemGetText";
 
         public object Invoke(NativeCallContext context) =>
-            VirtualFileSystem.ToText(VirtualFileSystem.ReadAll(context.RequireString("sPath", 0)));
+            NarrowText.FromBytes(VirtualFileSystem.ReadAll(context.RequireString("sPath", 0)));
     }
 
     public sealed class FileSystemExistsFunction : IXstunitNativeFunction

@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using xStunit.Interpreter;
 
 namespace xStunit.SystemLibraryPlugins.FileAccess
 {
@@ -311,24 +310,6 @@ namespace xStunit.SystemLibraryPlugins.FileAccess
                 throw new CommandFailedException(FileError.AccessDenied, "cannot seek before the start of the file");
 
             file.Position = target;
-        }
-
-        public static string ToText(byte[] bytes)
-        {
-            var text = new char[bytes.Length];
-            for (var i = 0; i < bytes.Length; i++)
-                text[i] = NarrowStringByte.ToChar(bytes[i]);
-
-            return new string(text);
-        }
-
-        public static byte[] ToBytes(string text)
-        {
-            var bytes = new byte[text.Length];
-            for (var i = 0; i < text.Length; i++)
-                bytes[i] = NarrowStringByte.FromChar(text[i]);
-
-            return bytes;
         }
 
         private static OpenFile Require(int handle)

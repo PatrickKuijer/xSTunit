@@ -81,6 +81,33 @@ namespace xStunit.Cli.Tests
             Assert.Contains("3 passed, 0 failed", output.ToString());
         }
 
+        [Fact]
+        public void Run_TwoPluginDllsClaimingTheSameNames_SkipsTheSecondAndReportsIt()
+        {
+            // The duplicate rule end to end, through the real loader rather
+            // than a registry in isolation: two DLLs disagreeing about a symbol
+            // is a configuration mistake whose symptom would otherwise be a
+            // wrong answer in a passing test. The loser is reported per-DLL and
+            // the run still completes on everything the winner supplied -
+            // losing one plugin degrades only the suites that needed it.
+            var clashDir = Path.Combine(_pluginDir, "clash");
+            Directory.CreateDirectory(clashDir);
+            var source = PluginDll();
+            File.Copy(source, Path.Combine(clashDir, "aaa-first.dll"));
+            File.Copy(source, Path.Combine(clashDir, "zzz-second.dll"));
+
+            var output = new StringWriter();
+            var exitCode = CliRunner.Run(new[] { FixtureDir(), "--plugins", clashDir }, output);
+
+            var text = output.ToString();
+            // Enumerated in name order, so which copy loses is reproducible
+            // rather than a matter of the filesystem's mood.
+            Assert.Contains("zzz-second.dll", text);
+            Assert.Contains("already registered", text);
+            Assert.Equal(0, exitCode);
+            Assert.Contains("36 passed, 0 failed", text);
+        }
+
         private static string FixtureDir([CallerFilePath] string callerFile = "") =>
             Path.GetFullPath(Path.Combine(
                 Path.GetDirectoryName(callerFile)!, "..", "Fixtures", "SystemLibraryPluginFixture"));

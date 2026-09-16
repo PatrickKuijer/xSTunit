@@ -661,5 +661,238 @@ namespace xStunit.Interpreter.Tests
             Assert.IsType<ulong>(instance.Fields["value"].Value);
             Assert.Equal(5UL, instance.Fields["value"].Value);
         }
+
+        // IEC 61131-3 and TwinCAT both accept the prefix-less conversion
+        // spelling, and it has to land on the very same conversion the
+        // prefixed pair performs - not a second, wider cast path of its own.
+        [Theory]
+        [InlineData("TO_SINT(7)")]
+        [InlineData("TO_USINT(7)")]
+        [InlineData("TO_INT(7)")]
+        [InlineData("TO_UINT(7)")]
+        [InlineData("TO_DINT(7)")]
+        [InlineData("TO_UDINT(7)")]
+        [InlineData("TO_LINT(7)")]
+        [InlineData("TO_ULINT(7)")]
+        [InlineData("TO_BYTE(7)")]
+        [InlineData("TO_WORD(7)")]
+        [InlineData("TO_DWORD(7)")]
+        [InlineData("TO_LWORD(7)")]
+        public void Evaluate_PrefixLessIntegerCast_MatchesThePrefixedForm(string expression)
+        {
+            var engine = NewEngine();
+
+            Assert.Equal(7, engine.Evaluate(Parser.ParseExpression(expression), NewFrame()));
+        }
+
+        [Fact]
+        public void Evaluate_PrefixLessRealCast_ProducesASingle()
+        {
+            var engine = NewEngine();
+
+            var result = engine.Evaluate(Parser.ParseExpression("TO_REAL(7)"), NewFrame());
+
+            Assert.Equal(7f, Assert.IsType<float>(result));
+        }
+
+        [Fact]
+        public void Evaluate_PrefixLessLrealCast_ProducesADouble()
+        {
+            var engine = NewEngine();
+
+            var result = engine.Evaluate(Parser.ParseExpression("TO_LREAL(7)"), NewFrame());
+
+            Assert.Equal(7d, Assert.IsType<double>(result));
+        }
+
+        [Fact]
+        public void Evaluate_PrefixLessStringCast_FormatsTheOperand()
+        {
+            var engine = NewEngine();
+
+            Assert.Equal("7", engine.Evaluate(Parser.ParseExpression("TO_STRING(7)"), NewFrame()));
+        }
+
+        // The short spelling must not reach targets the prefixed form refuses:
+        // widening the set of supported casts is a separate decision from
+        // accepting a second spelling of the ones already supported.
+        [Theory]
+        [InlineData("TO_BOOL(1)")]
+        [InlineData("TO_WSTRING(19)")]
+        [InlineData("TO_TIME(19)")]
+        [InlineData("TO_LTIME(19)")]
+        [InlineData("TO_DATE(19)")]
+        [InlineData("TO_DT(19)")]
+        [InlineData("TO_TOD(19)")]
+        public void Evaluate_PrefixLessCastToAnUnsupportedTarget_StillThrowsUnresolvedCall(string expression)
+        {
+            var engine = NewEngine();
+
+            var ex = Assert.Throws<InvalidOperationException>(
+                () => engine.Evaluate(Parser.ParseExpression(expression), NewFrame()));
+
+            Assert.Contains("not found", ex.Message);
+        }
+
+        // With no source type in the name to read, TO_STRING takes it from the
+        // operand's box - and a box that names no numeric IEC type has to keep
+        // failing exactly as BOOL_TO_STRING does.
+        [Theory]
+        [InlineData("TO_STRING(TRUE)")]
+        [InlineData("TO_STRING(TIME#1s)")]
+        [InlineData("TO_STRING('text')")]
+        public void Evaluate_PrefixLessStringCastOfANonNumericSource_StillThrowsUnresolvedCall(string expression)
+        {
+            var engine = NewEngine();
+
+            var ex = Assert.Throws<InvalidOperationException>(
+                () => engine.Evaluate(Parser.ParseExpression(expression), NewFrame()));
+
+            Assert.Contains("'TO_STRING' not found", ex.Message);
+        }
+
+        // ULINT, LWORD and LTIME all box as ulong, so the operand alone cannot
+        // say which one arrived. The tie is given to the integer reading: it is
+        // the common case, and rejecting all three would make the short
+        // spelling narrower than the prefixed one. TO_STRING over an LTIME
+        // therefore formats its tick count where LTIME_TO_STRING errors.
+        [Fact]
+        public void Evaluate_PrefixLessStringCastOfAnLtime_FormatsItsTickCount()
+        {
+            var engine = NewEngine();
+
+            Assert.Equal("1000000", engine.Evaluate(Parser.ParseExpression("TO_STRING(LTIME#1ms)"), NewFrame()));
+        }
+
+        // A TO_-prefixed name that names no conversion target is an ordinary
+        // call and must still reach the POU the user wrote for it.
+        [Fact]
+        public void CallMethod_PrefixLessNameThatIsNotAConversion_DispatchesToTheUserFunction()
+        {
+            var function = new PouAst(
+                "TO_Widget",
+                null,
+                "FUNCTION TO_Widget : INT\nVAR_INPUT\n\tnIn : INT;\nEND_VAR",
+                "TO_Widget := nIn * 2;",
+                new List<MethodAst>());
+
+            var caller = new MethodAst("bRun", "METHOD bRun : BOOL", "nResult := TO_Widget(21);");
+
+            var fb = new PouAst(
+                "FB_Widget",
+                null,
+                "VAR\n\tnResult : INT;\nEND_VAR",
+                "",
+                new List<MethodAst> { caller });
+
+            var engine = new Engine(new TypeRegistry(new[] { fb, function }));
+            var instance = engine.NewInstance("FB_Widget");
+
+            engine.CallMethod(instance, "bRun", new Expr[0], new NamedArg[0], null, null);
+
+            Assert.Equal(42, instance.Fields["nResult"].Value);
+        }
+
+        // An exact name collision is the only case where the intrinsic and a
+        // user POU can both claim the call, and interpreted source in the
+        // user's own tree wins it - the same precedence a native-function
+        // plugin is held to.
+        [Fact]
+        public void CallMethod_UserFunctionNamedForAConversion_ShadowsThePrefixLessIntrinsic()
+        {
+            var function = new PouAst(
+                "TO_INT",
+                null,
+                "FUNCTION TO_INT : INT\nVAR_INPUT\n\tnIn : INT;\nEND_VAR",
+                "TO_INT := nIn + 1;",
+                new List<MethodAst>());
+
+            var caller = new MethodAst("bRun", "METHOD bRun : BOOL", "nResult := TO_INT(41);");
+
+            var fb = new PouAst(
+                "FB_Widget",
+                null,
+                "VAR\n\tnResult : INT;\nEND_VAR",
+                "",
+                new List<MethodAst> { caller });
+
+            var engine = new Engine(new TypeRegistry(new[] { fb, function }));
+            var instance = engine.NewInstance("FB_Widget");
+
+            engine.CallMethod(instance, "bRun", new Expr[0], new NamedArg[0], null, null);
+
+            Assert.Equal(42, instance.Fields["nResult"].Value);
+        }
+
+        // Whether a TO_ name is a cast has to be settled from the name alone.
+        // An operand rejected only after evaluation would be evaluated a second
+        // time by the dispatch the call then falls through to, running any side
+        // effect in it twice.
+        [Fact]
+        public void CallMethod_PrefixLessNameFallingThroughToDispatch_EvaluatesItsArgumentOnce()
+        {
+            var function = new PouAst(
+                "TO_Widget",
+                null,
+                "FUNCTION TO_Widget : INT\nVAR_INPUT\n\tnIn : INT;\nEND_VAR",
+                "TO_Widget := nIn;",
+                new List<MethodAst>());
+
+            var bump = new MethodAst("nNext", "METHOD nNext : INT", "nCalls := nCalls + 1;\nnNext := nCalls;");
+
+            var counter = new PouAst(
+                "FB_Counter",
+                null,
+                "VAR\n\tnCalls : INT;\nEND_VAR",
+                "",
+                new List<MethodAst> { bump });
+
+            var caller = new MethodAst("bRun", "METHOD bRun : BOOL", "nResult := TO_Widget(fbCounter.nNext());");
+
+            var fb = new PouAst(
+                "FB_Widget",
+                null,
+                "VAR\n\tfbCounter : FB_Counter;\n\tnResult : INT;\nEND_VAR",
+                "",
+                new List<MethodAst> { caller });
+
+            var engine = new Engine(new TypeRegistry(new[] { fb, counter, function }));
+            var instance = engine.NewInstance("FB_Widget");
+
+            engine.CallMethod(instance, "bRun", new Expr[0], new NamedArg[0], null, null);
+
+            var counterInstance = Assert.IsType<FbInstance>(instance.Fields["fbCounter"].Value);
+            Assert.Equal(1, counterInstance.Fields["nCalls"].Value);
+            Assert.Equal(1, instance.Fields["nResult"].Value);
+        }
+
+        // Neither argument shape is a conversion in the prefixed form, and the
+        // short spelling must not quietly become the place they start working.
+        [Theory]
+        [InlineData("TO_UINT(IN := 7)")]
+        [InlineData("TO_UINT(7, 8)")]
+        public void Evaluate_PrefixLessCastWithAnUnsupportedArgumentShape_StillThrowsUnresolvedCall(string expression)
+        {
+            var engine = NewEngine();
+
+            var ex = Assert.Throws<InvalidOperationException>(
+                () => engine.Evaluate(Parser.ParseExpression(expression), NewFrame()));
+
+            Assert.Contains("'TO_UINT' not found", ex.Message);
+        }
+
+        // INT_TO_UINT is case-sensitive, so to_uint must be too: a short
+        // spelling that accepted lower case would be the wider path AC 3
+        // forbids.
+        [Fact]
+        public void Evaluate_LowerCasePrefixLessCast_StillThrowsUnresolvedCall()
+        {
+            var engine = NewEngine();
+
+            var ex = Assert.Throws<InvalidOperationException>(
+                () => engine.Evaluate(Parser.ParseExpression("to_uint(7)"), NewFrame()));
+
+            Assert.Contains("'to_uint' not found", ex.Message);
+        }
     }
 }

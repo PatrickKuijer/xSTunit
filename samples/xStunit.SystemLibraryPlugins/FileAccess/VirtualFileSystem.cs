@@ -24,22 +24,6 @@ namespace xStunit.SystemLibraryPlugins.FileAccess
         public const long PathNotFound = 6;
     }
 
-    // Raised by a virtual-filesystem operation that cannot be performed, and
-    // turned into bError/nErrId by the block that called it. An exception
-    // rather than a return code because every one of these has to reach the
-    // same two output fields, and a returned code invites a caller to forget
-    // one of them.
-    internal sealed class FileAccessException : Exception
-    {
-        public FileAccessException(long errorId, string message)
-            : base(message)
-        {
-            ErrorId = errorId;
-        }
-
-        public long ErrorId { get; }
-    }
-
     // The open-mode bits FB_FileOpen's nMode carries.
     //
     // FOPEN_MODEBINARY (16) and FOPEN_MODETEXT (32) are documented; the other
@@ -139,7 +123,7 @@ namespace xStunit.SystemLibraryPlugins.FileAccess
         {
             var key = Normalize(path);
             if (!Files.TryGetValue(key, out var content))
-                throw new FileAccessException(FileError.NotFound, $"no file '{path}' in the virtual filesystem");
+                throw new CommandFailedException(FileError.NotFound, $"no file '{path}' in the virtual filesystem");
 
             return content.ToArray();
         }
@@ -151,7 +135,7 @@ namespace xStunit.SystemLibraryPlugins.FileAccess
         {
             var key = Normalize(path);
             if (Directories.Contains(key))
-                throw new FileAccessException(FileError.AlreadyExists, $"directory '{path}' already exists");
+                throw new CommandFailedException(FileError.AlreadyExists, $"directory '{path}' already exists");
 
             Directories.Add(key);
         }
@@ -160,14 +144,14 @@ namespace xStunit.SystemLibraryPlugins.FileAccess
         {
             var key = Normalize(path);
             if (!Directories.Contains(key))
-                throw new FileAccessException(FileError.PathNotFound, $"no directory '{path}'");
+                throw new CommandFailedException(FileError.PathNotFound, $"no directory '{path}'");
 
             // The vendor is explicit that a directory containing files cannot
             // be deleted, and a POU that assumes otherwise is exactly the kind
             // of defect worth catching here.
             var prefix = key + "/";
             if (Files.Keys.Any(f => f.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)))
-                throw new FileAccessException(FileError.DirectoryNotEmpty, $"directory '{path}' still contains files");
+                throw new CommandFailedException(FileError.DirectoryNotEmpty, $"directory '{path}' still contains files");
 
             Directories.Remove(key);
         }
@@ -176,7 +160,7 @@ namespace xStunit.SystemLibraryPlugins.FileAccess
         {
             var key = Normalize(path);
             if (!Files.Remove(key))
-                throw new FileAccessException(FileError.NotFound, $"no file '{path}' to delete");
+                throw new CommandFailedException(FileError.NotFound, $"no file '{path}' to delete");
         }
 
         public static void Rename(string oldPath, string newPath)
@@ -185,10 +169,10 @@ namespace xStunit.SystemLibraryPlugins.FileAccess
             var to = Normalize(newPath);
 
             if (!Files.TryGetValue(from, out var content))
-                throw new FileAccessException(FileError.NotFound, $"no file '{oldPath}' to rename");
+                throw new CommandFailedException(FileError.NotFound, $"no file '{oldPath}' to rename");
 
             if (Files.ContainsKey(to))
-                throw new FileAccessException(FileError.AlreadyExists, $"'{newPath}' already exists");
+                throw new CommandFailedException(FileError.AlreadyExists, $"'{newPath}' already exists");
 
             Files.Remove(from);
             Files[to] = content;
@@ -212,7 +196,7 @@ namespace xStunit.SystemLibraryPlugins.FileAccess
             }
             else if (!Files.ContainsKey(key))
             {
-                throw new FileAccessException(FileError.NotFound, $"no file '{path}' to open for reading");
+                throw new CommandFailedException(FileError.NotFound, $"no file '{path}' to open for reading");
             }
 
             var file = new OpenFile(key, mode);
@@ -227,14 +211,14 @@ namespace xStunit.SystemLibraryPlugins.FileAccess
         public static void Close(int handle)
         {
             if (!Handles.Remove(handle))
-                throw new FileAccessException(FileError.InvalidHandle, $"file handle {handle} is not open");
+                throw new CommandFailedException(FileError.InvalidHandle, $"file handle {handle} is not open");
         }
 
         public static byte[] Read(int handle, int count)
         {
             var file = Require(handle);
             if (!file.CanRead)
-                throw new FileAccessException(FileError.AccessDenied, $"file handle {handle} was not opened for reading");
+                throw new CommandFailedException(FileError.AccessDenied, $"file handle {handle} was not opened for reading");
 
             var content = Files[file.Path];
             var available = Math.Max(0, content.Count - file.Position);
@@ -260,7 +244,7 @@ namespace xStunit.SystemLibraryPlugins.FileAccess
         {
             var file = Require(handle);
             if (!file.CanRead)
-                throw new FileAccessException(FileError.AccessDenied, $"file handle {handle} was not opened for reading");
+                throw new CommandFailedException(FileError.AccessDenied, $"file handle {handle} was not opened for reading");
 
             var content = Files[file.Path];
             var line = new List<byte>();
@@ -280,7 +264,7 @@ namespace xStunit.SystemLibraryPlugins.FileAccess
         {
             var file = Require(handle);
             if (!file.CanWrite)
-                throw new FileAccessException(FileError.AccessDenied, $"file handle {handle} was not opened for writing");
+                throw new CommandFailedException(FileError.AccessDenied, $"file handle {handle} was not opened for writing");
 
             var content = Files[file.Path];
 
@@ -320,11 +304,11 @@ namespace xStunit.SystemLibraryPlugins.FileAccess
                 0 => position,
                 1 => file.Position + position,
                 2 => length + position,
-                _ => throw new FileAccessException(FileError.AccessDenied, $"unknown seek origin {origin}"),
+                _ => throw new CommandFailedException(FileError.AccessDenied, $"unknown seek origin {origin}"),
             };
 
             if (target < 0)
-                throw new FileAccessException(FileError.AccessDenied, "cannot seek before the start of the file");
+                throw new CommandFailedException(FileError.AccessDenied, "cannot seek before the start of the file");
 
             file.Position = target;
         }
@@ -350,7 +334,7 @@ namespace xStunit.SystemLibraryPlugins.FileAccess
         private static OpenFile Require(int handle)
         {
             if (!Handles.TryGetValue(handle, out var file))
-                throw new FileAccessException(FileError.InvalidHandle, $"file handle {handle} is not open");
+                throw new CommandFailedException(FileError.InvalidHandle, $"file handle {handle} is not open");
 
             return file;
         }

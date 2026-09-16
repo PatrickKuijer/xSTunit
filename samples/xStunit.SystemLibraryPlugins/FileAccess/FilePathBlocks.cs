@@ -30,7 +30,7 @@ namespace xStunit.SystemLibraryPlugins.FileAccess
 
         public override IXstunitNativeFunctionBlock CreateInstance() => new FileDeleteBlock();
 
-        protected override void Execute(NativeFunctionBlockCall call) =>
+        protected override void Perform(NativeFunctionBlockCall call) =>
             VirtualFileSystem.Delete(PathOf(call, "sPathName"));
     }
 
@@ -53,7 +53,7 @@ namespace xStunit.SystemLibraryPlugins.FileAccess
 
         public override IXstunitNativeFunctionBlock CreateInstance() => new FileRenameBlock();
 
-        protected override void Execute(NativeFunctionBlockCall call) =>
+        protected override void Perform(NativeFunctionBlockCall call) =>
             VirtualFileSystem.Rename(PathOf(call, "sOldName"), PathOf(call, "sNewName"));
     }
 
@@ -75,7 +75,7 @@ namespace xStunit.SystemLibraryPlugins.FileAccess
 
         public override IXstunitNativeFunctionBlock CreateInstance() => new CreateDirBlock();
 
-        protected override void Execute(NativeFunctionBlockCall call) =>
+        protected override void Perform(NativeFunctionBlockCall call) =>
             VirtualFileSystem.MakeDirectory(PathOf(call, "sPathName"));
     }
 
@@ -97,7 +97,7 @@ namespace xStunit.SystemLibraryPlugins.FileAccess
 
         public override IXstunitNativeFunctionBlock CreateInstance() => new RemoveDirBlock();
 
-        protected override void Execute(NativeFunctionBlockCall call) =>
+        protected override void Perform(NativeFunctionBlockCall call) =>
             VirtualFileSystem.RemoveDirectory(PathOf(call, "sPathName"));
     }
 }

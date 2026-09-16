@@ -29,7 +29,7 @@ namespace xStunit.SystemLibraryPlugins.FileAccess
 
         public override IXstunitNativeFunctionBlock CreateInstance() => new FileOpenBlock();
 
-        protected override void Execute(NativeFunctionBlockCall call)
+        protected override void Perform(NativeFunctionBlockCall call)
         {
             var mode = (OpenMode)Convert.ToInt64(call.GetField("nMode"));
             call.SetField("hFile", VirtualFileSystem.Open(PathOf(call, "sPathName"), mode));
@@ -52,7 +52,7 @@ namespace xStunit.SystemLibraryPlugins.FileAccess
 
         public override IXstunitNativeFunctionBlock CreateInstance() => new FileCloseBlock();
 
-        protected override void Execute(NativeFunctionBlockCall call) =>
+        protected override void Perform(NativeFunctionBlockCall call) =>
             VirtualFileSystem.Close(HandleOf(call));
     }
 
@@ -75,7 +75,7 @@ namespace xStunit.SystemLibraryPlugins.FileAccess
 
         public override IXstunitNativeFunctionBlock CreateInstance() => new FileSeekBlock();
 
-        protected override void Execute(NativeFunctionBlockCall call) =>
+        protected override void Perform(NativeFunctionBlockCall call) =>
             VirtualFileSystem.Seek(
                 HandleOf(call),
                 Convert.ToInt32(call.GetField("nSeekPos")),
@@ -104,7 +104,7 @@ namespace xStunit.SystemLibraryPlugins.FileAccess
 
         public override IXstunitNativeFunctionBlock CreateInstance() => new FileTellBlock();
 
-        protected override void Execute(NativeFunctionBlockCall call) =>
+        protected override void Perform(NativeFunctionBlockCall call) =>
             call.SetField("nSeekPos", VirtualFileSystem.Tell(HandleOf(call)));
 
         protected override void OnFailed(NativeFunctionBlockCall call) => call.SetField("nSeekPos", -1);
@@ -129,7 +129,7 @@ namespace xStunit.SystemLibraryPlugins.FileAccess
 
         public override IXstunitNativeFunctionBlock CreateInstance() => new EndOfFileBlock();
 
-        protected override void Execute(NativeFunctionBlockCall call) =>
+        protected override void Perform(NativeFunctionBlockCall call) =>
             call.SetField("bEOF", VirtualFileSystem.EndOfFile(HandleOf(call)));
     }
 }

@@ -30,7 +30,7 @@ namespace xStunit.SystemLibraryPlugins.FileAccess
 
         public override IXstunitNativeFunctionBlock CreateInstance() => new FileReadBlock();
 
-        protected override void Execute(NativeFunctionBlockCall call)
+        protected override void Perform(NativeFunctionBlockCall call)
         {
             var requested = Convert.ToInt32(call.GetField("cbReadLen"));
             var bytes = VirtualFileSystem.Read(HandleOf(call), requested);
@@ -39,7 +39,7 @@ namespace xStunit.SystemLibraryPlugins.FileAccess
             {
                 if (!(call.GetField("pReadBuff") is Pointer target))
                 {
-                    throw new FileAccessException(
+                    throw new CommandFailedException(
                         FileError.AccessDenied,
                         "FB_FileRead was given no pReadBuff to read into - pass ADR(buffer)");
                 }
@@ -79,7 +79,7 @@ namespace xStunit.SystemLibraryPlugins.FileAccess
 
         public override IXstunitNativeFunctionBlock CreateInstance() => new FileWriteBlock();
 
-        protected override void Execute(NativeFunctionBlockCall call)
+        protected override void Perform(NativeFunctionBlockCall call)
         {
             var length = Convert.ToInt32(call.GetField("cbWriteLen"));
 
@@ -87,7 +87,7 @@ namespace xStunit.SystemLibraryPlugins.FileAccess
             {
                 if (!(call.GetField("pWriteBuff") is Pointer source))
                 {
-                    throw new FileAccessException(
+                    throw new CommandFailedException(
                         FileError.AccessDenied,
                         "FB_FileWrite was given no pWriteBuff to write from - pass ADR(buffer)");
                 }
@@ -130,7 +130,7 @@ namespace xStunit.SystemLibraryPlugins.FileAccess
 
         public override IXstunitNativeFunctionBlock CreateInstance() => new FileGetsBlock();
 
-        protected override void Execute(NativeFunctionBlockCall call)
+        protected override void Perform(NativeFunctionBlockCall call)
         {
             var line = VirtualFileSystem.ReadLine(HandleOf(call));
 
@@ -163,7 +163,7 @@ namespace xStunit.SystemLibraryPlugins.FileAccess
 
         public override IXstunitNativeFunctionBlock CreateInstance() => new FilePutsBlock();
 
-        protected override void Execute(NativeFunctionBlockCall call)
+        protected override void Perform(NativeFunctionBlockCall call)
         {
             // "up to the null termination but without the null character" - so
             // the terminator is not written, and neither is a line feed the

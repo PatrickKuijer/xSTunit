@@ -29,6 +29,8 @@ Behavior is taken from the vendor documentation, not guessed:
 | `FB_IecCriticalSection` | block | enter/leave bookkeeping; mutual exclusion is not modelled |
 | `FB_FileOpen` / `FB_FileClose` / `FB_FileRead` / `FB_FileWrite` / `FB_FileGets` / `FB_FilePuts` / `FB_FileSeek` / `FB_FileTell` / `FB_EOF` / `FB_FileDelete` / `FB_FileRename` / `FB_CreateDir` / `FB_RemoveDir` | blocks | over an in-memory filesystem, never real disk |
 | `F_FileSystemClear` / `F_FileSystemPutText` / `F_FileSystemGetText` / `F_FileSystemExists` / `F_FileSystemDirExists` / `F_FileSystemSize` / `F_FileSystemOpenHandleCount` | functions | **xStunit's own** — seed and inspect that filesystem from ST |
+| `ADSREAD` / `ADSWRITE` / `ADSRDWRT` / `ADSRDSTATE` | blocks | against a loopback device the suite scripts, never a real router |
+| `F_AdsServerClear` / `F_AdsServerSetText` / `F_AdsServerGetText` / `F_AdsServerFail` / `F_AdsServerTimeout` / `F_AdsServerSetState` / `F_AdsServerWriteCount` | functions | **xStunit's own** — script and inspect that device |
 
 ## Using it
 
@@ -91,6 +93,24 @@ is a safe thing for a suite to assert.
 `SEEK_SET`, `ADSLOG_MSGTYPE_ERROR` and `DEFAULT_ADS_TIMEOUT` live in
 compiled-only Tc2_System GVLs and there is no plugin surface for a named value
 yet, so the fixtures pass raw numbers where real source would not.
+
+## The ADS family
+
+Backed by a loopback device the suite scripts. A test against a real router
+would need one to exist, would depend on what some other device happened to
+hold, and could not provoke the cases production ADS code actually gets wrong:
+a timeout, an error on one variable while others answer, a write issued every
+cycle instead of once. Those are the paths error handling never exercises, so
+they are the ones worth being scriptable.
+
+`F_AdsServerTimeout` is measured on the **simulated** clock: the request stays
+`BUSY` until the suite has advanced time past `TMOUT`, then reports ADS
+`16#745`. A one-second timeout therefore costs no wall-clock time and lands at
+the same point every run. Unlike the file family's, these error codes are the
+vendor's real ones — ADS return codes are published.
+
+`ADSRDSTATE` names no index group or offset, so its scripted failure and
+timeout are addressed at group 0, offset 0.
 
 ## Why these live in a plugin rather than the interpreter
 

@@ -50,7 +50,7 @@ namespace xStunit.Cli.Tests
             // The count, not just "0 failed": a fixture that stopped being
             // discovered would pass a zero-failure assertion while testing
             // nothing at all.
-            Assert.Contains("32 passed, 0 failed", text);
+            Assert.Contains("36 passed, 0 failed", text);
         }
 
         [Fact]
@@ -66,9 +66,28 @@ namespace xStunit.Cli.Tests
             Assert.Contains("F_CreateAmsNetId", text);
         }
 
+        [Fact]
+        public void Run_TimeFixture_ReadsTheSimulatedClockFromItsOrigin()
+        {
+            // A separate fixture directory, and a separate run, on purpose: the
+            // simulated clock is shared by every suite in a run and there is no
+            // ST way to set it back, so the absolute-timestamp assertions in
+            // this suite need a run nothing else has advanced the clock in.
+            var output = new StringWriter();
+
+            var exitCode = CliRunner.Run(new[] { TimeFixtureDir(), "--plugins", _pluginDir }, output);
+
+            Assert.Equal(0, exitCode);
+            Assert.Contains("3 passed, 0 failed", output.ToString());
+        }
+
         private static string FixtureDir([CallerFilePath] string callerFile = "") =>
             Path.GetFullPath(Path.Combine(
                 Path.GetDirectoryName(callerFile)!, "..", "Fixtures", "SystemLibraryPluginFixture"));
+
+        private static string TimeFixtureDir([CallerFilePath] string callerFile = "") =>
+            Path.GetFullPath(Path.Combine(
+                Path.GetDirectoryName(callerFile)!, "..", "Fixtures", "SystemLibraryTimeFixture"));
 
         // Searched for rather than named: neither the configuration nor the
         // target framework of the sample's own build output is knowable here.

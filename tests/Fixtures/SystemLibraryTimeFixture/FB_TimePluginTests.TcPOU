@@ -16,10 +16,11 @@
     intervals since 1601-01-01 UTC, which is the epoch both functions answer
     in and is also where the simulated clock's origin sits.
 
-    The clock is shared by every suite in a run, so the absolute assertion
-    below also depends on this being the only suite in this fixture directory
-    that moves it. A new suite here that advances the clock must not be added
-    without reworking that test.
+    The clock is shared by every suite in a RUN, not just a file, and there is
+    no ST way to set it back. That is why this suite sits in a fixture
+    directory of its own: the absolute assertion below needs the clock to still
+    be at its origin, and any suite sharing the run that advanced it first -
+    the ADS timeout test does exactly that - would move the answer.
 *)
 FUNCTION_BLOCK FB_TimePluginTests EXTENDS TcUnit.FB_TestSuite]]></Declaration>
     <Implementation>

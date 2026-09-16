@@ -1,0 +1,259 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4026.18">
+  <POU Name="FB_AdsPluginTests" Id="{b2c3d4e5-6k20-4a1a-8b1b-000000000080}" SpecialFunc="None">
+    <Declaration><![CDATA[(*
+    Tc2_System's ADSREAD / ADSWRITE / ADSRDWRT / ADSRDSTATE, supplied by
+    samples/xStunit.SystemLibraryPlugins against a loopback device the suite
+    scripts - never a real ADS router.
+
+    The scripting is the point. A test against a real router would need one to
+    exist, would depend on what some other device happened to hold, and could
+    not provoke the cases production ADS code actually gets wrong: a timeout, an
+    error on one variable but not another, a write issued every cycle instead of
+    once. F_AdsServer* is xStunit's own surface for exactly those, because on a
+    real system the device on the other end is not the PLC's to configure.
+
+    Same handshake as the file family, with the legacy upper-case field names:
+    the invocation carrying the rising edge of READ/WRITE/WRTRD/RDSTATE reports
+    BUSY having done nothing; the next performs the request.
+*)
+FUNCTION_BLOCK FB_AdsPluginTests EXTENDS TcUnit.FB_TestSuite]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[ReadFillsTheDestinationBuffer();
+WriteReachesTheDeviceOncePerEdge();
+ReadWriteSeesItsOwnWrite();
+ReadOfAnUnscriptedVariableFails();
+ScriptedErrorReachesErrId();
+DeviceStateIsReported();
+ScriptedTimeoutStaysBusyUntilTmoutElapses();]]></ST>
+    </Implementation>
+    <Method Name="ReadFillsTheDestinationBuffer" Id="{b2c3d4e5-6k20-4a1a-8b1b-000000000081}">
+      <Declaration><![CDATA[METHOD PRIVATE ReadFillsTheDestinationBuffer
+VAR
+	fbRead		: ADSREAD;
+	aBuf		: ARRAY[0..3] OF BYTE;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('ReadFillsTheDestinationBuffer');
+
+F_AdsServerClear();
+F_AdsServerSetText(16#4020, 16#10, 'WXYZ');
+
+fbRead(NETID := '', PORT := 851, IDXGRP := 16#4020, IDXOFFS := 16#10, LEN := SIZEOF(aBuf), DESTADDR := ADR(aBuf), READ := TRUE, TMOUT := T#5S);
+fbRead(READ := FALSE);
+
+AssertEquals_BOOL(Expected := FALSE,
+                   Actual := fbRead.ERR,
+                   Message := 'a scripted variable reads without error');
+AssertEquals_BYTE(Expected := 87,
+                   Actual := aBuf[0],
+                   Message := 'the device response reached the caller buffer');
+AssertEquals_BYTE(Expected := 90,
+                   Actual := aBuf[3],
+                   Message := 'the whole response reached it');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="WriteReachesTheDeviceOncePerEdge" Id="{b2c3d4e5-6k20-4a1a-8b1b-000000000082}">
+      <Declaration><![CDATA[METHOD PRIVATE WriteReachesTheDeviceOncePerEdge
+VAR
+	fbWrite		: ADSWRITE;
+	aBuf		: ARRAY[0..2] OF BYTE;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('WriteReachesTheDeviceOncePerEdge');
+
+F_AdsServerClear();
+
+aBuf[0] := 65;
+aBuf[1] := 66;
+aBuf[2] := 67;
+
+(* The trigger stays high throughout. Holding it must not re-issue the
+   command: a POU that writes every cycle instead of once is the classic ADS
+   defect, and the data alone cannot reveal it - the value written is the
+   same each time. Dropping the trigger and raising it again would be a
+   second edge, and correctly a second write. *)
+fbWrite(NETID := '', PORT := 851, IDXGRP := 16#4021, IDXOFFS := 0, LEN := SIZEOF(aBuf), SRCADDR := ADR(aBuf), WRITE := TRUE, TMOUT := T#5S);
+fbWrite(WRITE := TRUE);
+fbWrite(WRITE := TRUE);
+fbWrite(WRITE := TRUE);
+
+AssertEquals_STRING(Expected := 'ABC',
+                     Actual := F_AdsServerGetText(16#4021, 0),
+                     Message := 'the buffer behind SRCADDR reached the device');
+AssertEquals_UDINT(Expected := 1,
+                    Actual := F_AdsServerWriteCount(),
+                    Message := 'one rising edge is one write');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="ReadWriteSeesItsOwnWrite" Id="{b2c3d4e5-6k20-4a1a-8b1b-000000000083}">
+      <Declaration><![CDATA[METHOD PRIVATE ReadWriteSeesItsOwnWrite
+VAR
+	fbRdWrt		: ADSRDWRT;
+	aOut		: ARRAY[0..1] OF BYTE;
+	aIn			: ARRAY[0..1] OF BYTE;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('ReadWriteSeesItsOwnWrite');
+
+F_AdsServerClear();
+
+aOut[0] := 72;
+aOut[1] := 73;
+
+(* One round trip, not two: the write lands first and the read answers from
+   it, which is the whole difference from an ADSWRITE followed by an
+   ADSREAD. *)
+fbRdWrt(NETID := '', PORT := 851, IDXGRP := 16#4022, IDXOFFS := 0, WRITELEN := SIZEOF(aOut), READLEN := SIZEOF(aIn), SRCADDR := ADR(aOut), DESTADDR := ADR(aIn), WRTRD := TRUE, TMOUT := T#5S);
+fbRdWrt(WRTRD := FALSE);
+
+AssertEquals_BOOL(Expected := FALSE,
+                   Actual := fbRdWrt.ERR,
+                   Message := 'the combined command succeeds');
+AssertEquals_BYTE(Expected := 72,
+                   Actual := aIn[0],
+                   Message := 'the response carries what was just written');
+AssertEquals_BYTE(Expected := 73,
+                   Actual := aIn[1],
+                   Message := 'all of it');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="ReadOfAnUnscriptedVariableFails" Id="{b2c3d4e5-6k20-4a1a-8b1b-000000000084}">
+      <Declaration><![CDATA[METHOD PRIVATE ReadOfAnUnscriptedVariableFails
+VAR
+	fbRead		: ADSREAD;
+	aBuf		: ARRAY[0..3] OF BYTE;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('ReadOfAnUnscriptedVariableFails');
+
+F_AdsServerClear();
+
+(* Reading an address nobody published is a defect. Handing back zeroes
+   would let the test pass, so it is an invalid index group - ADS 16#702. *)
+fbRead(NETID := '', PORT := 851, IDXGRP := 16#9999, IDXOFFS := 0, LEN := SIZEOF(aBuf), DESTADDR := ADR(aBuf), READ := TRUE, TMOUT := T#5S);
+fbRead(READ := FALSE);
+
+AssertEquals_BOOL(Expected := TRUE,
+                   Actual := fbRead.ERR,
+                   Message := 'an unscripted variable is an error, not empty data');
+AssertEquals_UDINT(Expected := 16#702,
+                    Actual := fbRead.ERRID,
+                    Message := 'reported as the ADS invalid-index-group code');
+AssertEquals_BOOL(Expected := FALSE,
+                   Actual := fbRead.BUSY,
+                   Message := 'a failed request stops being busy');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="ScriptedErrorReachesErrId" Id="{b2c3d4e5-6k20-4a1a-8b1b-000000000085}">
+      <Declaration><![CDATA[METHOD PRIVATE ScriptedErrorReachesErrId
+VAR
+	fbRead		: ADSREAD;
+	aBuf		: ARRAY[0..3] OF BYTE;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('ScriptedErrorReachesErrId');
+
+F_AdsServerClear();
+F_AdsServerSetText(16#4023, 0, 'DATA');
+F_AdsServerFail(16#4023, 0, 16#703);
+
+(* A device that answers with an error on one variable while others work is
+   not reachable against a real router, and is precisely the path production
+   error handling never exercises. *)
+fbRead(NETID := '', PORT := 851, IDXGRP := 16#4023, IDXOFFS := 0, LEN := SIZEOF(aBuf), DESTADDR := ADR(aBuf), READ := TRUE, TMOUT := T#5S);
+fbRead(READ := FALSE);
+
+AssertEquals_BOOL(Expected := TRUE,
+                   Actual := fbRead.ERR,
+                   Message := 'the scripted failure is reported');
+AssertEquals_UDINT(Expected := 16#703,
+                    Actual := fbRead.ERRID,
+                    Message := 'the scripted error code reaches ERRID unchanged');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="DeviceStateIsReported" Id="{b2c3d4e5-6k20-4a1a-8b1b-000000000086}">
+      <Declaration><![CDATA[METHOD PRIVATE DeviceStateIsReported
+VAR
+	fbState		: ADSRDSTATE;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('DeviceStateIsReported');
+
+F_AdsServerClear();
+F_AdsServerSetState(5, 17);
+
+fbState(NETID := '', PORT := 851, RDSTATE := TRUE, TMOUT := T#5S);
+fbState(RDSTATE := FALSE);
+
+AssertEquals_UINT(Expected := 5,
+                   Actual := fbState.ADSSTATE,
+                   Message := 'the scripted ADS state is reported');
+AssertEquals_UINT(Expected := 17,
+                   Actual := fbState.DEVSTATE,
+                   Message := 'the device-specific state comes back too');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="ScriptedTimeoutStaysBusyUntilTmoutElapses" Id="{b2c3d4e5-6k20-4a1a-8b1b-000000000087}">
+      <Declaration><![CDATA[METHOD PRIVATE ScriptedTimeoutStaysBusyUntilTmoutElapses
+VAR
+	fbRead			: ADSREAD;
+	aBuf			: ARRAY[0..3] OF BYTE;
+	bBusyWhileWaiting	: BOOL;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('ScriptedTimeoutStaysBusyUntilTmoutElapses');
+
+F_AdsServerClear();
+F_AdsServerTimeout(16#4024, 0);
+
+fbRead(NETID := '', PORT := 851, IDXGRP := 16#4024, IDXOFFS := 0, LEN := SIZEOF(aBuf), DESTADDR := ADR(aBuf), READ := TRUE, TMOUT := T#1S);
+fbRead(READ := FALSE);
+
+(* Still waiting: a POU watching BUSY sees the wait it would see on a real
+   system, rather than an instant failure it could never have written code
+   for. *)
+bBusyWhileWaiting := fbRead.BUSY;
+
+(* The wait is measured on the SIMULATED clock, so a one-second timeout
+   costs no wall-clock time and lands at exactly the same point every run. *)
+AdvanceClock(T#1S);
+fbRead(READ := FALSE);
+
+AssertEquals_BOOL(Expected := TRUE,
+                   Actual := bBusyWhileWaiting,
+                   Message := 'the request stays busy before the timeout is up');
+AssertEquals_BOOL(Expected := TRUE,
+                   Actual := fbRead.ERR,
+                   Message := 'the timeout is reported once TMOUT has elapsed');
+AssertEquals_UDINT(Expected := 16#745,
+                    Actual := fbRead.ERRID,
+                    Message := 'reported as the ADS client sync timeout code');
+AssertEquals_BOOL(Expected := FALSE,
+                   Actual := fbRead.BUSY,
+                   Message := 'a timed-out request stops being busy');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+  </POU>
+</TcPlcObject>

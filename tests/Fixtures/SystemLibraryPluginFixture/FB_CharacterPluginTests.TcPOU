@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4026.18">
+  <POU Name="FB_CharacterPluginTests" Id="{b2c3d4e5-6k20-4a1a-8b1b-000000000020}" SpecialFunc="None">
+    <Declaration><![CDATA[(*
+    Tc2_System's character pair F_ToASC / F_ToCHR, supplied by
+    samples/xStunit.SystemLibraryPlugins.
+
+    Two conventions are worth pinning, because both are easy to get subtly
+    wrong and neither shows up as a crash: F_ToASC takes a plain STRING and
+    reads only its FIRST character (an empty one delivers zero), and the byte
+    it yields is the Latin-1 byte the rest of the interpreter's narrow-STRING
+    model uses - so a code above 127 is unsigned, not negative.
+*)
+FUNCTION_BLOCK FB_CharacterPluginTests EXTENDS TcUnit.FB_TestSuite]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[ToAscReadsTheFirstCharacterOnly();
+EmptyStringDeliversZero();
+ToChrIsTheInverse();
+HighByteStaysUnsigned();]]></ST>
+    </Implementation>
+    <Method Name="ToAscReadsTheFirstCharacterOnly" Id="{b2c3d4e5-6k20-4a1a-8b1b-000000000021}">
+      <Declaration><![CDATA[METHOD PRIVATE ToAscReadsTheFirstCharacterOnly
+VAR
+	nCode		: BYTE;
+	nFromLong	: BYTE;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('ToAscReadsTheFirstCharacterOnly');
+
+nCode := F_ToASC('1');
+nFromLong := F_ToASC('1234');
+
+AssertEquals_BYTE(Expected := 49,
+                   Actual := nCode,
+                   Message := 'a single character yields its ASCII code');
+(* Real source classifies a whole record by its leading byte, so a longer
+   argument must be accepted rather than rejected. *)
+AssertEquals_BYTE(Expected := 49,
+                   Actual := nFromLong,
+                   Message := 'characters past the first are ignored');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="EmptyStringDeliversZero" Id="{b2c3d4e5-6k20-4a1a-8b1b-000000000022}">
+      <Declaration><![CDATA[METHOD PRIVATE EmptyStringDeliversZero
+VAR
+	nCode		: BYTE;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('EmptyStringDeliversZero');
+
+nCode := F_ToASC('');
+
+AssertEquals_BYTE(Expected := 0,
+                   Actual := nCode,
+                   Message := 'an empty STRING delivers zero');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="ToChrIsTheInverse" Id="{b2c3d4e5-6k20-4a1a-8b1b-000000000023}">
+      <Declaration><![CDATA[METHOD PRIVATE ToChrIsTheInverse
+VAR
+	sChar		: STRING(1);
+	nRoundTrip	: BYTE;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('ToChrIsTheInverse');
+
+sChar := F_ToCHR(16#31);
+nRoundTrip := F_ToASC(F_ToCHR(65));
+
+AssertEquals_STRING(Expected := '1',
+                     Actual := sChar,
+                     Message := '16#31 is the character 1');
+AssertEquals_BYTE(Expected := 65,
+                   Actual := nRoundTrip,
+                   Message := 'F_ToASC undoes F_ToCHR');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="HighByteStaysUnsigned" Id="{b2c3d4e5-6k20-4a1a-8b1b-000000000024}">
+      <Declaration><![CDATA[METHOD PRIVATE HighByteStaysUnsigned
+VAR
+	nRoundTrip	: BYTE;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('HighByteStaysUnsigned');
+
+(* Above 127 a signed round trip would come back negative. The narrow STRING
+   byte model is Latin-1, where the byte value IS the character. *)
+nRoundTrip := F_ToASC(F_ToCHR(200));
+
+AssertEquals_BYTE(Expected := 200,
+                   Actual := nRoundTrip,
+                   Message := 'a code above 127 survives the round trip unsigned');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+  </POU>
+</TcPlcObject>

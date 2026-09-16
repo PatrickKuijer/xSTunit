@@ -47,7 +47,10 @@ namespace xStunit.Cli.Tests
 
             var text = output.ToString();
             Assert.Equal(0, exitCode);
-            Assert.Contains("0 failed", text);
+            // The count, not just "0 failed": a fixture that stopped being
+            // discovered would pass a zero-failure assertion while testing
+            // nothing at all.
+            Assert.Contains("7 passed, 0 failed", text);
         }
 
         [Fact]

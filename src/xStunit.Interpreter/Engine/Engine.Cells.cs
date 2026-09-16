@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using xStunit.Runner;
 
 namespace xStunit.Interpreter
 {
@@ -189,24 +190,170 @@ namespace xStunit.Interpreter
         // happens here rather than inside ResolveDeclaredTypeName because
         // SIZEOF still needs the full declaration, capacity and all.
         //
-        // A bare string literal has no declaration to read a type off at all.
-        // It is typed from the literal itself, because an unresolved argument
-        // fails on the type class before the characters are ever compared.
-        // Which of the two string keywords it takes has to come from the other
-        // argument: the lexer folds '...' and "..." into one token, so a literal
-        // not sitting opposite a WSTRING is read as STRING.
+        // A literal argument has no declaration to read a type off at all, and
+        // an untyped argument fails on the type class before the values are
+        // ever compared. Two disjoint groups of literal carry the typing, in
+        // three passes that each read only what the pass before them settled -
+        // which is what makes the answer the same in either argument order.
+        //
+        // Pass 2, SELF-TYPED: a literal with one unambiguous class of its own
+        // (BOOL and the TIME/DATE family) takes it, and never adopts - T#1s
+        // opposite a UDINT must stay a mismatch, TIME being no kind of integer.
+        // A string literal belongs here too: the only open question is which of
+        // the two string keywords it takes, and since the lexer folds '...' and
+        // "..." into one token, only a declared side can ever say WSTRING.
+        //
+        // Pass 3, ADOPTING: a numeric literal has no width of its own - 8 is an
+        // INT against an INT and a DINT against a DINT - so it can only take
+        // the other side's class, bounded to its own family so that a REAL
+        // literal cannot land on INT and an integer literal cannot land on
+        // TIME or STRING.
         private (string Expected, string Actual) ResolveAnyTypeClasses(Expr expectedExpr, Expr actualExpr, Frame frame)
         {
-            var expected = StringTypeInfo.TypeClass(ResolveDeclaredTypeName(expectedExpr, frame));
-            var actual = StringTypeInfo.TypeClass(ResolveDeclaredTypeName(actualExpr, frame));
+            expectedExpr = UnwrapSignedLiteral(expectedExpr);
+            actualExpr = UnwrapSignedLiteral(actualExpr);
 
-            if (expectedExpr is StringLiteralExpr)
-                expected = actual == "WSTRING" ? "WSTRING" : "STRING";
-            if (actualExpr is StringLiteralExpr)
-                actual = expected == "WSTRING" ? "WSTRING" : "STRING";
+            var declaredExpected = CanonicalTypeClass(StringTypeInfo.TypeClass(ResolveDeclaredTypeName(expectedExpr, frame)));
+            var declaredActual = CanonicalTypeClass(StringTypeInfo.TypeClass(ResolveDeclaredTypeName(actualExpr, frame)));
+
+            var expected = declaredExpected ?? SelfTypedLiteralClass(expectedExpr, declaredActual);
+            var actual = declaredActual ?? SelfTypedLiteralClass(actualExpr, declaredExpected);
+
+            expected = expected ?? AdoptableLiteralClass(expectedExpr, actual);
+            actual = actual ?? AdoptableLiteralClass(actualExpr, expected);
+
+            // With nothing declared on either side there is nothing to adopt
+            // from, and the runner would otherwise report a missing type ''
+            // that names neither the call nor the reason.
+            if (expected == null && actual == null
+                && (IsNumericLiteral(expectedExpr) || IsNumericLiteral(actualExpr)))
+            {
+                throw new UnsupportedConstructException(
+                    "AssertEquals",
+                    "AssertEquals(ANY) cannot type an argument pair with nothing declared on either " +
+                    "side: a numeric literal has no width of its own. Compare against a declared " +
+                    "variable, or call the typed AssertEquals_<TYPE> overload.");
+            }
 
             return (expected, actual);
         }
+
+        // DT and TOD are accepted declaration text for the same types the DT#
+        // and TOD# literals produce, but are not type classes in their own
+        // right; without this the new self-typing would turn a var declared DT
+        // into a mismatch against its own literal.
+        private static string CanonicalTypeClass(string typeClass)
+        {
+            if (string.Equals(typeClass, "DT", StringComparison.OrdinalIgnoreCase))
+                return "DATE_AND_TIME";
+            if (string.Equals(typeClass, "TOD", StringComparison.OrdinalIgnoreCase))
+                return "TIME_OF_DAY";
+            return typeClass;
+        }
+
+        // A leading minus parses as a UnaryExpr over the literal rather than
+        // folding into it, so every negative expected value would otherwise
+        // reach the assert untyped. The sign is carried into the literal here
+        // because the range bound below has to see the value that will be
+        // compared, not its magnitude.
+        private static Expr UnwrapSignedLiteral(Expr expr)
+        {
+            if (!(expr is UnaryExpr unary) || (unary.Op != "-" && unary.Op != "+"))
+                return expr;
+
+            var operand = UnwrapSignedLiteral(unary.Operand);
+            if (unary.Op == "+")
+                return operand;
+
+            switch (operand)
+            {
+                case IntLiteralExpr i: return new IntLiteralExpr(-i.Value);
+                case LintLiteralExpr l: return new LintLiteralExpr(-l.Value);
+                case RealLiteralExpr r: return new RealLiteralExpr(-r.Value);
+                case LrealLiteralExpr lr: return new LrealLiteralExpr(-lr.Value);
+                default: return expr;
+            }
+        }
+
+        private static string SelfTypedLiteralClass(Expr expr, string otherDeclaredClass)
+        {
+            switch (expr)
+            {
+                case BoolLiteralExpr _: return "BOOL";
+                case TimeLiteralExpr _: return "TIME";
+                case LtimeLiteralExpr _: return "LTIME";
+                case DateLiteralExpr _: return "DATE";
+                case DateAndTimeLiteralExpr _: return "DATE_AND_TIME";
+                case TimeOfDayLiteralExpr _: return "TIME_OF_DAY";
+                case StringLiteralExpr _: return otherDeclaredClass == "WSTRING" ? "WSTRING" : "STRING";
+                default: return null;
+            }
+        }
+
+        private static readonly string[] IntegerTypeClasses =
+        {
+            "SINT", "USINT", "BYTE", "INT", "UINT", "WORD",
+            "DINT", "DWORD", "UDINT", "LINT", "LWORD", "ULINT",
+        };
+
+        // The class is handed back exactly as the other side spelled it: the
+        // runner compares the two type names ordinally, so normalising only the
+        // literal side would invent a mismatch out of a var declared 'int'.
+        //
+        // A real literal takes REAL and never LREAL. An unsuffixed decimal
+        // lexes as a 32-bit float, so it has already lost the mantissa an LREAL
+        // compare would need, and the ANY overload compares with Delta := 0.0:
+        // adopting LREAL would fail on the VALUE while both sides looked right.
+        private static string AdoptableLiteralClass(Expr expr, string otherClass)
+        {
+            if (otherClass == null)
+                return null;
+
+            if (expr is RealLiteralExpr || expr is LrealLiteralExpr)
+                return string.Equals(otherClass, "REAL", StringComparison.OrdinalIgnoreCase) ? otherClass : null;
+
+            if (!IsIntegerLiteral(expr)
+                || !IntegerTypeClasses.Contains(otherClass, StringComparer.OrdinalIgnoreCase))
+                return null;
+
+            return LiteralFitsWithin(expr, otherClass) ? otherClass : null;
+        }
+
+        // TwinCAT rejects an out-of-range literal at compile time and this
+        // interpreter has no compile step, so the bound is the only thing
+        // between AssertEquals(70000, nInt) and a silent pass: the assert
+        // truncates both operands to the adopted width, which would compare
+        // 70000 equal to an INT holding 4464.
+        private static bool LiteralFitsWithin(Expr literal, string typeClass)
+        {
+            if (!IecNumericType.TryGetBounds(typeClass, out var bounds))
+                return false;
+
+            switch (literal)
+            {
+                case IntLiteralExpr i: return FitsSigned(i.Value, bounds);
+                case LintLiteralExpr l: return FitsSigned(l.Value, bounds);
+                case UlintLiteralExpr u: return FitsUnsigned(u.Value, bounds);
+                default: return false;
+            }
+        }
+
+        // ULINT and LWORD are the only classes whose bounds box as ulong, and
+        // they are also the only ones a value above long.MaxValue can fit -
+        // which is the only shape a UlintLiteralExpr is produced for at all.
+        private static bool FitsSigned(long value, (object Min, object Max) bounds) =>
+            bounds.Max is ulong
+                ? value >= 0
+                : value >= Convert.ToInt64(bounds.Min) && value <= Convert.ToInt64(bounds.Max);
+
+        private static bool FitsUnsigned(ulong value, (object Min, object Max) bounds) =>
+            bounds.Max is ulong max ? value <= max : value <= (ulong)Convert.ToInt64(bounds.Max);
+
+        private static bool IsIntegerLiteral(Expr expr) =>
+            expr is IntLiteralExpr || expr is LintLiteralExpr || expr is UlintLiteralExpr;
+
+        private static bool IsNumericLiteral(Expr expr) =>
+            IsIntegerLiteral(expr) || expr is RealLiteralExpr || expr is LrealLiteralExpr;
 
         // FbInstance and StructInstance are both named-field containers of
         // Cells, so FieldAccessExpr reads either the same way.

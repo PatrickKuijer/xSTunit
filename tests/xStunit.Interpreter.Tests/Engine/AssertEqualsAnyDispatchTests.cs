@@ -5,10 +5,12 @@ using Xunit;
 namespace xStunit.Interpreter.Tests
 {
     // The type-erased AssertEquals(ANY, ANY, Message) carries no type suffix to
-    // dispatch on, so the IEC type must come from the DECLARED type of the
-    // variable passed in - there is no literal fallback. That is why every case
-    // here declares typed VAR fields and passes bare identifiers, the same way
-    // SIZEOF() resolves a declared type.
+    // dispatch on, so the IEC type comes from the DECLARED type of the variable
+    // passed in, the same way SIZEOF() resolves one. Every case here therefore
+    // declares typed VAR fields and passes bare identifiers: this is the
+    // declared-type path on its own, with no literal on either side to type it
+    // from. Typing a literal argument is a path of its own - see
+    // AssertEqualsAnyStringLiteralTests and AssertEqualsAnyNumericLiteralTests.
     public class AssertEqualsAnyDispatchTests
     {
         private static Engine NewSuiteEngine(string declarationText, string implementationText)

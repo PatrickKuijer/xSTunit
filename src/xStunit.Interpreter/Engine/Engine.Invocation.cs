@@ -193,10 +193,11 @@ namespace xStunit.Interpreter
                     {
                         var expectedExpr = ResolveNamedOrPositionalArg("AssertEquals", "Expected", 0, positionalArgs, namedArgs);
                         var actualExpr = ResolveNamedOrPositionalArg("AssertEquals", "Actual", 1, positionalArgs, namedArgs);
+                        var typeClasses = ResolveAnyTypeClasses(expectedExpr, actualExpr, callerFrame);
                         anyTypeNames = new Dictionary<string, string>
                         {
-                            ["Expected"] = ResolveDeclaredTypeName(expectedExpr, callerFrame),
-                            ["Actual"] = ResolveDeclaredTypeName(actualExpr, callerFrame),
+                            ["Expected"] = typeClasses.Expected,
+                            ["Actual"] = typeClasses.Actual,
                         };
                     }
 

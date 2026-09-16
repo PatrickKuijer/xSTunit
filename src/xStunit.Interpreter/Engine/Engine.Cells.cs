@@ -147,6 +147,31 @@ namespace xStunit.Interpreter
         // declaration time and immune to later REF= aliasing. GVL members are
         // never REF= targets - the parser accepts only a bare identifier there -
         // so their Cell's DeclaredTypeName is trustworthy as it stands.
+        // AssertEquals(ANY) dispatches on the TYPE CLASS, which is not quite the
+        // declared type: a STRING(32) and a STRING(80) are both TypeClass STRING
+        // to TwinCAT's ANY, and ScalarAssertType's registry is keyed the same
+        // way. The capacity is therefore dropped here rather than inside
+        // ResolveDeclaredTypeName, which SIZEOF needs to keep telling it.
+        //
+        // A bare string literal has no declaration to read a type off at all.
+        // It is typed from the literal itself, because an unresolved argument
+        // fails on the type class before the characters are ever compared.
+        // Which of the two string keywords it takes has to come from the other
+        // argument: the lexer folds '...' and "..." into one token, so a literal
+        // not sitting opposite a WSTRING is read as STRING.
+        private (string Expected, string Actual) ResolveAnyTypeClasses(Expr expectedExpr, Expr actualExpr, Frame frame)
+        {
+            var expected = StringTypeInfo.TypeClass(ResolveDeclaredTypeName(expectedExpr, frame));
+            var actual = StringTypeInfo.TypeClass(ResolveDeclaredTypeName(actualExpr, frame));
+
+            if (expectedExpr is StringLiteralExpr)
+                expected = actual == "WSTRING" ? "WSTRING" : "STRING";
+            if (actualExpr is StringLiteralExpr)
+                actual = expected == "WSTRING" ? "WSTRING" : "STRING";
+
+            return (expected, actual);
+        }
+
         private string ResolveDeclaredTypeName(Expr expr, Frame frame)
         {
             if (expr is IdentifierExpr id)

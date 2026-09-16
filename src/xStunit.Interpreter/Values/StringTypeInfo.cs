@@ -51,6 +51,15 @@ namespace xStunit.Interpreter
                 && string.Equals(match.Groups["keyword"].Value, "WSTRING", System.StringComparison.OrdinalIgnoreCase);
         }
 
+        // The bare keyword a declared STRING/WSTRING belongs to, capacity
+        // dropped: a STRING(32) and a STRING(80) are one type class, and a bare
+        // literal carries no capacity to be matched against in the first place.
+        // Any other type name is already its own class and comes back as it is.
+        public static string TypeClass(string typeName) =>
+            IsStringType(typeName)
+                ? (IsWideStringType(typeName) ? "WSTRING" : "STRING")
+                : typeName;
+
         // Bytes per character on the wire, which doubles as the type's
         // alignment and as the width of its terminator: a narrow STRING ends
         // at a zero byte, a WSTRING at a zero WORD.

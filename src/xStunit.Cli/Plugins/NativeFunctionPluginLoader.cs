@@ -20,17 +20,6 @@ namespace xStunit.Cli.Plugins
     // Engine's clear "no native function is registered" error.
     internal static class NativeFunctionPluginLoader
     {
-        // Both halves of the plugin contract, filled by one pass over the
-        // directory. Kept together because a host needs both to build an
-        // Engine, and returning one and out-parameterizing the other would
-        // make which is which a matter of argument order.
-        internal sealed class LoadedPlugins
-        {
-            public NativeFunctionRegistry Functions { get; } = new NativeFunctionRegistry();
-
-            public NativeFunctionBlockRegistry FunctionBlocks { get; } = new NativeFunctionBlockRegistry();
-        }
-
         // Never loaded *as plugins*, even when a build drops copies of them
         // beside one: a second copy of xStunit.Interpreter in the plugin
         // context defines a second, non-identical IXstunitNativeFunction, and
@@ -42,12 +31,12 @@ namespace xStunit.Cli.Plugins
             "xStunit.Interpreter", "xStunit.Parser", "xStunit.Runner", "xstunit",
         };
 
-        public static LoadedPlugins Load(
+        public static NativePlugins Load(
             string pluginDirectory, out List<SkippedFile> skipped, out List<string> loadedFrom)
         {
             skipped = new List<SkippedFile>();
             loadedFrom = new List<string>();
-            var loaded = new LoadedPlugins();
+            var loaded = new NativePlugins();
 
             if (string.IsNullOrWhiteSpace(pluginDirectory))
                 return loaded;
@@ -70,18 +59,9 @@ namespace xStunit.Cli.Plugins
 
                 try
                 {
-                    var (functionCount, blockCount) = LoadFrom(dll, loaded);
-                    if (functionCount > 0 || blockCount > 0)
-                    {
-                        // The function count is always spelled out, the block
-                        // count only when there is one: a run whose plugins
-                        // supply no stateful FBs should read exactly as it did
-                        // before the FB surface existed.
-                        var summary = $"{functionCount} function(s)";
-                        if (blockCount > 0)
-                            summary += $", {blockCount} function block(s)";
-                        loadedFrom.Add($"{Path.GetFileName(dll)} ({summary})");
-                    }
+                    var counts = LoadFrom(dll, loaded);
+                    if (counts.Any > 0)
+                        loadedFrom.Add($"{Path.GetFileName(dll)} ({counts.Describe()})");
                 }
                 catch (BadImageFormatException)
                 {
@@ -109,7 +89,40 @@ namespace xStunit.Cli.Plugins
             return loaded;
         }
 
-        private static (int Functions, int FunctionBlocks) LoadFrom(string dll, LoadedPlugins loaded)
+        // What one DLL contributed. The function count is always spelled out
+        // and the others only when non-zero, so a run whose plugins supply
+        // nothing but functions reads exactly as it did before the other
+        // extension points existed.
+        private readonly struct PluginCounts
+        {
+            public PluginCounts(int functions, int functionBlocks, int constants)
+            {
+                Functions = functions;
+                FunctionBlocks = functionBlocks;
+                Constants = constants;
+            }
+
+            public int Functions { get; }
+
+            public int FunctionBlocks { get; }
+
+            public int Constants { get; }
+
+            public int Any => Functions + FunctionBlocks + Constants;
+
+            public string Describe()
+            {
+                var summary = $"{Functions} function(s)";
+                if (FunctionBlocks > 0)
+                    summary += $", {FunctionBlocks} function block(s)";
+                if (Constants > 0)
+                    summary += $", {Constants} constant(s)";
+
+                return summary;
+            }
+        }
+
+        private static PluginCounts LoadFrom(string dll, NativePlugins loaded)
         {
             var context = new PluginLoadContext(dll);
             var assembly = context.LoadFromAssemblyPath(Path.GetFullPath(dll));
@@ -134,7 +147,18 @@ namespace xStunit.Cli.Plugins
                 blockCount++;
             }
 
-            return (functionCount, blockCount);
+            // Registered per PROVIDER but counted per constant: "1 constant(s)"
+            // for a provider publishing twenty would describe the plumbing
+            // rather than what the run gained.
+            var constantCount = 0;
+            foreach (var type in PluginTypesImplementing<IXstunitNativeConstants>(assembly))
+            {
+                var provider = (IXstunitNativeConstants)Activator.CreateInstance(type);
+                loaded.Constants.RegisterAll(provider.Constants, $"{source}!{type.FullName}");
+                constantCount += provider.Constants.Count;
+            }
+
+            return new PluginCounts(functionCount, blockCount, constantCount);
         }
 
         // Ordered by full name so a duplicate-name conflict within one DLL

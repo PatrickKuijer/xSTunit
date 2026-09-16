@@ -69,8 +69,7 @@ namespace xStunit.Interpreter.Tests
 
             return new Engine(
                 new TypeRegistry(new[] { pou }),
-                null,
-                RegistryWith(new AccumulatorBlock()));
+                new NativePlugins(null, RegistryWith(new AccumulatorBlock())));
         }
 
         private static void Step(Engine engine, FbInstance instance) =>
@@ -234,8 +233,7 @@ namespace xStunit.Interpreter.Tests
 
             var engine = new Engine(
                 new TypeRegistry(new[] { real, wrapper }),
-                null,
-                RegistryWith(new AccumulatorBlock()));
+                new NativePlugins(null, RegistryWith(new AccumulatorBlock())));
 
             var instance = engine.NewInstance("FB_Wrapper");
             Step(engine, instance);

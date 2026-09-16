@@ -16,6 +16,10 @@
     F_FileSystem* are xStunit's own seed/inspect functions, not vendor
     symbols - a suite cannot reach the machine's filesystem from ST, which is
     most of why file-touching POUs go untested.
+
+    The mode and path constants are written by NAME here, as real source
+    writes them: they come from compiled-only Tc2_System GVLs and ENUMs and are
+    supplied by the same plugin as the blocks.
 *)
 FUNCTION_BLOCK FB_FileAccessPluginTests EXTENDS TcUnit.FB_TestSuite]]></Declaration>
     <Implementation>
@@ -46,7 +50,7 @@ F_FileSystemClear();
 (* A POU written as "trigger, then advance once I have seen bBusy" is a
    common shape, and an instantly-completing block would leave it waiting
    forever in a test while working on a real PLC. *)
-fbOpen(sNetId := '', sPathName := 'trace.txt', nMode := 2, ePath := 0, bExecute := TRUE, tTimeout := T#5S);
+fbOpen(sNetId := '', sPathName := 'trace.txt', nMode := FOPEN_MODEWRITE, ePath := PATH_GENERIC, bExecute := TRUE, tTimeout := T#5S);
 bBusyOnTrigger := fbOpen.bBusy;
 
 fbOpen(bExecute := FALSE);
@@ -83,9 +87,7 @@ aBuf[0] := 65;
 aBuf[1] := 66;
 aBuf[2] := 67;
 
-(* nMode 2 is FOPEN_MODEWRITE. The constants themselves live in a
-   compiled-only Tc2_System GVL, so a suite writes the value. *)
-fbOpen(sNetId := '', sPathName := 'out.bin', nMode := 2, ePath := 0, bExecute := TRUE, tTimeout := T#5S);
+fbOpen(sNetId := '', sPathName := 'out.bin', nMode := FOPEN_MODEWRITE, ePath := PATH_GENERIC, bExecute := TRUE, tTimeout := T#5S);
 fbOpen(bExecute := FALSE);
 
 fbWrite(sNetId := '', hFile := fbOpen.hFile, pWriteBuff := ADR(aBuf), cbWriteLen := SIZEOF(aBuf), bExecute := TRUE, tTimeout := T#5S);
@@ -118,10 +120,11 @@ END_VAR
 F_FileSystemClear();
 F_FileSystemPutText('in.bin', 'WXYZ');
 
-(* nMode 1 is FOPEN_MODEREAD. This is the case the stateful plugin surface
-   exists for: the block writes into a buffer the CALLER owns, reached
-   through a pointer, which a pure function cannot do. *)
-fbOpen(sNetId := '', sPathName := 'in.bin', nMode := 1, ePath := 0, bExecute := TRUE, tTimeout := T#5S);
+(* This is the case the stateful plugin surface exists for: the block writes
+   into a buffer the CALLER owns, reached through a pointer, which a pure
+   function cannot do. tTimeout is named here rather than written as a
+   literal, the way source that leaves it defaulted spells it. *)
+fbOpen(sNetId := '', sPathName := 'in.bin', nMode := FOPEN_MODEREAD, ePath := PATH_GENERIC, bExecute := TRUE, tTimeout := DEFAULT_ADS_TIMEOUT);
 fbOpen(bExecute := FALSE);
 
 fbRead(sNetId := '', hFile := fbOpen.hFile, pReadBuff := ADR(aBuf), cbReadLen := SIZEOF(aBuf), bExecute := TRUE, tTimeout := T#5S);
@@ -159,7 +162,7 @@ END_VAR
 F_FileSystemClear();
 F_FileSystemPutText('short.bin', 'AB');
 
-fbOpen(sNetId := '', sPathName := 'short.bin', nMode := 1, ePath := 0, bExecute := TRUE, tTimeout := T#5S);
+fbOpen(sNetId := '', sPathName := 'short.bin', nMode := FOPEN_MODEREAD, ePath := PATH_GENERIC, bExecute := TRUE, tTimeout := T#5S);
 fbOpen(bExecute := FALSE);
 
 (* The read consumes the whole file. bEOF must still be FALSE: a loop that
@@ -205,9 +208,8 @@ END_VAR
 F_FileSystemClear();
 F_FileSystemPutText('settings.txt', 'alpha$Nbeta');
 
-(* nMode 33 is FOPEN_MODEREAD OR FOPEN_MODETEXT - FB_FileGets needs a text
-   handle. *)
-fbOpen(sNetId := '', sPathName := 'settings.txt', nMode := 33, ePath := 0, bExecute := TRUE, tTimeout := T#5S);
+(* FB_FileGets needs a text-mode handle. *)
+fbOpen(sNetId := '', sPathName := 'settings.txt', nMode := FOPEN_MODEREAD OR FOPEN_MODETEXT, ePath := PATH_GENERIC, bExecute := TRUE, tTimeout := T#5S);
 fbOpen(bExecute := FALSE);
 
 fbGets(sNetId := '', hFile := fbOpen.hFile, bExecute := TRUE, tTimeout := T#5S);
@@ -248,9 +250,9 @@ END_VAR
 F_FileSystemClear();
 F_FileSystemPutText('trace.log', 'first$N');
 
-(* nMode 36 is FOPEN_MODEAPPEND OR FOPEN_MODETEXT, the shape every trace
-   writer uses: append must not truncate what is already there. *)
-fbOpen(sNetId := '', sPathName := 'trace.log', nMode := 36, ePath := 0, bExecute := TRUE, tTimeout := T#5S);
+(* The shape every trace writer uses: append must not truncate what is
+   already there. *)
+fbOpen(sNetId := '', sPathName := 'trace.log', nMode := FOPEN_MODEAPPEND OR FOPEN_MODETEXT, ePath := PATH_GENERIC, bExecute := TRUE, tTimeout := T#5S);
 fbOpen(bExecute := FALSE);
 
 fbPuts(sNetId := '', hFile := fbOpen.hFile, sLine := 'second', bExecute := TRUE, tTimeout := T#5S);
@@ -285,13 +287,13 @@ END_VAR
 F_FileSystemClear();
 F_FileSystemPutText('seek.bin', 'ABCDE');
 
-fbOpen(sNetId := '', sPathName := 'seek.bin', nMode := 1, ePath := 0, bExecute := TRUE, tTimeout := T#5S);
+fbOpen(sNetId := '', sPathName := 'seek.bin', nMode := FOPEN_MODEREAD, ePath := PATH_GENERIC, bExecute := TRUE, tTimeout := T#5S);
 fbOpen(bExecute := FALSE);
 
-(* eOrigin 0 is SEEK_SET. One position is shared by seek, tell and the next
+(* One position is shared by seek, tell and the next
    read - if they each kept their own, a POU that seeks then reads would get
    the wrong record and nothing would say so. *)
-fbSeek(sNetId := '', hFile := fbOpen.hFile, nSeekPos := 2, eOrigin := 0, bExecute := TRUE, tTimeout := T#5S);
+fbSeek(sNetId := '', hFile := fbOpen.hFile, nSeekPos := 2, eOrigin := SEEK_SET, bExecute := TRUE, tTimeout := T#5S);
 fbSeek(bExecute := FALSE);
 
 fbTell(sNetId := '', hFile := fbOpen.hFile, bExecute := TRUE, tTimeout := T#5S);
@@ -323,7 +325,7 @@ END_VAR
 
 F_FileSystemClear();
 
-fbOpen(sNetId := '', sPathName := 'absent.bin', nMode := 1, ePath := 0, bExecute := TRUE, tTimeout := T#5S);
+fbOpen(sNetId := '', sPathName := 'absent.bin', nMode := FOPEN_MODEREAD, ePath := PATH_GENERIC, bExecute := TRUE, tTimeout := T#5S);
 fbOpen(bExecute := FALSE);
 
 (* hFile stays 0, which is what an unset handle already holds, so a POU that
@@ -363,16 +365,16 @@ END_VAR
 F_FileSystemClear();
 F_FileSystemPutText('old.csv', 'payload');
 
-fbRename(sNetId := '', sOldName := 'old.csv', sNewName := 'new.csv', ePath := 0, bExecute := TRUE, tTimeout := T#5S);
+fbRename(sNetId := '', sOldName := 'old.csv', sNewName := 'new.csv', ePath := PATH_GENERIC, bExecute := TRUE, tTimeout := T#5S);
 fbRename(bExecute := FALSE);
 
-fbCreateDir(sNetId := '', sPathName := 'archive', ePath := 0, bExecute := TRUE, tTimeout := T#5S);
+fbCreateDir(sNetId := '', sPathName := 'archive', ePath := PATH_GENERIC, bExecute := TRUE, tTimeout := T#5S);
 fbCreateDir(bExecute := FALSE);
 
-fbRemoveDir(sNetId := '', sPathName := 'archive', ePath := 0, bExecute := TRUE, tTimeout := T#5S);
+fbRemoveDir(sNetId := '', sPathName := 'archive', ePath := PATH_GENERIC, bExecute := TRUE, tTimeout := T#5S);
 fbRemoveDir(bExecute := FALSE);
 
-fbDelete(sNetId := '', sPathName := 'new.csv', ePath := 0, bExecute := TRUE, tTimeout := T#5S);
+fbDelete(sNetId := '', sPathName := 'new.csv', ePath := PATH_GENERIC, bExecute := TRUE, tTimeout := T#5S);
 fbDelete(bExecute := FALSE);
 
 AssertEquals_BOOL(Expected := FALSE,
@@ -404,7 +406,7 @@ END_VAR
 
 F_FileSystemClear();
 
-fbOpen(sNetId := '', sPathName := 'handle.bin', nMode := 2, ePath := 0, bExecute := TRUE, tTimeout := T#5S);
+fbOpen(sNetId := '', sPathName := 'handle.bin', nMode := FOPEN_MODEWRITE, ePath := PATH_GENERIC, bExecute := TRUE, tTimeout := T#5S);
 fbOpen(bExecute := FALSE);
 nWhileOpen := F_FileSystemOpenHandleCount();
 

@@ -31,6 +31,7 @@ Behavior is taken from the vendor documentation, not guessed:
 | `F_FileSystemClear` / `F_FileSystemPutText` / `F_FileSystemGetText` / `F_FileSystemExists` / `F_FileSystemDirExists` / `F_FileSystemSize` / `F_FileSystemOpenHandleCount` | functions | **xStunit's own** — seed and inspect that filesystem from ST |
 | `ADSREAD` / `ADSWRITE` / `ADSRDWRT` / `ADSRDSTATE` | blocks | against a loopback device the suite scripts, never a real router |
 | `F_AdsServerClear` / `F_AdsServerSetText` / `F_AdsServerGetText` / `F_AdsServerFail` / `F_AdsServerTimeout` / `F_AdsServerSetState` / `F_AdsServerWriteCount` | functions | **xStunit's own** — script and inspect that device |
+| `FOPEN_MODE*` / `E_OpenPath` / `E_SeekOrigin` / `ADSLOG_MSGTYPE_*` / `DEFAULT_ADS_TIMEOUT` | constants | the library's GVL and ENUM values, so source names them as it really does |
 
 ## Using it
 
@@ -89,11 +90,6 @@ filesystem has one flat namespace). `nErrId` values are xStunit's own — the
 vendor does not publish the command-specific half — so only *zero vs non-zero*
 is a safe thing for a suite to assert.
 
-**The named constants are still missing.** `FOPEN_MODEREAD`, `PATH_GENERIC`,
-`SEEK_SET`, `ADSLOG_MSGTYPE_ERROR` and `DEFAULT_ADS_TIMEOUT` live in
-compiled-only Tc2_System GVLs and there is no plugin surface for a named value
-yet, so the fixtures pass raw numbers where real source would not.
-
 ## The ADS family
 
 Backed by a loopback device the suite scripts. A test against a real router
@@ -111,6 +107,23 @@ vendor's real ones — ADS return codes are published.
 
 `ADSRDSTATE` names no index group or offset, so its scripted failure and
 timeout are addressed at group 0, offset 0.
+
+## The named constants
+
+A library's constants live in its GVLs and ENUMs, which ship compiled just as
+its POUs do. Supplying the blocks without them would only half-solve the
+problem — real source never writes `nMode := 33`, it writes
+`FOPEN_MODEREAD OR FOPEN_MODETEXT`, and an unresolved identifier skips the POU
+just as an unresolved call does. `SystemLibraryConstants` publishes them through
+`IXstunitNativeConstants`; an enum member resolves both bare and qualified
+(`PATH_GENERIC` and `E_OpenPath.PATH_GENERIC`), as TwinCAT allows.
+
+How sure the numbers are: `FOPEN_MODEBINARY` (16) and `FOPEN_MODETEXT` (32) are
+documented and the other four continue the same bit sequence; `E_SeekOrigin` is
+assumed to follow C's `SEEK_SET`/`SEEK_CUR`/`SEEK_END` = 0/1/2. Only the
+relative behaviour is load-bearing here — the virtual filesystem reads the mode
+bits — so a wrong absolute value would matter only to source that hard-codes
+one.
 
 ## Why these live in a plugin rather than the interpreter
 

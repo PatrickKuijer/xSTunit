@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using xStunit.Interpreter;
+using xStunit.Interpreter.Extensibility;
 using xStunit.Parser;
 using Xunit;
 
@@ -19,7 +20,7 @@ namespace xStunit.Interpreter.Tests
             var fb = new PouAst("FB_Holder", null, varBlock, "", new List<MethodAst>());
             var engine = new Engine(
                 new TypeRegistry(new[] { fb }, structTypes, aliases: aliases),
-                null,
+                new NativePlugins(),
                 target ?? TargetPlatform.Default);
             var instance = engine.NewInstance("FB_Holder");
             return (engine, instance, new Frame(instance, "FB_Holder"));

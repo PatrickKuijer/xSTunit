@@ -43,12 +43,15 @@ namespace xStunit.Interpreter
         // constructor, so the dispatch site needs no null check of its own.
         private readonly Extensibility.NativeFunctionRegistry _nativeFunctions;
 
-        // The same arrangement for stateful library FUNCTION_BLOCKs. Separate
-        // from _nativeFunctions rather than one combined registry because the
-        // two are consulted for different questions at different points: a
-        // function name only matters once a call has failed to resolve, a block
-        // type name only matters while an instance is being constructed.
+        // The same arrangement for stateful library FUNCTION_BLOCKs and for the
+        // named constants those libraries publish. Three registries rather than
+        // one lookup, because each answers a different question at a different
+        // point: a function name only matters once a call has failed to
+        // resolve, a block type name only while an instance is constructed, a
+        // constant only once an identifier has failed every real scope.
         private readonly Extensibility.NativeFunctionBlockRegistry _nativeFunctionBlocks;
+
+        private readonly Extensibility.NativeConstantRegistry _nativeConstants;
 
         // The machine the code under test is compiled for, which only the
         // layout rules read: it is what makes an address 4 bytes or 8, and so
@@ -56,7 +59,7 @@ namespace xStunit.Interpreter
         private readonly TargetPlatform _target;
 
         public Engine(TypeRegistry registry)
-            : this(registry, null, TargetPlatform.Default)
+            : this(registry, new Extensibility.NativePlugins(), TargetPlatform.Default)
         {
         }
 
@@ -67,28 +70,33 @@ namespace xStunit.Interpreter
 
         public Engine(
             TypeRegistry registry, Extensibility.NativeFunctionRegistry nativeFunctions, TargetPlatform target)
-            : this(registry, nativeFunctions, null, target)
+            : this(registry, PluginsWith(nativeFunctions), target)
         {
         }
 
-        public Engine(
-            TypeRegistry registry,
-            Extensibility.NativeFunctionRegistry nativeFunctions,
-            Extensibility.NativeFunctionBlockRegistry nativeFunctionBlocks)
-            : this(registry, nativeFunctions, nativeFunctionBlocks, TargetPlatform.Default)
+        // Adopted rather than copied, so the registry's own duplicate-message
+        // attribution survives the wrapping.
+        private static Extensibility.NativePlugins PluginsWith(Extensibility.NativeFunctionRegistry nativeFunctions) =>
+            new Extensibility.NativePlugins(nativeFunctions);
+
+        public Engine(TypeRegistry registry, Extensibility.NativePlugins plugins)
+            : this(registry, plugins, TargetPlatform.Default)
         {
         }
 
-        public Engine(
-            TypeRegistry registry,
-            Extensibility.NativeFunctionRegistry nativeFunctions,
-            Extensibility.NativeFunctionBlockRegistry nativeFunctionBlocks,
-            TargetPlatform target)
+        // The one real constructor. The NativeFunctionRegistry overloads above
+        // predate the other extension points and stay because most callers only
+        // ever needed functions; anything supplying more than that passes a
+        // NativePlugins, so a further extension point costs no new overload.
+        public Engine(TypeRegistry registry, Extensibility.NativePlugins plugins, TargetPlatform target)
         {
+            plugins = plugins ?? new Extensibility.NativePlugins();
+
             _registry = registry;
             _target = target;
-            _nativeFunctions = nativeFunctions ?? new Extensibility.NativeFunctionRegistry();
-            _nativeFunctionBlocks = nativeFunctionBlocks ?? new Extensibility.NativeFunctionBlockRegistry();
+            _nativeFunctions = plugins.Functions;
+            _nativeFunctionBlocks = plugins.FunctionBlocks;
+            _nativeConstants = plugins.Constants;
 
             // Every GVL's Cells are allocated and registered in _globals
             // *before* any default value is computed, so a default-value

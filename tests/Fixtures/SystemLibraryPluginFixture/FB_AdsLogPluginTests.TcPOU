@@ -12,9 +12,9 @@
     readers; those readers are xStunit's own, not vendor symbols, because on a
     real system the log is not the PLC's to read back.
 
-    The control-mask constants (ADSLOG_MSGTYPE_ERROR and friends) live in a
-    Tc2_System GVL that is compiled-only like the rest of the library, so these
-    tests pass the raw DWORD values.
+    The control-mask constants live in a Tc2_System GVL that is compiled-only
+    like the rest of the library, and are supplied by the same plugin - so
+    these tests name them the way real source does.
 *)
 FUNCTION_BLOCK FB_AdsLogPluginTests EXTENDS TcUnit.FB_TestSuite]]></Declaration>
     <Implementation>
@@ -36,7 +36,7 @@ END_VAR
    asserting on a count has to start from a known state. *)
 F_AdsLogClear();
 
-nResult := ADSLOGSTR(16#00000002, 'conveyor %s stalled', 'M14');
+nResult := ADSLOGSTR(ADSLOG_MSGTYPE_WARN, 'conveyor %s stalled', 'M14');
 nCount := F_AdsLogCount();
 
 AssertEquals_DINT(Expected := 0,
@@ -45,7 +45,7 @@ AssertEquals_DINT(Expected := 0,
 AssertEquals_UDINT(Expected := 1,
                     Actual := nCount,
                     Message := 'the call was recorded');
-AssertEquals_DWORD(Expected := 16#00000002,
+AssertEquals_DWORD(Expected := ADSLOG_MSGTYPE_WARN,
                     Actual := F_AdsLogMask(0),
                     Message := 'the severity mask is what the caller passed');
 AssertEquals_STRING(Expected := 'conveyor %s stalled',
@@ -69,8 +69,8 @@ END_VAR
 
 F_AdsLogClear();
 
-ADSLOGDINT(16#00000001, 'cycle count %d', 4711);
-ADSLOGLREAL(16#00000001, 'measured %f mm', 12.5);
+ADSLOGDINT(ADSLOG_MSGTYPE_HINT, 'cycle count %d', 4711);
+ADSLOGLREAL(ADSLOG_MSGTYPE_HINT, 'measured %f mm', 12.5);
 
 nCount := F_AdsLogCount();
 
@@ -100,7 +100,7 @@ END_VAR
       <Implementation>
         <ST><![CDATA[TEST('ClearResetsTheSink');
 
-ADSLOGSTR(16#00000004, 'hint %s', 'ignored');
+ADSLOGSTR(ADSLOG_MSGTYPE_ERROR, 'hint %s', 'ignored');
 F_AdsLogClear();
 nCount := F_AdsLogCount();
 

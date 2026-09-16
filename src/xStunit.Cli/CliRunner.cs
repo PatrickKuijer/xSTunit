@@ -197,7 +197,7 @@ namespace xStunit.Cli
             if (pluginDirectory != null)
                 writer.PluginsLoaded(pluginsLoaded);
 
-            var engine = new Engine(registry, plugins.Functions, plugins.FunctionBlocks, target);
+            var engine = new Engine(registry, plugins, target);
 
             writer.Discovery(suiteNames, suiteFilePaths);
 

@@ -41,7 +41,21 @@ namespace xStunit.Interpreter
                     if (cell == null)
                     {
                         if (!TryResolveGlobalCell(id.Name, out cell))
-                            throw new InvalidOperationException($"Unknown variable '{id.Name}'");
+                        {
+                            // A compiled-only library's own constant, e.g.
+                            // Tc2_System's FOPEN_MODEREAD. Deliberately the LAST
+                            // thing tried, after every real scope has missed, so
+                            // a plugin constant can never shadow a variable that
+                            // exists - the same precedence the function and block
+                            // registries have.
+                            if (_nativeConstants.TryGet(id.Name, out var constant))
+                                return constant;
+
+                            throw new InvalidOperationException(
+                                $"Unknown variable '{id.Name}'. If it is a constant from a compiled-only " +
+                                "TwinCAT library, supply it via a native-constant plugin.");
+                        }
+
                         NoteGlobalRead(cell);
                     }
 
@@ -105,6 +119,17 @@ namespace xStunit.Interpreter
 
                         NoteGlobalRead(gvlCell);
                         return gvlCell.Value;
+                    }
+
+                    // Type.Member where Type is a compiled-only library's ENUM -
+                    // E_OpenPath.PATH_GENERIC. Tried before the receiver is
+                    // evaluated, because evaluating it would throw on the type
+                    // name, which is not a variable.
+                    if (fieldAccess.Receiver is IdentifierExpr nativeEnumTypeId &&
+                        frame.ResolveCell(nativeEnumTypeId.Name) == null &&
+                        _nativeConstants.TryGet($"{nativeEnumTypeId.Name}.{fieldAccess.FieldName}", out var nativeConstant))
+                    {
+                        return nativeConstant;
                     }
 
                     var receiverValue = Evaluate(fieldAccess.Receiver, frame);

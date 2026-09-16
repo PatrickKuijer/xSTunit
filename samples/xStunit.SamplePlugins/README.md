@@ -112,6 +112,29 @@ outputs, and `call.WriteBytes` for the `VAR_IN_OUT` buffer a read-shaped vendor
 FB fills on the caller's behalf. It still never sees the `Engine`,
 `TypeRegistry`, or the caller's `Frame`.
 
+## Named constants
+
+A library's constants live in its GVLs and ENUMs, which ship compiled just as
+its POUs do — so supplying its functions and blocks only half-resolves it. Real
+source writes `nMode := FOPEN_MODEREAD OR FOPEN_MODEBINARY`, and an unresolved
+identifier skips the POU just as an unresolved call does.
+`IXstunitNativeConstants` publishes them, a provider at a time rather than a
+class per value:
+
+```csharp
+public sealed class MyLibraryConstants : IXstunitNativeConstants
+{
+    public IReadOnlyList<NativeConstant> Constants => new[]
+    {
+        new NativeConstant("FOPEN_MODEREAD", 0x01L),              // DWORD -> long
+        new NativeConstant("PATH_GENERIC", 1, "E_OpenPath"),      // also E_OpenPath.PATH_GENERIC
+    };
+}
+```
+
+Constants are consulted only after locals, instance fields and real GVLs have
+all missed, so one can never shadow a variable that exists.
+
 ## Using one
 
 ```bash
@@ -119,9 +142,9 @@ dotnet build samples/xStunit.SamplePlugins -c Release
 xstunit <path-to-POUs> --plugins samples/xStunit.SamplePlugins/bin/Release/netstandard2.0
 ```
 
-Every `*.dll` in the directory is scanned for `IXstunitNativeFunction` and
-`IXstunitNativeFunctionBlock` implementations with a public parameterless
-constructor. A DLL that isn't a managed assembly, fails type load, or collides
+Every `*.dll` in the directory is scanned for `IXstunitNativeFunction`,
+`IXstunitNativeFunctionBlock` and `IXstunitNativeConstants` implementations with
+a public parameterless constructor. A DLL that isn't a managed assembly, fails type load, or collides
 on a name already registered is **skipped and reported** — never fatal, matching
 how unloadable POUs are handled.
 

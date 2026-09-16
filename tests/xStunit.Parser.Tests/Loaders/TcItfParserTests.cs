@@ -119,6 +119,26 @@ namespace xStunit.Parser.Tests
             Assert.Contains(expectedInMessage, ex.Message);
         }
 
+        // The missing <Implementation> above is tolerated; a missing
+        // <Declaration> is not. A method header is the entire content of an
+        // interface member, so a file without one is truncated, and loading it
+        // as a member with no signature hides that.
+        [Fact]
+        public void Parse_MethodWithoutADeclarationElement_ThrowsNamingTheMissingElement()
+        {
+            const string xml = @"<?xml version=""1.0"" encoding=""utf-8""?>
+<TcPlcObject Version=""1.1.0.1"">
+  <Itf Name=""I_Truncated"" Id=""{00000000-0000-0000-0000-00000000000e}"">
+    <Declaration><![CDATA[INTERFACE I_Truncated]]></Declaration>
+    <Method Name=""Enable"" Id=""{00000000-0000-0000-0000-00000000000f}"" />
+  </Itf>
+</TcPlcObject>";
+
+            var ex = Assert.Throws<XmlException>(() => TcItfParser.Parse(xml));
+
+            Assert.Contains("Declaration", ex.Message);
+        }
+
         // Same tolerance as the method case above, on the accessor path: an
         // accessor carries no body an interface cares about, so an empty <Get>
         // still has to report the getter the contract demands.

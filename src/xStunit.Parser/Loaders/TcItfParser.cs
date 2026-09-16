@@ -39,7 +39,8 @@ namespace xStunit.Parser
             new MethodAst(
                 method.Attribute("Name")?.Value
                     ?? throw new XmlException("<Method> has no Name attribute."),
-                method.Element("Declaration")?.Value ?? string.Empty,
+                (method.Element("Declaration")
+                    ?? throw new XmlException("<Method> has no <Declaration> element.")).Value,
                 string.Empty);
 
         // An accessor the interface declares maps to empty (not null) body

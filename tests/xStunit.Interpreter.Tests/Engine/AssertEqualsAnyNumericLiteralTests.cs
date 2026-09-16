@@ -119,12 +119,22 @@ namespace xStunit.Interpreter.Tests
             Assert.Contains("ACT: (Type class = REAL)", result.Failures[0].Message);
         }
 
+        // The LREAL# form is parsed as a double, so it carries the precision an
+        // LREAL comparison needs and is the one real literal that may take the
+        // wide class.
+        [Fact]
+        public void RunSuite_AssertEqualsAny_LrealLiteralAgainstLrealDeclaration_PassesInEitherOrder()
+        {
+            Assert.True(RunAssert("lrActual : LREAL := LREAL#1.5;", "AssertEquals(LREAL#1.5, lrActual, 'literal first');").Passed);
+            Assert.True(RunAssert("lrActual : LREAL := LREAL#1.5;", "AssertEquals(lrActual, LREAL#1.5, 'literal second');").Passed);
+        }
+
         // An unsuffixed decimal is lexed as a 32-bit float, so it has already
-        // lost the mantissa an LREAL comparison would need; adopting LREAL
-        // would fail on the VALUE while both sides looked right, which reads
-        // as a far more confusing defect than a type-class mismatch. An LREAL
-        // comparison needs an LREAL variable on both sides until the literal
-        // keeps its full precision.
+        // lost the mantissa an LREAL comparison would need; letting it take
+        // LREAL would fail on the VALUE while both sides looked right, which
+        // reads as a far more confusing defect than a type-class mismatch. An
+        // LREAL comparison needs the LREAL# form or a second LREAL variable
+        // until the bare literal keeps its full precision.
         [Fact]
         public void RunSuite_AssertEqualsAny_LrealVariableAgainstRealLiteral_StillFailsOnTheTypeClass()
         {
@@ -133,6 +143,18 @@ namespace xStunit.Interpreter.Tests
             Assert.False(result.Passed);
             Assert.Contains("EXP: (Type class = UNKNOWN)", result.Failures[0].Message);
             Assert.Contains("ACT: (Type class = LREAL)", result.Failures[0].Message);
+        }
+
+        // One width each: the wide literal does not narrow into REAL any more
+        // than the bare one widens into LREAL.
+        [Fact]
+        public void RunSuite_AssertEqualsAny_RealVariableAgainstLrealLiteral_StillFailsOnTheTypeClass()
+        {
+            var result = RunAssert("rActual : REAL := 1.5;", "AssertEquals(LREAL#1.5, rActual, 'an LREAL literal is not a REAL');");
+
+            Assert.False(result.Passed);
+            Assert.Contains("EXP: (Type class = UNKNOWN)", result.Failures[0].Message);
+            Assert.Contains("ACT: (Type class = REAL)", result.Failures[0].Message);
         }
 
         [Fact]

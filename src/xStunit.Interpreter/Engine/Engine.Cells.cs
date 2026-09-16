@@ -300,17 +300,22 @@ namespace xStunit.Interpreter
         // runner compares the two type names ordinally, so normalising only the
         // literal side would invent a mismatch out of a var declared 'int'.
         //
-        // A real literal takes REAL and never LREAL. An unsuffixed decimal
-        // lexes as a 32-bit float, so it has already lost the mantissa an LREAL
-        // compare would need, and the ANY overload compares with Delta := 0.0:
-        // adopting LREAL would fail on the VALUE while both sides looked right.
+        // The two real literals take one width each, and are not
+        // interchangeable. An unsuffixed decimal lexes as a 32-bit float, so it
+        // has already lost the mantissa an LREAL compare would need, and the
+        // ANY overload compares with Delta := 0.0: letting it take LREAL would
+        // fail on the VALUE while both sides looked right. The LREAL# form is
+        // parsed as a double and carries the wide case instead.
         private static string AdoptableLiteralClass(Expr expr, string otherClass)
         {
             if (otherClass == null)
                 return null;
 
-            if (expr is RealLiteralExpr || expr is LrealLiteralExpr)
+            if (expr is RealLiteralExpr)
                 return string.Equals(otherClass, "REAL", StringComparison.OrdinalIgnoreCase) ? otherClass : null;
+
+            if (expr is LrealLiteralExpr)
+                return string.Equals(otherClass, "LREAL", StringComparison.OrdinalIgnoreCase) ? otherClass : null;
 
             if (!IsIntegerLiteral(expr)
                 || !IntegerTypeClasses.Contains(otherClass, StringComparer.OrdinalIgnoreCase))

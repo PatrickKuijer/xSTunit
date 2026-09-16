@@ -421,6 +421,37 @@ namespace xStunit.Interpreter
 
         private static readonly string[] AdvanceClockParamNames = { "Duration" };
 
+        // IEC 61131-3's ABS operator names its single input IN, so
+        // ABS(IN := x) binds the same way ABS(x) does.
+        private static readonly string[] AbsParamNames = { "IN" };
+
+        // ABS is overloaded over ANY_NUM and returns its argument's own type,
+        // not a widened one: ABS of a DINT is a DINT, of a REAL a REAL. The
+        // interpreter's type model is the CLR box (see IecNumericType), so
+        // preserving the type means switching on the box and returning the
+        // same shape - never routing everything through double, which would
+        // turn an INT result into an LREAL and break the next assignment or
+        // assertion.
+        //
+        // The unsigned tiers (ULINT/LWORD as ulong) are already non-negative,
+        // so ABS is identity there. UINT/WORD share the int box with the
+        // signed types and UDINT/DWORD share the long box; Math.Abs is a
+        // no-op on their always-non-negative values, so one branch per box is
+        // correct for both. int.MinValue/long.MinValue have no positive
+        // counterpart and Math.Abs throws OverflowException, which surfaces
+        // through the normal fault path attributed to the PLC call site -
+        // the honest outcome, since the result is not representable.
+        private static object EvaluateAbs(object value) => value switch
+        {
+            double d => (object)Math.Abs(d),
+            float f => Math.Abs(f),
+            long l => Math.Abs(l),
+            ulong ul => ul,
+            int i => Math.Abs(i),
+            _ => throw new NotSupportedException(
+                $"ABS requires a numeric (ANY_NUM) argument, got {value?.GetType().Name}"),
+        };
+
         // The one ST-visible way to move the shared Clock: a suite (or any
         // other interpreted body) calls AdvanceClock(T#100ms) the same way it
         // calls SIZEOF/CONCAT, rather than needing a C# harness between
@@ -737,6 +768,12 @@ namespace xStunit.Interpreter
                         if (args.TryGetValue(paramName, out var argExpr))
                             sb.Append(RequireStringArg("CONCAT", paramName, argExpr, frame));
                     return sb.ToString();
+                }
+
+                if (call.MethodName == "ABS")
+                {
+                    var args = ResolveIntrinsicArgs(AbsParamNames, call.PositionalArgs, call.NamedArgs);
+                    return EvaluateAbs(Evaluate(RequireIntrinsicArg("ABS", "IN", args), frame));
                 }
 
                 if (TryEvaluateCast(call, frame, out var castResult))

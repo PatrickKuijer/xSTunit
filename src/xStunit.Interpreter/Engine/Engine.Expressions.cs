@@ -843,21 +843,60 @@ namespace xStunit.Interpreter
             "SINT", "USINT", "INT", "UINT", "DINT", "UDINT", "LINT", "ULINT", "BYTE", "WORD", "DWORD", "LWORD",
         };
 
-        // Recognizes explicit <from>_TO_<to> conversion calls (e.g.
-        // LREAL_TO_INT) per TwinCAT's cast naming convention. These are not real
-        // methods, so they are intercepted before CallMethod/native-bridge
-        // dispatch; an unrecognized shape returns false and falls through to it.
+        // Recognizes conversion calls in both IEC 61131-3 spellings: the
+        // explicit <from>_TO_<to> pair (e.g. LREAL_TO_INT) and the prefix-less
+        // TO_<to>. These are not real methods, so they are intercepted before
+        // CallMethod/native-bridge dispatch; an unrecognized shape returns false
+        // and falls through to it.
         private bool TryEvaluateCast(CallExpr call, Frame frame, out object result)
         {
             result = null;
 
+            string fromType;
+            string toType;
+
+            // Prefixed first, so a pathological TO_INT_TO_STRING still resolves
+            // the long way round.
             var separator = call.MethodName.IndexOf("_TO_", StringComparison.Ordinal);
-            if (separator < 0 || call.PositionalArgs.Count != 1)
+            if (separator >= 0)
+            {
+                fromType = call.MethodName.Substring(0, separator);
+                toType = call.MethodName.Substring(separator + 4);
+            }
+            else if (call.MethodName.StartsWith("TO_", StringComparison.Ordinal))
+            {
+                fromType = null;
+                toType = call.MethodName.Substring(3);
+            }
+            else
                 return false;
 
-            var fromType = call.MethodName.Substring(0, separator);
-            var toType = call.MethodName.Substring(separator + 4);
+            // The named-argument and multi-argument spellings are not
+            // conversions in either form.
+            if (call.PositionalArgs.Count != 1)
+                return false;
+
+            if (fromType == null)
+            {
+                // Whether a prefix-less name is a cast at all has to be settled
+                // from the NAME, before the operand is touched: every TO_* call
+                // in the tree reaches here, and one rejected after evaluation
+                // would have its argument evaluated a second time by the
+                // dispatch it then falls through to.
+                if (toType != "REAL" && toType != "LREAL" && toType != "STRING" &&
+                    !IntegerCastTargets.Contains(toType))
+                    return false;
+
+                // An interpreted POU in the user's own tree outranks the
+                // intrinsic, the same precedence a native-function plugin is
+                // held to. Only the prefix-less form needs the guard: TO_INT is
+                // a name a FUNCTION can plausibly carry, INT_TO_UINT is not.
+                if (TryGetGlobalFunctionDef(call.MethodName, out _))
+                    return false;
+            }
+
             var value = Evaluate(call.PositionalArgs[0], frame);
+            fromType = fromType ?? SourceTypeOf(value);
 
             // Explicit InvariantCulture provider: Convert.ToXXX(object) without
             // one parses string sources (e.g. STRING_TO_LREAL) against
@@ -887,6 +926,33 @@ namespace xStunit.Interpreter
 
             return true;
         }
+
+        // The prefix-less spelling carries no source type, so it comes from the
+        // evaluated operand's box. Only two questions are ever asked of the
+        // answer - is it {REAL, LREAL}, is it an integer - so one representative
+        // name stands in for the whole integer family; the string is only ever
+        // membership-tested, never compared for identity.
+        //
+        // ulong is ULINT/LWORD and also LTIME, and the box cannot separate them.
+        // The tie goes to the integer reading: it is the common case, and
+        // rejecting all three would leave the short spelling narrower than the
+        // prefixed one. uint, which is exactly the TIME/DATE family, and bool
+        // and string stay outside both buckets so TO_STRING over them keeps the
+        // unresolved-call error that TIME_TO_STRING and BOOL_TO_STRING give.
+        private static string SourceTypeOf(object value)
+        {
+            switch (value)
+            {
+                case float _: return "REAL";
+                case double _: return "LREAL";
+                case int _:
+                case long _:
+                case ulong _: return "DINT";
+                default: return NonNumericSource;
+            }
+        }
+
+        private const string NonNumericSource = "";
 
         // A whole-valued REAL still has to read as a REAL: TwinCAT writes 19.0
         // as '19.0', and an assertion checked against '19' is checking a shape

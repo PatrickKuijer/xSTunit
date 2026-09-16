@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using xStunit.Parser;
 using xStunit.Runner.TcUnitStub;
 
 namespace xStunit.Interpreter
@@ -226,10 +227,7 @@ namespace xStunit.Interpreter
                 // have matched the ancestry walk above. It runs with no receiver
                 // instance - a FUNCTION sees only its own params and locals,
                 // plus GVLs.
-                var globalFunctionDef = _registry.Get(methodName);
-                if (globalFunctionDef != null &&
-                    GlobalFunctionDeclarationPattern.IsMatch(
-                        CallableReturnTypeParser.StripLeadingComments(globalFunctionDef.DeclarationText)))
+                if (TryGetGlobalFunctionDef(methodName, out var globalFunctionDef))
                     return CallGlobalFunction(globalFunctionDef, positionalArgs, namedArgs, callerFrame);
 
                 // Host-registered stand-in for a compiled-only TwinCAT library
@@ -307,6 +305,14 @@ namespace xStunit.Interpreter
             WriteBackOutputArgs(paramDecls, namedArgs, newFrame, callerFrame);
 
             return newFrame.Locals.TryGetValue(methodName, out var returnCell) ? returnCell.Value : null;
+        }
+
+        private bool TryGetGlobalFunctionDef(string name, out PouAst def)
+        {
+            def = _registry.Get(name);
+            return def != null &&
+                GlobalFunctionDeclarationPattern.IsMatch(
+                    CallableReturnTypeParser.StripLeadingComments(def.DeclarationText));
         }
 
         // The ^ anchor only works because callers strip the leading comment run

@@ -83,5 +83,21 @@ namespace xStunit.Interpreter.Tests
         {
             Assert.DoesNotContain(".0", Eval(expression));
         }
+
+        // The prefix-less spelling reads its source type off the operand's box
+        // rather than the call's name, so the REAL/integer split has to be
+        // pinned there separately: collapsing float, double and int into one
+        // numeric bucket would hand TO_STRING(19) a point it must not have.
+        [Theory]
+        [InlineData("TO_STRING(REAL#19.0)", "19.0")]
+        [InlineData("TO_STRING(LREAL#19.0)", "19.0")]
+        [InlineData("TO_STRING(REAL#3.5)", "3.5")]
+        [InlineData("TO_STRING(LREAL#2.25)", "2.25")]
+        [InlineData("TO_STRING(19)", "19")]
+        [InlineData("TO_STRING(-7)", "-7")]
+        public void Evaluate_PrefixLessToString_KeepsTheRealAndIntegerFormsApart(string expression, string expected)
+        {
+            Assert.Equal(expected, Eval(expression));
+        }
     }
 }

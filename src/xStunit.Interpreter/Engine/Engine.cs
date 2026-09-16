@@ -231,6 +231,13 @@ namespace xStunit.Interpreter
                 host = instance.NativeSuiteHost;
                 var def = _registry.Get(suiteTypeName);
                 ResetTopLevelTempFields(instance);
+
+                // A suite body is one PLC cycle, so it latches the task start
+                // the same way StepCycles does. Without this a test advancing
+                // the clock would move "when did this cycle start" along with
+                // "what time is it", and the two library functions that
+                // distinguish them would answer identically.
+                Clock.BeginCycle();
                 // A suite body is a POU body, not a METHOD, so the frame
                 // carries no method name - a fault here reports just "FB_X".
                 // GetStatements is passed lazily so it resolves inside

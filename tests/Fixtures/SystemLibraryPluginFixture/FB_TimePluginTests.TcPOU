@@ -1,0 +1,104 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4026.18">
+  <POU Name="FB_TimePluginTests" Id="{b2c3d4e5-6k20-4a1a-8b1b-000000000030}" SpecialFunc="None">
+    <Declaration><![CDATA[(*
+    Tc2_System's F_GetSystemTime / F_GetTaskTime, supplied by
+    samples/xStunit.SystemLibraryPlugins.
+
+    The whole point is that neither reads wall time. A test that asked the
+    machine what time it is could assert nothing at all - it would pass here
+    and fail on a different machine, or a second later. These read the
+    interpreter's simulated clock instead, so AdvanceClock moves them by
+    exactly what it says and an absolute timestamp is a constant a test can
+    write down.
+
+    125911584000000000 is 2000-01-01T00:00:00Z in the vendor's unit: 100 ns
+    intervals since 1601-01-01 UTC, which is the epoch both functions answer
+    in and is also where the simulated clock's origin sits.
+
+    The clock is shared by every suite in a run, so the absolute assertion
+    below also depends on this being the only suite in this fixture directory
+    that moves it. A new suite here that advances the clock must not be added
+    without reworking that test.
+*)
+FUNCTION_BLOCK FB_TimePluginTests EXTENDS TcUnit.FB_TestSuite]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[SystemTimeStartsAtTheSimulatedOrigin();
+SystemTimeFollowsTheSimulatedClock();
+TaskTimeStaysAtTheStartOfTheCycle();]]></ST>
+    </Implementation>
+    <Method Name="SystemTimeStartsAtTheSimulatedOrigin" Id="{b2c3d4e5-6k20-4a1a-8b1b-000000000031}">
+      <Declaration><![CDATA[METHOD PRIVATE SystemTimeStartsAtTheSimulatedOrigin
+VAR
+	tNow		: ULINT;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('SystemTimeStartsAtTheSimulatedOrigin');
+
+tNow := F_GetSystemTime();
+
+(* An absolute constant, which is only writable at all because the clock is
+   simulated. This also pins the epoch: a function counting from 1970 rather
+   than 1601 would be out by 369 years here. *)
+AssertEquals_ULINT(Expected := 125911584000000000,
+                    Actual := tNow,
+                    Message := 'system time starts at the simulated origin');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="SystemTimeFollowsTheSimulatedClock" Id="{b2c3d4e5-6k20-4a1a-8b1b-000000000032}">
+      <Declaration><![CDATA[METHOD PRIVATE SystemTimeFollowsTheSimulatedClock
+VAR
+	tBefore		: ULINT;
+	tAfter		: ULINT;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('SystemTimeFollowsTheSimulatedClock');
+
+tBefore := F_GetSystemTime();
+AdvanceClock(T#500MS);
+tAfter := F_GetSystemTime();
+
+(* 500 ms is 5 000 000 units of 100 ns. A function reading wall time would
+   report an arbitrary difference here instead. *)
+AssertEquals_ULINT(Expected := 5000000,
+                    Actual := tAfter - tBefore,
+                    Message := 'the clock advance is exactly what system time moved by');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="TaskTimeStaysAtTheStartOfTheCycle" Id="{b2c3d4e5-6k20-4a1a-8b1b-000000000033}">
+      <Declaration><![CDATA[METHOD PRIVATE TaskTimeStaysAtTheStartOfTheCycle
+VAR
+	tTask		: ULINT;
+	tTaskAgain	: ULINT;
+	tSystem		: ULINT;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('TaskTimeStaysAtTheStartOfTheCycle');
+
+tTask := F_GetTaskTime();
+AdvanceClock(T#250MS);
+tTaskAgain := F_GetTaskTime();
+tSystem := F_GetSystemTime();
+
+(* The documented difference between the two: a task's start time does not
+   move part-way through its own cycle, so two reads in one cycle agree even
+   though system time has moved between them. *)
+AssertEquals_ULINT(Expected := tTask,
+                    Actual := tTaskAgain,
+                    Message := 'task time does not move within a cycle');
+AssertEquals_BOOL(Expected := TRUE,
+                   Actual := tSystem > tTaskAgain,
+                   Message := 'system time did move within the same cycle');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+  </POU>
+</TcPlcObject>

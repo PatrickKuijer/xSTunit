@@ -19,6 +19,11 @@ namespace xStunit.Interpreter
                 // Every cycle, not just once at instantiation.
                 ResetTopLevelTempFields(instance);
 
+                // Latched here and nowhere else: the task start is a property
+                // of the cycle, so a body that advances the clock part-way
+                // through moves "now" without moving the time this cycle began.
+                Clock.BeginCycle();
+
                 // ExecuteBody owns the rule that a top-level RETURN in the FB's
                 // cyclic body ends only this cycle and must not unwind into
                 // whatever ST call invoked StepCycles, plus fault attribution.

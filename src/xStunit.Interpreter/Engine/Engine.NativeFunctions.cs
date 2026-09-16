@@ -48,8 +48,15 @@ namespace xStunit.Interpreter
                 methodName,
                 evaluatedPositional,
                 evaluatedNamed,
-                (ptr, count) => ReadPointerBytes(ptr, count, methodName, callerFrame));
+                (ptr, count) => ReadPointerBytes(ptr, count, methodName, callerFrame),
+                CurrentSimulatedTime());
         }
+
+        // One snapshot shape for both plugin surfaces, taken at the call rather
+        // than handed out as the live Clock: a plugin that could advance the
+        // clock would move time for every timer in the run.
+        private SimulatedTime CurrentSimulatedTime() =>
+            new SimulatedTime(Clock.TotalNs, Clock.UtcNow, Clock.TaskStartUtc);
 
         // Whether methodName is one the plugin claims. Case-insensitive, like
         // every other IEC identifier match, and like the type-name lookup that
@@ -80,7 +87,7 @@ namespace xStunit.Interpreter
                 methodName,
                 arguments,
                 instance.Fields,
-                Clock.TotalNs,
+                CurrentSimulatedTime(),
                 (ptr, count) => ReadPointerBytes(ptr, count, label, callerFrame),
                 (ptr, bytes) => WritePointerBytes(ptr, bytes, label, callerFrame));
         }

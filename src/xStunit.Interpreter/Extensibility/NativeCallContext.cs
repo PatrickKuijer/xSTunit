@@ -30,18 +30,31 @@ namespace xStunit.Interpreter.Extensibility
         /// it. Null leaves the context unable to serve
         /// <see cref="RequireBytes"/>, which then throws.
         /// </param>
+        /// <param name="time">
+        /// The simulated clock as of this call. Omitted outside the interpreter, where
+        /// it defaults to a zero <see cref="SimulatedTime"/> - the caller has no clock
+        /// to report.
+        /// </param>
         /// <exception cref="ArgumentNullException"><paramref name="functionName"/> is null.</exception>
         public NativeCallContext(
             string functionName,
             IReadOnlyList<object> positionalArgs,
             IReadOnlyDictionary<string, object> namedArgs,
-            Func<Pointer, int, byte[]> readBytes)
+            Func<Pointer, int, byte[]> readBytes,
+            SimulatedTime time = default)
         {
             FunctionName = functionName ?? throw new ArgumentNullException(nameof(functionName));
             PositionalArgs = positionalArgs ?? Array.Empty<object>();
             NamedArgs = namedArgs ?? new Dictionary<string, object>();
             _readBytes = readBytes;
+            Time = time;
         }
+
+        /// <summary>
+        /// The simulated clock as of this call - never wall time, so a time-shaped
+        /// library function stays deterministic and assertable.
+        /// </summary>
+        public SimulatedTime Time { get; }
 
         /// <summary>
         /// The ST identifier as the caller wrote it, which may differ in casing from

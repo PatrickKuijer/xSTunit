@@ -31,7 +31,7 @@ namespace xStunit.Interpreter.Extensibility
         /// <param name="methodName">The method being called, or null for a bare <c>fb(...)</c> invocation.</param>
         /// <param name="arguments">The method call's evaluated arguments; null becomes an empty context, which is also what a bare invocation gets.</param>
         /// <param name="fields">The owning instance's live field storage. Held by reference, not copied - a write through <see cref="SetField"/> is what ST reads back.</param>
-        /// <param name="simulatedTimeNs">The shared simulated clock's running total in nanoseconds, so a timeout-shaped FB measures the same time the timers do.</param>
+        /// <param name="time">The simulated clock as of this call, so a timeout-shaped FB measures the same time the timers do.</param>
         /// <param name="readBytes">Interpreter callback resolving a pointer and a byte count to the bytes behind it; null leaves <see cref="ReadBytes"/> throwing.</param>
         /// <param name="writeBytes">Interpreter callback writing bytes back behind a pointer; null leaves <see cref="WriteBytes"/> throwing.</param>
         /// <exception cref="ArgumentNullException"><paramref name="typeName"/> or <paramref name="fields"/> is null.</exception>
@@ -40,7 +40,7 @@ namespace xStunit.Interpreter.Extensibility
             string methodName,
             NativeCallContext arguments,
             IDictionary<string, Cell> fields,
-            long simulatedTimeNs,
+            SimulatedTime time,
             Func<Pointer, int, byte[]> readBytes,
             Action<Pointer, byte[]> writeBytes)
         {
@@ -48,7 +48,7 @@ namespace xStunit.Interpreter.Extensibility
             _fields = fields ?? throw new ArgumentNullException(nameof(fields));
             MethodName = methodName;
             Arguments = arguments ?? NativeCallContext.ForPositional(methodName ?? typeName);
-            SimulatedTimeNs = simulatedTimeNs;
+            Time = time;
             _readBytes = readBytes;
             _writeBytes = writeBytes;
         }
@@ -85,10 +85,10 @@ namespace xStunit.Interpreter.Extensibility
         public NativeCallContext Arguments { get; }
 
         /// <summary>
-        /// The shared simulated clock's total elapsed nanoseconds - never wall time, so
-        /// a suite that advances the clock gets a deterministic result.
+        /// The simulated clock as of this call - never wall time, so a suite that
+        /// advances the clock gets a deterministic result.
         /// </summary>
-        public long SimulatedTimeNs { get; }
+        public SimulatedTime Time { get; }
 
         /// <param name="name">The field name, as declared in <see cref="IXstunitNativeFunctionBlock.Fields"/>.</param>
         /// <returns>The field's current value, which ST may have assigned since the last invocation.</returns>

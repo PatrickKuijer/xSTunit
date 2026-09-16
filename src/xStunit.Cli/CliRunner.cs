@@ -191,13 +191,13 @@ namespace xStunit.Cli
             // Plugin-supplied native functions are resolved only after every
             // real POU in the tree has failed to resolve a call (see
             // Engine.CallMethod), so a plugin can never shadow real source.
-            var nativeFunctions = Plugins.NativeFunctionPluginLoader.Load(
+            var plugins = Plugins.NativeFunctionPluginLoader.Load(
                 pluginDirectory, out var pluginSkips, out var pluginsLoaded);
             skipped.AddRange(pluginSkips);
             if (pluginDirectory != null)
                 writer.PluginsLoaded(pluginsLoaded);
 
-            var engine = new Engine(registry, nativeFunctions, target);
+            var engine = new Engine(registry, plugins.Functions, plugins.FunctionBlocks, target);
 
             writer.Discovery(suiteNames, suiteFilePaths);
 

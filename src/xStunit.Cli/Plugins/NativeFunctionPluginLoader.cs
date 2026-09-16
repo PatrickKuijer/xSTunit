@@ -20,6 +20,17 @@ namespace xStunit.Cli.Plugins
     // Engine's clear "no native function is registered" error.
     internal static class NativeFunctionPluginLoader
     {
+        // Both halves of the plugin contract, filled by one pass over the
+        // directory. Kept together because a host needs both to build an
+        // Engine, and returning one and out-parameterizing the other would
+        // make which is which a matter of argument order.
+        internal sealed class LoadedPlugins
+        {
+            public NativeFunctionRegistry Functions { get; } = new NativeFunctionRegistry();
+
+            public NativeFunctionBlockRegistry FunctionBlocks { get; } = new NativeFunctionBlockRegistry();
+        }
+
         // Never loaded *as plugins*, even when a build drops copies of them
         // beside one: a second copy of xStunit.Interpreter in the plugin
         // context defines a second, non-identical IXstunitNativeFunction, and
@@ -31,20 +42,20 @@ namespace xStunit.Cli.Plugins
             "xStunit.Interpreter", "xStunit.Parser", "xStunit.Runner", "xstunit",
         };
 
-        public static NativeFunctionRegistry Load(
+        public static LoadedPlugins Load(
             string pluginDirectory, out List<SkippedFile> skipped, out List<string> loadedFrom)
         {
             skipped = new List<SkippedFile>();
             loadedFrom = new List<string>();
-            var registry = new NativeFunctionRegistry();
+            var loaded = new LoadedPlugins();
 
             if (string.IsNullOrWhiteSpace(pluginDirectory))
-                return registry;
+                return loaded;
 
             if (!Directory.Exists(pluginDirectory))
             {
                 skipped.Add(new SkippedFile(pluginDirectory, "plugin directory does not exist"));
-                return registry;
+                return loaded;
             }
 
             // Ordered so a run is reproducible: which DLL wins a duplicate-name
@@ -59,9 +70,18 @@ namespace xStunit.Cli.Plugins
 
                 try
                 {
-                    var count = LoadFrom(dll, registry);
-                    if (count > 0)
-                        loadedFrom.Add($"{Path.GetFileName(dll)} ({count} function(s))");
+                    var (functionCount, blockCount) = LoadFrom(dll, loaded);
+                    if (functionCount > 0 || blockCount > 0)
+                    {
+                        // The function count is always spelled out, the block
+                        // count only when there is one: a run whose plugins
+                        // supply no stateful FBs should read exactly as it did
+                        // before the FB surface existed.
+                        var summary = $"{functionCount} function(s)";
+                        if (blockCount > 0)
+                            summary += $", {blockCount} function block(s)";
+                        loadedFrom.Add($"{Path.GetFileName(dll)} ({summary})");
+                    }
                 }
                 catch (BadImageFormatException)
                 {
@@ -78,39 +98,55 @@ namespace xStunit.Cli.Plugins
                 {
                     // Catches broadly ON PURPOSE: one bad DLL must not stop the
                     // remaining plugins from loading. Includes the
-                    // duplicate-name InvalidOperationException from
-                    // NativeFunctionRegistry.Register, where whatever this DLL
-                    // registered before the clash stays registered - partial,
-                    // but better than dropping working functions.
+                    // duplicate-name InvalidOperationException from either
+                    // registry's Register, where whatever this DLL registered
+                    // before the clash stays registered - partial, but better
+                    // than dropping working functions.
                     skipped.Add(new SkippedFile(dll, ex.Message));
                 }
             }
 
-            return registry;
+            return loaded;
         }
 
-        private static int LoadFrom(string dll, NativeFunctionRegistry registry)
+        private static (int Functions, int FunctionBlocks) LoadFrom(string dll, LoadedPlugins loaded)
         {
             var context = new PluginLoadContext(dll);
             var assembly = context.LoadFromAssemblyPath(Path.GetFullPath(dll));
+            var source = Path.GetFileName(dll);
 
-            var pluginTypes = assembly.GetExportedTypes()
-                .Where(t => typeof(IXstunitNativeFunction).IsAssignableFrom(t))
+            var functionCount = 0;
+            foreach (var type in PluginTypesImplementing<IXstunitNativeFunction>(assembly))
+            {
+                loaded.Functions.Register(
+                    (IXstunitNativeFunction)Activator.CreateInstance(type), $"{source}!{type.FullName}");
+                functionCount++;
+            }
+
+            // Registered as PROTOTYPES: the Engine calls CreateInstance once
+            // per declared variable, so this single activation is never the
+            // object any suite drives.
+            var blockCount = 0;
+            foreach (var type in PluginTypesImplementing<IXstunitNativeFunctionBlock>(assembly))
+            {
+                loaded.FunctionBlocks.Register(
+                    (IXstunitNativeFunctionBlock)Activator.CreateInstance(type), $"{source}!{type.FullName}");
+                blockCount++;
+            }
+
+            return (functionCount, blockCount);
+        }
+
+        // Ordered by full name so a duplicate-name conflict within one DLL
+        // resolves the same way on every run, for the same reason the DLLs
+        // themselves are enumerated in order.
+        private static List<Type> PluginTypesImplementing<T>(Assembly assembly) =>
+            assembly.GetExportedTypes()
+                .Where(t => typeof(T).IsAssignableFrom(t))
                 .Where(t => !t.IsAbstract && !t.IsInterface)
                 .Where(t => t.GetConstructor(Type.EmptyTypes) != null)
                 .OrderBy(t => t.FullName, StringComparer.Ordinal)
                 .ToList();
-
-            var count = 0;
-            foreach (var type in pluginTypes)
-            {
-                var function = (IXstunitNativeFunction)Activator.CreateInstance(type);
-                registry.Register(function, $"{Path.GetFileName(dll)}!{type.FullName}");
-                count++;
-            }
-
-            return count;
-        }
 
         // One context per plugin, so each plugin's private dependencies stay
         // isolated from every other plugin's - two plugins may legitimately

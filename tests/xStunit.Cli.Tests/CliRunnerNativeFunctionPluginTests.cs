@@ -71,7 +71,9 @@ namespace xStunit.Cli.Tests
             var text = output.ToString();
             Assert.Equal(0, exitCode);
             Assert.Contains("3 passed, 0 failed", text);
-            Assert.Contains("plugin: xStunit.SamplePlugins.dll (2 function(s))", text);
+            // The sample assembly carries both halves of the plugin contract,
+            // and the loaded-plugin line accounts for each separately.
+            Assert.Contains("plugin: xStunit.SamplePlugins.dll (2 function(s), 1 function block(s))", text);
         }
 
         [Fact]

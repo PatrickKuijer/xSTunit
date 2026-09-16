@@ -43,6 +43,13 @@ namespace xStunit.Interpreter
         // constructor, so the dispatch site needs no null check of its own.
         private readonly Extensibility.NativeFunctionRegistry _nativeFunctions;
 
+        // The same arrangement for stateful library FUNCTION_BLOCKs. Separate
+        // from _nativeFunctions rather than one combined registry because the
+        // two are consulted for different questions at different points: a
+        // function name only matters once a call has failed to resolve, a block
+        // type name only matters while an instance is being constructed.
+        private readonly Extensibility.NativeFunctionBlockRegistry _nativeFunctionBlocks;
+
         // The machine the code under test is compiled for, which only the
         // layout rules read: it is what makes an address 4 bytes or 8, and so
         // what SIZEOF and the MEMCPY byte image answer.
@@ -60,10 +67,28 @@ namespace xStunit.Interpreter
 
         public Engine(
             TypeRegistry registry, Extensibility.NativeFunctionRegistry nativeFunctions, TargetPlatform target)
+            : this(registry, nativeFunctions, null, target)
+        {
+        }
+
+        public Engine(
+            TypeRegistry registry,
+            Extensibility.NativeFunctionRegistry nativeFunctions,
+            Extensibility.NativeFunctionBlockRegistry nativeFunctionBlocks)
+            : this(registry, nativeFunctions, nativeFunctionBlocks, TargetPlatform.Default)
+        {
+        }
+
+        public Engine(
+            TypeRegistry registry,
+            Extensibility.NativeFunctionRegistry nativeFunctions,
+            Extensibility.NativeFunctionBlockRegistry nativeFunctionBlocks,
+            TargetPlatform target)
         {
             _registry = registry;
             _target = target;
             _nativeFunctions = nativeFunctions ?? new Extensibility.NativeFunctionRegistry();
+            _nativeFunctionBlocks = nativeFunctionBlocks ?? new Extensibility.NativeFunctionBlockRegistry();
 
             // Every GVL's Cells are allocated and registered in _globals
             // *before* any default value is computed, so a default-value
@@ -268,7 +293,19 @@ namespace xStunit.Interpreter
             instance.NativeKind = nativeHost.Kind;
             instance.NativeHost = nativeHost.Host;
             foreach (var field in nativeHost.DefaultFields)
-                instance.Fields[field.Key] = new Cell { Value = field.Value };
+            {
+                // A field that named its IEC type goes through the same
+                // construction as a real declaration, so a plugin's
+                // STRING(255) truncates where the declaration says it does;
+                // the in-tree stubs name no type and keep the untyped Cell
+                // they have always had.
+                instance.Fields[field.Name] = field.DeclaredTypeName == null
+                    ? new Cell { Value = field.DefaultValue }
+                    : NewDeclaredCell(field.DefaultValue, field.DeclaredTypeName, instance);
+
+                if (field.DeclaredTypeName != null)
+                    instance.FieldTypeNames[field.Name] = field.DeclaredTypeName;
+            }
 
             for (var i = chain.Count - 1; i >= 0; i--)
             {

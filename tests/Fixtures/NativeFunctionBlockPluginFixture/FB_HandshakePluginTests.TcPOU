@@ -1,0 +1,115 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4026.18">
+  <POU Name="FB_HandshakePluginTests" Id="{a1b2c3d4-6k20-4a1a-8b1b-000000000030}" SpecialFunc="None">
+    <Declaration><![CDATA[(*
+    Interpreter fixture for the STATEFUL half of the plugin surface. A
+    compiled-only vendor FB cannot be a native FUNCTION: it carries state
+    between cycles, publishes VAR_OUTPUTs a later cycle reads back, and runs a
+    bExecute/bBusy/bDone handshake spanning several invocations. This drives
+    all three of those through a plugin loaded from a real DLL.
+
+    FB_DemoHandshake is the SAMPLE plugin's invented block
+    (samples/xStunit.SamplePlugins), not a Beckhoff FB - the point is that the
+    shape works, not that any vendor block is reproduced.
+*)
+FUNCTION_BLOCK FB_HandshakePluginTests EXTENDS TcUnit.FB_TestSuite]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[HandshakeCompletesAcrossCycles();
+InstancesDoNotShareState();
+AbortReportsWhetherItCancelledAnything();]]></ST>
+    </Implementation>
+    <Method Name="HandshakeCompletesAcrossCycles" Id="{a1b2c3d4-6k20-4a1a-8b1b-000000000031}">
+      <Declaration><![CDATA[METHOD PRIVATE HandshakeCompletesAcrossCycles
+VAR
+	fbDemo		: FB_DemoHandshake;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('HandshakeCompletesAcrossCycles');
+
+(* Each bare invocation is one PLC cycle for this block. A plugin that could
+   not carry state would restart the countdown every call and never reach
+   bDone. *)
+fbDemo(bExecute := TRUE, nCycles := 3);
+
+AssertEquals_BOOL(Expected := TRUE,
+                   Actual := fbDemo.bBusy,
+                   Message := 'busy on the cycle the command started');
+AssertEquals_BOOL(Expected := FALSE,
+                   Actual := fbDemo.bDone,
+                   Message := 'not done on the first cycle');
+
+fbDemo(bExecute := TRUE, nCycles := 3);
+fbDemo(bExecute := TRUE, nCycles := 3);
+
+AssertEquals_BOOL(Expected := FALSE,
+                   Actual := fbDemo.bBusy,
+                   Message := 'busy clears when the command finishes');
+AssertEquals_BOOL(Expected := TRUE,
+                   Actual := fbDemo.bDone,
+                   Message := 'done raised on the last cycle');
+AssertEquals_STRING(Expected := 'done',
+                     Actual := fbDemo.sResult,
+                     Message := 'a STRING output survives the plugin boundary');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="InstancesDoNotShareState" Id="{a1b2c3d4-6k20-4a1a-8b1b-000000000032}">
+      <Declaration><![CDATA[METHOD PRIVATE InstancesDoNotShareState
+VAR
+	fbShort		: FB_DemoHandshake;
+	fbLong		: FB_DemoHandshake;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('InstancesDoNotShareState');
+
+(* Two variables of one plugin type are two blocks, as in a real PLC. If the
+   registered prototype were driven directly they would be one, and the
+   shorter command would finish the longer one too. *)
+fbShort(bExecute := TRUE, nCycles := 1);
+fbLong(bExecute := TRUE, nCycles := 5);
+
+AssertEquals_BOOL(Expected := TRUE,
+                   Actual := fbShort.bDone,
+                   Message := 'the one-cycle command finished');
+AssertEquals_BOOL(Expected := TRUE,
+                   Actual := fbLong.bBusy,
+                   Message := 'the five-cycle command is still running');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="AbortReportsWhetherItCancelledAnything" Id="{a1b2c3d4-6k20-4a1a-8b1b-000000000033}">
+      <Declaration><![CDATA[METHOD PRIVATE AbortReportsWhetherItCancelledAnything
+VAR
+	fbDemo			: FB_DemoHandshake;
+	bCancelled		: BOOL;
+	bNothingToDo	: BOOL;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('AbortReportsWhetherItCancelledAnything');
+
+(* A METHOD on a plugin FB, not a bare invocation: the same block answers
+   both call shapes, and a method returns a value to ST. *)
+fbDemo(bExecute := TRUE, nCycles := 4);
+bCancelled := fbDemo.Abort();
+bNothingToDo := fbDemo.Abort();
+
+AssertEquals_BOOL(Expected := TRUE,
+                   Actual := bCancelled,
+                   Message := 'aborting a running command reports TRUE');
+AssertEquals_BOOL(Expected := FALSE,
+                   Actual := bNothingToDo,
+                   Message := 'aborting an idle block reports FALSE');
+AssertEquals_BOOL(Expected := FALSE,
+                   Actual := fbDemo.bBusy,
+                   Message := 'abort clears busy');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+  </POU>
+</TcPlcObject>

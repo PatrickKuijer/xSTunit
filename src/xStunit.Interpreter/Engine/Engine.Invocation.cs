@@ -120,6 +120,17 @@ namespace xStunit.Interpreter
                             callee.NativeCounterHost.Update(callee);
                             return null;
 
+                        // A stateful library FB supplied from outside this
+                        // assembly. Its inputs bind exactly as an in-tree
+                        // stub's do, off the names the plugin declares;
+                        // everything the call then means is the plugin's own
+                        // business.
+                        case NativeHostKind.Plugin:
+                            var pluginCallee = callee.NativePluginFunctionBlock;
+                            BindNativeInputs(callee, pluginCallee.PositionalInputNames, positionalArgs, namedArgs, callerFrame);
+                            pluginCallee.Invoke(NewFunctionBlockCall(callee, null, null, callerFrame));
+                            return null;
+
                         // Ordinary interpreted FB field or method-local var:
                         // bind VAR_INPUT/VAR_IN_OUT args into the callee's
                         // persisted Fields, then run its top-level body once.
@@ -130,6 +141,20 @@ namespace xStunit.Interpreter
                             InvokeFbInstance(callee, positionalArgs, namedArgs, callerFrame);
                             return null;
                     }
+                }
+
+                // Method-name routing WITHIN a plugin function block, the same
+                // shape as the loopback block below. Which names belong to the
+                // plugin is what the plugin declares, not what it happens to
+                // handle: the FB_init NewInstance speculatively calls on every
+                // instance must fall through to the optional-method path rather
+                // than arriving at a plugin as if it were part of the contract.
+                if (instance?.NativeKind == NativeHostKind.Plugin &&
+                    DeclaresMethod(instance.NativePluginFunctionBlock, methodName))
+                {
+                    var pluginArgs = NewNativeCallContext(methodName, positionalArgs, namedArgs, callerFrame);
+                    return instance.NativePluginFunctionBlock.Invoke(
+                        NewFunctionBlockCall(instance, methodName, pluginArgs, callerFrame));
                 }
 
                 // Method-name routing WITHIN the loopback host kind - a

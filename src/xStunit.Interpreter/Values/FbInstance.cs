@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using xStunit.Interpreter.Extensibility;
 
 namespace xStunit.Interpreter
 {
@@ -56,6 +57,13 @@ namespace xStunit.Interpreter
         // Backs the counting behavior of CTU/CTD/CTUD.
         public CounterHost NativeCounterHost =>
             NativeKind == NativeHostKind.Counter ? (CounterHost)NativeHost : null;
+
+        // Backs a stateful library FB supplied from outside this assembly. The
+        // only typed view whose type is an interface rather than an in-tree
+        // host class: what stands behind it is a plugin's own CreateInstance
+        // product, which this assembly has no type for.
+        public IXstunitNativeFunctionBlock NativePluginFunctionBlock =>
+            NativeKind == NativeHostKind.Plugin ? (IXstunitNativeFunctionBlock)NativeHost : null;
 
         // Backs CLK -> Q for the edge-trigger FBs R_TRIG/F_TRIG.
         public EdgeTriggerHost NativeEdgeTriggerHost =>

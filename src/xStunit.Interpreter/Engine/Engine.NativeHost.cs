@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using xStunit.Interpreter.Extensibility;
 
 namespace xStunit.Interpreter
 {
@@ -37,6 +38,13 @@ namespace xStunit.Interpreter
         // Loopback's fault-injection stub.
         Loopback,
 
+        // A stateful library FB supplied from outside this assembly through
+        // IXstunitNativeFunctionBlock. One member for the whole extension
+        // point, not one per vendor FB: which plugin backs an instance is the
+        // host object's business, so a plugin assembly adds FBs without this
+        // enum or the dispatch switch changing again.
+        Plugin,
+
         // Anything whose ancestry leaves the registry without naming a known
         // native FB - i.e. TcUnit.FB_TestSuite.
         Suite,
@@ -71,12 +79,12 @@ namespace xStunit.Interpreter
         // forgot it.
         private readonly struct NativeHostBinding
         {
-            private static readonly KeyValuePair<string, object>[] NoFields = Array.Empty<KeyValuePair<string, object>>();
+            private static readonly NativeFieldDeclaration[] NoFields = Array.Empty<NativeFieldDeclaration>();
 
             public static readonly NativeHostBinding NotNative =
                 new NativeHostBinding(NativeHostKind.None, null, NoFields);
 
-            public NativeHostBinding(NativeHostKind kind, object host, IReadOnlyList<KeyValuePair<string, object>> defaultFields)
+            public NativeHostBinding(NativeHostKind kind, object host, IReadOnlyList<NativeFieldDeclaration> defaultFields)
             {
                 Kind = kind;
                 Host = host;
@@ -92,14 +100,14 @@ namespace xStunit.Interpreter
             // Applied to FbInstance.Fields as plain Cells; declaration order
             // is the IEC parameter order of the stub's own VAR_INPUT/
             // VAR_OUTPUT for readability only, nothing depends on it.
-            public IReadOnlyList<KeyValuePair<string, object>> DefaultFields { get; }
+            public IReadOnlyList<NativeFieldDeclaration> DefaultFields { get; }
 
-            public static NativeHostBinding Of(NativeHostKind kind, object host, params KeyValuePair<string, object>[] defaultFields) =>
+            public static NativeHostBinding Of(NativeHostKind kind, object host, params NativeFieldDeclaration[] defaultFields) =>
                 new NativeHostBinding(kind, host, defaultFields);
         }
 
-        private static KeyValuePair<string, object> Field(string name, object value) =>
-            new KeyValuePair<string, object>(name, value);
+        private static NativeFieldDeclaration Field(string name, object value) =>
+            new NativeFieldDeclaration(name, value);
 
         // Classifies the type an FbInstance's base-type ancestry terminates on,
         // and produces everything that classification implies.
@@ -114,7 +122,7 @@ namespace xStunit.Interpreter
         // unregistered base type is how a suite reaches TcUnit.FB_TestSuite,
         // whose source is never parsed, and the same fallthrough covers any other
         // compiled-only base a fixture happens to extend.
-        private static NativeHostBinding ClassifyNativeHost(string nativeBaseTypeName)
+        private NativeHostBinding ClassifyNativeHost(string nativeBaseTypeName)
         {
             if (nativeBaseTypeName == null)
                 return NativeHostBinding.NotNative;
@@ -171,7 +179,7 @@ namespace xStunit.Interpreter
                 // fields are enumerated off the host. PV/CV are WORD zeros -
                 // ints, per IecNumericType's boxing for WORD.
                 var counter = CounterHost.Create(nativeBaseTypeName);
-                var counterFields = new List<KeyValuePair<string, object>>();
+                var counterFields = new List<NativeFieldDeclaration>();
 
                 foreach (var inputName in counter.BooleanInputNames)
                     counterFields.Add(Field(inputName, false));
@@ -181,6 +189,22 @@ namespace xStunit.Interpreter
                 counterFields.Add(Field(CounterHost.CurrentValueOutputName, 0));
 
                 return NativeHostBinding.Of(NativeHostKind.Counter, counter, counterFields.ToArray());
+            }
+
+            // Consulted after every in-tree stub and, by construction, only
+            // for a name the TypeRegistry already failed to resolve: a plugin
+            // can shadow neither interpreted source nor TON/R_TRIG/RS/CTU.
+            //
+            // The registered object is the prototype; what an instance is
+            // backed by is its own CreateInstance product, so two variables of
+            // one plugin type share no state.
+            if (_nativeFunctionBlocks.TryGet(nativeBaseTypeName, out var prototype))
+            {
+                var fields = new List<NativeFieldDeclaration>();
+                foreach (var field in prototype.Fields)
+                    fields.Add(field);
+
+                return NativeHostBinding.Of(NativeHostKind.Plugin, prototype.CreateInstance(), fields.ToArray());
             }
 
             return NativeHostBinding.Of(NativeHostKind.Suite, new SuiteHost());
@@ -196,11 +220,12 @@ namespace xStunit.Interpreter
         // kind backs this ancestry tail?", wrong for "is this type name
         // instantiable as a native FB stub?". The two questions share only the
         // list of native base-type names.
-        private static bool IsNativeFbTypeName(string typeName) =>
+        private bool IsNativeFbTypeName(string typeName) =>
             NativeTimerTypes.Contains(typeName)
             || NativeEdgeTriggerTypes.Contains(typeName)
             || NativeBistableLatchTypes.Contains(typeName)
             || NativeCounterTypes.Contains(typeName)
-            || string.Equals(typeName, NativeLoopbackType, StringComparison.OrdinalIgnoreCase);
+            || string.Equals(typeName, NativeLoopbackType, StringComparison.OrdinalIgnoreCase)
+            || _nativeFunctionBlocks.Contains(typeName);
     }
 }

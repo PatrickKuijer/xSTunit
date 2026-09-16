@@ -258,14 +258,10 @@ namespace xStunit.Interpreter
         // compared, not its magnitude.
         private static Expr UnwrapSignedLiteral(Expr expr)
         {
-            if (!(expr is UnaryExpr unary) || (unary.Op != "-" && unary.Op != "+"))
+            if (!(expr is UnaryExpr unary) || unary.Op != "-")
                 return expr;
 
-            var operand = UnwrapSignedLiteral(unary.Operand);
-            if (unary.Op == "+")
-                return operand;
-
-            switch (operand)
+            switch (UnwrapSignedLiteral(unary.Operand))
             {
                 case IntLiteralExpr i: return new IntLiteralExpr(-i.Value);
                 case LintLiteralExpr l: return new LintLiteralExpr(-l.Value);

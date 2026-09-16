@@ -94,12 +94,14 @@ namespace xStunit.Parser
         }
 
         // Null (not an exception) for an accessor the POU never declared, so
-        // PropertyAst.HasGet/HasSet can tell that apart from an empty body. An
-        // accessor that IS declared but carries no ST body is a rejection
-        // instead: chaining past it to null would report a graphical accessor
-        // as one the POU never wrote.
+        // PropertyAst.HasGet/HasSet can tell that apart from an empty body, and
+        // likewise for one carrying no <Implementation> at all - TwinCAT writes
+        // that element inconsistently across versions, so its absence is not
+        // evidence of a broken file. An accessor whose <Implementation> is
+        // present but holds no <ST> is a rejection: chaining past it to null
+        // would report a graphical accessor as one the POU never wrote.
         private static string ParseAccessorImplementation(XElement accessor, string scopeName) =>
-            accessor == null ? null : RequiredStBody(accessor, scopeName).Value;
+            accessor?.Element("Implementation") == null ? null : RequiredStBody(accessor, scopeName).Value;
 
         // A body drawn in LD/FBD/SFC/CFC/IL is written as a <NWL>/<CFC>/...
         // child instead of <ST>: well-formed and TwinCAT-valid, but carrying no

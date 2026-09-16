@@ -882,8 +882,8 @@ namespace xStunit.Interpreter.Tests
         }
 
         // INT_TO_UINT is case-sensitive, so to_uint must be too: a short
-        // spelling that accepted lower case would be the wider path AC 3
-        // forbids.
+        // spelling that accepted lower case would be a second, wider cast
+        // path than the prefixed form it shadows.
         [Fact]
         public void Evaluate_LowerCasePrefixLessCast_StillThrowsUnresolvedCall()
         {

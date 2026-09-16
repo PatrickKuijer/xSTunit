@@ -50,9 +50,9 @@ namespace xStunit.Parser.Tests
                 ex.Message);
         }
 
-        // A graphical accessor used to chain past the absent <ST> to null and
-        // be reported downstream as an accessor the POU never declared - no
-        // crash, but a diagnostic pointing at the wrong thing.
+        // Chaining past the absent <ST> to null reports a graphical accessor
+        // downstream as an accessor the POU never declared - no crash, but a
+        // diagnostic pointing at the wrong thing.
         [Fact]
         public void Parse_PropertyAccessorInGraphicalLanguage_RejectsNamingTheAccessor()
         {
@@ -60,6 +60,20 @@ namespace xStunit.Parser.Tests
 
             Assert.Contains("'nCounter.Get' has no ST body", ex.Message);
             Assert.Contains("'NWL'", ex.Message);
+        }
+
+        // TwinCAT omits <Implementation> on an accessor in some versions, so
+        // its absence is a body the POU never wrote - not a broken file. Only
+        // an <Implementation> that IS present and holds no <ST> means a
+        // graphical accessor; treating the two alike would skip whole files
+        // over a shape TwinCAT emits on purpose.
+        [Fact]
+        public void Parse_AccessorWithoutAnImplementationElement_StillParses()
+        {
+            var pou = TcPouParser.Parse(AccessorWithoutImplementationXml);
+
+            var property = Assert.Single(pou.Properties);
+            Assert.False(property.HasGet);
         }
 
         // Truncated or foreign XML is a broken file, not an unsupported
@@ -138,6 +152,26 @@ END_VAR
         <Implementation>
           " + NetworkList + @"
         </Implementation>
+      </Get>
+    </Property>
+  </POU>
+</TcPlcObject>";
+
+        private const string AccessorWithoutImplementationXml = @"<?xml version=""1.0"" encoding=""utf-8""?>
+<TcPlcObject Version=""1.1.0.1"">
+  <POU Name=""FB_BodilessAccessor"" Id=""{00000000-0000-0000-0000-000000000007}"" SpecialFunc=""None"">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_BodilessAccessor
+VAR
+	snCounter : UINT;
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[]]></ST>
+    </Implementation>
+    <Property Name=""nCounter"" Id=""{00000000-0000-0000-0000-000000000008}"">
+      <Declaration><![CDATA[PROPERTY PUBLIC nCounter : UINT]]></Declaration>
+      <Get Name=""Get"" Id=""{00000000-0000-0000-0000-000000000009}"">
+        <Declaration><![CDATA[]]></Declaration>
       </Get>
     </Property>
   </POU>

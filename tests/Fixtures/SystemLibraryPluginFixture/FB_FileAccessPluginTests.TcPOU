@@ -1,0 +1,427 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4026.18">
+  <POU Name="FB_FileAccessPluginTests" Id="{b2c3d4e5-6k20-4a1a-8b1b-000000000070}" SpecialFunc="None">
+    <Declaration><![CDATA[(*
+    Tc2_System's file-access family, supplied by
+    samples/xStunit.SystemLibraryPlugins over an in-memory virtual filesystem.
+    Never real disk: a suite that wrote to the machine would leave artefacts,
+    race other runs, and depend on what the running user may write.
+
+    THE HANDSHAKE, which every test below is shaped by: the invocation
+    carrying the RISING EDGE of bExecute starts the command and reports bBusy
+    TRUE having done nothing else; the NEXT invocation performs it, publishes
+    the outputs and clears bBusy. So every command here is two calls, which is
+    also what a real POU's state machine does.
+
+    F_FileSystem* are xStunit's own seed/inspect functions, not vendor
+    symbols - a suite cannot reach the machine's filesystem from ST, which is
+    most of why file-touching POUs go untested.
+*)
+FUNCTION_BLOCK FB_FileAccessPluginTests EXTENDS TcUnit.FB_TestSuite]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[BusyIsRaisedOnTheTriggeringCycleOnly();
+WriteThroughAHandleLandsInTheFile();
+ReadFillsTheCallersBuffer();
+EndOfFileOnlyWhenNothingCouldBeRead();
+GetsDeliversOneLineAtATime();
+PutsAppendsWithoutATerminator();
+SeekAndTellShareOnePosition();
+OpeningAMissingFileForReadFails();
+DeleteRenameAndDirectories();
+ClosingReleasesTheHandle();]]></ST>
+    </Implementation>
+    <Method Name="BusyIsRaisedOnTheTriggeringCycleOnly" Id="{b2c3d4e5-6k20-4a1a-8b1b-000000000071}">
+      <Declaration><![CDATA[METHOD PRIVATE BusyIsRaisedOnTheTriggeringCycleOnly
+VAR
+	fbOpen			: FB_FileOpen;
+	bBusyOnTrigger	: BOOL;
+	bBusyAfter		: BOOL;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('BusyIsRaisedOnTheTriggeringCycleOnly');
+
+F_FileSystemClear();
+
+(* A POU written as "trigger, then advance once I have seen bBusy" is a
+   common shape, and an instantly-completing block would leave it waiting
+   forever in a test while working on a real PLC. *)
+fbOpen(sNetId := '', sPathName := 'trace.txt', nMode := 2, ePath := 0, bExecute := TRUE, tTimeout := T#5S);
+bBusyOnTrigger := fbOpen.bBusy;
+
+fbOpen(bExecute := FALSE);
+bBusyAfter := fbOpen.bBusy;
+
+AssertEquals_BOOL(Expected := TRUE,
+                   Actual := bBusyOnTrigger,
+                   Message := 'the triggering call reports busy');
+AssertEquals_BOOL(Expected := FALSE,
+                   Actual := bBusyAfter,
+                   Message := 'the next call completes and clears busy');
+AssertEquals_BOOL(Expected := FALSE,
+                   Actual := fbOpen.bError,
+                   Message := 'opening for write succeeds');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="WriteThroughAHandleLandsInTheFile" Id="{b2c3d4e5-6k20-4a1a-8b1b-000000000072}">
+      <Declaration><![CDATA[METHOD PRIVATE WriteThroughAHandleLandsInTheFile
+VAR
+	fbOpen		: FB_FileOpen;
+	fbWrite		: FB_FileWrite;
+	fbClose		: FB_FileClose;
+	aBuf		: ARRAY[0..2] OF BYTE;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('WriteThroughAHandleLandsInTheFile');
+
+F_FileSystemClear();
+
+aBuf[0] := 65;
+aBuf[1] := 66;
+aBuf[2] := 67;
+
+(* nMode 2 is FOPEN_MODEWRITE. The constants themselves live in a
+   compiled-only Tc2_System GVL, so a suite writes the value. *)
+fbOpen(sNetId := '', sPathName := 'out.bin', nMode := 2, ePath := 0, bExecute := TRUE, tTimeout := T#5S);
+fbOpen(bExecute := FALSE);
+
+fbWrite(sNetId := '', hFile := fbOpen.hFile, pWriteBuff := ADR(aBuf), cbWriteLen := SIZEOF(aBuf), bExecute := TRUE, tTimeout := T#5S);
+fbWrite(bExecute := FALSE);
+
+fbClose(sNetId := '', hFile := fbOpen.hFile, bExecute := TRUE, tTimeout := T#5S);
+fbClose(bExecute := FALSE);
+
+AssertEquals_UDINT(Expected := 3,
+                    Actual := fbWrite.cbWrite,
+                    Message := 'every byte asked for was written');
+AssertEquals_STRING(Expected := 'ABC',
+                     Actual := F_FileSystemGetText('out.bin'),
+                     Message := 'the bytes behind the pointer reached the file');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="ReadFillsTheCallersBuffer" Id="{b2c3d4e5-6k20-4a1a-8b1b-000000000073}">
+      <Declaration><![CDATA[METHOD PRIVATE ReadFillsTheCallersBuffer
+VAR
+	fbOpen		: FB_FileOpen;
+	fbRead		: FB_FileRead;
+	aBuf		: ARRAY[0..3] OF BYTE;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('ReadFillsTheCallersBuffer');
+
+F_FileSystemClear();
+F_FileSystemPutText('in.bin', 'WXYZ');
+
+(* nMode 1 is FOPEN_MODEREAD. This is the case the stateful plugin surface
+   exists for: the block writes into a buffer the CALLER owns, reached
+   through a pointer, which a pure function cannot do. *)
+fbOpen(sNetId := '', sPathName := 'in.bin', nMode := 1, ePath := 0, bExecute := TRUE, tTimeout := T#5S);
+fbOpen(bExecute := FALSE);
+
+fbRead(sNetId := '', hFile := fbOpen.hFile, pReadBuff := ADR(aBuf), cbReadLen := SIZEOF(aBuf), bExecute := TRUE, tTimeout := T#5S);
+fbRead(bExecute := FALSE);
+
+AssertEquals_UDINT(Expected := 4,
+                    Actual := fbRead.cbRead,
+                    Message := 'the whole buffer was filled');
+AssertEquals_BYTE(Expected := 87,
+                   Actual := aBuf[0],
+                   Message := 'the first byte reached the caller');
+AssertEquals_BYTE(Expected := 90,
+                   Actual := aBuf[3],
+                   Message := 'the last byte reached the caller');
+AssertEquals_BOOL(Expected := FALSE,
+                   Actual := fbRead.bEOF,
+                   Message := 'a read that returned data is not end of file');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="EndOfFileOnlyWhenNothingCouldBeRead" Id="{b2c3d4e5-6k20-4a1a-8b1b-000000000074}">
+      <Declaration><![CDATA[METHOD PRIVATE EndOfFileOnlyWhenNothingCouldBeRead
+VAR
+	fbOpen		: FB_FileOpen;
+	fbRead		: FB_FileRead;
+	fbEof		: FB_EOF;
+	aBuf		: ARRAY[0..7] OF BYTE;
+	bEofAfterData	: BOOL;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('EndOfFileOnlyWhenNothingCouldBeRead');
+
+F_FileSystemClear();
+F_FileSystemPutText('short.bin', 'AB');
+
+fbOpen(sNetId := '', sPathName := 'short.bin', nMode := 1, ePath := 0, bExecute := TRUE, tTimeout := T#5S);
+fbOpen(bExecute := FALSE);
+
+(* The read consumes the whole file. bEOF must still be FALSE: a loop that
+   stops on bEOF would otherwise drop the last record of every file. *)
+fbRead(sNetId := '', hFile := fbOpen.hFile, pReadBuff := ADR(aBuf), cbReadLen := SIZEOF(aBuf), bExecute := TRUE, tTimeout := T#5S);
+fbRead(bExecute := FALSE);
+bEofAfterData := fbRead.bEOF;
+
+fbRead(bExecute := TRUE);
+fbRead(bExecute := FALSE);
+
+fbEof(sNetId := '', hFile := fbOpen.hFile, bExecute := TRUE, tTimeout := T#5S);
+fbEof(bExecute := FALSE);
+
+AssertEquals_BOOL(Expected := FALSE,
+                   Actual := bEofAfterData,
+                   Message := 'a read that emptied the file is not yet end of file');
+AssertEquals_UDINT(Expected := 0,
+                    Actual := fbRead.cbRead,
+                    Message := 'the second read returns nothing');
+AssertEquals_BOOL(Expected := TRUE,
+                   Actual := fbRead.bEOF,
+                   Message := 'a read that returned nothing is end of file');
+AssertEquals_BOOL(Expected := TRUE,
+                   Actual := fbEof.bEOF,
+                   Message := 'FB_EOF agrees about the position');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="GetsDeliversOneLineAtATime" Id="{b2c3d4e5-6k20-4a1a-8b1b-000000000075}">
+      <Declaration><![CDATA[METHOD PRIVATE GetsDeliversOneLineAtATime
+VAR
+	fbOpen		: FB_FileOpen;
+	fbGets		: FB_FileGets;
+	sFirst		: STRING(255);
+	sSecond		: STRING(255);
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('GetsDeliversOneLineAtATime');
+
+F_FileSystemClear();
+F_FileSystemPutText('settings.txt', 'alpha$Nbeta');
+
+(* nMode 33 is FOPEN_MODEREAD OR FOPEN_MODETEXT - FB_FileGets needs a text
+   handle. *)
+fbOpen(sNetId := '', sPathName := 'settings.txt', nMode := 33, ePath := 0, bExecute := TRUE, tTimeout := T#5S);
+fbOpen(bExecute := FALSE);
+
+fbGets(sNetId := '', hFile := fbOpen.hFile, bExecute := TRUE, tTimeout := T#5S);
+fbGets(bExecute := FALSE);
+sFirst := fbGets.sLine;
+
+fbGets(bExecute := TRUE);
+fbGets(bExecute := FALSE);
+sSecond := fbGets.sLine;
+
+(* The line feed is kept, C fgets style - the vendor doc says the read runs
+   "up to and including the line feed character". A trailing-terminator
+   change here would break every caller that strips it itself. *)
+AssertEquals_STRING(Expected := 'alpha$N',
+                     Actual := sFirst,
+                     Message := 'the first line arrives with its terminator');
+AssertEquals_STRING(Expected := 'beta',
+                     Actual := sSecond,
+                     Message := 'a final line without a terminator still arrives');
+AssertEquals_BOOL(Expected := FALSE,
+                   Actual := fbGets.bEOF,
+                   Message := 'the last line is delivered, not swallowed by EOF');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="PutsAppendsWithoutATerminator" Id="{b2c3d4e5-6k20-4a1a-8b1b-000000000076}">
+      <Declaration><![CDATA[METHOD PRIVATE PutsAppendsWithoutATerminator
+VAR
+	fbOpen		: FB_FileOpen;
+	fbPuts		: FB_FilePuts;
+	fbClose		: FB_FileClose;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('PutsAppendsWithoutATerminator');
+
+F_FileSystemClear();
+F_FileSystemPutText('trace.log', 'first$N');
+
+(* nMode 36 is FOPEN_MODEAPPEND OR FOPEN_MODETEXT, the shape every trace
+   writer uses: append must not truncate what is already there. *)
+fbOpen(sNetId := '', sPathName := 'trace.log', nMode := 36, ePath := 0, bExecute := TRUE, tTimeout := T#5S);
+fbOpen(bExecute := FALSE);
+
+fbPuts(sNetId := '', hFile := fbOpen.hFile, sLine := 'second', bExecute := TRUE, tTimeout := T#5S);
+fbPuts(bExecute := FALSE);
+
+fbClose(sNetId := '', hFile := fbOpen.hFile, bExecute := TRUE, tTimeout := T#5S);
+fbClose(bExecute := FALSE);
+
+(* No newline is added: FB_FilePuts writes the string up to its null
+   termination and nothing else, so a caller wanting a line ending puts one
+   in sLine. *)
+AssertEquals_STRING(Expected := 'first$Nsecond',
+                     Actual := F_FileSystemGetText('trace.log'),
+                     Message := 'append adds to the end and inserts no terminator');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="SeekAndTellShareOnePosition" Id="{b2c3d4e5-6k20-4a1a-8b1b-000000000077}">
+      <Declaration><![CDATA[METHOD PRIVATE SeekAndTellShareOnePosition
+VAR
+	fbOpen		: FB_FileOpen;
+	fbSeek		: FB_FileSeek;
+	fbTell		: FB_FileTell;
+	fbRead		: FB_FileRead;
+	aBuf		: ARRAY[0..0] OF BYTE;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('SeekAndTellShareOnePosition');
+
+F_FileSystemClear();
+F_FileSystemPutText('seek.bin', 'ABCDE');
+
+fbOpen(sNetId := '', sPathName := 'seek.bin', nMode := 1, ePath := 0, bExecute := TRUE, tTimeout := T#5S);
+fbOpen(bExecute := FALSE);
+
+(* eOrigin 0 is SEEK_SET. One position is shared by seek, tell and the next
+   read - if they each kept their own, a POU that seeks then reads would get
+   the wrong record and nothing would say so. *)
+fbSeek(sNetId := '', hFile := fbOpen.hFile, nSeekPos := 2, eOrigin := 0, bExecute := TRUE, tTimeout := T#5S);
+fbSeek(bExecute := FALSE);
+
+fbTell(sNetId := '', hFile := fbOpen.hFile, bExecute := TRUE, tTimeout := T#5S);
+fbTell(bExecute := FALSE);
+
+fbRead(sNetId := '', hFile := fbOpen.hFile, pReadBuff := ADR(aBuf), cbReadLen := 1, bExecute := TRUE, tTimeout := T#5S);
+fbRead(bExecute := FALSE);
+
+AssertEquals_DINT(Expected := 2,
+                   Actual := fbTell.nSeekPos,
+                   Message := 'tell reports where seek left the pointer');
+AssertEquals_BYTE(Expected := 67,
+                   Actual := aBuf[0],
+                   Message := 'the read starts from the seek position');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="OpeningAMissingFileForReadFails" Id="{b2c3d4e5-6k20-4a1a-8b1b-000000000078}">
+      <Declaration><![CDATA[METHOD PRIVATE OpeningAMissingFileForReadFails
+VAR
+	fbOpen		: FB_FileOpen;
+	fbRead		: FB_FileRead;
+	aBuf		: ARRAY[0..3] OF BYTE;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('OpeningAMissingFileForReadFails');
+
+F_FileSystemClear();
+
+fbOpen(sNetId := '', sPathName := 'absent.bin', nMode := 1, ePath := 0, bExecute := TRUE, tTimeout := T#5S);
+fbOpen(bExecute := FALSE);
+
+(* hFile stays 0, which is what an unset handle already holds, so a POU that
+   skipped its bError check fails at the next block instead of silently
+   addressing some other file. *)
+fbRead(sNetId := '', hFile := fbOpen.hFile, pReadBuff := ADR(aBuf), cbReadLen := 4, bExecute := TRUE, tTimeout := T#5S);
+fbRead(bExecute := FALSE);
+
+AssertEquals_BOOL(Expected := TRUE,
+                   Actual := fbOpen.bError,
+                   Message := 'opening a missing file for read fails');
+AssertEquals_BOOL(Expected := TRUE,
+                   Actual := fbOpen.nErrId > 0,
+                   Message := 'the failure carries a non-zero error id');
+AssertEquals_UINT(Expected := 0,
+                   Actual := fbOpen.hFile,
+                   Message := 'no handle is handed out on failure');
+AssertEquals_BOOL(Expected := TRUE,
+                   Actual := fbRead.bError,
+                   Message := 'reading through the unset handle fails too');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="DeleteRenameAndDirectories" Id="{b2c3d4e5-6k20-4a1a-8b1b-000000000079}">
+      <Declaration><![CDATA[METHOD PRIVATE DeleteRenameAndDirectories
+VAR
+	fbRename	: FB_FileRename;
+	fbDelete	: FB_FileDelete;
+	fbCreateDir	: FB_CreateDir;
+	fbRemoveDir	: FB_RemoveDir;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('DeleteRenameAndDirectories');
+
+F_FileSystemClear();
+F_FileSystemPutText('old.csv', 'payload');
+
+fbRename(sNetId := '', sOldName := 'old.csv', sNewName := 'new.csv', ePath := 0, bExecute := TRUE, tTimeout := T#5S);
+fbRename(bExecute := FALSE);
+
+fbCreateDir(sNetId := '', sPathName := 'archive', ePath := 0, bExecute := TRUE, tTimeout := T#5S);
+fbCreateDir(bExecute := FALSE);
+
+fbRemoveDir(sNetId := '', sPathName := 'archive', ePath := 0, bExecute := TRUE, tTimeout := T#5S);
+fbRemoveDir(bExecute := FALSE);
+
+fbDelete(sNetId := '', sPathName := 'new.csv', ePath := 0, bExecute := TRUE, tTimeout := T#5S);
+fbDelete(bExecute := FALSE);
+
+AssertEquals_BOOL(Expected := FALSE,
+                   Actual := F_FileSystemExists('old.csv'),
+                   Message := 'rename moves the content off the old name');
+AssertEquals_BOOL(Expected := FALSE,
+                   Actual := F_FileSystemDirExists('archive'),
+                   Message := 'an empty directory can be removed');
+AssertEquals_BOOL(Expected := FALSE,
+                   Actual := F_FileSystemExists('new.csv'),
+                   Message := 'delete removes the file');
+AssertEquals_BOOL(Expected := FALSE,
+                   Actual := fbDelete.bError,
+                   Message := 'deleting an existing file succeeds');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="ClosingReleasesTheHandle" Id="{b2c3d4e5-6k20-4a1a-8b1b-00000000007a}">
+      <Declaration><![CDATA[METHOD PRIVATE ClosingReleasesTheHandle
+VAR
+	fbOpen		: FB_FileOpen;
+	fbClose		: FB_FileClose;
+	nWhileOpen	: UDINT;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('ClosingReleasesTheHandle');
+
+F_FileSystemClear();
+
+fbOpen(sNetId := '', sPathName := 'handle.bin', nMode := 2, ePath := 0, bExecute := TRUE, tTimeout := T#5S);
+fbOpen(bExecute := FALSE);
+nWhileOpen := F_FileSystemOpenHandleCount();
+
+fbClose(sNetId := '', hFile := fbOpen.hFile, bExecute := TRUE, tTimeout := T#5S);
+fbClose(bExecute := FALSE);
+
+(* A leaked handle is invisible in every other output and only bites after a
+   long run on a real machine, so it gets its own assertion here. *)
+AssertEquals_UDINT(Expected := 1,
+                    Actual := nWhileOpen,
+                    Message := 'the open file holds a handle');
+AssertEquals_UDINT(Expected := 0,
+                    Actual := F_FileSystemOpenHandleCount(),
+                    Message := 'closing gives the handle back');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+  </POU>
+</TcPlcObject>

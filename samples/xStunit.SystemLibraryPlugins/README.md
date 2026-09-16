@@ -27,6 +27,8 @@ Behavior is taken from the vendor documentation, not guessed:
 | `ADSLOGSTR` / `ADSLOGDINT` / `ADSLOGLREAL` | functions | recorded into a sink a suite can assert on |
 | `F_AdsLogCount` / `F_AdsLogClear` / `F_AdsLogMask` / `F_AdsLogFormat` / `F_AdsLog*Arg` | functions | **xStunit's own**, not vendor symbols — the read side of that sink |
 | `FB_IecCriticalSection` | block | enter/leave bookkeeping; mutual exclusion is not modelled |
+| `FB_FileOpen` / `FB_FileClose` / `FB_FileRead` / `FB_FileWrite` / `FB_FileGets` / `FB_FilePuts` / `FB_FileSeek` / `FB_FileTell` / `FB_EOF` / `FB_FileDelete` / `FB_FileRename` / `FB_CreateDir` / `FB_RemoveDir` | blocks | over an in-memory filesystem, never real disk |
+| `F_FileSystemClear` / `F_FileSystemPutText` / `F_FileSystemGetText` / `F_FileSystemExists` / `F_FileSystemDirExists` / `F_FileSystemSize` / `F_FileSystemOpenHandleCount` | functions | **xStunit's own** — seed and inspect that filesystem from ST |
 
 ## Using it
 
@@ -60,6 +62,35 @@ for a section that was not previously entered — because an unbalanced
 `Enter`/`Leave` on some error path is a real defect that shows up without any
 concurrency at all. Nesting is counted rather than collapsed, so correct nested
 code does not read as a failure.
+
+## The file-access family
+
+Backed by an in-memory filesystem, never real disk. A suite that wrote to the
+machine would leave artefacts behind, race other runs, and behave differently
+depending on what the running user may write — and it could not seed what a POU
+is about to read. `F_FileSystem*` is that seed/inspect surface; there is no
+vendor equivalent, because on a real system ST cannot reach the filesystem,
+which is most of why file-touching POUs go untested.
+
+**The handshake.** The invocation carrying the *rising edge* of `bExecute`
+starts the command and reports `bBusy` TRUE having done nothing else; the *next*
+invocation performs it, publishes the outputs and clears `bBusy`. One cycle of
+latency, not zero — a real POU driving one of these is a state machine, and
+"trigger, then advance once I have seen `bBusy`" is a common shape that an
+instantly-completing block would leave waiting forever in a test while it worked
+on a PLC. Longer would be arbitrary: there is no ADS round trip here, so any
+particular number of cycles would be a fiction a test then had to encode.
+
+**Not modelled:** text-vs-binary line-ending translation (a file holds exactly
+the bytes written to it), and `ePath`'s TwinCAT system directories (the virtual
+filesystem has one flat namespace). `nErrId` values are xStunit's own — the
+vendor does not publish the command-specific half — so only *zero vs non-zero*
+is a safe thing for a suite to assert.
+
+**The named constants are still missing.** `FOPEN_MODEREAD`, `PATH_GENERIC`,
+`SEEK_SET`, `ADSLOG_MSGTYPE_ERROR` and `DEFAULT_ADS_TIMEOUT` live in
+compiled-only Tc2_System GVLs and there is no plugin surface for a named value
+yet, so the fixtures pass raw numbers where real source would not.
 
 ## Why these live in a plugin rather than the interpreter
 

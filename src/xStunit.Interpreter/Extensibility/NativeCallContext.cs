@@ -250,6 +250,42 @@ namespace xStunit.Interpreter.Extensibility
         }
 
         /// <summary>
+        /// Reads an ARRAY OF BYTE argument passed by value, as opposed to the pointer to
+        /// one <see cref="RequireBytes"/> expects.
+        /// </summary>
+        /// <param name="paramName">Declared parameter name.</param>
+        /// <param name="position">The parameter&apos;s 0-based index in the declared signature.</param>
+        /// <returns>
+        /// A fresh copy of every element in declaration order, so an IEC array whose
+        /// bounds do not start at zero still reads as a flat buffer; writing to it does
+        /// not touch interpreted state.
+        /// </returns>
+        /// <exception cref="InvalidOperationException">The argument is missing or is not an ARRAY.</exception>
+        /// <remarks>
+        /// A fixed-size byte array is how several library functions take what is
+        /// conceptually one value - Tc2_System&apos;s F_CreateAmsNetId takes the six
+        /// octets of a net ID that way. Element values are masked to a byte rather than
+        /// range-checked: the interpreter boxes every narrow integer type as int, so an
+        /// ARRAY OF USINT and an ARRAY OF BYTE are indistinguishable here and both mean
+        /// the same eight bits to the caller.
+        /// </remarks>
+        public byte[] RequireByteArray(string paramName, int position)
+        {
+            var value = RequireArg(paramName, position);
+            if (!(value is ArrayValue array))
+            {
+                throw new InvalidOperationException(
+                    $"{FunctionName} argument '{paramName}' must be an ARRAY, got {Describe(value)}");
+            }
+
+            var bytes = new byte[array.Elements.Length];
+            for (var i = 0; i < bytes.Length; i++)
+                bytes[i] = (byte)(Convert.ToInt64(array.Elements[i]) & 0xFF);
+
+            return bytes;
+        }
+
+        /// <summary>
         /// Reads <paramref name="count"/> bytes behind a POINTER argument - the
         /// ADR(buf) / ADR(buf[i]) / ADR(someStruct) shapes MEMCPY already accepts,
         /// resolved through the same byte-layout rules (Engine.ByteLayout.cs), so a

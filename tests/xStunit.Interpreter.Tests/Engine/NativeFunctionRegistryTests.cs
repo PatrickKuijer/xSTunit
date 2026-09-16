@@ -178,6 +178,62 @@ namespace xStunit.Interpreter.Tests
         }
 
         [Fact]
+        public void CallMethod_NativeFunctionReadsAnArrayPassedByValue()
+        {
+            // The other way a library function takes a buffer: the array
+            // itself, not a pointer to it. Tc2_System's F_CreateAmsNetId takes
+            // its six octets that way, and RequireBytes cannot serve it -
+            // there is no Pointer to resolve.
+            var caller = new MethodAst(
+                "bDoWork",
+                "METHOD bDoWork : BOOL",
+                "aIds[0] := 10;\naIds[1] := 200;\naIds[2] := 3;\n" +
+                "nResult := F_SumArray(aIds);");
+
+            var fb = new PouAst(
+                "FB_Widget",
+                null,
+                "VAR\n\taIds : ARRAY[0..2] OF BYTE;\n\tnResult : INT;\nEND_VAR",
+                "",
+                new List<MethodAst> { caller });
+
+            var engine = new Engine(
+                new TypeRegistry(new[] { fb }),
+                RegistryWith(new StubFunction("F_SumArray", ctx =>
+                    ctx.RequireByteArray("nIds", 0).Sum(b => (int)b))));
+
+            var instance = engine.NewInstance("FB_Widget");
+            engine.CallMethod(instance, "bDoWork", new Expr[0], new NamedArg[0], null, null);
+
+            // 213 rather than 13: an octet is unsigned, and a byte read as
+            // signed would be the silent failure here.
+            Assert.Equal(213, instance.Fields["nResult"].Value);
+        }
+
+        [Fact]
+        public void CallMethod_NativeFunctionGivenAScalarWhereAnArrayWasExpected_SaysSo()
+        {
+            var caller = new MethodAst("bDoWork", "METHOD bDoWork : BOOL", "nResult := F_SumArray(nValue);");
+            var fb = new PouAst(
+                "FB_Widget",
+                null,
+                "VAR\n\tnValue : INT := 3;\n\tnResult : INT;\nEND_VAR",
+                "",
+                new List<MethodAst> { caller });
+
+            var engine = new Engine(
+                new TypeRegistry(new[] { fb }),
+                RegistryWith(new StubFunction("F_SumArray", ctx =>
+                    ctx.RequireByteArray("nIds", 0).Sum(b => (int)b))));
+
+            var instance = engine.NewInstance("FB_Widget");
+
+            var ex = Assert.ThrowsAny<Exception>(
+                () => engine.CallMethod(instance, "bDoWork", new Expr[0], new NamedArg[0], null, null));
+            Assert.Contains("must be an ARRAY", ex.ToString());
+        }
+
+        [Fact]
         public void CallMethod_NativeFunctionReadsBytesBehindAPointerIntoAnArrayOfStructs()
         {
             // A pointer read is bounds-checked against the array's byte size

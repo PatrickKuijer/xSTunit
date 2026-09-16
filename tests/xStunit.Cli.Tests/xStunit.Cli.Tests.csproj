@@ -52,6 +52,9 @@
          Tc2_Standard string-function plugin. -->
     <ProjectReference Include="..\..\samples\xStunit.StandardStringPlugins\xStunit.StandardStringPlugins.csproj"
                       ReferenceOutputAssembly="false" />
+    <!-- Same reasoning again, for the Tc2_System plugin. -->
+    <ProjectReference Include="..\..\samples\xStunit.SystemLibraryPlugins\xStunit.SystemLibraryPlugins.csproj"
+                      ReferenceOutputAssembly="false" />
   </ItemGroup>
 
 </Project>

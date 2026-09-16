@@ -33,6 +33,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "xStunit.SamplePlugins", "sa
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "xStunit.StandardStringPlugins", "samples\xStunit.StandardStringPlugins\xStunit.StandardStringPlugins.csproj", "{ABAF88B9-AEC2-4B63-BCD7-2169865DEAD2}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "xStunit.SystemLibraryPlugins", "samples\xStunit.SystemLibraryPlugins\xStunit.SystemLibraryPlugins.csproj", "{7B3C51D6-4E9A-4F2E-9B7C-3A1D6C8E5F40}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -181,6 +183,18 @@ Global
 		{ABAF88B9-AEC2-4B63-BCD7-2169865DEAD2}.Release|x64.Build.0 = Release|Any CPU
 		{ABAF88B9-AEC2-4B63-BCD7-2169865DEAD2}.Release|x86.ActiveCfg = Release|Any CPU
 		{ABAF88B9-AEC2-4B63-BCD7-2169865DEAD2}.Release|x86.Build.0 = Release|Any CPU
+		{7B3C51D6-4E9A-4F2E-9B7C-3A1D6C8E5F40}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{7B3C51D6-4E9A-4F2E-9B7C-3A1D6C8E5F40}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{7B3C51D6-4E9A-4F2E-9B7C-3A1D6C8E5F40}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{7B3C51D6-4E9A-4F2E-9B7C-3A1D6C8E5F40}.Debug|x64.Build.0 = Debug|Any CPU
+		{7B3C51D6-4E9A-4F2E-9B7C-3A1D6C8E5F40}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{7B3C51D6-4E9A-4F2E-9B7C-3A1D6C8E5F40}.Debug|x86.Build.0 = Debug|Any CPU
+		{7B3C51D6-4E9A-4F2E-9B7C-3A1D6C8E5F40}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{7B3C51D6-4E9A-4F2E-9B7C-3A1D6C8E5F40}.Release|Any CPU.Build.0 = Release|Any CPU
+		{7B3C51D6-4E9A-4F2E-9B7C-3A1D6C8E5F40}.Release|x64.ActiveCfg = Release|Any CPU
+		{7B3C51D6-4E9A-4F2E-9B7C-3A1D6C8E5F40}.Release|x64.Build.0 = Release|Any CPU
+		{7B3C51D6-4E9A-4F2E-9B7C-3A1D6C8E5F40}.Release|x86.ActiveCfg = Release|Any CPU
+		{7B3C51D6-4E9A-4F2E-9B7C-3A1D6C8E5F40}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -198,5 +212,6 @@ Global
 		{02B812CB-94ED-4BE9-AD12-98A4EAFB0935} = {71B07E6C-7646-44BF-9DEE-EE4B20A12F39}
 		{1562EAE8-D32E-4649-9700-827CA1FF0448} = {5D20AA90-6969-D8BD-9DCD-8634F4692FDA}
 		{ABAF88B9-AEC2-4B63-BCD7-2169865DEAD2} = {5D20AA90-6969-D8BD-9DCD-8634F4692FDA}
+		{7B3C51D6-4E9A-4F2E-9B7C-3A1D6C8E5F40} = {5D20AA90-6969-D8BD-9DCD-8634F4692FDA}
 	EndGlobalSection
 EndGlobal

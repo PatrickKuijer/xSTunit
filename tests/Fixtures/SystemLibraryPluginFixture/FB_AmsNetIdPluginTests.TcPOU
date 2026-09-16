@@ -1,0 +1,102 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4026.18">
+  <POU Name="FB_AmsNetIdPluginTests" Id="{b2c3d4e5-6k20-4a1a-8b1b-000000000010}" SpecialFunc="None">
+    <Declaration><![CDATA[(*
+    Tc2_System's F_CreateAmsNetId, supplied by samples/xStunit.SystemLibraryPlugins.
+
+    Documented vendor behavior, not a stand-in: six octets in, the dotted
+    decimal T_AmsNetID text out. The return SHAPE is the thing worth pinning -
+    everything downstream in real source feeds this straight into an ADS FB's
+    sNetId input or compares it against '', and a packed byte value would
+    type-check and then mismatch every one of those.
+*)
+FUNCTION_BLOCK FB_AmsNetIdPluginTests EXTENDS TcUnit.FB_TestSuite]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[NetIdRendersAsDottedDecimal();
+NetIdOctetsAreNotZeroPadded();
+FullWidthOctetSurvives();]]></ST>
+    </Implementation>
+    <Method Name="NetIdRendersAsDottedDecimal" Id="{b2c3d4e5-6k20-4a1a-8b1b-000000000011}">
+      <Declaration><![CDATA[METHOD PRIVATE NetIdRendersAsDottedDecimal
+VAR
+	ids			: ARRAY[0..5] OF BYTE;
+	sNetId		: STRING(23);
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('NetIdRendersAsDottedDecimal');
+
+ids[0] := 127;
+ids[1] := 16;
+ids[2] := 17;
+ids[3] := 3;
+ids[4] := 1;
+ids[5] := 1;
+
+sNetId := F_CreateAmsNetId(ids);
+
+AssertEquals_STRING(Expected := '127.16.17.3.1.1',
+                     Actual := sNetId,
+                     Message := 'six octets render as dotted decimal');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="NetIdOctetsAreNotZeroPadded" Id="{b2c3d4e5-6k20-4a1a-8b1b-000000000012}">
+      <Declaration><![CDATA[METHOD PRIVATE NetIdOctetsAreNotZeroPadded
+VAR
+	ids			: ARRAY[0..5] OF BYTE;
+	sNetId		: STRING(23);
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('NetIdOctetsAreNotZeroPadded');
+
+(* A padded '001.002...' would be silently wrong: an ADS route is matched on
+   the text, so the two spellings are not interchangeable. *)
+ids[0] := 1;
+ids[1] := 2;
+ids[2] := 3;
+ids[3] := 4;
+ids[4] := 5;
+ids[5] := 6;
+
+sNetId := F_CreateAmsNetId(ids);
+
+AssertEquals_STRING(Expected := '1.2.3.4.5.6',
+                     Actual := sNetId,
+                     Message := 'single-digit octets are not zero-padded');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="FullWidthOctetSurvives" Id="{b2c3d4e5-6k20-4a1a-8b1b-000000000013}">
+      <Declaration><![CDATA[METHOD PRIVATE FullWidthOctetSurvives
+VAR
+	ids			: ARRAY[0..5] OF BYTE;
+	sNetId		: STRING(23);
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('FullWidthOctetSurvives');
+
+(* 255 is the widest an octet gets, and the longest T_AmsNetID text a
+   STRING(23) has to hold. A byte read as signed would render -1 here. *)
+ids[0] := 255;
+ids[1] := 255;
+ids[2] := 255;
+ids[3] := 255;
+ids[4] := 255;
+ids[5] := 255;
+
+sNetId := F_CreateAmsNetId(ids);
+
+AssertEquals_STRING(Expected := '255.255.255.255.255.255',
+                     Actual := sNetId,
+                     Message := 'a full-width octet is unsigned');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+  </POU>
+</TcPlcObject>

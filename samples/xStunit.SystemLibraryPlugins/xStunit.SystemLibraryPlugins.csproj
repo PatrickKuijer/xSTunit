@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+    <RootNamespace>xStunit.SystemLibraryPlugins</RootNamespace>
+    <!-- Not packed or shipped: vendor-library behavior stays out of the
+         interpreter assemblies and is pointed at with the CLI's plugins
+         option, like every other plugin project under samples/. -->
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Private=false for the same reason as every other plugin project: the
+         host already has xStunit.Interpreter loaded and PluginLoadContext
+         redirects the plugin's reference there, so a local copy would at best
+         be ignored and at worst produce a second, incompatible copy of the
+         plugin interfaces. -->
+    <ProjectReference Include="..\..\src\xStunit.Interpreter\xStunit.Interpreter.csproj" Private="false" />
+  </ItemGroup>
+
+</Project>

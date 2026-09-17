@@ -320,6 +320,73 @@ END_VAR";
             Assert.Equal(VarSection.Temp, value.Section);
         }
 
+        // A motion-control layer is written against library-qualified types,
+        // and the registries already see through a qualifier to the bare name.
+        // If these go red the whole line fails to match and the variable never
+        // exists, so every later use reports "Unknown variable" from somewhere
+        // else entirely. The qualifier is passed through verbatim because the
+        // declared spelling is what FbInstance and Cell record.
+        [Theory]
+        [InlineData("fbWriteParam : MotionLib.MC_WriteParameter;", "fbWriteParam", "MotionLib.MC_WriteParameter")]
+        [InlineData("fbGroup : KinematicsLib.Group.Handle;", "fbGroup", "KinematicsLib.Group.Handle")]
+        [InlineData("axis : motionlib.AXIS_REF;", "axis", "motionlib.AXIS_REF")]
+        public void Parse_LibraryQualifiedType_ReadsFullTypeName(
+            string line, string expectedName, string expectedTypeName)
+        {
+            var vars = VarBlockParser.Parse($"VAR\n\t{line}\nEND_VAR");
+
+            var declared = Assert.Single(vars);
+            Assert.Equal(expectedName, declared.Name);
+            Assert.Equal(expectedTypeName, declared.TypeName);
+        }
+
+        // The composite arms have to admit the qualifier too: a qualified type
+        // is just as legal as an ARRAY element type or a pointee as it is on
+        // its own, and ArrayTypeInfo and AddressTypeInfo both already accept
+        // one. Matching only the bare form here would drop those lines while
+        // the layers that consume the text would have handled them.
+        [Theory]
+        [InlineData("axes : ARRAY[0..3] OF MotionLib.AXIS_REF;", "ARRAY[0..3] OF MotionLib.AXIS_REF")]
+        [InlineData("pAxis : POINTER TO MotionLib.AXIS_REF;", "POINTER TO MotionLib.AXIS_REF")]
+        [InlineData("rAxis : REFERENCE TO MotionLib.AXIS_REF;", "REFERENCE TO MotionLib.AXIS_REF")]
+        public void Parse_LibraryQualifiedCompositeType_ReadsFullTypeName(string line, string expectedTypeName)
+        {
+            var vars = VarBlockParser.Parse($"VAR\n\t{line}\nEND_VAR");
+
+            var declared = Assert.Single(vars);
+            Assert.Equal(expectedTypeName, declared.TypeName);
+        }
+
+        // The sized-string alternative is listed before the bare-name one so
+        // that a STRING sized by a dotted constant is read as a sized string
+        // rather than having its qualifier eaten by a name alternative. Pinned
+        // because admitting dotted names is exactly the change that could
+        // reorder the two and turn STRING(cGvl.MAX) into a plain type name.
+        [Theory]
+        [InlineData("label : STRING(cScratchConstants.MAX);", "STRING(cScratchConstants.MAX)")]
+        [InlineData("labels : ARRAY[0..3] OF WSTRING(cScratchConstants.MAX);", "ARRAY[0..3] OF WSTRING(cScratchConstants.MAX)")]
+        public void Parse_SizedStringWithDottedSize_ReadsSizedStringNotPlainType(
+            string line, string expectedTypeName)
+        {
+            var vars = VarBlockParser.Parse($"VAR\n\t{line}\nEND_VAR");
+
+            var declared = Assert.Single(vars);
+            Assert.Equal(expectedTypeName, declared.TypeName);
+        }
+
+        // A qualified type with an initializer must still split type from
+        // default at the ":=", not swallow it: the dotted type group is
+        // greedier than the bare-name one it replaces.
+        [Fact]
+        public void Parse_LibraryQualifiedTypeWithDefault_SplitsTypeFromDefault()
+        {
+            var vars = VarBlockParser.Parse("VAR\n\tmode : MotionLib.E_Mode := MotionLib.E_Mode.Idle;\nEND_VAR");
+
+            var declared = Assert.Single(vars);
+            Assert.Equal("MotionLib.E_Mode", declared.TypeName);
+            Assert.Equal("MotionLib.E_Mode.Idle", declared.DefaultValueText);
+        }
+
         [Fact]
         public void Parse_WStringSizedByConstArithmeticExpression_ReadsFullTypeName()
         {

@@ -24,6 +24,11 @@ namespace xStunit.Interpreter
         // every later use of the name reports "Unknown variable" instead.
         private const string SizedStringPattern = @"W?STRING\s*\(\s*[^()]+\s*\)";
 
+        // A type name may carry a library qualifier - Lib.FB_Name - which the
+        // registries already strip to reach the bare name. Segments repeat
+        // because a qualifier may itself be nested.
+        private const string QualifiedNamePattern = @"\w+(?:\.\w+)*";
+
         // IgnoreCase because IEC 61131-3 type names are case-insensitive and
         // every consumer of the type text this produces already treats them
         // that way - AddressTypeInfo, ArrayTypeInfo, StringTypeInfo,
@@ -34,8 +39,10 @@ namespace xStunit.Interpreter
         // text is still passed through verbatim, since the declared spelling is
         // what FbInstance and Cell record.
         private static readonly Regex VarLinePattern = new Regex(
-            @"^(?<name>\w+)\s*:\s*(?<type>POINTER TO \w+|REFERENCE TO \w+|ARRAY\s*\[[^\]]+\]\s*OF\s*(?:"
-            + SizedStringPattern + @"|\w+)|" + SizedStringPattern + @"|\w+)\s*(:=\s*(?<default>.+?))?;$",
+            @"^(?<name>\w+)\s*:\s*(?<type>POINTER TO " + QualifiedNamePattern
+            + @"|REFERENCE TO " + QualifiedNamePattern + @"|ARRAY\s*\[[^\]]+\]\s*OF\s*(?:"
+            + SizedStringPattern + @"|" + QualifiedNamePattern + @")|"
+            + SizedStringPattern + @"|" + QualifiedNamePattern + @")\s*(:=\s*(?<default>.+?))?;$",
             RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
         public static IReadOnlyList<VarDecl> Parse(string declarationText)

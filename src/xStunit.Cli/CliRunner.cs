@@ -159,8 +159,9 @@ namespace xStunit.Cli
             // already dropped on its way there.
             var workspace = WorkspaceLoader.Load(args);
             skipped.AddRange(workspace.Skipped);
+            var warnings = workspace.Warnings;
             if (workspace.Error != null)
-                return writer.Error(workspace.Error, skipped, coverage);
+                return writer.Error(workspace.Error, skipped, warnings, coverage);
 
             var types = workspace.PouTypes;
             var registry = workspace.Registry;
@@ -172,7 +173,7 @@ namespace xStunit.Cli
                 var discovered = new HashSet<string>(suiteNames, StringComparer.Ordinal);
                 var missing = suiteFilters.Where(name => !discovered.Contains(name)).Distinct().ToList();
                 if (missing.Count > 0)
-                    return writer.Error($"suite not found: {string.Join(", ", missing)}", skipped, coverage);
+                    return writer.Error($"suite not found: {string.Join(", ", missing)}", skipped, warnings, coverage);
 
                 var requested = new HashSet<string>(suiteFilters, StringComparer.Ordinal);
                 suiteNames = suiteNames.Where(name => requested.Contains(name)).ToList();
@@ -186,7 +187,7 @@ namespace xStunit.Cli
                 coverage = SuiteCoverage.Analyze(types, suiteNames);
 
             if (suiteNames.Count == 0)
-                return writer.Error($"no TcUnit suites found under {string.Join(", ", args)}", skipped, coverage);
+                return writer.Error($"no TcUnit suites found under {string.Join(", ", args)}", skipped, warnings, coverage);
 
             // Plugin-supplied native functions are resolved only after every
             // real POU in the tree has failed to resolve a call (see
@@ -242,7 +243,7 @@ namespace xStunit.Cli
                 writer.SuiteCompleted(suiteName, filePath, testReports, suiteDurationMs);
             }
 
-            return writer.Summary(skipped, coverage);
+            return writer.Summary(skipped, warnings, coverage);
         }
 
         // The single description of every flag, and so the one that must be

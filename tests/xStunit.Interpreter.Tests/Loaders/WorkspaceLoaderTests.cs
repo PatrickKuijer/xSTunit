@@ -197,6 +197,88 @@ namespace xStunit.Interpreter.Tests
             Assert.EndsWith("FB_Malformed.TcPOU", Assert.Single(workspace.Skipped).FileKey);
         }
 
+        // A declaration line the parser cannot spell costs a variable, not a
+        // file, so it must not become a skip: the file still loads and its
+        // other types still run. It is reported as a warning instead, carrying
+        // the file and the line, because nothing else in the run says the
+        // variable is gone - a later use reports "Unknown variable" against
+        // the use, not against the declaration that never parsed.
+        [Fact]
+        public void Load_PouWithUnreadableDeclarationLine_LoadsTheFileAndWarns()
+        {
+            File.WriteAllText(Path.Combine(_tempDir, "FB_Drive.TcPOU"), DriveWithUnreadableLinePouXml);
+
+            var workspace = WorkspaceLoader.Load(new[] { _tempDir });
+
+            Assert.Null(workspace.Error);
+            Assert.NotNull(workspace.Registry.Get("FB_Drive"));
+            Assert.Empty(workspace.Skipped);
+
+            var warning = Assert.Single(workspace.Warnings);
+            Assert.EndsWith("FB_Drive.TcPOU", warning.FileKey);
+            Assert.Equal(new[] { "i, j : INT;" }, warning.Lines);
+        }
+
+        [Fact]
+        public void Load_PouWhoseDeclarationsAllParse_WarnsAboutNothing()
+        {
+            File.WriteAllText(Path.Combine(_tempDir, "FB_Counter.TcPOU"), CounterPouXml);
+
+            var workspace = WorkspaceLoader.Load(new[] { _tempDir });
+
+            Assert.Empty(workspace.Warnings);
+        }
+
+        // A method's VAR_INPUT block is parsed separately from the POU's own
+        // declaration, so a loss inside one has to reach the same report.
+        [Fact]
+        public void Load_MethodWithUnreadableDeclarationLine_WarnsAgainstTheOwningFile()
+        {
+            File.WriteAllText(Path.Combine(_tempDir, "FB_Mover.TcPOU"), MethodWithUnreadableLinePouXml);
+
+            var workspace = WorkspaceLoader.Load(new[] { _tempDir });
+
+            var warning = Assert.Single(workspace.Warnings);
+            Assert.EndsWith("FB_Mover.TcPOU", warning.FileKey);
+            Assert.Equal(new[] { "cx, cy : LREAL;" }, warning.Lines);
+        }
+
+        private const string DriveWithUnreadableLinePouXml = @"<?xml version=""1.0"" encoding=""utf-8""?>
+<TcPlcObject Version=""1.1.0.1"">
+  <POU Name=""FB_Drive"" Id=""{00000000-0000-0000-0000-0000000000d0}"" SpecialFunc=""None"">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_Drive
+VAR
+    nCount : INT;
+    i, j : INT;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[nCount := nCount + 1;]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>";
+
+        private const string MethodWithUnreadableLinePouXml = @"<?xml version=""1.0"" encoding=""utf-8""?>
+<TcPlcObject Version=""1.1.0.1"">
+  <POU Name=""FB_Mover"" Id=""{00000000-0000-0000-0000-0000000000d1}"" SpecialFunc=""None"">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_Mover
+VAR
+    nCount : INT;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[nCount := nCount + 1;]]></ST>
+    </Implementation>
+    <Method Name=""M_Step"" Id=""{00000000-0000-0000-0000-0000000000d2}"">
+      <Declaration><![CDATA[METHOD PUBLIC M_Step
+VAR
+    cx, cy : LREAL;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[nCount := nCount + 1;]]></ST>
+      </Implementation>
+    </Method>
+  </POU>
+</TcPlcObject>";
+
         private const string CounterPouXml = @"<?xml version=""1.0"" encoding=""utf-8""?>
 <TcPlcObject Version=""1.1.0.1"">
   <POU Name=""FB_Counter"" Id=""{00000000-0000-0000-0000-0000000000c0}"" SpecialFunc=""None"">

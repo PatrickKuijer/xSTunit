@@ -387,6 +387,128 @@ END_VAR";
             Assert.Equal("MotionLib.E_Mode.Idle", declared.DefaultValueText);
         }
 
+        // A line the pattern cannot match has to be reported, since nothing
+        // else will say the variable is gone. Reporting is only worth anything
+        // if it separates a declaration that was lost from a line that was
+        // never a declaration: the lines matching nothing are overwhelmingly
+        // pragmas and comment bodies, and a report drowning in those is one
+        // nobody reads.
+        [Theory]
+        [InlineData("saParameters : REFERENCE TO ARRAY[1..MAX] OF uData;")]
+        [InlineData("i, j : INT;")]
+        [InlineData("DI_KeyPresent AT %I* : BOOL;")]
+        [InlineData("state : (INIT, STARTING, WAIT_CONTAINER);")]
+        public void Parse_LineItCannotSpell_ReportsItAsUnreadable(string line)
+        {
+            VarBlockParser.Parse($"VAR\n\t{line}\nEND_VAR", out var unreadable);
+
+            var reported = Assert.Single(unreadable);
+            Assert.Equal(line, reported);
+        }
+
+        [Fact]
+        public void Parse_LinesItCanSpell_ReportNothingAsUnreadable()
+        {
+            const string declaration = @"FUNCTION_BLOCK FB_Counter
+VAR
+	value : INT := 5; // seed
+	pFloor : POINTER TO INT;
+	label : STRING(cConsts.MAX);
+END_VAR";
+
+            var vars = VarBlockParser.Parse(declaration, out var unreadable);
+
+            Assert.Equal(3, vars.Count);
+            Assert.Empty(unreadable);
+        }
+
+        // A pragma is not a declaration, so it is not a lost variable. They
+        // outnumber real losses several times over, so reporting them would
+        // bury the losses that matter.
+        [Theory]
+        [InlineData("{attribute 'hide'}")]
+        [InlineData("{attribute 'symbol' := 'readwrite'}")]
+        [InlineData("{IF defined (VariantCamming)}")]
+        [InlineData("{END_IF}")]
+        public void Parse_PragmaInsideAnOpenSection_IsNotReportedAsUnreadable(string pragma)
+        {
+            VarBlockParser.Parse($"VAR\n\t{pragma}\n\tvalue : INT;\nEND_VAR", out var unreadable);
+
+            Assert.Empty(unreadable);
+        }
+
+        // A block comment may span several lines, and each line reaches the
+        // parser on its own. Its body and closing line are comment text, not
+        // lost variables, so neither may be reported as one.
+        [Fact]
+        public void Parse_MultiLineBlockComment_IsNotReportedAsUnreadable()
+        {
+            const string declaration = @"FUNCTION_BLOCK FB_Sync
+VAR
+	(* the transport's real ack-arrival edge. No default -- iAckMessage
+	   lives in a receive buffer, so an ungated call replays the pre-drop
+	   ack every scan. *)
+	obAcked : BOOL;
+END_VAR";
+
+            var vars = VarBlockParser.Parse(declaration, out var unreadable);
+
+            var acked = Assert.Single(vars);
+            Assert.Equal("obAcked", acked.Name);
+            Assert.Empty(unreadable);
+        }
+
+        // A declaration sharing a line with the end of a block comment is
+        // still a declaration.
+        [Fact]
+        public void Parse_DeclarationAfterBlockCommentCloses_IsStillRead()
+        {
+            const string declaration = @"VAR
+	(* note
+	   continues *) value : INT;
+END_VAR";
+
+            var vars = VarBlockParser.Parse(declaration, out var unreadable);
+
+            var value = Assert.Single(vars);
+            Assert.Equal("value", value.Name);
+            Assert.Equal("INT", value.TypeName);
+            Assert.Empty(unreadable);
+        }
+
+        // A block comment opening outside any section must not swallow the
+        // section header that follows it.
+        [Fact]
+        public void Parse_MultiLineBlockCommentBeforeSectionHeader_DoesNotSwallowTheBlock()
+        {
+            const string declaration = @"FUNCTION_BLOCK FB_Sync
+(* leading
+   note *)
+VAR
+	value : INT;
+END_VAR";
+
+            var vars = VarBlockParser.Parse(declaration, out var unreadable);
+
+            Assert.Equal("value", Assert.Single(vars).Name);
+            Assert.Empty(unreadable);
+        }
+
+        // Nothing outside an open section is a declaration, so an unmatched
+        // line there is not a lost variable either.
+        [Fact]
+        public void Parse_UnmatchedLineOutsideAnySection_IsNotReportedAsUnreadable()
+        {
+            const string declaration = @"FUNCTION_BLOCK FB_Counter EXTENDS FB_Base
+VAR
+	value : INT;
+END_VAR";
+
+            VarBlockParser.Parse(declaration, out var unreadable);
+
+            Assert.Empty(unreadable);
+        }
+
         [Fact]
         public void Parse_WStringSizedByConstArithmeticExpression_ReadsFullTypeName()
         {

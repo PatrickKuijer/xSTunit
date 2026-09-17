@@ -41,11 +41,16 @@ namespace xStunit.Cli
     internal sealed class ErrorReport
     {
         public ErrorReport(
-            string error, IReadOnlyList<SkipReport> skipped, IReadOnlyList<CoverageReport> coverage, string streamEvent = null)
+            string error,
+            IReadOnlyList<SkipReport> skipped,
+            IReadOnlyList<WarningReport> warnings,
+            IReadOnlyList<CoverageReport> coverage,
+            string streamEvent = null)
         {
             Event = streamEvent;
             Error = error;
             Skipped = skipped;
+            Warnings = warnings;
             Coverage = coverage;
         }
 
@@ -68,6 +73,11 @@ namespace xStunit.Cli
         // no reason why.
         public IReadOnlyList<SkipReport> Skipped { get; }
 
+        // Declaration lines lost before the error surfaced. Reported for the
+        // same reason the skips above are: what was already dropped is part of
+        // why the run ended where it did.
+        public IReadOnlyList<WarningReport> Warnings { get; }
+
         // Reported even on a failed run: "no suites found" is a usage error
         // for a run, but for a work list it is the most informative answer
         // there is - every POU in the tree is uncovered.
@@ -89,6 +99,25 @@ namespace xStunit.Cli
         public string Reason { get; }
     }
 
+    // A file that loaded but lost declaration lines on the way in, as opposed
+    // to a SkipReport's file that produced no types at all. Separate on the
+    // wire as well as in the model, so a consumer counting skips to report
+    // reduced coverage does not start counting these too.
+    internal sealed class WarningReport
+    {
+        public WarningReport(string filePath, IReadOnlyList<string> lines)
+        {
+            FilePath = filePath;
+            Lines = lines;
+        }
+
+        public string FilePath { get; }
+
+        // The declaration lines that could not be read. Never empty: a file
+        // with nothing to report produces no WarningReport at all.
+        public IReadOnlyList<string> Lines { get; }
+    }
+
     // Root of the `--format json` output, and with it the *Report family
     // below. Kept separate from TestCaseResult/AssertionFailure on purpose:
     // the wire format has to stay stable even when the interpreter's
@@ -101,6 +130,7 @@ namespace xStunit.Cli
             int failed,
             int exitCode,
             IReadOnlyList<SkipReport> skipped,
+            IReadOnlyList<WarningReport> warnings,
             IReadOnlyList<CoverageReport> coverage,
             string streamEvent = null)
         {
@@ -110,6 +140,7 @@ namespace xStunit.Cli
             Failed = failed;
             ExitCode = exitCode;
             Skipped = skipped;
+            Warnings = warnings;
             Coverage = coverage;
         }
 
@@ -126,6 +157,10 @@ namespace xStunit.Cli
         // Always present, empty when nothing was skipped, so a consumer can
         // read it unconditionally.
         public IReadOnlyList<SkipReport> Skipped { get; }
+
+        // Always present, empty when nothing was lost, so a consumer can read
+        // it unconditionally the same way it reads Skipped.
+        public IReadOnlyList<WarningReport> Warnings { get; }
 
         // One entry per non-suite POU. Omitted entirely without --coverage,
         // because an empty list already means something else: that every

@@ -54,6 +54,12 @@ namespace xStunit.Cli.Tests
         private static RunReportBuilder Builder() =>
             new RunReportBuilder((message, kind, isVerbatim, bodyLine) => message, failure => failure.Message);
 
+        private const string WarnedPath = "/POUs/FB_Drive.TcPOU";
+        private const string WarnedLine = "i, j : INT;";
+
+        private static readonly IReadOnlyList<DeclarationWarning> Warnings =
+            new[] { new DeclarationWarning(WarnedPath, new[] { WarnedLine }) };
+
         private static readonly IReadOnlyList<SkippedFile> Skips =
             new[] { new SkippedFile(SkippedPath, SkipReason) };
 
@@ -73,6 +79,7 @@ namespace xStunit.Cli.Tests
                     ["Failed"] = 2,
                     ["ExitCode"] = 1,
                     ["Skipped"] = Check<List<XstunitSkippedFile>>(AssertSkipsSurvived),
+                    ["Warnings"] = Check<List<XstunitDeclarationWarning>>(AssertWarningsSurvived),
                     // The summary shape carries no run-level failure: those two
                     // keys belong to the early-exit shape below, which is where
                     // a rename of either shows up.
@@ -85,7 +92,7 @@ namespace xStunit.Cli.Tests
         [Fact]
         public void JsonBlob_OfAnEarlyExitError_ArrivesWithTheRunLevelErrorKindAndSkips()
         {
-            var blob = RunReportJson.Blob(Builder().Error("no TcUnit suites found under /POUs", Skips, coverage: null));
+            var blob = RunReportJson.Blob(Builder().Error("no TcUnit suites found under /POUs", Skips, Warnings, coverage: null));
 
             var result = JsonSerializer.Deserialize<XstunitRunResult>(blob, XstunitEventStream.SerializerOptions);
 
@@ -99,6 +106,9 @@ namespace xStunit.Cli.Tests
                     // of why nothing was found, so they have to survive a shape
                     // that carries no suites at all.
                     ["Skipped"] = Check<List<XstunitSkippedFile>>(AssertSkipsSurvived),
+                    // Same reason as the skips above: what a dying run had
+                    // already lost is part of the account of why it died.
+                    ["Warnings"] = Check<List<XstunitDeclarationWarning>>(AssertWarningsSurvived),
                     ["Suites"] = null,
                     ["Passed"] = 0,
                     ["Failed"] = 0,
@@ -197,6 +207,7 @@ namespace xStunit.Cli.Tests
                     ["Failed"] = 2,
                     ["ExitCode"] = 1,
                     ["Skipped"] = Check<List<XstunitSkippedFile>>(AssertSkipsSurvived),
+                    ["Warnings"] = Check<List<XstunitDeclarationWarning>>(AssertWarningsSurvived),
                     ["Error"] = null,
                     ["Kind"] = null,
                     // Stashed by the extension itself, not read off the wire:
@@ -213,7 +224,7 @@ namespace xStunit.Cli.Tests
         public void StreamLine_Error_ArrivesWholeAndFinishesTheStream()
         {
             var line = RunReportJson.Line(
-                Builder().Error("no TcUnit suites found under /POUs", Skips, coverage: null, streamEvent: "error"));
+                Builder().Error("no TcUnit suites found under /POUs", Skips, Warnings, coverage: null, streamEvent: "error"));
             var stream = new XstunitEventStream();
 
             var error = Assert.IsType<XstunitErrorEvent>(stream.Append(line));
@@ -226,6 +237,7 @@ namespace xStunit.Cli.Tests
                     ["Error"] = "no TcUnit suites found under /POUs",
                     ["Kind"] = FailureKind.LoadError,
                     ["Skipped"] = Check<List<XstunitSkippedFile>>(AssertSkipsSurvived),
+                    ["Warnings"] = Check<List<XstunitDeclarationWarning>>(AssertWarningsSurvived),
                     ["Suites"] = null,
                     ["Passed"] = 0,
                     ["Failed"] = 0,
@@ -244,8 +256,9 @@ namespace xStunit.Cli.Tests
                 failed: 2,
                 exitCode: 1,
                 Skips,
+                Warnings,
                 coverage: null,
-                streamEvent);
+                streamEvent: streamEvent);
         }
 
         // A suite that ran to completion: it has a duration and tests, and none
@@ -382,6 +395,13 @@ namespace xStunit.Cli.Tests
                         });
                 })
             };
+
+        private static void AssertWarningsSurvived(List<XstunitDeclarationWarning> warnings)
+        {
+            var warning = Assert.Single(warnings);
+            Assert.Equal(WarnedPath, warning.FilePath);
+            Assert.Equal(new[] { WarnedLine }, warning.Lines);
+        }
 
         private static void AssertSkipsSurvived(List<XstunitSkippedFile> skipped) =>
             AssertEveryFieldSurvives(

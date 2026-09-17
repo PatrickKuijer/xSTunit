@@ -54,14 +54,21 @@ namespace xStunit.Cli
         // Returns the exit code for a usage or discovery error, because
         // reporting one and exiting 2 are the same decision: this is the only
         // path that produces a run with no results at all.
-        public int Error(string message, IReadOnlyList<SkippedFile> skipped, IReadOnlyList<PouCoverage> coverage)
+        public int Error(
+            string message,
+            IReadOnlyList<SkippedFile> skipped,
+            IReadOnlyList<DeclarationWarning> warnings,
+            IReadOnlyList<PouCoverage> coverage)
         {
-            WriteError(message, skipped, coverage);
+            WriteError(message, skipped, warnings, coverage);
             return 2;
         }
 
         protected abstract void WriteError(
-            string message, IReadOnlyList<SkippedFile> skipped, IReadOnlyList<PouCoverage> coverage);
+            string message,
+            IReadOnlyList<SkippedFile> skipped,
+            IReadOnlyList<DeclarationWarning> warnings,
+            IReadOnlyList<PouCoverage> coverage);
 
         public virtual void PluginsLoaded(IReadOnlyList<string> plugins)
         {
@@ -142,15 +149,21 @@ namespace xStunit.Cli
         // completed run (0 or 1 by test outcome). Exit 2 stays reserved for
         // usage and discovery errors that produced no results at all; the skip
         // list is what tells the caller coverage was reduced.
-        public int Summary(IReadOnlyList<SkippedFile> skipped, IReadOnlyList<PouCoverage> coverage)
+        public int Summary(
+            IReadOnlyList<SkippedFile> skipped,
+            IReadOnlyList<DeclarationWarning> warnings,
+            IReadOnlyList<PouCoverage> coverage)
         {
             var exitCode = _anyFailed ? 1 : 0;
-            WriteSummary(exitCode, skipped, coverage);
+            WriteSummary(exitCode, skipped, warnings, coverage);
             return exitCode;
         }
 
         protected abstract void WriteSummary(
-            int exitCode, IReadOnlyList<SkippedFile> skipped, IReadOnlyList<PouCoverage> coverage);
+            int exitCode,
+            IReadOnlyList<SkippedFile> skipped,
+            IReadOnlyList<DeclarationWarning> warnings,
+            IReadOnlyList<PouCoverage> coverage);
     }
 
     // What a human reads at a console: results as they finish, then a count.
@@ -162,9 +175,13 @@ namespace xStunit.Cli
         }
 
         protected override void WriteError(
-            string message, IReadOnlyList<SkippedFile> skipped, IReadOnlyList<PouCoverage> coverage)
+            string message,
+            IReadOnlyList<SkippedFile> skipped,
+            IReadOnlyList<DeclarationWarning> warnings,
+            IReadOnlyList<PouCoverage> coverage)
         {
             WriteSkipLines(skipped);
+            WriteWarningLines(warnings);
             // The bare message, without the guidance the structured shapes
             // append: this line is read by a human at a console who has the
             // rest of the terminal for context.
@@ -195,13 +212,36 @@ namespace xStunit.Cli
         }
 
         protected override void WriteSummary(
-            int exitCode, IReadOnlyList<SkippedFile> skipped, IReadOnlyList<PouCoverage> coverage)
+            int exitCode,
+            IReadOnlyList<SkippedFile> skipped,
+            IReadOnlyList<DeclarationWarning> warnings,
+            IReadOnlyList<PouCoverage> coverage)
         {
             WriteSkipLines(skipped);
-            Output.WriteLine(skipped.Count > 0
-                ? $"{PassCount} passed, {FailCount} failed, {skipped.Count} skipped"
-                : $"{PassCount} passed, {FailCount} failed");
+            WriteWarningLines(warnings);
+            Output.WriteLine(CountLine(skipped, warnings));
             WriteCoverageLines(coverage);
+        }
+
+        // Skips and warnings are counted in different units on purpose: a skip
+        // costs a whole file, so it is counted in files lost, while a warning
+        // leaves the file running and is counted in files affected. Each part
+        // is omitted at zero, so an all-green run still ends on the same bare
+        // "N passed, M failed" line it always did.
+        private string CountLine(
+            IReadOnlyList<SkippedFile> skipped, IReadOnlyList<DeclarationWarning> warnings)
+        {
+            var line = $"{PassCount} passed, {FailCount} failed";
+
+            if (skipped.Count > 0)
+                line += $", {skipped.Count} skipped";
+
+            if (warnings.Count > 0)
+                line += warnings.Count == 1
+                    ? ", 1 file with warnings"
+                    : $", {warnings.Count} files with warnings";
+
+            return line;
         }
 
         // Frames print beneath the line they belong to, never instead of it: a
@@ -230,6 +270,22 @@ namespace xStunit.Cli
             foreach (var skip in skipped)
                 Output.WriteLine($"skipped: {skip.FileKey} ({skip.Message})");
         }
+
+        // The offending lines print beneath the file that lost them: the file
+        // alone is not enough to act on, since the whole point of the report
+        // is to show which declaration went missing.
+        private void WriteWarningLines(IReadOnlyList<DeclarationWarning> warnings)
+        {
+            foreach (var warning in warnings)
+            {
+                Output.WriteLine(
+                    $"warning: {warning.FileKey} - {warning.Lines.Count} declaration "
+                    + (warning.Lines.Count == 1 ? "line" : "lines") + " not understood");
+
+                foreach (var line in warning.Lines)
+                    Output.WriteLine($"    {line}");
+            }
+        }
     }
 
     // `--format json`: one blob at the end, so nothing is written until the run
@@ -242,13 +298,19 @@ namespace xStunit.Cli
         }
 
         protected override void WriteError(
-            string message, IReadOnlyList<SkippedFile> skipped, IReadOnlyList<PouCoverage> coverage) =>
-            Output.WriteLine(RunReportJson.Blob(Reports.Error(message, skipped, coverage)));
+            string message,
+            IReadOnlyList<SkippedFile> skipped,
+            IReadOnlyList<DeclarationWarning> warnings,
+            IReadOnlyList<PouCoverage> coverage) =>
+            Output.WriteLine(RunReportJson.Blob(Reports.Error(message, skipped, warnings, coverage)));
 
         protected override void WriteSummary(
-            int exitCode, IReadOnlyList<SkippedFile> skipped, IReadOnlyList<PouCoverage> coverage) =>
+            int exitCode,
+            IReadOnlyList<SkippedFile> skipped,
+            IReadOnlyList<DeclarationWarning> warnings,
+            IReadOnlyList<PouCoverage> coverage) =>
             Output.WriteLine(RunReportJson.Blob(
-                Reports.Summary(Suites, PassCount, FailCount, exitCode, skipped, coverage)));
+                Reports.Summary(Suites, PassCount, FailCount, exitCode, skipped, warnings, coverage)));
     }
 
     // `--stream`: one NDJSON event per line as the run proceeds. Every method
@@ -262,10 +324,14 @@ namespace xStunit.Cli
         }
 
         protected override void WriteError(
-            string message, IReadOnlyList<SkippedFile> skipped, IReadOnlyList<PouCoverage> coverage) =>
+            string message,
+            IReadOnlyList<SkippedFile> skipped,
+            IReadOnlyList<DeclarationWarning> warnings,
+            IReadOnlyList<PouCoverage> coverage) =>
             // Stands alone: this can fire before any discovery or suite event
             // has been emitted (a bad path, "no suites found").
-            Output.WriteLine(RunReportJson.Line(Reports.Error(message, skipped, coverage, StreamEventNames.Error)));
+            Output.WriteLine(RunReportJson.Line(
+                Reports.Error(message, skipped, warnings, coverage, StreamEventNames.Error)));
 
         public override void Discovery(
             IReadOnlyList<string> suiteNames, IReadOnlyDictionary<string, string> filePathsByTypeName) =>
@@ -284,8 +350,11 @@ namespace xStunit.Cli
             Output.WriteLine(RunReportJson.Line(suite.AsStreamEvent(StreamEventNames.SuiteResult)));
 
         protected override void WriteSummary(
-            int exitCode, IReadOnlyList<SkippedFile> skipped, IReadOnlyList<PouCoverage> coverage) =>
-            Output.WriteLine(RunReportJson.Line(
-                Reports.Summary(Suites, PassCount, FailCount, exitCode, skipped, coverage, StreamEventNames.Summary)));
+            int exitCode,
+            IReadOnlyList<SkippedFile> skipped,
+            IReadOnlyList<DeclarationWarning> warnings,
+            IReadOnlyList<PouCoverage> coverage) =>
+            Output.WriteLine(RunReportJson.Line(Reports.Summary(
+                Suites, PassCount, FailCount, exitCode, skipped, warnings, coverage, StreamEventNames.Summary)));
     }
 }

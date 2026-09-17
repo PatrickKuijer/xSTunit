@@ -24,6 +24,7 @@ namespace xStunit.Cli.Tests
         private const string SuitePath = "/POUs/FB_CounterTests.TcPOU";
 
         private static readonly IReadOnlyList<SkippedFile> NoSkips = new SkippedFile[0];
+        private static readonly IReadOnlyList<DeclarationWarning> NoWarnings = new DeclarationWarning[0];
 
         private static readonly IReadOnlyDictionary<string, string> FilePaths =
             new Dictionary<string, string> { ["FB_CounterTests"] = SuitePath };
@@ -66,7 +67,7 @@ namespace xStunit.Cli.Tests
             writer.SuiteStart("FB_CounterTests");
             var tests = writer.ReportTests(new[] { Passing(), Failing() });
             writer.SuiteCompleted("FB_CounterTests", SuitePath, tests, 11);
-            return writer.Summary(NoSkips, coverage: null);
+            return writer.Summary(NoSkips, NoWarnings, coverage: null);
         }
 
         [Fact]
@@ -139,7 +140,7 @@ namespace xStunit.Cli.Tests
             // No "coverage": omitted when not requested, because an empty list
             // already means something else - that every POU is uncovered.
             Assert.Equal(
-                new[] { "event", "suites", "passed", "failed", "exitCode", "skipped" },
+                new[] { "event", "suites", "passed", "failed", "exitCode", "skipped", "warnings" },
                 KeysOf(summary.RootElement));
             Assert.Equal(1, summary.RootElement.GetProperty("passed").GetInt32());
             Assert.Equal(1, summary.RootElement.GetProperty("failed").GetInt32());
@@ -160,7 +161,7 @@ namespace xStunit.Cli.Tests
             writer.SuiteStart("FB_CounterTests");
             var completed = writer.ReportTests(new[] { Passing() });
             writer.SuiteFailed("FB_CounterTests", SuitePath, fault, completed);
-            var exitCode = writer.Summary(NoSkips, coverage: null);
+            var exitCode = writer.Summary(NoSkips, NoWarnings, coverage: null);
 
             // A suite that never ran to completion still closes its own entry
             // on the consumer's waiting list, and still fails the run.
@@ -195,12 +196,12 @@ namespace xStunit.Cli.Tests
 
             // An error can fire before any discovery or suite event has been
             // emitted, so its line has to stand alone.
-            var exitCode = writer.Error("no TcUnit suites found under /POUs", skips, coverage: null);
+            var exitCode = writer.Error("no TcUnit suites found under /POUs", skips, NoWarnings, coverage: null);
 
             Assert.Equal(2, exitCode);
             var line = Assert.Single(Lines(output));
             using var error = JsonDocument.Parse(line);
-            Assert.Equal(new[] { "event", "error", "kind", "skipped" }, KeysOf(error.RootElement));
+            Assert.Equal(new[] { "event", "error", "kind", "skipped", "warnings" }, KeysOf(error.RootElement));
             Assert.Equal("error", error.RootElement.GetProperty("event").GetString());
             Assert.Equal(FailureKind.LoadError, error.RootElement.GetProperty("kind").GetString());
             Assert.StartsWith("no TcUnit suites found under /POUs -- ", error.RootElement.GetProperty("error").GetString());
@@ -220,14 +221,14 @@ namespace xStunit.Cli.Tests
             writer.SuiteCompleted("FB_CounterTests", SuitePath, tests, 11);
             Assert.Equal(string.Empty, output.ToString());
 
-            var exitCode = writer.Summary(NoSkips, coverage: null);
+            var exitCode = writer.Summary(NoSkips, NoWarnings, coverage: null);
 
             Assert.Equal(1, exitCode);
             using var blob = JsonDocument.Parse(output.ToString());
             // No "event": its absence is what tells a --format json consumer
             // apart from a --stream one.
             Assert.Equal(
-                new[] { "suites", "passed", "failed", "exitCode", "skipped" },
+                new[] { "suites", "passed", "failed", "exitCode", "skipped", "warnings" },
                 KeysOf(blob.RootElement));
             Assert.Equal(1, blob.RootElement.GetProperty("exitCode").GetInt32());
             // The outcome the --stream suite-result line carries is on the
@@ -271,7 +272,7 @@ namespace xStunit.Cli.Tests
                 "FB_Counter", "Add", 12, 3, frames, new InvalidOperationException("division by zero"));
 
             writer.SuiteFailed("FB_CounterTests", SuitePath, fault, new TestReport[0]);
-            var exitCode = writer.Summary(NoSkips, coverage: null);
+            var exitCode = writer.Summary(NoSkips, NoWarnings, coverage: null);
 
             // Frames print beneath the FAIL line, never instead of it, innermost
             // first: a consumer that reads only the FAIL line must keep working,
@@ -343,7 +344,7 @@ namespace xStunit.Cli.Tests
             var writer = RunReportWriter.Create(output, asJson: false, streaming: false);
 
             writer.SuiteCompleted("FB_CounterTests", SuitePath, writer.ReportTests(new[] { Passing() }), 4);
-            var exitCode = writer.Summary(skips, coverage: null);
+            var exitCode = writer.Summary(skips, NoWarnings, coverage: null);
 
             // A run that skipped unsupported POUs but ran everything else is
             // still a completed run. Exit 2 stays reserved for a run that
@@ -351,6 +352,52 @@ namespace xStunit.Cli.Tests
             Assert.Equal(0, exitCode);
             Assert.Equal(
                 new[] { "CounterResets: PASS", "skipped: /POUs/FB_Odd.TcPOU (unsupported file)", "1 passed, 0 failed, 1 skipped" },
+                Lines(output));
+        }
+
+        // A warning is not a skip. The file loaded and its suites ran; what
+        // was lost is the variables those lines declared. Folding it into the
+        // skip list would make "N skipped" mean two different things, and
+        // reporting only a count would hide which file to go and look at.
+        [Fact]
+        public void DeclarationWarnings_AreReportedSeparatelyFromSkipsAndDoNotChangeTheExitCode()
+        {
+            var warnings = new[]
+            {
+                new DeclarationWarning(
+                    "/POUs/FB_Drive.TcPOU",
+                    new[] { "saParameters : REFERENCE TO ARRAY[1..MAX] OF uData;", "i, j : INT;" })
+            };
+            var output = new StringWriter();
+            var writer = RunReportWriter.Create(output, asJson: false, streaming: false);
+
+            writer.SuiteCompleted("FB_CounterTests", SuitePath, writer.ReportTests(new[] { Passing() }), 4);
+            var exitCode = writer.Summary(NoSkips, warnings, coverage: null);
+
+            Assert.Equal(0, exitCode);
+            Assert.Equal(
+                new[]
+                {
+                    "CounterResets: PASS",
+                    "warning: /POUs/FB_Drive.TcPOU - 2 declaration lines not understood",
+                    "    saParameters : REFERENCE TO ARRAY[1..MAX] OF uData;",
+                    "    i, j : INT;",
+                    "1 passed, 0 failed, 1 file with warnings"
+                },
+                Lines(output));
+        }
+
+        [Fact]
+        public void DeclarationWarnings_AreOmittedEntirelyWhenThereAreNone()
+        {
+            var output = new StringWriter();
+            var writer = RunReportWriter.Create(output, asJson: false, streaming: false);
+
+            writer.SuiteCompleted("FB_CounterTests", SuitePath, writer.ReportTests(new[] { Passing() }), 4);
+            writer.Summary(NoSkips, NoWarnings, coverage: null);
+
+            Assert.Equal(
+                new[] { "CounterResets: PASS", "1 passed, 0 failed" },
                 Lines(output));
         }
 
@@ -365,8 +412,8 @@ namespace xStunit.Cli.Tests
             var text = new StringWriter();
             var json = new StringWriter();
 
-            RunReportWriter.Create(text, asJson: false, streaming: false).Summary(NoSkips, coverage);
-            RunReportWriter.Create(json, asJson: true, streaming: false).Summary(NoSkips, coverage);
+            RunReportWriter.Create(text, asJson: false, streaming: false).Summary(NoSkips, NoWarnings, coverage);
+            RunReportWriter.Create(json, asJson: true, streaming: false).Summary(NoSkips, NoWarnings, coverage);
 
             Assert.Equal(
                 new[] { "0 passed, 0 failed", "FB_Counter  suites: FB_CounterTests", "F_ComputeChecksum  suites: (none)" },

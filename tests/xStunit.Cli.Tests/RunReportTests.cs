@@ -32,6 +32,7 @@ namespace xStunit.Cli.Tests
                 failure => failure.Message);
 
         private static readonly IReadOnlyList<SkippedFile> NoSkips = new SkippedFile[0];
+        private static readonly IReadOnlyList<DeclarationWarning> NoWarnings = new DeclarationWarning[0];
 
         private static string[] KeysOf(JsonElement element) =>
             element.EnumerateObject().Select(p => p.Name).ToArray();
@@ -58,14 +59,14 @@ namespace xStunit.Cli.Tests
             var tests = new[] { builder.Test(failing), builder.Test(passing) };
             var suite = builder.Suite("FB_CounterTests", "/POUs/FB_CounterTests.TcPOU", tests, 11);
             var json = RunReportJson.Blob(
-                builder.Summary(new[] { suite }, passed: 1, failed: 1, exitCode: 1, NoSkips, coverage: null));
+                builder.Summary(new[] { suite }, passed: 1, failed: 1, exitCode: 1, NoSkips, NoWarnings, coverage: null));
 
             using var doc = JsonDocument.Parse(json);
             var root = doc.RootElement;
             // No "event" and no "coverage": both are omitted when null, which is
             // what tells a --format json consumer apart from a --stream one, and
             // an unrequested coverage list apart from an empty one.
-            Assert.Equal(new[] { "suites", "passed", "failed", "exitCode", "skipped" }, KeysOf(root));
+            Assert.Equal(new[] { "suites", "passed", "failed", "exitCode", "skipped", "warnings" }, KeysOf(root));
             Assert.Equal(1, root.GetProperty("passed").GetInt32());
             Assert.Equal(1, root.GetProperty("failed").GetInt32());
             Assert.Equal(1, root.GetProperty("exitCode").GetInt32());
@@ -144,7 +145,7 @@ namespace xStunit.Cli.Tests
             };
 
             var json = RunReportJson.Blob(
-                builder.Summary(suites, passed: 3, failed: 2, exitCode: 1, NoSkips, coverage: null));
+                builder.Summary(suites, passed: 3, failed: 2, exitCode: 1, NoSkips, NoWarnings, coverage: null));
 
             using var doc = JsonDocument.Parse(json);
             Assert.Equal(
@@ -208,11 +209,11 @@ namespace xStunit.Cli.Tests
         {
             var skipped = new[] { new SkippedFile("/POUs/FB_Odd.TcPOU", "unsupported file") };
 
-            var json = RunReportJson.Blob(Builder().Error("no TcUnit suites found under /POUs", skipped, coverage: null));
+            var json = RunReportJson.Blob(Builder().Error("no TcUnit suites found under /POUs", skipped, NoWarnings, coverage: null));
 
             using var doc = JsonDocument.Parse(json);
             var root = doc.RootElement;
-            Assert.Equal(new[] { "error", "kind", "skipped" }, KeysOf(root));
+            Assert.Equal(new[] { "error", "kind", "skipped", "warnings" }, KeysOf(root));
             Assert.Equal("no TcUnit suites found under /POUs -- load-error", root.GetProperty("error").GetString());
             // Constant, not derived: every error in this shape is a run that
             // produced no results at all.
@@ -234,7 +235,7 @@ namespace xStunit.Cli.Tests
             };
 
             var json = RunReportJson.Blob(
-                Builder().Summary(new SuiteReport[0], passed: 0, failed: 0, exitCode: 0, NoSkips, coverage));
+                Builder().Summary(new SuiteReport[0], passed: 0, failed: 0, exitCode: 0, NoSkips, NoWarnings, coverage));
 
             using var doc = JsonDocument.Parse(json);
             var entries = doc.RootElement.GetProperty("coverage").EnumerateArray().ToList();
@@ -259,8 +260,8 @@ namespace xStunit.Cli.Tests
                 RunReportJson.Line(builder
                     .Suite("FB_CounterTests", "/POUs/FB_CounterTests.TcPOU", new TestReport[0], 4)
                     .AsStreamEvent("suite-result")),
-                RunReportJson.Line(builder.Summary(new SuiteReport[0], 0, 0, 0, NoSkips, null, "summary")),
-                RunReportJson.Line(builder.Error("bad path", NoSkips, null, "error"))
+                RunReportJson.Line(builder.Summary(new SuiteReport[0], 0, 0, 0, NoSkips, NoWarnings, null, "summary")),
+                RunReportJson.Line(builder.Error("bad path", NoSkips, NoWarnings, null, "error"))
             };
 
             // NDJSON's whole contract: a consumer reading line by line must get
@@ -295,7 +296,7 @@ namespace xStunit.Cli.Tests
         [Fact]
         public void Blob_IsIndented_AndTheStreamLineOfTheSameReportIsNot()
         {
-            var report = Builder().Summary(new SuiteReport[0], passed: 0, failed: 0, exitCode: 0, NoSkips, null);
+            var report = Builder().Summary(new SuiteReport[0], passed: 0, failed: 0, exitCode: 0, NoSkips, NoWarnings, null);
 
             // Same report, two renderings: the human-facing blob may span lines,
             // the NDJSON line may not. Nothing else about them differs.

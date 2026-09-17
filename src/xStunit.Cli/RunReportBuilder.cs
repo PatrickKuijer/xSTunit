@@ -45,11 +45,13 @@ namespace xStunit.Cli
         public ErrorReport Error(
             string message,
             IReadOnlyList<SkippedFile> skipped,
+            IReadOnlyList<DeclarationWarning> warnings,
             IReadOnlyList<PouCoverage> coverage,
             string streamEvent = null) =>
             new ErrorReport(
                 _guidance(message, FailureKind.LoadError, isVerbatim: false, PlcSourceLocationException.UnknownLine),
                 ToSkipReports(skipped),
+                ToWarningReports(warnings),
                 ToCoverageReports(coverage),
                 streamEvent);
 
@@ -61,10 +63,18 @@ namespace xStunit.Cli
             int failed,
             int exitCode,
             IReadOnlyList<SkippedFile> skipped,
+            IReadOnlyList<DeclarationWarning> warnings,
             IReadOnlyList<PouCoverage> coverage,
             string streamEvent = null) =>
             new RunReport(
-                suites, passed, failed, exitCode, ToSkipReports(skipped), ToCoverageReports(coverage), streamEvent);
+                suites,
+                passed,
+                failed,
+                exitCode,
+                ToSkipReports(skipped),
+                ToWarningReports(warnings),
+                ToCoverageReports(coverage),
+                streamEvent);
 
         public TestReport Test(TestCaseResult result) =>
             new TestReport(
@@ -153,6 +163,9 @@ namespace xStunit.Cli
 
         private static IReadOnlyList<CoverageReport> ToCoverageReports(IReadOnlyList<PouCoverage> coverage) =>
             coverage?.Select(c => new CoverageReport(c.PouTypeName, c.SuiteTypeNames)).ToList();
+
+        private static IReadOnlyList<WarningReport> ToWarningReports(IReadOnlyList<DeclarationWarning> warnings) =>
+            warnings.Select(w => new WarningReport(w.FileKey, w.Lines)).ToArray();
 
         private static IReadOnlyList<SkipReport> ToSkipReports(IReadOnlyList<SkippedFile> skipped) =>
             skipped.Select(s => new SkipReport(s.FileKey, s.Message)).ToList();

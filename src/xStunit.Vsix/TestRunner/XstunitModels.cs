@@ -39,6 +39,18 @@ namespace xStunit.Vsix.TestRunner
         /// </remarks>
         public List<XstunitSkippedFile> Skipped { get; set; } = new List<XstunitSkippedFile>();
 
+        /// <summary>
+        /// The files that loaded but lost individual declaration lines on the way in.
+        /// </summary>
+        /// <remarks>
+        /// Distinct from <see cref="Skipped"/>: these files produced their types and ran
+        /// their suites, so a renderer must not present them as load failures or reduced
+        /// coverage. What is missing is the variables those lines declared. Emptied
+        /// rather than omitted by the CLI, with the same initializer rationale as
+        /// <see cref="Skipped"/>.
+        /// </remarks>
+        public List<XstunitDeclarationWarning> Warnings { get; set; } = new List<XstunitDeclarationWarning>();
+
         public string Error { get; set; }
 
         // Classifies the run-level Error above. Always "load-error" - every error
@@ -60,6 +72,17 @@ namespace xStunit.Vsix.TestRunner
         public string FilePath { get; set; }
 
         public string Reason { get; set; }
+    }
+
+    internal sealed class XstunitDeclarationWarning
+    {
+        public string FilePath { get; set; }
+
+        /// <summary>
+        /// The declaration lines the CLI could not read. Never empty - a file with
+        /// nothing to report carries no warning entry at all.
+        /// </summary>
+        public List<string> Lines { get; set; } = new List<string>();
     }
 
     internal class XstunitSuiteResult

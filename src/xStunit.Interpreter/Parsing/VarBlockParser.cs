@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Text;
 using System.Text.RegularExpressions;
 
 namespace xStunit.Interpreter
@@ -45,15 +46,41 @@ namespace xStunit.Interpreter
             + SizedStringPattern + @"|" + QualifiedNamePattern + @")\s*(:=\s*(?<default>.+?))?;$",
             RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
+        // Reports the lines inside an open section that the pattern could not
+        // match, which are the variables this parse lost. Pragmas, comment text
+        // and anything outside a section are not reported: they were never
+        // declarations, they outnumber real losses several times over in a real
+        // tree, and a report they drown out is one nobody reads.
+        public static IReadOnlyList<VarDecl> Parse(string declarationText, out IReadOnlyList<string> unreadableLines)
+        {
+            var unreadable = new List<string>();
+            var result = Parse(declarationText, unreadable);
+            unreadableLines = unreadable;
+            return result;
+        }
+
         public static IReadOnlyList<VarDecl> Parse(string declarationText)
+        {
+            return Parse(declarationText, null);
+        }
+
+        private static IReadOnlyList<VarDecl> Parse(string declarationText, List<string> unreadable)
         {
             var result = new List<VarDecl>();
             var currentSection = (VarSection?)null;
+            var inBlockComment = false;
 
             foreach (var rawLine in declarationText.Split('\n'))
             {
-                var line = StripTrailingComment(rawLine.Trim()).Trim();
+                var line = StripComments(rawLine.Trim(), ref inBlockComment).Trim();
                 if (line.Length == 0)
+                    continue;
+
+                // A pragma carries no declaration, so it costs no variable and
+                // is not a loss to report. It also may not close the section it
+                // sits in, which is why it is skipped rather than falling
+                // through to the header read below.
+                if (line[0] == '{')
                     continue;
 
                 // Section keywords are read case-sensitively, here and in
@@ -91,7 +118,10 @@ namespace xStunit.Interpreter
 
                 var match = VarLinePattern.Match(line);
                 if (!match.Success)
+                {
+                    unreadable?.Add(line);
                     continue;
+                }
 
                 var defaultGroup = match.Groups["default"];
                 result.Add(new VarDecl(
@@ -149,17 +179,42 @@ namespace xStunit.Interpreter
             }
         }
 
-        // Strips a trailing "// ..." or "(* ... *)" comment, ignoring those
+        // Removes "// ..." and "(* ... *)" comment text, ignoring those
         // sequences when they appear inside a single- or double-quoted string
         // literal - a STRING default value is allowed to contain them.
-        private static string StripTrailingComment(string line)
+        //
+        // inBlockComment carries across lines because a "(* ... *)" may span
+        // several, and each line is offered to the caller separately. Without
+        // that state the body and closing line of a multi-line comment arrive
+        // as declarations: harmless while an unmatched line was skipped in
+        // silence, but once losses are reported they are the bulk of what gets
+        // reported and nothing real is visible behind them.
+        //
+        // Code either side of a comment on the same line is kept, so a
+        // declaration that follows a comment's close is still read.
+        private static string StripComments(string line, ref bool inBlockComment)
         {
+            var code = new StringBuilder(line.Length);
             char? quoteChar = null;
+
             for (var i = 0; i < line.Length; i++)
             {
                 var c = line[i];
+
+                if (inBlockComment)
+                {
+                    if (c == '*' && i < line.Length - 1 && line[i + 1] == ')')
+                    {
+                        inBlockComment = false;
+                        i++;
+                    }
+
+                    continue;
+                }
+
                 if (quoteChar != null)
                 {
+                    code.Append(c);
                     if (c == quoteChar)
                         quoteChar = null;
                     continue;
@@ -168,18 +223,24 @@ namespace xStunit.Interpreter
                 if (c == '\'' || c == '"')
                 {
                     quoteChar = c;
+                    code.Append(c);
                     continue;
                 }
 
-                if (i < line.Length - 1 && c == '/' && line[i + 1] == '/')
-                    return line.Substring(0, i);
+                if (c == '/' && i < line.Length - 1 && line[i + 1] == '/')
+                    break;
 
-                if (i < line.Length - 1 && c == '(' && line[i + 1] == '*'
-                    && line.IndexOf("*)", i + 2, System.StringComparison.Ordinal) >= 0)
-                    return line.Substring(0, i);
+                if (c == '(' && i < line.Length - 1 && line[i + 1] == '*')
+                {
+                    inBlockComment = true;
+                    i++;
+                    continue;
+                }
+
+                code.Append(c);
             }
 
-            return line;
+            return code.ToString();
         }
     }
 }

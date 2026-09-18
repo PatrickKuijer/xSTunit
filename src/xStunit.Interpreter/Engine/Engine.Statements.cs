@@ -216,7 +216,7 @@ namespace xStunit.Interpreter
                     // support. The Cell is resolved only for the STRING branch
                     // below, where System.String's immutability means writing a
                     // byte replaces the parent Cell's Value wholesale.
-                    var receiverValue = Evaluate(index.Receiver, frame);
+                    var receiverValue = EvaluateIndexReceiver(index.Receiver, frame);
                     if (receiverValue is string str)
                     {
                         var receiverCell = ResolveCellForLValue(index.Receiver, frame);

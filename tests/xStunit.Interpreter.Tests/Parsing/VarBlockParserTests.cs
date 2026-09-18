@@ -387,6 +387,24 @@ END_VAR";
             Assert.Equal("MotionLib.E_Mode.Idle", declared.DefaultValueText);
         }
 
+        // POINTER TO / REFERENCE TO an ARRAY, and REFERENCE TO a sized
+        // STRING, are real shapes (a step-timer FB's history buffer, a
+        // FUNCTION taking a whole array by reference) - not just the plain
+        // pointee/target the address-type alternatives used to require.
+        [Theory]
+        [InlineData("ipHistory : POINTER TO ARRAY[0..20] OF INT;", "POINTER TO ARRAY[0..20] OF INT")]
+        [InlineData("iaParts : REFERENCE TO ARRAY[1..MAX_UNITS_PER_WIDGET] OF ITF_Part;", "REFERENCE TO ARRAY[1..MAX_UNITS_PER_WIDGET] OF ITF_Part")]
+        [InlineData("iaSettings : REFERENCE TO ARRAY[1..cScratchConstants.MAX_GADGET_SETTINGS] OF uGadgetSettingValue;", "REFERENCE TO ARRAY[1..cScratchConstants.MAX_GADGET_SETTINGS] OF uGadgetSettingValue")]
+        [InlineData("isUtc : REFERENCE TO STRING(32);", "REFERENCE TO STRING(32)")]
+        [InlineData("pLabel : POINTER TO STRING(32);", "POINTER TO STRING(32)")]
+        public void Parse_AddressToArrayOrSizedString_ReadsFullTypeName(string line, string expectedTypeName)
+        {
+            var vars = VarBlockParser.Parse($"VAR\n\t{line}\nEND_VAR");
+
+            var declared = Assert.Single(vars);
+            Assert.Equal(expectedTypeName, declared.TypeName);
+        }
+
         // A line the pattern cannot match has to be reported, since nothing
         // else will say the variable is gone. Reporting is only worth anything
         // if it separates a declaration that was lost from a line that was
@@ -394,7 +412,6 @@ END_VAR";
         // pragmas and comment bodies, and a report drowning in those is one
         // nobody reads.
         [Theory]
-        [InlineData("saParameters : REFERENCE TO ARRAY[1..MAX] OF uData;")]
         [InlineData("i, j : INT;")]
         [InlineData("DI_KeyPresent AT %I* : BOOL;")]
         [InlineData("state : (INIT, STARTING, WAIT_CONTAINER);")]

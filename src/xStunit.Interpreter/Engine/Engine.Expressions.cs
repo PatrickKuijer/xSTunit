@@ -76,7 +76,7 @@ namespace xStunit.Interpreter
                 }
                 case IndexExpr index:
                 {
-                    var receiverValue = Evaluate(index.Receiver, frame);
+                    var receiverValue = EvaluateIndexReceiver(index.Receiver, frame);
                     if (receiverValue is string str)
                         return GetStringByte(str, ResolveStringIndex(index.Indices, frame));
 
@@ -184,6 +184,29 @@ namespace xStunit.Interpreter
                     throw new UnsupportedConstructException(
                         expr.GetType().Name, $"Expression type {expr.GetType().Name} not supported");
             }
+        }
+
+        // ipHistory^[i], where ipHistory : POINTER TO ARRAY[..] OF T. ADR(x) on
+        // a whole array decays to a pointer at its first element
+        // (ResolveCellForAdr), so a bare deref reads only that one scalar - the
+        // whole array is recovered here, from the decayed ArrayElementCell's
+        // own backing Array, only when the deref is immediately indexed. That
+        // is what lets ipHistory^[i] mean "index i of the array ADR(x)
+        // addressed" rather than casting the scalar ipHistory^ already read to
+        // ArrayValue and failing.
+        //
+        // Every other index receiver (a plain array identifier, a struct/FB
+        // field, REFERENCE TO ARRAY - which aliases the target's own Cell and
+        // needs no deref at all) is untouched: this only fires for `x^[...]`.
+        private object EvaluateIndexReceiver(Expr receiverExpr, Frame frame)
+        {
+            if (receiverExpr is DerefExpr deref &&
+                Evaluate(deref.Inner, frame) is Pointer ptr &&
+                ptr.Target is ArrayElementCell aec &&
+                aec.Index == 0)
+                return aec.Array;
+
+            return Evaluate(receiverExpr, frame);
         }
 
         private object EvaluateUnary(UnaryExpr unary, Frame frame)

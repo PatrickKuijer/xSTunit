@@ -30,6 +30,22 @@ namespace xStunit.Interpreter
         // because a qualifier may itself be nested.
         private const string QualifiedNamePattern = @"\w+(?:\.\w+)*";
 
+        // ARRAY[lo..hi,...] OF <elementType>, where the element type is a
+        // sized string or a (qualified) name - the same alternatives a bare
+        // declaration accepts. Bounds pass through verbatim, literal or
+        // GVL-qualified constant expression alike; ArrayTypeInfo/
+        // Engine.Defaults resolve them later.
+        private const string ArrayPattern = @"ARRAY\s*\[[^\]]+\]\s*OF\s*(?:" + SizedStringPattern + "|" + QualifiedNamePattern + ")";
+
+        // What POINTER TO / REFERENCE TO may address: a plain or qualified
+        // type name, a sized string, or a whole array. A POINTER TO/
+        // REFERENCE TO an array or a sized string is a real, common shape
+        // (step-timer FBs holding a POINTER TO ARRAY OF ..., FUNCTIONs
+        // taking a REFERENCE TO ARRAY OF .. to avoid a by-value copy) - not
+        // widening this cost every such declaration its variable, silently,
+        // the same way an unmatched element type does.
+        private const string AddressTargetPattern = @"(?:" + ArrayPattern + "|" + SizedStringPattern + "|" + QualifiedNamePattern + ")";
+
         // IgnoreCase because IEC 61131-3 type names are case-insensitive and
         // every consumer of the type text this produces already treats them
         // that way - AddressTypeInfo, ArrayTypeInfo, StringTypeInfo,
@@ -40,9 +56,8 @@ namespace xStunit.Interpreter
         // text is still passed through verbatim, since the declared spelling is
         // what FbInstance and Cell record.
         private static readonly Regex VarLinePattern = new Regex(
-            @"^(?<name>\w+)\s*:\s*(?<type>POINTER TO " + QualifiedNamePattern
-            + @"|REFERENCE TO " + QualifiedNamePattern + @"|ARRAY\s*\[[^\]]+\]\s*OF\s*(?:"
-            + SizedStringPattern + @"|" + QualifiedNamePattern + @")|"
+            @"^(?<name>\w+)\s*:\s*(?<type>POINTER TO " + AddressTargetPattern
+            + @"|REFERENCE TO " + AddressTargetPattern + @"|" + ArrayPattern + @"|"
             + SizedStringPattern + @"|" + QualifiedNamePattern + @")\s*(:=\s*(?<default>.+?))?;$",
             RegexOptions.Compiled | RegexOptions.IgnoreCase);
 

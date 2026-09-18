@@ -39,5 +39,22 @@ namespace xStunit.Interpreter.Tests
 
             Assert.True(SuiteDiscovery.IsSuiteType(registry, "FB_ClockSuiteRepro"));
         }
+
+        // Real TcUnit-flavored source is not consistent about the
+        // qualifier: an intermediate base's own EXTENDS clause can spell the
+        // native root bare (EXTENDS FB_TestSuite) rather than library-
+        // qualified. The terminal match has to tolerate that spelling too,
+        // not just the canonical "TcUnit.FB_TestSuite".
+        [Fact]
+        public void IsSuiteType_UnqualifiedExtendsOfNativeRoot_ResolvesToNativeRoot()
+        {
+            var intermediateBase = new PouAst(
+                "FB_TestSuiteWithClock", "FB_TestSuite", "", "", new List<MethodAst>());
+            var descendant = new PouAst(
+                "FB_ClockSuiteRepro", "FB_TestSuiteWithClock", "", "", new List<MethodAst>());
+            var registry = new TypeRegistry(new[] { intermediateBase, descendant });
+
+            Assert.True(SuiteDiscovery.IsSuiteType(registry, "FB_ClockSuiteRepro"));
+        }
     }
 }

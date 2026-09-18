@@ -12,6 +12,13 @@ namespace xStunit.Interpreter
     {
         private const string TestSuiteBaseType = "TcUnit.FB_TestSuite";
 
+        // The bare form of TestSuiteBaseType. Real TcUnit-flavored source is
+        // not consistent about the qualifier on its own EXTENDS clauses - an
+        // intermediate base can name the native root either way - so the
+        // terminal match has to accept both spellings, not just the
+        // canonical qualified one.
+        private static readonly string TestSuiteBaseTypeBareName = Engine.UnqualifiedTail(TestSuiteBaseType);
+
         public static IReadOnlyList<string> FindSuiteTypeNames(TypeRegistry registry, IEnumerable<string> candidateTypeNames) =>
             candidateTypeNames.Where(name => IsSuiteType(registry, name)).ToList();
 
@@ -20,7 +27,7 @@ namespace xStunit.Interpreter
             var current = typeName;
             while (current != null)
             {
-                if (current == TestSuiteBaseType)
+                if (current == TestSuiteBaseType || current == TestSuiteBaseTypeBareName)
                     return true;
 
                 var def = registry.Get(current);

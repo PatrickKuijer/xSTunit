@@ -481,9 +481,9 @@ namespace xStunit.Interpreter
         // Tc2_System's TestAndSet names its VAR_IN_OUT operand Lock.
         private static readonly string[] TestAndSetParamNames = { "Lock" };
 
-        // Tc2_System's TestAndSet: answers with the operand's PRIOR value and
-        // leaves it TRUE, so the first caller sees FALSE (it took the lock) and
-        // every later one sees TRUE until the holder clears the flag.
+        // Tc2_System's TestAndSet: answers TRUE when the lock was free (it just
+        // took it) and FALSE when contended, always leaving the operand TRUE -
+        // the inverse of the operand's prior value, not the prior value itself.
         //
         // An intrinsic rather than a native-function plugin, despite being a
         // compiled-only library function like F_CheckSum16: the plugin contract
@@ -509,7 +509,7 @@ namespace xStunit.Interpreter
                     $"TestAndSet requires a BOOL operand, got {cell.Value?.GetType().Name ?? "null"}");
 
             cell.Value = true;
-            return priorValue;
+            return !priorValue;
         }
 
         // ABS is overloaded over ANY_NUM and returns its argument's own type,

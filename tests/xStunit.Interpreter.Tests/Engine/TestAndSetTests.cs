@@ -12,10 +12,9 @@ namespace xStunit.Interpreter.Tests
     // VALUES, and TestAndSet's whole point is that it writes its operand back -
     // so it lives with MEMSET and the other mutating intrinsics.
     //
-    // The semantics pinned here are the atomic ones: the call answers with the
-    // operand's PRIOR value and leaves it TRUE, so the first caller sees FALSE
-    // (it took the lock) and every later one sees TRUE (contended) until the
-    // holder clears the flag.
+    // The semantics pinned here are the atomic ones: the call answers TRUE
+    // when the lock was free (it just took it) and FALSE when contended,
+    // always leaving the operand TRUE until the holder clears the flag.
     public class TestAndSetTests
     {
         private static Engine NewGuardEngine(string suiteBody)
@@ -42,12 +41,12 @@ namespace xStunit.Interpreter.Tests
         }
 
         [Fact]
-        public void RunSuite_TestAndSetOnAClearFlag_ReturnsFalseAndTakesTheLock()
+        public void RunSuite_TestAndSetOnAClearFlag_ReturnsTrueAndTakesTheLock()
         {
             var engine = NewGuardEngine(
                 "TEST('t');\n" +
                 "bFirst := guard.bTest();\n" +
-                "AssertFalse(bFirst, 'an uncontended lock is granted');\n" +
+                "AssertTrue(bFirst, 'an uncontended lock is granted');\n" +
                 "AssertTrue(guard.sbBlocked, 'and the flag is left set');\n" +
                 "TEST_FINISHED();");
 
@@ -55,13 +54,13 @@ namespace xStunit.Interpreter.Tests
         }
 
         [Fact]
-        public void RunSuite_TestAndSetOnAFlagAlreadySet_ReturnsTrueAndLeavesItSet()
+        public void RunSuite_TestAndSetOnAFlagAlreadySet_ReturnsFalseAndLeavesItSet()
         {
             var engine = NewGuardEngine(
                 "TEST('t');\n" +
                 "bFirst := guard.bTest();\n" +
                 "bSecond := guard.bTest();\n" +
-                "AssertTrue(bSecond, 'a contended lock is refused');\n" +
+                "AssertFalse(bSecond, 'a contended lock is refused');\n" +
                 "AssertTrue(guard.sbBlocked, 'and the holder still owns the flag');\n" +
                 "TEST_FINISHED();");
 
@@ -76,7 +75,7 @@ namespace xStunit.Interpreter.Tests
                 "bFirst := guard.bTest();\n" +
                 "guard.Release();\n" +
                 "bThird := guard.bTest();\n" +
-                "AssertFalse(bThird, 'a released lock can be re-acquired');\n" +
+                "AssertTrue(bThird, 'a released lock can be re-acquired');\n" +
                 "TEST_FINISHED();");
 
             Assert.True(Assert.Single(engine.RunSuite("FB_MySuite")).Passed);
@@ -100,7 +99,7 @@ namespace xStunit.Interpreter.Tests
 
             engine.CallMethod(instance, "Take", new Expr[0], new NamedArg[0], null, null);
 
-            Assert.Equal(false, instance.Fields["bPrior"].Value);
+            Assert.Equal(true, instance.Fields["bPrior"].Value);
             Assert.Equal(true, instance.Fields["sbBlocked"].Value);
         }
 
@@ -153,7 +152,7 @@ namespace xStunit.Interpreter.Tests
             engine.CallMethod(instance, "Take", new Expr[0], new NamedArg[0], null, null);
 
             var lockStruct = (StructInstance)instance.Fields["stLock"].Value;
-            Assert.Equal(false, instance.Fields["bPrior"].Value);
+            Assert.Equal(true, instance.Fields["bPrior"].Value);
             Assert.Equal(true, lockStruct.Fields["bHeld"].Value);
         }
     }

@@ -22,6 +22,23 @@ namespace xStunit.Cli.Tests
             Assert.DoesNotContain("FAIL", text);
         }
 
+        // A suite that EXTENDS a user-defined intermediate base
+        // (FB_TestSuiteWithClock) through a library-qualified spelling
+        // (TcUnit.FB_TestSuiteWithClock) must still be discovered and run,
+        // not silently dropped from the report.
+        [Fact]
+        public void Run_SuiteExtendingQualifiedIntermediateBase_IsDiscoveredAndPasses()
+        {
+            var output = new StringWriter();
+
+            var exitCode = CliRunner.Run(new[] { TestFixtures.TestSuiteWithClockFixtureDir() }, output);
+
+            Assert.Equal(0, exitCode);
+            var text = output.ToString();
+            Assert.Contains("AdvancesPastTimeout: PASS", text);
+            Assert.DoesNotContain("FAIL", text);
+        }
+
         [Fact]
         public void Run_MissingPath_ReturnsTwoAndPrintsError()
         {

@@ -14,6 +14,9 @@ namespace xStunit.Cli.Tests
         public static string FailingLineFixtureDir([CallerFilePath] string callerFile = "") =>
             FixtureDir("FailingLineFixture", callerFile);
 
+        public static string TestSuiteWithClockFixtureDir([CallerFilePath] string callerFile = "") =>
+            FixtureDir("TestSuiteWithClock", callerFile);
+
         private static string FixtureDir(string name, string callerFile) =>
             Path.GetFullPath(Path.Combine(Path.GetDirectoryName(callerFile)!, "..", "Fixtures", name));
     }

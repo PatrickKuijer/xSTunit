@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4026.18">
+  <POU Name="FB_ClockAdvancingSuiteTests" Id="{267d7f54-cead-459f-9b43-6ee4e810c1a2}" SpecialFunc="None">
+    <Declaration><![CDATA[(*
+    CLI fixture. A suite that EXTENDS the user-defined intermediate base
+    FB_TestSuiteWithClock through a library-qualified spelling, the way real
+    TcUnit-flavored source names it.
+*)
+FUNCTION_BLOCK FB_ClockAdvancingSuiteTests EXTENDS TcUnit.FB_TestSuiteWithClock]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[AdvancesPastTimeout();]]></ST>
+    </Implementation>
+    <Method Name="AdvancesPastTimeout" Id="{267d7f54-cead-459f-9b43-6ee4e810c1a3}">
+      <Declaration><![CDATA[METHOD PRIVATE AdvancesPastTimeout
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('AdvancesPastTimeout');
+
+AdvanceClockMs(Duration := T#500MS);
+
+AssertTrue(Condition := TRUE,
+           Message := 'suite reachable through the qualified EXTENDS chain');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+  </POU>
+</TcPlcObject>

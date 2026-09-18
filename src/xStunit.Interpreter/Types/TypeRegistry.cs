@@ -82,7 +82,22 @@ namespace xStunit.Interpreter
                     _enumMembers[enumMember.Key] = enumMember.Value;
         }
 
-        public PouAst Get(string name) => _types.TryGetValue(name, out var type) ? type : null;
+        // A library qualifier is transparent, same as it is for a native
+        // function/FB/constant lookup (Engine.NativeHost.UnqualifiedTail):
+        // real source spells a user-defined ancestor both with and without
+        // one (TcUnit.FB_TestSuiteWithClock vs FB_TestSuiteWithClock), and
+        // this registry only ever keys off the bare name. Tried only after
+        // the spelling as written has missed, so a name that happens to
+        // contain a dot but isn't actually qualified still resolves first
+        // by its own literal spelling.
+        public PouAst Get(string name)
+        {
+            if (_types.TryGetValue(name, out var type))
+                return type;
+
+            var tail = Engine.UnqualifiedTail(name);
+            return tail != null && _types.TryGetValue(tail, out type) ? type : null;
+        }
 
         // Follows alias-of-alias chains through to the underlying type text.
         // Returns its input unchanged (including null) when that is not a

@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using xStunit.Interpreter;
@@ -20,6 +21,23 @@ namespace xStunit.Interpreter.Tests
             var suites = SuiteDiscovery.FindSuiteTypeNames(registry, types.Select(t => t.Name));
 
             Assert.Equal(new[] { "FB_CounterTests" }, suites);
+        }
+
+        // FB_TestSuiteWithClock is a user-defined intermediate base (EXTENDS
+        // TcUnit.FB_TestSuite directly), registered under its bare name. A
+        // descendant that spells the EXTENDS clause with a library qualifier
+        // - as real TcUnit-flavored source does - must still resolve through
+        // it to the native root, not dead-end at the first ancestry step.
+        [Fact]
+        public void IsSuiteType_QualifiedExtendsOfUserDefinedIntermediateBase_ResolvesToNativeRoot()
+        {
+            var intermediateBase = new PouAst(
+                "FB_TestSuiteWithClock", "TcUnit.FB_TestSuite", "", "", new List<MethodAst>());
+            var descendant = new PouAst(
+                "FB_ClockSuiteRepro", "TcUnit.FB_TestSuiteWithClock", "", "", new List<MethodAst>());
+            var registry = new TypeRegistry(new[] { intermediateBase, descendant });
+
+            Assert.True(SuiteDiscovery.IsSuiteType(registry, "FB_ClockSuiteRepro"));
         }
     }
 }

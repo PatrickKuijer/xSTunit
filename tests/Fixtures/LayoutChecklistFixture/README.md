@@ -83,11 +83,14 @@ makes an address width visible at all: identical source, different bytes.
 `LayoutChecklistOracleTests` reads them and needs no TwinCAT.
 
 Regenerating them does. The fixtures are built inside the XAE solution at
-`C:\Git\p_twincat_test_project\XAE-TestSolution`, whose PLC project carries
-them as `DUTs`/`GVLs` entries, by `build-layout-tmc.ps1` in that repository —
-a scripted, headless XAE build over the automation interface that harvests both
-platforms back into this folder. It builds only, and never activates a
-configuration, so no runtime and no license are involved.
+`C:\Git\p_twincat_test_project\TestSolution`, whose `PLC1` project carries
+them as `DUTs`/`GVLs` entries alongside a TcUnit reference. A build under the
+`TwinCAT RT (x86)` solution platform and another under `TwinCAT RT (x64)` each
+leave a `PLC1.tmc` behind, which is copied here as the matching file. It builds
+only, and never activates a configuration, so no runtime and no license are
+involved. After replacing them, the two `.diff.txt` files are rewritten from
+`LayoutReport.ToText()` so `Compare_ReproducesTheCommittedDiff` pins the new
+build.
 
 The global variable list carries `{attribute 'linkalways'}` and instantiates
 every type on purpose: a DUT nothing references can be dropped from the symbol
@@ -96,12 +99,7 @@ type is added here, add it to that list too — a test enforces this.
 
 ## What the compiler settled
 
-`ST_PackedToZero` is absent from the committed `.tmc` files, so the oracle does
-not score it and the agreement below does not cover it. The rule it pins was
-measured by hand instead: a `BOOL` + `INT` struct under an explicit `'0'` is 3
-bytes on a TwinCAT 3.1.4026 target.
-
-Every rule above came back as xStunit already had it, over 59 types and 208
+Every rule above came back as xStunit already had it, over 60 types and 212
 members with zero disagreements, on the x64 module as much as the x86 one.
 Addresses are sized from the target rather than hardcoded, `POINTER TO` and
 `REFERENCE TO` alike, so the 64-bit module's wider addresses and everything they
@@ -125,7 +123,8 @@ to guess the other way:
   drop them to 4 — and a type ending in a single byte behind them is padded out
   to a multiple of 8.
 - `pack_mode` caps a field's alignment rather than flattening it, and does not
-  reach into a nested struct type, which keeps its own internal padding.
+  reach into a nested struct type, which keeps its own internal padding. An
+  explicit `'0'` is not "no cap": it packs without gaps, exactly like `'1'`.
 
 `U_OverlaidScalars` came back at 8 bytes, every member at offset 0, imposing
 that 8-byte alignment on `ST_UnionHolder`, which is 24 bytes with its trailer

@@ -244,6 +244,22 @@ namespace xStunit.Interpreter.Tests.Conformance
                 ("tail", 6, 1));
         }
 
+        // An explicit pack_mode '0' packs without gaps, the same as '1': the
+        // DINT sits at 1 and the type is 6 bytes. Read as an absent pragma it
+        // would sit at 4 and the type would be 12.
+        [Theory]
+        [InlineData(X86Module)]
+        [InlineData(X64Module)]
+        public void PackedToZero_PacksWithoutGapsRatherThanAligningNaturally(string module)
+        {
+            AssertDeclaredLayout(module, "ST_PackedToZero", 6,
+                ("leadIn", 0, 1),
+                ("wide", 1, 4),
+                ("tail", 5, 1));
+
+            Assert.DoesNotContain(Compare(module).Findings, f => f.TypeName == "ST_PackedToZero");
+        }
+
         // Without the pragma surviving into the .tmc, a packed type is read back
         // as naturally aligned and reported as a disagreement where xStunit is
         // right - so the two packed fixtures above measure nothing at all
@@ -253,6 +269,7 @@ namespace xStunit.Interpreter.Tests.Conformance
         {
             Assert.Equal(1, DeclaredType(X86Module, "ST_PackedOuter").PackMode);
             Assert.Equal(2, DeclaredType(X86Module, "ST_PackedToTwo").PackMode);
+            Assert.Equal(0, DeclaredType(X86Module, "ST_PackedToZero").PackMode);
             Assert.Null(DeclaredType(X86Module, "ST_NestedNatural").PackMode);
         }
 

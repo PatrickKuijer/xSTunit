@@ -1,9 +1,9 @@
-module PLC target TwinCAT RT (x64)
-compared 59 of 94 declared types, 208 members
+module PLC1 target TwinCAT RT (x64)
+compared 60 of 90 declared types, 212 members
 sizes and offsets in bits
 NotCompared TOF function block instance layout is not modeled
-NotCompared I_TestResults neither members nor a base type declared
 NotCompared R_TRIG function block instance layout is not modeled
+NotCompared I_TestResults neither members nor a base type declared
 NotCompared FB_TestResults function block instance layout is not modeled
 NotCompared I_TestResultLogger neither members nor a base type declared
 NotCompared FB_AdsTestResultLogger function block instance layout is not modeled
@@ -22,6 +22,8 @@ NotCompared I_AssertMessageFormatter neither members nor a base type declared
 NotCompared FB_AdjustAssertFailureMessageToMax253CharLength function block instance layout is not modeled
 NotCompared FB_AdsAssertMessageFormatter function block instance layout is not modeled
 NotCompared FB_TestSuite function block instance layout is not modeled
+NotCompared FW_GetCpuCounter function block instance layout is not modeled
+NotCompared GETCPUCOUNTER function block instance layout is not modeled
 NotCompared FB_MemRingBuffer function block instance layout is not modeled
 NotCompared TON function block instance layout is not modeled
 NotCompared FB_AdsLogStringMessageFifoQueue function block instance layout is not modeled
@@ -29,10 +31,3 @@ NotCompared FB_AddLrealInt function block instance layout is not modeled
 Unsupported ST_BitPacking.firstBit SIZEOF() doesn't know the byte size of type 'BIT'
 Unsupported PlcAppSystemInfo.TComSrvPtr SIZEOF() doesn't know the byte size of type 'ITComObjectServer'
 NotCompared PlcTaskSystemInfo.TaskName displaced by a gap the .tmc does not describe
-NotCompared Global_Variables static members - a program or global variable list, not an instance layout
-NotCompared GVL_Param_TcUnit static members - a program or global variable list, not an instance layout
-NotCompared GVL_TcUnit static members - a program or global variable list, not an instance layout
-NotCompared Global_Variables static members - a program or global variable list, not an instance layout
-NotCompared MAIN static members - a program or global variable list, not an instance layout
-NotCompared TwinCAT_PreventOnlineChangeGvl static members - a program or global variable list, not an instance layout
-NotCompared LayoutChecklistInstances static members - a program or global variable list, not an instance layout

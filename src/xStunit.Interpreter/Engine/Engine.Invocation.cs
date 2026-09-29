@@ -340,8 +340,9 @@ namespace xStunit.Interpreter
             // rather than the statement list.
             var newFrame = new Frame(instance, definingType, methodDef.Name, methodDef.BodyStartLine);
             SeedReturnCell(newFrame, methodDef.Name, methodDef.DeclarationText);
-            var paramDecls = _registry.GetDecls(methodDef.DeclarationText);
-            BindMethodInstanceCells(paramDecls, definingType, methodDef.Name, newFrame);
+            var (instanceDecls, paramDecls) = SplitOffMethodInstanceDecls(_registry.GetDecls(methodDef.DeclarationText));
+            if (instanceDecls.Count > 0)
+                BindMethodInstanceCells(instanceDecls, definingType, methodDef.Name, newFrame);
             BindParams(paramDecls, positionalArgs, namedArgs, callerFrame, newFrame);
 
             ExecuteBody(() => _registry.GetStatements(methodDef.ImplementationText), newFrame);
@@ -351,45 +352,53 @@ namespace xStunit.Interpreter
             return newFrame.Locals.TryGetValue(methodDef.Name, out var returnCell) ? returnCell.Value : null;
         }
 
-        // Puts the instance's own VAR_INST cells into the frame's Locals - the
-        // same Cell objects every call, so a write in one call is what the next
-        // call reads. The table is keyed by declaring type as well as method
-        // name because an override and the base method it overrides (reached
-        // via SUPER^) are separate methods, each with its own copy.
+        private static (IReadOnlyList<VarDecl> InstanceDecls, IReadOnlyList<VarDecl> OtherDecls) SplitOffMethodInstanceDecls(
+            IReadOnlyList<VarDecl> decls)
+        {
+            if (!decls.Any(d => d.Section == VarSection.MethodInstance))
+                return (Array.Empty<VarDecl>(), decls);
+
+            return (
+                decls.Where(d => d.Section == VarSection.MethodInstance).ToList(),
+                decls.Where(d => d.Section != VarSection.MethodInstance).ToList());
+        }
+
+        // VAR_INST has no home outside a METHOD - a FUNCTION has no instance
+        // to keep it in, and an FB's or PROGRAM's own would just be a VAR - and
+        // TwinCAT refuses to compile it. Dropped instead, it resurfaces as an
+        // unknown variable at every use, pointing away from the declaration.
+        private static void RejectMethodInstanceDecls(IReadOnlyList<VarDecl> decls, string pouName)
+        {
+            if (decls.Any(d => d.Section == VarSection.MethodInstance))
+                throw new InvalidOperationException(
+                    $"'{pouName}' declares VAR_INST outside a METHOD: VAR_INST is only allowed in a METHOD of a FUNCTION_BLOCK.");
+        }
+
+        // Keyed by declaring type as well as method name because an override
+        // and the base method it overrides (reached via SUPER^) are separate
+        // methods, each with its own copy.
         //
-        // Created on the method's first call on this instance rather than in
-        // NewInstance, which would otherwise have to parse the declaration of
-        // every method in the ancestry for every instance built, the nested
-        // and never-called ones included. A VAR_INST is unreachable from
-        // outside its method, so its first read is always inside a call that
-        // has already created it; the one visible difference is that an
-        // initialiser reading mutable state sees it as of that first call, not
-        // as of construction.
+        // Created lazily on the method's first call on this instance: doing it
+        // in NewInstance would parse every method declaration in the ancestry
+        // for every instance built, nested and never-called ones included. The
+        // gotcha is that an initialiser reading mutable state sees it as of
+        // that first call, not as of construction.
         private void BindMethodInstanceCells(
-            IReadOnlyList<VarDecl> decls,
+            IReadOnlyList<VarDecl> instanceDecls,
             string declaringType,
             string methodName,
             Frame frame)
         {
-            var instanceDecls = decls.Where(d => d.Section == VarSection.MethodInstance).ToList();
-            if (instanceDecls.Count == 0)
-                return;
-
             var instance = frame.Instance;
-            var key = declaringType + "." + methodName;
-            if (!instance.MethodInstanceCells.TryGetValue(key, out var cells))
+            var cells = instance.GetOrCreateMethodInstanceCells(declaringType, methodName, () =>
             {
-                cells = new Dictionary<string, Cell>(StringComparer.OrdinalIgnoreCase);
+                var created = new Dictionary<string, Cell>(StringComparer.OrdinalIgnoreCase);
                 foreach (var decl in instanceDecls)
-                    cells[decl.Name] = RunWithFaultAttribution(() => CreateFieldCell(decl, instance), frame);
-                instance.MethodInstanceCells[key] = cells;
-            }
+                    created[decl.Name] = RunWithFaultAttribution(() => CreateFieldCell(decl, instance), frame);
+                return created;
+            });
 
-            foreach (var decl in instanceDecls)
-            {
-                frame.Locals[decl.Name] = cells[decl.Name];
-                frame.LocalTypeNames[decl.Name] = decl.TypeName;
-            }
+            frame.BindMethodInstanceCells(instanceDecls, cells);
         }
 
         private static bool IsNamed(string identifier, string name) =>
@@ -483,6 +492,7 @@ namespace xStunit.Interpreter
             var newFrame = new Frame(null, functionDef.Name);
             SeedReturnCell(newFrame, functionDef.Name, functionDef.DeclarationText);
             var paramDecls = _registry.GetDecls(functionDef.DeclarationText);
+            RunWithFaultAttribution(() => RejectMethodInstanceDecls(paramDecls, functionDef.Name), newFrame);
             BindParams(paramDecls, positionalArgs, namedArgs, callerFrame, newFrame);
 
             ExecuteBody(() => _registry.GetStatements(functionDef.ImplementationText), newFrame);
@@ -659,9 +669,6 @@ namespace xStunit.Interpreter
             var posIndex = 0;
             foreach (var decl in paramDecls)
             {
-                if (decl.Section == VarSection.MethodInstance)
-                    continue;
-
                 object value;
 
                 if ((decl.Section == VarSection.Input || decl.Section == VarSection.InOut) &&

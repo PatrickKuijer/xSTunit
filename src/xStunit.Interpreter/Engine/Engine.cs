@@ -324,11 +324,14 @@ namespace xStunit.Interpreter
             for (var i = chain.Count - 1; i >= 0; i--)
             {
                 var def = _registry.Get(chain[i]);
+                var decls = _registry.GetDecls(def.DeclarationText);
+                RejectMethodInstanceDecls(decls, def.Name);
+
                 // VAR_INPUT/VAR_OUTPUT/VAR_IN_OUT must persist as instance
                 // Fields alongside VAR (Local), or dot-access and
                 // StepCycles-internal references to a nested FB's own
                 // inputs/outputs never resolve.
-                foreach (var decl in _registry.GetDecls(def.DeclarationText).Where(IsPersistedField))
+                foreach (var decl in decls.Where(IsPersistedField))
                 {
                     instance.Fields[decl.Name] = CreateFieldCell(decl, instance);
                     instance.FieldTypeNames[decl.Name] = decl.TypeName;

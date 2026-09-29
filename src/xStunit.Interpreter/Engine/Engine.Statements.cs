@@ -261,9 +261,9 @@ namespace xStunit.Interpreter
             switch (target)
             {
                 case IdentifierExpr id:
-                    // Method-local REFERENCE TO vars are pre-populated into
-                    // frame.Locals by BindParams, so a hit there means the
-                    // target really is local. A name that instead belongs to an
+                    // Method-local REFERENCE TO vars, VAR_INST included, are
+                    // pre-populated into frame.Locals before the body runs, so
+                    // a hit there means the target really is local. A name that instead belongs to an
                     // instance field has to be written through to
                     // instance.Fields, or the binding dies with this per-call
                     // Frame instead of persisting across calls.
@@ -272,7 +272,7 @@ namespace xStunit.Interpreter
                         frame.Instance.Fields.ContainsKey(id.Name))
                         frame.Instance.Fields[id.Name] = sourceCell;
                     else
-                        frame.Locals[id.Name] = sourceCell;
+                        frame.RebindLocal(id.Name, sourceCell);
                     break;
 
                 case FieldAccessExpr fieldAccess:

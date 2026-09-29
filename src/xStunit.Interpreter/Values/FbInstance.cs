@@ -18,12 +18,11 @@ namespace xStunit.Interpreter
         // POINTER TO, so for instance fields this table is the source of truth.
         public Dictionary<string, string> FieldTypeNames { get; } = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
-        // VAR_INST cells, one table per method that has been called on this
-        // instance and declares any. Kept apart from Fields because they are
-        // private to their method: a same-named FB field, or another method's
-        // same-named VAR_INST, is a different variable.
-        public Dictionary<string, Dictionary<string, Cell>> MethodInstanceCells { get; } =
-            new Dictionary<string, Dictionary<string, Cell>>(StringComparer.OrdinalIgnoreCase);
+        // VAR_INST cells, one table per method. Kept apart from Fields because
+        // they are private to their method: a same-named FB field, or another
+        // method's same-named VAR_INST, is a different variable.
+        private readonly Dictionary<(string DeclaringType, string Method), Dictionary<string, Cell>> _methodInstanceCells =
+            new Dictionary<(string DeclaringType, string Method), Dictionary<string, Cell>>(MethodKeyComparer.Instance);
 
         // Which native (compiled-only) stub backs this instance, and the host
         // object itself - assigned as a pair by the native-host classifier in
@@ -80,6 +79,36 @@ namespace xStunit.Interpreter
         public FbInstance(string actualTypeName)
         {
             ActualTypeName = actualTypeName;
+        }
+
+        // The table is returned rather than copied because a REF= rebinding a
+        // VAR_INST replaces its Cell, and the next call has to find the new one.
+        public Dictionary<string, Cell> GetOrCreateMethodInstanceCells(
+            string declaringTypeName,
+            string methodName,
+            Func<Dictionary<string, Cell>> createCells)
+        {
+            var key = (declaringTypeName, methodName);
+            if (!_methodInstanceCells.TryGetValue(key, out var cells))
+            {
+                cells = createCells();
+                _methodInstanceCells[key] = cells;
+            }
+
+            return cells;
+        }
+
+        private sealed class MethodKeyComparer : IEqualityComparer<(string DeclaringType, string Method)>
+        {
+            public static readonly MethodKeyComparer Instance = new MethodKeyComparer();
+
+            public bool Equals((string DeclaringType, string Method) x, (string DeclaringType, string Method) y) =>
+                StringComparer.OrdinalIgnoreCase.Equals(x.DeclaringType, y.DeclaringType) &&
+                StringComparer.OrdinalIgnoreCase.Equals(x.Method, y.Method);
+
+            public int GetHashCode((string DeclaringType, string Method) key) =>
+                unchecked(StringComparer.OrdinalIgnoreCase.GetHashCode(key.DeclaringType) * 31 +
+                    StringComparer.OrdinalIgnoreCase.GetHashCode(key.Method));
         }
     }
 }

@@ -68,6 +68,30 @@ namespace xStunit.Interpreter
             BodyStartLine = bodyStartLine;
         }
 
+        // The instance-owned table this call's VAR_INST locals came from; null
+        // when the frame has none. RebindLocal writes through to it.
+        private Dictionary<string, Cell> _methodInstanceCells;
+
+        public void BindMethodInstanceCells(IReadOnlyList<VarDecl> decls, Dictionary<string, Cell> cells)
+        {
+            _methodInstanceCells = cells;
+            foreach (var decl in decls)
+            {
+                Locals[decl.Name] = cells[decl.Name];
+                LocalTypeNames[decl.Name] = decl.TypeName;
+            }
+        }
+
+        // Replaces a local's Cell wholesale, as REF= does. A VAR_INST local is
+        // replaced in the instance's table too, or the binding would die with
+        // this call and the next call would find the old Cell.
+        public void RebindLocal(string name, Cell cell)
+        {
+            Locals[name] = cell;
+            if (_methodInstanceCells != null && _methodInstanceCells.ContainsKey(name))
+                _methodInstanceCells[name] = cell;
+        }
+
         public Cell ResolveCell(string identifier)
         {
             if (Locals.TryGetValue(identifier, out var local))

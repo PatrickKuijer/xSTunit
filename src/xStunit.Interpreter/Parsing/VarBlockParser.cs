@@ -4,11 +4,10 @@ using System.Text.RegularExpressions;
 
 namespace xStunit.Interpreter
 {
-    // Turns the raw VAR/VAR_INPUT/VAR_OUTPUT/VAR_IN_OUT/VAR_TEMP/VAR_INST
-    // declaration text a FUNCTION_BLOCK or METHOD carries in its Declaration
-    // CDATA into typed VarDecl entries. Also doubles as StructDeclParser's
-    // field-list parser: STRUCT/UNION and their END_ keywords toggle the same
-    // section state as VAR/END_VAR.
+    // Turns the VAR_* sections a FUNCTION_BLOCK or METHOD carries in its
+    // Declaration CDATA into typed VarDecl entries. Also doubles as
+    // StructDeclParser's field-list parser: STRUCT/UNION and their END_
+    // keywords toggle the same section state as VAR/END_VAR.
     // Scoped to the fixtures' grammar - one name per line, no comma lists.
     public static class VarBlockParser
     {
@@ -149,12 +148,11 @@ namespace xStunit.Interpreter
             return result;
         }
 
-        // Reads a VAR/VAR_INPUT/VAR_OUTPUT/VAR_IN_OUT/VAR_TEMP/VAR_INST/
-        // VAR_GLOBAL header and the section it opens, ignoring any CONSTANT/
-        // RETAIN/PERSISTENT modifiers trailing it. The modifiers change nothing but
-        // the section a field lands in - no write-protection, retain or
-        // persistence semantics are modelled - but the header they sit on has
-        // to be recognized anyway. Unrecognized, it leaves no section open, and
+        // Reads a VAR_* section header and the section it opens, ignoring any
+        // CONSTANT/RETAIN/PERSISTENT modifiers trailing it. The modifiers
+        // change nothing but the section a field lands in - no write-
+        // protection, retain or persistence semantics are modelled - but the
+        // header they sit on has to be recognized anyway. Unrecognized, it leaves no section open, and
         // every declaration under it is dropped without a word: each later use
         // reports "Unknown variable", pointing at the use rather than at the
         // block that never opened.

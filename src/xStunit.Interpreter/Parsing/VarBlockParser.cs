@@ -70,11 +70,11 @@ namespace xStunit.Interpreter
 
         // Whole word, so an alias to a type named STRUCTURED_x opens nothing.
         private static readonly Regex TypeHeaderOpeningBodyPattern = new Regex(
-            @"^TYPE\s+\w+(\s+EXTENDS\s+\w+)?\s*:\s*(?<body>STRUCT|UNION)\b(?<rest>.*)$",
+            @"^TYPE\s+\w+(\s+EXTENDS\s+[\w.]+)?\s*:\s*(?<body>STRUCT|UNION)\b(?<rest>.*)$",
             RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
         private static readonly Regex BareTypeHeaderPattern = new Regex(
-            @"^TYPE\s+\w+(\s+EXTENDS\s+\w+)?\s*:$", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+            @"^TYPE\s+\w+(\s+EXTENDS\s+[\w.]+)?\s*:$", RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
         private static readonly Regex BodyOpeningLinePattern = new Regex(
             @"^(?<body>STRUCT|UNION)\b(?<rest>.*)$", RegexOptions.Compiled | RegexOptions.IgnoreCase);

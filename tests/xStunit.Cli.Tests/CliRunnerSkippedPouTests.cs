@@ -205,6 +205,28 @@ namespace xStunit.Cli.Tests
             Assert.DoesNotContain("Object reference not set", text);
         }
 
+        // A struct DUT with EXTENDS is a skip, never an exit-2 discovery
+        // error, and the suite next to it still runs.
+        [Fact]
+        public void Run_ExtendsStructDutAlongsideSuite_StillRunsSuiteAndReportsSkip()
+        {
+            const string declaration = "TYPE ST_Child EXTENDS ST_Base :\nSTRUCT\n\tx : REAL;\nEND_STRUCT\nEND_TYPE";
+            File.WriteAllText(
+                Path.Combine(_tempDir, "ST_Child.TcDUT"),
+                "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<TcPlcObject Version=\"1.1.0.1\">\n" +
+                "  <DUT Name=\"ST_Child\" Id=\"{00000000-0000-0000-0000-0000000000d0}\">\n" +
+                "    <Declaration><![CDATA[" + declaration + "]]></Declaration>\n  </DUT>\n</TcPlcObject>");
+            var output = new StringWriter();
+
+            var exitCode = CliRunner.Run(new[] { _tempDir }, output);
+
+            var text = output.ToString();
+            Assert.Equal(0, exitCode);
+            Assert.Contains("1 passed, 0 failed, 2 skipped", text);
+            Assert.Contains("ST_Child.TcDUT", text);
+            Assert.Contains("inheritance is not supported", text);
+        }
+
         // The POU-body case is the one real trees hit today; a graphical METHOD
         // on an otherwise ST-bodied FB is the same defect one level down, and
         // reaches the user through the same skip line.

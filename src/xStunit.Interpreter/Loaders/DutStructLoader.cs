@@ -12,10 +12,9 @@ namespace xStunit.Interpreter
     // ENUM/alias DUTs are skipped, since StructDeclParser has no model for
     // them (DutEnumLoader and DutAliasLoader pick those up on their own pass
     // over the same files). STRUCT inheritance - "TYPE X EXTENDS Base:" - is
-    // skipped too: there is no model for merging in the base type's fields,
-    // and StructDeclParser yields no name for that header shape, so Load drops
-    // it. Neither case fails registry build, so an unsupported DUT costs only
-    // itself rather than every suite in the directory.
+    // reported as a skipped file: there is no model for merging in the base
+    // type's fields. Neither case fails registry build, so an unsupported DUT
+    // costs only itself rather than every suite in the directory.
     public static class DutStructLoader
     {
         // True for a STRUCT declaration alone, not for the UNION that Load also
@@ -49,8 +48,22 @@ namespace xStunit.Interpreter
                     continue;
                 }
 
-                if (StructDeclParser.DeclaredBody(dut.DeclarationText) == null)
+                var body = StructDeclParser.DeclaredBody(dut.DeclarationText);
+                if (body == null)
                     continue;
+
+                var baseType = StructDeclParser.DeclaredBaseType(dut.DeclarationText);
+                if (baseType != null)
+                {
+                    var typeName = StructDeclParser.DeclaredName(dut.DeclarationText);
+                    var kind = body == StructDeclParser.UnionBody
+                        ? "Union"
+                        : "Struct";
+                    skipped.Add(new SkippedFile(
+                        file,
+                        $"{kind} '{typeName}' EXTENDS '{baseType}': inheritance is not supported, so the type is not loaded."));
+                    continue;
+                }
 
                 if (!StructuralParseGuard.TryParseOrSkip(
                         file,

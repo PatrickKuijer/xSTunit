@@ -11,8 +11,8 @@ namespace xStunit.Interpreter
         public const string StructBody = "STRUCT";
         public const string UnionBody = "UNION";
 
-        private static readonly Regex TypeNamePattern = new Regex(
-            @"^TYPE\s+(?<name>\w+)\s*:", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+        private static readonly Regex TypeHeaderPattern = new Regex(
+            @"^TYPE\s+(?<name>\w+)(\s+EXTENDS\s+(?<base>[\w.]+))?\s*:", RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
         // TwinCAT emits "{attribute 'pack_mode' := 'N'}" before the
         // "TYPE Name :" header, so it is read out of the preamble - past that
@@ -20,8 +20,6 @@ namespace xStunit.Interpreter
         private static readonly Regex PackModeAttributePattern = new Regex(
             @"^\{attribute\s+'pack_mode'\s*:=\s*'(?<value>\d+)'\}$", RegexOptions.Compiled);
 
-        private static readonly Regex TypeHeaderPattern = new Regex(
-            @"^TYPE\s+\w+(\s+EXTENDS\s+\w+)?\s*:", RegexOptions.Compiled | RegexOptions.IgnoreCase);
         private static readonly Regex BodyOnHeaderLinePattern = new Regex(
             @":\s*(?<body>STRUCT|UNION)\b", RegexOptions.Compiled | RegexOptions.IgnoreCase);
         private static readonly Regex BodyOnItsOwnLinePattern = new Regex(
@@ -65,6 +63,15 @@ namespace xStunit.Interpreter
             return null;
         }
 
+        internal static string DeclaredBaseType(string declarationText)
+        {
+            var baseType = HeaderMatch(declarationText)?.Groups["base"];
+            return baseType != null && baseType.Success ? baseType.Value : null;
+        }
+
+        internal static string DeclaredName(string declarationText) =>
+            HeaderMatch(declarationText)?.Groups["name"].Value;
+
         public static StructAst Parse(string declarationText) => Parse(declarationText, out _);
 
         public static StructAst Parse(string declarationText, out IReadOnlyList<string> unreadableLines)
@@ -80,13 +87,13 @@ namespace xStunit.Interpreter
         // Taken from the header rather than from the first "TYPE Name :" text
         // anywhere in the declaration, so prose in the header comment that
         // quotes a TYPE line cannot name the type.
-        private static string DeclaredName(string declarationText)
+        private static Match HeaderMatch(string declarationText)
         {
             foreach (var rawLine in DutDeclarationPreamble.Strip(declarationText).Split('\n'))
             {
-                var match = TypeNamePattern.Match(rawLine.Trim());
+                var match = TypeHeaderPattern.Match(rawLine.Trim());
                 if (match.Success)
-                    return match.Groups["name"].Value;
+                    return match;
             }
 
             return null;

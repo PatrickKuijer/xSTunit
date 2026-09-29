@@ -123,30 +123,71 @@ END_TYPE";
             }
         }
 
-        [Fact]
-        public void Load_ExtendsStructDut_IsSkippedNotRegisteredAsStruct()
+        [Theory]
+        [InlineData("TYPE ST_Child EXTENDS ST_Base :\nSTRUCT\n\tx : REAL;\nEND_STRUCT\nEND_TYPE")]
+        [InlineData("TYPE ST_Child EXTENDS ST_Base : STRUCT\n\tx : REAL;\nEND_STRUCT\nEND_TYPE")]
+        [InlineData("TYPE ST_Child EXTENDS Lib.ST_Base :\nSTRUCT\n\tx : REAL;\nEND_STRUCT\nEND_TYPE")]
+        [InlineData("type   ST_Child   extends   ST_Base:struct\n\tx : REAL;\nend_struct\nend_type")]
+        [InlineData("{attribute 'pack_mode' := '1'}\n(* header *)\n// note\nTYPE ST_Child EXTENDS ST_Base :\r\nSTRUCT\r\n\tx : REAL;\r\nEND_STRUCT\r\nEND_TYPE")]
+        public void Load_ExtendsStructDut_IsSkippedWithReasonNamingTheType(string declaration)
         {
-            // Struct inheritance has no field-merging model yet, so an
-            // "EXTENDS Base" STRUCT DUT must be dropped rather than registered
-            // with only its own fields. Note where that happens: this one still
-            // passes IsStructDeclaration - hence the assertion mid-test - and
-            // is only rejected a step later in Load, when the name pattern
-            // cannot match past the EXTENDS clause and leaves StructAst.Name
-            // null. Move the rejection to the filter and the mid-test assertion
-            // is what fails.
+            // A struct DUT with an EXTENDS clause has no field-inheritance
+            // model, so it must be reported as a skipped file naming the type
+            // rather than vanishing or registering with only its own fields -
+            // in any spelling of the header.
             var tempDir = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "xstunit-extendsstruct-" + Guid.NewGuid()));
             try
             {
-                const string declaration = "TYPE FB_ExtendedThing EXTENDS FB_Base :\nSTRUCT\n\tx : REAL;\nEND_STRUCT\nEND_TYPE";
-                File.WriteAllText(Path.Combine(tempDir.FullName, "FB_ExtendedThing.TcDUT"), DutXml("FB_ExtendedThing", declaration));
-
-                Assert.True(DutStructLoader.IsStructDeclaration(declaration));
+                var path = Path.Combine(tempDir.FullName, "ST_Child.TcDUT");
+                File.WriteAllText(path, DutXml("ST_Child", declaration));
 
                 var structTypes = DutStructLoader.Load(new[] { tempDir.FullName }, out var skipped);
 
                 Assert.Empty(structTypes);
-                Assert.Empty(skipped);
-                Assert.DoesNotContain("FB_ExtendedThing", structTypes.Select(s => s.Name));
+                var skip = Assert.Single(skipped);
+                Assert.Equal(path, skip.FileKey);
+                Assert.Contains("ST_Child", skip.Message);
+                Assert.Contains("Struct 'ST_Child' EXTENDS", skip.Message);
+                Assert.Contains("inheritance is not supported", skip.Message);
+            }
+            finally
+            {
+                Directory.Delete(tempDir.FullName, recursive: true);
+            }
+        }
+
+        [Fact]
+        public void Load_ExtendsUnionDut_SkipReasonSaysUnion()
+        {
+            var tempDir = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "xstunit-extendsunion-" + Guid.NewGuid()));
+            try
+            {
+                File.WriteAllText(Path.Combine(tempDir.FullName, "U_Child.TcDUT"), DutXml("U_Child", "TYPE U_Child EXTENDS U_Base :\nUNION\n\tx : REAL;\nEND_UNION\nEND_TYPE"));
+
+                DutStructLoader.Load(new[] { tempDir.FullName }, out var skipped);
+
+                Assert.StartsWith("Union 'U_Child' EXTENDS 'U_Base'", Assert.Single(skipped).Message);
+            }
+            finally
+            {
+                Directory.Delete(tempDir.FullName, recursive: true);
+            }
+        }
+
+        [Fact]
+        public void Load_ExtendsStructDutAlongsidePlainStruct_StillLoadsThePlainStruct()
+        {
+            // Skipping the inheriting struct must cost only that file.
+            var tempDir = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "xstunit-extendsmixed-" + Guid.NewGuid()));
+            try
+            {
+                File.WriteAllText(Path.Combine(tempDir.FullName, "ST_Child.TcDUT"), DutXml("ST_Child", "TYPE ST_Child EXTENDS ST_Base :\nSTRUCT\n\tx : REAL;\nEND_STRUCT\nEND_TYPE"));
+                File.WriteAllText(Path.Combine(tempDir.FullName, "ST_Base.TcDUT"), DutXml("ST_Base", "TYPE ST_Base :\nSTRUCT\n\ty : REAL;\nEND_STRUCT\nEND_TYPE"));
+
+                var structTypes = DutStructLoader.Load(new[] { tempDir.FullName }, out var skipped);
+
+                Assert.Equal("ST_Base", Assert.Single(structTypes).Name);
+                Assert.Single(skipped);
             }
             finally
             {

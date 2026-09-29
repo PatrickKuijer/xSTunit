@@ -252,29 +252,31 @@ namespace xStunit.Interpreter
             if (binary.Op == "AND_THEN" || binary.Op == "OR_ELSE")
                 return EvaluateShortCircuit(binary, frame);
 
-            var leftVal = Evaluate(binary.Left, frame);
-            var rightVal = Evaluate(binary.Right, frame);
+            return EvaluateBinaryValues(binary.Op, Evaluate(binary.Left, frame), Evaluate(binary.Right, frame), frame);
+        }
 
-            if ((binary.Op == "+" || binary.Op == "-") && (leftVal is Pointer || rightVal is Pointer))
-                return EvaluatePointerArithmetic(binary.Op, leftVal, rightVal, frame);
+        private object EvaluateBinaryValues(string op, object leftVal, object rightVal, Frame frame)
+        {
+            if ((op == "+" || op == "-") && (leftVal is Pointer || rightVal is Pointer))
+                return EvaluatePointerArithmetic(op, leftVal, rightVal, frame);
 
-            if ((binary.Op == "=" || binary.Op == "<>") &&
+            if ((op == "=" || op == "<>") &&
                 (leftVal is Pointer || rightVal is Pointer || leftVal is FbInstance || rightVal is FbInstance ||
                  leftVal is UnassignedInterfaceReference || rightVal is UnassignedInterfaceReference ||
                  leftVal == null || rightVal == null))
-                return EvaluatePointerEquality(binary.Op, leftVal, rightVal);
+                return EvaluatePointerEquality(op, leftVal, rightVal);
 
-            if (binary.Op == "AND" || binary.Op == "OR" || binary.Op == "XOR")
-                return EvaluateBitstring(binary.Op, leftVal, rightVal);
+            if (op == "AND" || op == "OR" || op == "XOR")
+                return EvaluateBitstring(op, leftVal, rightVal);
 
-            if (binary.Op == "MOD")
+            if (op == "MOD")
                 return EvaluateMod(leftVal, rightVal);
 
             // BOOL only supports equality/inequality in IEC 61131-3 (no
             // ordering, no arithmetic) - handle it here so it doesn't fall
             // through to the int cast below.
-            if (leftVal is bool lbEq && rightVal is bool rbEq && (binary.Op == "=" || binary.Op == "<>"))
-                return binary.Op == "=" ? lbEq == rbEq : lbEq != rbEq;
+            if (leftVal is bool lbEq && rightVal is bool rbEq && (op == "=" || op == "<>"))
+                return op == "=" ? lbEq == rbEq : lbEq != rbEq;
 
             // Any other BOOL usage - BOOL mixed with a non-BOOL operand
             // (TRUE = 1), or an operator with no BOOL semantics (TRUE < FALSE) -
@@ -282,7 +284,7 @@ namespace xStunit.Interpreter
             // int-cast path below and throw a bare InvalidCastException.
             if (leftVal is bool || rightVal is bool)
                 throw new NotSupportedException(
-                    $"Operator '{binary.Op}' is not supported between {leftVal?.GetType().Name ?? "null"} and " +
+                    $"Operator '{op}' is not supported between {leftVal?.GetType().Name ?? "null"} and " +
                     $"{rightVal?.GetType().Name ?? "null"}; BOOL only supports '=' and '<>' against another BOOL");
 
             // STRING and WSTRING are both boxed System.String here
@@ -292,7 +294,7 @@ namespace xStunit.Interpreter
             // byte-by-byte - so all six operators are valid, unlike the BOOL
             // guard above.
             if (leftVal is string ls && rightVal is string rs)
-                return binary.Op switch
+                return op switch
                 {
                     "=" => ls == rs,
                     "<>" => ls != rs,
@@ -301,7 +303,7 @@ namespace xStunit.Interpreter
                     "<=" => string.CompareOrdinal(ls, rs) <= 0,
                     ">=" => string.CompareOrdinal(ls, rs) >= 0,
                     _ => throw new NotSupportedException(
-                        $"Operator '{binary.Op}' is not supported between STRING operands"),
+                        $"Operator '{op}' is not supported between STRING operands"),
                 };
 
             // Mismatched STRING/non-STRING (e.g. sVal = 1) has no valid
@@ -309,7 +311,7 @@ namespace xStunit.Interpreter
             // instead of falling through to the int-cast numeric path.
             if (leftVal is string || rightVal is string)
                 throw new NotSupportedException(
-                    $"Operator '{binary.Op}' is not supported between {leftVal?.GetType().Name ?? "null"} and " +
+                    $"Operator '{op}' is not supported between {leftVal?.GetType().Name ?? "null"} and " +
                     $"{rightVal?.GetType().Name ?? "null"}; STRING can only be compared against another STRING");
 
             // INT->LONG->REAL->LREAL implicit widening: promote both operands to
@@ -318,11 +320,11 @@ namespace xStunit.Interpreter
             var (promotedLeft, promotedRight) = NumericCoercion.Promote(leftVal, rightVal);
             return promotedLeft switch
             {
-                double dl => EvaluateNumeric(binary.Op, dl, (double)promotedRight),
-                float fl => EvaluateNumeric(binary.Op, fl, (float)promotedRight),
-                long ll => EvaluateNumeric(binary.Op, ll, (long)promotedRight),
-                ulong ul => EvaluateNumeric(binary.Op, ul, (ulong)promotedRight),
-                int il => EvaluateNumeric(binary.Op, il, (int)promotedRight),
+                double dl => EvaluateNumeric(op, dl, (double)promotedRight),
+                float fl => EvaluateNumeric(op, fl, (float)promotedRight),
+                long ll => EvaluateNumeric(op, ll, (long)promotedRight),
+                ulong ul => EvaluateNumeric(op, ul, (ulong)promotedRight),
+                int il => EvaluateNumeric(op, il, (int)promotedRight),
                 _ => throw new NotSupportedException($"Cannot use {promotedLeft?.GetType().Name} in numeric arithmetic"),
             };
         }

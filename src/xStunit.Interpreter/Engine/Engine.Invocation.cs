@@ -227,13 +227,13 @@ namespace xStunit.Interpreter
                 // .TcPOU anywhere to parse for these, so nothing above could
                 // ever have resolved them.
                 //
-                // Deliberately the LAST thing tried, after the global-FUNCTION
-                // POU lookup directly above: if the user's own tree really does
-                // contain source for this name, that source wins. A plugin can
-                // only fill a hole that would otherwise have been the error
-                // below - it can never shadow interpreted code.
+                // Source in the user's own tree for this name wins: a plugin
+                // never shadows interpreted code.
                 if (_nativeFunctions.TryGet(methodName, out var nativeFunction))
                     return InvokeNativeFunction(nativeFunction, methodName, positionalArgs, namedArgs, callerFrame);
+
+                if (unqualified && TryEvaluateSelection(methodName, positionalArgs, namedArgs, callerFrame, out var selected))
+                    return selected;
 
                 // A suite receiver that got this far named something the TcUnit
                 // stub doesn't implement and that isn't a POU or native function

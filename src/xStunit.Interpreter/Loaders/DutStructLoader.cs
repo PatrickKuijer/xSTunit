@@ -25,9 +25,16 @@ namespace xStunit.Interpreter
             StructDeclParser.DeclaredBody(declarationText) == StructDeclParser.StructBody;
 
         public static IReadOnlyList<StructAst> Load(
-            IReadOnlyList<string> pouDirectories, out List<SkippedFile> skipped)
+            IReadOnlyList<string> pouDirectories, out List<SkippedFile> skipped) =>
+            Load(pouDirectories, out skipped, out _);
+
+        public static IReadOnlyList<StructAst> Load(
+            IReadOnlyList<string> pouDirectories,
+            out List<SkippedFile> skipped,
+            out List<DeclarationWarning> warnings)
         {
             skipped = new List<SkippedFile>();
+            warnings = new List<DeclarationWarning>();
             var structTypesWithFiles = new List<(string FilePath, StructAst Struct)>();
 
             foreach (var file in MultiDirectoryPouLoader.FindDutFiles(pouDirectories))
@@ -46,16 +53,26 @@ namespace xStunit.Interpreter
                     continue;
 
                 if (!StructuralParseGuard.TryParseOrSkip(
-                        file, () => StructDeclParser.Parse(dut.DeclarationText), out var structAst, out var structSkip))
+                        file,
+                        () =>
+                        {
+                            var parsed = StructDeclParser.Parse(dut.DeclarationText, out var unreadableLines);
+                            return (Struct: parsed, UnreadableLines: unreadableLines);
+                        },
+                        out var parse,
+                        out var structSkip))
                 {
                     skipped.Add(structSkip);
                     continue;
                 }
 
-                if (structAst.Name == null)
+                if (parse.Struct.Name == null)
                     continue;
 
-                structTypesWithFiles.Add((file, structAst));
+                if (parse.UnreadableLines.Count > 0)
+                    warnings.Add(new DeclarationWarning(file, parse.UnreadableLines));
+
+                structTypesWithFiles.Add((file, parse.Struct));
             }
 
             // Checked after the whole merged set is read, not per file: a

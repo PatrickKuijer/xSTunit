@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Text.RegularExpressions;
 
 namespace xStunit.Interpreter
@@ -64,9 +65,11 @@ namespace xStunit.Interpreter
             return null;
         }
 
-        public static StructAst Parse(string declarationText)
+        public static StructAst Parse(string declarationText) => Parse(declarationText, out _);
+
+        public static StructAst Parse(string declarationText, out IReadOnlyList<string> unreadableLines)
         {
-            var fields = VarBlockParser.Parse(declarationText);
+            var fields = VarBlockParser.Parse(declarationText, out unreadableLines);
             return new StructAst(
                 DeclaredName(declarationText),
                 fields,

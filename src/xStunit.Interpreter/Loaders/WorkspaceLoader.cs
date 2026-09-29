@@ -71,13 +71,18 @@ namespace xStunit.Interpreter
             var types = loaded.Select(l => l.Pou).ToList();
 
             IReadOnlyList<StructAst> structTypes;
+            var dutSkipped = new List<SkippedFile>();
+            var dutWarnings = new List<DeclarationWarning>();
             try
             {
-                structTypes = DutStructLoader.Load(directories, out var dutSkipped);
+                structTypes = DutStructLoader.Load(directories, out dutSkipped, out dutWarnings);
                 skipped.AddRange(dutSkipped);
+                warnings.AddRange(dutWarnings);
             }
             catch (DuplicateStructTypeException ex)
             {
+                skipped.AddRange(dutSkipped);
+                warnings.AddRange(dutWarnings);
                 return LoadedWorkspace.Failed(ex.Message, skipped, warnings);
             }
 
@@ -94,13 +99,18 @@ namespace xStunit.Interpreter
                 aliases[enumAlias.Key] = enumAlias.Value;
 
             IReadOnlyList<GvlAst> gvls;
+            var gvlSkipped = new List<SkippedFile>();
+            var gvlWarnings = new List<DeclarationWarning>();
             try
             {
-                gvls = GvlLoader.Load(directories, out var gvlSkipped);
+                gvls = GvlLoader.Load(directories, out gvlSkipped, out gvlWarnings);
                 skipped.AddRange(gvlSkipped);
+                warnings.AddRange(gvlWarnings);
             }
             catch (DuplicateGvlNameException ex)
             {
+                skipped.AddRange(gvlSkipped);
+                warnings.AddRange(gvlWarnings);
                 return LoadedWorkspace.Failed(ex.Message, skipped, warnings);
             }
 

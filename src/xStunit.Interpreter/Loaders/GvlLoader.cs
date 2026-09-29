@@ -13,9 +13,16 @@ namespace xStunit.Interpreter
     public static class GvlLoader
     {
         public static IReadOnlyList<GvlAst> Load(
-            IReadOnlyList<string> pouDirectories, out List<SkippedFile> skipped)
+            IReadOnlyList<string> pouDirectories, out List<SkippedFile> skipped) =>
+            Load(pouDirectories, out skipped, out _);
+
+        public static IReadOnlyList<GvlAst> Load(
+            IReadOnlyList<string> pouDirectories,
+            out List<SkippedFile> skipped,
+            out List<DeclarationWarning> warnings)
         {
             skipped = new List<SkippedFile>();
+            warnings = new List<DeclarationWarning>();
             var gvlsWithFiles = new List<(string FilePath, GvlAst Gvl)>();
 
             foreach (var file in MultiDirectoryPouLoader.FindGvlFiles(pouDirectories))
@@ -28,6 +35,10 @@ namespace xStunit.Interpreter
                 }
 
                 gvlsWithFiles.Add((file, gvl));
+
+                VarBlockParser.Parse(gvl.DeclarationText, out var unreadable);
+                if (unreadable.Count > 0)
+                    warnings.Add(new DeclarationWarning(file, unreadable));
             }
 
             // Checked after the whole merged set is read, not per file: a

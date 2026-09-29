@@ -243,6 +243,129 @@ namespace xStunit.Interpreter.Tests
             Assert.Equal(new[] { "cx, cy : LREAL;" }, warning.Lines);
         }
 
+        // GVL constants feed ARRAY bounds and STRING sizes, so a dropped line
+        // costs more than its own variable and has to reach the same report
+        // as a POU's.
+        [Fact]
+        public void Load_GvlWithUnreadableDeclarationLine_WarnsAgainstTheGvlFile()
+        {
+            File.WriteAllText(Path.Combine(_tempDir, "gLimits.TcGVL"), GvlWithUnreadableLineXml);
+
+            var workspace = WorkspaceLoader.Load(new[] { _tempDir });
+
+            Assert.Null(workspace.Error);
+            Assert.NotNull(workspace.Registry.GetGvlDecls("gLimits"));
+            Assert.Empty(workspace.Skipped);
+
+            var warning = Assert.Single(workspace.Warnings);
+            Assert.EndsWith("gLimits.TcGVL", warning.FileKey);
+            Assert.Equal(new[] { "nLow, nHigh : INT;" }, warning.Lines);
+        }
+
+        [Fact]
+        public void Load_StructDutWithUnreadableFieldLine_WarnsAgainstTheDutFile()
+        {
+            File.WriteAllText(Path.Combine(_tempDir, "ST_Pair.TcDUT"), StructWithUnreadableLineXml);
+
+            var workspace = WorkspaceLoader.Load(new[] { _tempDir });
+
+            Assert.Null(workspace.Error);
+            Assert.NotNull(workspace.Registry.GetStruct("ST_Pair"));
+            Assert.Empty(workspace.Skipped);
+
+            var warning = Assert.Single(workspace.Warnings);
+            Assert.EndsWith("ST_Pair.TcDUT", warning.FileKey);
+            Assert.Equal(new[] { "a, b : INT;" }, warning.Lines);
+        }
+
+        [Fact]
+        public void Load_UnionDutWithUnreadableFieldLine_WarnsAgainstTheDutFile()
+        {
+            File.WriteAllText(
+                Path.Combine(_tempDir, "U_Pair.TcDUT"),
+                StructWithUnreadableLineXml.Replace("ST_Pair", "U_Pair").Replace("STRUCT", "UNION"));
+
+            var workspace = WorkspaceLoader.Load(new[] { _tempDir });
+
+            var warning = Assert.Single(workspace.Warnings);
+            Assert.EndsWith("U_Pair.TcDUT", warning.FileKey);
+            Assert.Equal(new[] { "a, b : INT;" }, warning.Lines);
+        }
+
+        // A failed load still reports what it had already lost: the error is
+        // about the directory set, and the unreadable line is a separate fact
+        // the user would otherwise never hear about.
+        [Fact]
+        public void Load_DuplicateStructName_StillReportsWarningsAndSkipsGatheredBeforeTheError()
+        {
+            var first = Path.Combine(_tempDir, "first");
+            var second = Path.Combine(_tempDir, "second");
+            Directory.CreateDirectory(first);
+            Directory.CreateDirectory(second);
+            File.WriteAllText(Path.Combine(first, "ST_Pair.TcDUT"), StructWithUnreadableLineXml);
+            File.WriteAllText(Path.Combine(second, "ST_Pair.TcDUT"), StructWithUnreadableLineXml);
+            File.WriteAllText(Path.Combine(second, "ST_Broken.TcDUT"), "<TcPlcObject><DUT Name=");
+
+            var workspace = WorkspaceLoader.Load(new[] { first, second });
+
+            Assert.Contains("ST_Pair", workspace.Error);
+            Assert.Equal(2, workspace.Warnings.Count);
+            Assert.All(workspace.Warnings, w => Assert.Equal(new[] { "a, b : INT;" }, w.Lines));
+            Assert.Contains(workspace.Skipped, s => s.FileKey.EndsWith("ST_Broken.TcDUT"));
+        }
+
+        [Fact]
+        public void Load_DuplicateGvlName_StillReportsWarningsAndSkipsGatheredBeforeTheError()
+        {
+            var first = Path.Combine(_tempDir, "first");
+            var second = Path.Combine(_tempDir, "second");
+            Directory.CreateDirectory(first);
+            Directory.CreateDirectory(second);
+            File.WriteAllText(Path.Combine(first, "gLimits.TcGVL"), GvlWithUnreadableLineXml);
+            File.WriteAllText(Path.Combine(second, "gLimits.TcGVL"), GvlWithUnreadableLineXml);
+            File.WriteAllText(Path.Combine(second, "gBroken.TcGVL"), "<TcPlcObject><GVL Name=");
+
+            var workspace = WorkspaceLoader.Load(new[] { first, second });
+
+            Assert.Contains("gLimits", workspace.Error);
+            Assert.Equal(2, workspace.Warnings.Count);
+            Assert.All(workspace.Warnings, w => Assert.Equal(new[] { "nLow, nHigh : INT;" }, w.Lines));
+            Assert.Contains(workspace.Skipped, s => s.FileKey.EndsWith("gBroken.TcGVL"));
+        }
+
+        [Fact]
+        public void Load_GvlAndStructWhoseDeclarationsAllParse_WarnAboutNothing()
+        {
+            File.WriteAllText(Path.Combine(_tempDir, "gGlobals.TcGVL"), GvlXml);
+            File.WriteAllText(Path.Combine(_tempDir, "ST_Point.TcDUT"), StructDutXml);
+
+            var workspace = WorkspaceLoader.Load(new[] { _tempDir });
+
+            Assert.Empty(workspace.Warnings);
+        }
+
+        private const string GvlWithUnreadableLineXml = @"<?xml version=""1.0"" encoding=""utf-8""?>
+<TcPlcObject Version=""1.1.0.1"">
+  <GVL Name=""gLimits"" Id=""{00000000-0000-0000-0000-0000000000f0}"">
+    <Declaration><![CDATA[VAR_GLOBAL CONSTANT
+    nMax : INT := 16;
+    nLow, nHigh : INT;
+END_VAR]]></Declaration>
+  </GVL>
+</TcPlcObject>";
+
+        private const string StructWithUnreadableLineXml = @"<?xml version=""1.0"" encoding=""utf-8""?>
+<TcPlcObject Version=""1.1.0.1"">
+  <DUT Name=""ST_Pair"" Id=""{00000000-0000-0000-0000-0000000000f1}"">
+    <Declaration><![CDATA[TYPE ST_Pair :
+STRUCT
+    x : INT;
+    a, b : INT;
+END_STRUCT
+END_TYPE]]></Declaration>
+  </DUT>
+</TcPlcObject>";
+
         private const string DriveWithUnreadableLinePouXml = @"<?xml version=""1.0"" encoding=""utf-8""?>
 <TcPlcObject Version=""1.1.0.1"">
   <POU Name=""FB_Drive"" Id=""{00000000-0000-0000-0000-0000000000d0}"" SpecialFunc=""None"">

@@ -657,6 +657,59 @@ END_VAR";
             Assert.Equal("x", value.Name);
         }
 
+        // A pragma sharing a declaration's line must not cost the declaration:
+        // otherwise it is neither read nor reported.
+        [Theory]
+        [InlineData("{attribute 'hide'} nValue : INT := 7;")]
+        [InlineData("{attribute 'hide'}{attribute 'symbol' := 'readwrite'} nValue : INT := 7;")]
+        [InlineData("{attribute 'hide'}\tnValue : INT := 7;")]
+        public void Parse_PragmaPrefixingDeclarationLine_ReadsDeclaration(string line)
+        {
+            var vars = VarBlockParser.Parse("VAR\n\t" + line + "\nEND_VAR", out var unreadable);
+
+            var value = Assert.Single(vars);
+            Assert.Equal("nValue", value.Name);
+            Assert.Equal("INT", value.TypeName);
+            Assert.Equal("7", value.DefaultValueText);
+            Assert.Empty(unreadable);
+        }
+
+        // STRUCT fields go through the same reader as VAR lines, so the pragma
+        // strip has to hold there too or the field silently vanishes from the type.
+        [Fact]
+        public void Parse_PragmaPrefixingStructFieldLine_ReadsField()
+        {
+            const string declaration = "TYPE ST_Point : STRUCT\n\t{attribute 'hide'} x : INT;\n\ty : INT;\nEND_STRUCT\nEND_TYPE";
+
+            var vars = VarBlockParser.Parse(declaration);
+
+            Assert.Equal(new[] { "x", "y" }, vars.Select(v => v.Name));
+        }
+
+        // A pragma is transparent to section structure: if the keyword it
+        // prefixes is not recognised, the whole section's declarations are lost.
+        [Fact]
+        public void Parse_PragmaPrefixingSectionKeywords_OpensAndClosesSection()
+        {
+            const string declaration = "{attribute 'x'} VAR_INPUT\n\tnIn : INT;\n{attribute 'x'} END_VAR\n\tnOutside : INT;";
+
+            var value = Assert.Single(VarBlockParser.Parse(declaration));
+
+            Assert.Equal("nIn", value.Name);
+            Assert.Equal(VarSection.Input, value.Section);
+        }
+
+        // Stripping the pragma must not turn an unmatchable declaration into
+        // silence: it is still a lost variable and has to be reported.
+        [Fact]
+        public void Parse_PragmaPrefixedLineThePatternCannotMatch_IsReportedUnreadable()
+        {
+            var vars = VarBlockParser.Parse("VAR\n\t{attribute 'x'} nBad : ;\nEND_VAR", out var unreadable);
+
+            Assert.Empty(vars);
+            Assert.Equal("nBad : ;", Assert.Single(unreadable));
+        }
+
         // A line dropped here leaves no trace until the name is used, so the
         // FB_init argument list must survive as declaration data.
         [Theory]

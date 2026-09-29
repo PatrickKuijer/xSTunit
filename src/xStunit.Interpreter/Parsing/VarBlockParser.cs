@@ -102,20 +102,19 @@ namespace xStunit.Interpreter
 
             foreach (var rawLine in declarationText.Split('\n'))
             {
-                var line = StripComments(rawLine.Trim(), ref inBlockComment).Trim();
+                var line = LeadingPragmasPattern.Replace(
+                    StripComments(rawLine.Trim(), ref inBlockComment).Trim(), "");
                 if (line.Length == 0)
                     continue;
 
-                if (TypeHeaderOpeningBodyPattern.IsMatch(LeadingPragmasPattern.Replace(line, "")))
+                if (TypeHeaderOpeningBodyPattern.IsMatch(line))
                 {
                     currentSection = VarSection.Local;
                     continue;
                 }
 
-                // A pragma carries no declaration, so it costs no variable and
-                // is not a loss to report. It also may not close the section it
-                // sits in, which is why it is skipped rather than falling
-                // through to the header read below.
+                // An unterminated pragma is left unstripped and must not be
+                // reported as a lost declaration.
                 if (line[0] == '{')
                     continue;
 

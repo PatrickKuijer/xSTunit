@@ -48,5 +48,13 @@ namespace xStunit.Interpreter.Tests
 
             Assert.True(BodyReadsField(declaration, "ST_Point", "v.nX = 42"));
         }
+
+        [Fact]
+        public void RunSuite_BodyReadsFieldWhosePragmaSharesItsLine_SeesTheField()
+        {
+            const string declaration = "TYPE ST_Point : STRUCT\n\t{attribute 'hide'} nX : DINT := 42;\nEND_STRUCT\nEND_TYPE";
+
+            Assert.True(BodyReadsField(declaration, "ST_Point", "v.nX = 42"));
+        }
     }
 }

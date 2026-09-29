@@ -9,7 +9,8 @@ namespace xStunit.Interpreter
         public string InitArgumentsText { get; }
 
         // The declaration as read from the source: trimmed and stripped of
-        // comments, otherwise verbatim. Null for a VarDecl not read from source.
+        // leading pragmas and comments, otherwise verbatim. Null for a
+        // VarDecl not read from source.
         public string SourceText { get; }
 
         public VarDecl(string name, string typeName, string defaultValueText, VarSection section)

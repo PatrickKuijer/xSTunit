@@ -12,8 +12,10 @@ namespace xStunit.Interpreter.Extensibility
     /// <remarks>
     /// Deliberately the smallest possible surface: a name and an Invoke. The interpreter
     /// never hands out its Engine, TypeRegistry, or Frame, so a plugin can compute a
-    /// value from its arguments and nothing else - it cannot reach into the running
-    /// program's state, define types, or alter dispatch.
+    /// return value and VAR_OUTPUTs from its arguments and nothing else - it cannot
+    /// reach into the running program's state, define types, or alter dispatch. Its
+    /// outputs land only where the caller pointed them with <c>=&gt;</c> (see
+    /// <see cref="NativeCallContext.SetOutput"/>).
     /// <para>
     /// Engine consults registered functions LAST (Engine.Invocation.cs), after
     /// intrinsics, methods on the ancestry chain, bare-invoked FB fields, native hosts,

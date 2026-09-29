@@ -17,7 +17,10 @@ namespace xStunit.Interpreter
             IReadOnlyList<NamedArg> namedArgs,
             Frame callerFrame)
         {
-            return function.Invoke(NewNativeCallContext(methodName, positionalArgs, namedArgs, callerFrame));
+            var context = NewNativeCallContext(methodName, positionalArgs, namedArgs, callerFrame);
+            var result = function.Invoke(context);
+            WriteBackPluginOutputs(context, namedArgs, callerFrame);
+            return result;
         }
 
         // Evaluates a call's arguments in the caller's scope and wraps them in
@@ -36,10 +39,19 @@ namespace xStunit.Interpreter
             // how the suite-host bridge builds its own named-arg dictionary,
             // and a duplicate named argument is a source-level mistake the
             // parser is the right place to reject, not this call site.
+            //
+            // An => target is never evaluated here: its current value is not an
+            // argument, and a plugin reading it by the output's name would be
+            // reading stale caller state as if it were an input.
             var evaluatedNamed = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
+            var boundOutputs = new List<string>();
             foreach (var arg in namedArgs)
-                if (!arg.IsUnboundOutput)
+            {
+                if (!arg.IsOutput)
                     evaluatedNamed[arg.Name] = Evaluate(arg.Value, callerFrame);
+                else if (!arg.IsUnboundOutput)
+                    boundOutputs.Add(arg.Name);
+            }
 
             // methodName (as written at the call site), not the registered
             // name - lookup is case-insensitive, so the two can differ, and an
@@ -50,7 +62,33 @@ namespace xStunit.Interpreter
                 evaluatedPositional,
                 evaluatedNamed,
                 (ptr, count) => ReadPointerBytes(ptr, count, methodName, callerFrame),
-                CurrentSimulatedTime());
+                CurrentSimulatedTime(),
+                boundOutputs);
+        }
+
+        // The plugin counterpart of WriteBackOutputArgs: the outputs live in the
+        // context rather than in callee cells, but the assignment into each =>
+        // target is the same SetLValue, so coercion matches an interpreted
+        // FUNCTION's outputs exactly.
+        //
+        // Every bound output is checked before any is written, so a plugin that
+        // forgot one faults the call without leaving the caller half-updated.
+        private void WriteBackPluginOutputs(NativeCallContext context, IReadOnlyList<NamedArg> namedArgs, Frame callerFrame)
+        {
+            foreach (var arg in namedArgs)
+            {
+                if (arg.IsOutput && !arg.IsUnboundOutput && !context.Outputs.ContainsKey(arg.Name))
+                {
+                    throw new InvalidOperationException(
+                        $"{context.FunctionName} did not set output '{arg.Name}', which the call binds with " +
+                        $"'{arg.Name} =>' - a native plugin must call {nameof(NativeCallContext.SetOutput)} " +
+                        "for every output a caller can bind, since it declares no default to write");
+                }
+            }
+
+            foreach (var arg in namedArgs)
+                if (arg.IsOutput && !arg.IsUnboundOutput)
+                    SetLValue(arg.Value, context.Outputs[arg.Name], callerFrame);
         }
 
         // One snapshot shape for both plugin surfaces, taken at the call rather

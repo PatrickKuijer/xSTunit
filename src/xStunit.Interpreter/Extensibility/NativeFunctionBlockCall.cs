@@ -81,6 +81,13 @@ namespace xStunit.Interpreter.Extensibility
         /// entered, the way a real FB's VAR_INPUTs are written by the call, and reading
         /// them anywhere but <see cref="GetField"/> would see only what this one call
         /// happened to pass rather than what the input currently holds.
+        /// <para>
+        /// A method's VAR_OUTPUTs go through <see cref="NativeCallContext.SetOutput"/>
+        /// here and reach the call's <c>=&gt;</c> targets once
+        /// <see cref="IXstunitNativeFunctionBlock.Invoke"/> returns. A bare invocation
+        /// binds nothing on this context - its <c>=&gt;</c> targets are written from
+        /// the instance's fields - so it publishes outputs with <see cref="SetField"/>.
+        /// </para>
         /// </remarks>
         public NativeCallContext Arguments { get; }
 

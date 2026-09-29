@@ -163,8 +163,10 @@ namespace xStunit.Interpreter
                     DeclaresMethod(instance.NativePluginFunctionBlock, methodName))
                 {
                     var pluginArgs = NewNativeCallContext(methodName, positionalArgs, namedArgs, callerFrame);
-                    return instance.NativePluginFunctionBlock.Invoke(
+                    var pluginResult = instance.NativePluginFunctionBlock.Invoke(
                         NewFunctionBlockCall(instance, methodName, pluginArgs, callerFrame));
+                    WriteBackPluginOutputs(pluginArgs, namedArgs, callerFrame);
+                    return pluginResult;
                 }
 
                 // Method-name routing WITHIN the loopback host kind - a

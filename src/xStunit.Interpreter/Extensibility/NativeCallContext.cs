@@ -6,8 +6,8 @@ namespace xStunit.Interpreter.Extensibility
 {
     /// <summary>
     /// Everything an <see cref="IXstunitNativeFunction"/> is allowed to see about the
-    /// call being made: the function's name, its already-evaluated arguments, and a way
-    /// to read bytes behind a POINTER argument.
+    /// call being made: the function's name, its already-evaluated arguments, a way
+    /// to read bytes behind a POINTER argument, and a channel for its VAR_OUTPUTs.
     /// </summary>
     /// <remarks>
     /// Arguments arrive evaluated - a plugin gets CLR values, never Expr trees or
@@ -17,6 +17,12 @@ namespace xStunit.Interpreter.Extensibility
     /// (Engine.ByteLayout.cs) is not something a plugin could reasonably reimplement,
     /// and a large share of real library functions (checksums, CRCs, serializers) exist
     /// precisely to walk a byte buffer.
+    /// <para>
+    /// Outputs flow the other way through the same containment: a plugin hands values
+    /// to <see cref="SetOutput"/>, and the interpreter - not the plugin - assigns them
+    /// to the <c>name =&gt; target</c> expressions the caller wrote, after
+    /// <see cref="IXstunitNativeFunction.Invoke"/> returns.
+    /// </para>
     /// </remarks>
     public sealed class NativeCallContext
     {
@@ -40,19 +46,26 @@ namespace xStunit.Interpreter.Extensibility
         /// it defaults to a zero <see cref="SimulatedTime"/> - the caller has no clock
         /// to report.
         /// </param>
+        /// <param name="boundOutputs">
+        /// The output names the call binds with <c>name =&gt; target</c>, as written;
+        /// null is treated as none. An output listed with no target (<c>name =&gt;</c>)
+        /// binds nothing and does not belong here.
+        /// </param>
         /// <exception cref="ArgumentNullException"><paramref name="functionName"/> is null.</exception>
         public NativeCallContext(
             string functionName,
             IReadOnlyList<object> positionalArgs,
             IReadOnlyDictionary<string, object> namedArgs,
             Func<Pointer, int, byte[]> readBytes,
-            SimulatedTime time = default)
+            SimulatedTime time = default,
+            IEnumerable<string> boundOutputs = null)
         {
             FunctionName = functionName ?? throw new ArgumentNullException(nameof(functionName));
             PositionalArgs = positionalArgs ?? Array.Empty<object>();
             NamedArgs = CaseInsensitiveCopy(namedArgs);
             _readBytes = readBytes;
             Time = time;
+            _boundOutputs = new HashSet<string>(boundOutputs ?? Array.Empty<string>(), StringComparer.OrdinalIgnoreCase);
         }
 
         private static IReadOnlyDictionary<string, object> CaseInsensitiveCopy(IReadOnlyDictionary<string, object> namedArgs)
@@ -92,6 +105,57 @@ namespace xStunit.Interpreter.Extensibility
         /// any case.
         /// </remarks>
         public IReadOnlyDictionary<string, object> NamedArgs { get; }
+
+        private readonly HashSet<string> _boundOutputs;
+        private readonly Dictionary<string, object> _outputs = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>
+        /// The VAR_OUTPUT names this call binds with <c>name =&gt; target</c>, as the
+        /// caller wrote them. Those arguments are never evaluated and never appear in
+        /// <see cref="NamedArgs"/>: the target is where a value goes, not a value.
+        /// </summary>
+        public IReadOnlyCollection<string> BoundOutputs => _boundOutputs;
+
+        /// <summary>
+        /// Whether the caller bound <paramref name="paramName"/> to a target, matched
+        /// case-insensitively. Only worth asking when an output is expensive to compute;
+        /// <see cref="SetOutput"/> is safe to call either way.
+        /// </summary>
+        public bool IsOutputBound(string paramName) =>
+            paramName != null && _boundOutputs.Contains(paramName);
+
+        /// <summary>
+        /// Publishes a VAR_OUTPUT. Once <see cref="IXstunitNativeFunction.Invoke"/> (or,
+        /// for a plugin FB method, <see cref="IXstunitNativeFunctionBlock.Invoke"/>)
+        /// returns, the interpreter assigns it to the call's <c>name =&gt; target</c>,
+        /// coercing to the target's declared type exactly as an ST assignment would.
+        /// </summary>
+        /// <param name="paramName">The declared output name; matched case-insensitively, and setting it twice keeps the later value.</param>
+        /// <param name="value">
+        /// The value in the interpreter's CLR representation for the output's IEC type
+        /// (see <see cref="IXstunitNativeFunction.Invoke"/>).
+        /// </param>
+        /// <exception cref="ArgumentNullException"><paramref name="paramName"/> is null.</exception>
+        /// <remarks>
+        /// Setting an output the caller did not bind is not an error and is simply
+        /// dropped, since TwinCAT lets a caller omit any output - so a plugin can set
+        /// every output it declares unconditionally. The reverse is an error: an output
+        /// the caller bound but the plugin never set faults the call, because a plugin
+        /// declares no output types and there is no default the interpreter could write.
+        /// </remarks>
+        public void SetOutput(string paramName, object value)
+        {
+            if (paramName == null)
+                throw new ArgumentNullException(nameof(paramName));
+
+            _outputs[paramName] = value;
+        }
+
+        /// <summary>
+        /// Every output set through <see cref="SetOutput"/> so far, bound or not, keyed
+        /// case-insensitively - what a host invoking a plugin directly reads back.
+        /// </summary>
+        public IReadOnlyDictionary<string, object> Outputs => _outputs;
 
         // Accumulated as the plugin queries them: a named argument can occupy any
         // declared position, so every parameter after it sits one PositionalArgs slot
@@ -335,9 +399,10 @@ namespace xStunit.Interpreter.Extensibility
         /// </exception>
         /// <remarks>
         /// Read-only by design: a plugin can inspect a buffer to compute a checksum or
-        /// parse a record, but cannot write back into interpreted program state. A
-        /// library function that mutates an output parameter is out of scope for this
-        /// extension point.
+        /// parse a record, but cannot write through the pointer into interpreted program
+        /// state. A library function with a VAR_OUTPUT publishes it with
+        /// <see cref="SetOutput"/> instead, which reaches only the target the caller
+        /// named with <c>=&gt;</c>.
         /// </remarks>
         public byte[] RequireBytes(string paramName, int position, int count)
         {

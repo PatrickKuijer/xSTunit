@@ -163,6 +163,13 @@ how unloadable POUs are handled.
   access via `RequireBytes` is **read-only**; a function block additionally
   reaches its own instance's fields and, through `WriteBytes`, whatever buffer
   the caller explicitly pointed it at — nothing else.
+- **`VAR_OUTPUT`s go through `SetOutput`.** A function (or a function-block
+  method) called as `F(nIn := x, nOut => y)` publishes `nOut` with
+  `context.SetOutput("nOut", value)`; the interpreter assigns it to `y` after
+  `Invoke` returns, with the same type coercion as an ST assignment. The `=>`
+  target is never passed in as an argument. Setting an output the caller did
+  not bind is ignored, so set every output unconditionally; an output the caller
+  bound but the plugin never set fails the call, naming both.
 - **Unresolved and unplugged is still a clear error**, naming the function and
   suggesting a plugin — not a `NullReferenceException`.
 - **Loading a DLL runs its code.** Point `--plugins` only at a directory you

@@ -91,7 +91,7 @@ namespace xStunit.Interpreter
         // .TcDUT of the same name (unlikely, but not impossible) overwrites
         // them rather than the other way round.
         private static readonly IReadOnlyDictionary<string, string> WellKnownLibraryAliases =
-            new Dictionary<string, string>
+            new Dictionary<string, string>(IecIdentifier.Comparer)
             {
                 // Tc2_System.T_MaxString: TwinCAT PLC string of max length
                 // 255 bytes + 1 byte null delimiter.
@@ -104,7 +104,7 @@ namespace xStunit.Interpreter
             skipped = new List<SkippedFile>();
             // Case-insensitive so a project DUT overwrites the well-known entry
             // it shadows however it spells the name, instead of sitting beside it.
-            var aliases = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            var aliases = new Dictionary<string, string>(IecIdentifier.Comparer);
             foreach (var wellKnown in WellKnownLibraryAliases)
                 aliases[wellKnown.Key] = wellKnown.Value;
 

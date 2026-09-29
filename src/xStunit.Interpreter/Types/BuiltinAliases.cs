@@ -17,7 +17,7 @@ namespace xStunit.Interpreter
         // x86 and 64 on x64 - the same two files disagree about it - so any
         // entry for one would be right on one target and wrong on the other.
         private static readonly IReadOnlyDictionary<string, string> UnderlyingTypes =
-            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            new Dictionary<string, string>(IecIdentifier.Comparer)
             {
                 ["OTCID"] = "UDINT",
             };

@@ -18,7 +18,7 @@ namespace xStunit.Interpreter
         // declared spelling, which is what diagnostics echo back. The same
         // holds for every name-keyed table in Frame, FbInstance and
         // StructInstance.
-        public Dictionary<string, Cell> Locals { get; } = new Dictionary<string, Cell>(StringComparer.OrdinalIgnoreCase);
+        public Dictionary<string, Cell> Locals { get; } = new Dictionary<string, Cell>(IecIdentifier.Comparer);
         public string DeclaringTypeName { get; }
 
         // Null when the frame runs a POU's own top-level body (suite body,
@@ -32,7 +32,7 @@ namespace xStunit.Interpreter
         // FbInstance.FieldTypeNames: a REF= binding replaces the Locals entry
         // wholesale with the target's own Cell, so Cell.DeclaredTypeName
         // afterwards describes the target, not the local's declaration.
-        public Dictionary<string, string> LocalTypeNames { get; } = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        public Dictionary<string, string> LocalTypeNames { get; } = new Dictionary<string, string>(IecIdentifier.Comparer);
 
         // Where this frame's body starts in its source file, copied from the
         // MethodAst/PouAst it came from, so CurrentFileLine can turn an

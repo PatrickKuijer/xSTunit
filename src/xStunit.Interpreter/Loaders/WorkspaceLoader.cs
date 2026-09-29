@@ -82,7 +82,7 @@ namespace xStunit.Interpreter
             }
 
             var aliases = DutAliasLoader.Load(directories, out var aliasSkipped)
-                .ToDictionary(kv => kv.Key, kv => kv.Value, StringComparer.OrdinalIgnoreCase);
+                .ToDictionary(kv => kv.Key, kv => kv.Value, IecIdentifier.Comparer);
             skipped.AddRange(aliasSkipped);
 
             // Enum names are merged into the alias map so SIZEOF() and every
@@ -118,10 +118,9 @@ namespace xStunit.Interpreter
             return LoadedWorkspace.Succeeded(
                 new TypeRegistry(types, structTypes, gvls, aliases, enumMembers, interfaceTypes),
                 types,
-                // Case-insensitive like every other type-name lookup. The
-                // duplicate check above has already ruled out two names this
-                // would merge.
-                loaded.ToDictionary(l => l.Pou.Name, l => l.FilePath, StringComparer.OrdinalIgnoreCase),
+                // The duplicate check above has already ruled out two names
+                // this would merge.
+                loaded.ToDictionary(l => l.Pou.Name, l => l.FilePath, IecIdentifier.Comparer),
                 skipped,
                 warnings);
         }
@@ -222,7 +221,7 @@ namespace xStunit.Interpreter
             new LoadedWorkspace(
                 null,
                 Array.Empty<PouAst>(),
-                new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase),
+                new Dictionary<string, string>(IecIdentifier.Comparer),
                 skipped,
                 warnings,
                 error);

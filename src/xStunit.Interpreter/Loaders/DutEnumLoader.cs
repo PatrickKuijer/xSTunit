@@ -66,10 +66,10 @@ namespace xStunit.Interpreter
         // following IEC 61131-3 enum numbering: an explicit ":=" initializer
         // is used verbatim, an unspecified member is one greater than the
         // previous member's value, and a first member with no initializer
-        // is 0. Member names match in any case, as IEC identifiers do.
+        // is 0.
         private static IReadOnlyDictionary<string, int> ParseMembers(string body)
         {
-            var members = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            var members = new Dictionary<string, int>(IecIdentifier.Comparer);
             var nextValue = 0;
 
             foreach (var rawEntry in TrailingLineComment.Replace(body, "").Split(','))
@@ -124,8 +124,8 @@ namespace xStunit.Interpreter
             out IReadOnlyDictionary<string, IReadOnlyDictionary<string, int>> memberTables)
         {
             skipped = new List<SkippedFile>();
-            var enums = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            var members = new Dictionary<string, IReadOnlyDictionary<string, int>>(StringComparer.OrdinalIgnoreCase);
+            var enums = new Dictionary<string, string>(IecIdentifier.Comparer);
+            var members = new Dictionary<string, IReadOnlyDictionary<string, int>>(IecIdentifier.Comparer);
 
             foreach (var file in MultiDirectoryPouLoader.FindDutFiles(pouDirectories))
             {

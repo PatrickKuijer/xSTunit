@@ -14,11 +14,8 @@ namespace xStunit.Interpreter
     // type (range checks, byte layout) must carry the type name, not the box.
     internal static class IecNumericType
     {
-        // IEC 61131-3 type names are case-insensitive (a VAR declared 'lreal'
-        // is as valid as 'LREAL'), so this table - like every other type-name
-        // lookup in the interpreter - is OrdinalIgnoreCase.
         private static readonly Dictionary<string, (object Default, object Min, object Max)> Types =
-            new Dictionary<string, (object Default, object Min, object Max)>(StringComparer.OrdinalIgnoreCase)
+            new Dictionary<string, (object Default, object Min, object Max)>(IecIdentifier.Comparer)
             {
                 ["SINT"] = (0, (int)sbyte.MinValue, (int)sbyte.MaxValue),
                 ["USINT"] = (0, (int)byte.MinValue, (int)byte.MaxValue),

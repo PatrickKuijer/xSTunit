@@ -244,9 +244,9 @@ namespace xStunit.Interpreter
         // into a mismatch against its own literal.
         private static string CanonicalTypeClass(string typeClass)
         {
-            if (string.Equals(typeClass, "DT", StringComparison.OrdinalIgnoreCase))
+            if (IecIdentifier.Matches(typeClass, "DT"))
                 return "DATE_AND_TIME";
-            if (string.Equals(typeClass, "TOD", StringComparison.OrdinalIgnoreCase))
+            if (IecIdentifier.Matches(typeClass, "TOD"))
                 return "TIME_OF_DAY";
             return typeClass;
         }
@@ -307,13 +307,13 @@ namespace xStunit.Interpreter
                 return null;
 
             if (expr is RealLiteralExpr)
-                return string.Equals(otherClass, "REAL", StringComparison.OrdinalIgnoreCase) ? otherClass : null;
+                return IecIdentifier.Matches(otherClass, "REAL") ? otherClass : null;
 
             if (expr is LrealLiteralExpr)
-                return string.Equals(otherClass, "LREAL", StringComparison.OrdinalIgnoreCase) ? otherClass : null;
+                return IecIdentifier.Matches(otherClass, "LREAL") ? otherClass : null;
 
             if (!IsIntegerLiteral(expr)
-                || !IntegerTypeClasses.Contains(otherClass, StringComparer.OrdinalIgnoreCase))
+                || !IntegerTypeClasses.Contains(otherClass, IecIdentifier.Comparer))
                 return null;
 
             return LiteralFitsWithin(expr, otherClass) ? otherClass : null;

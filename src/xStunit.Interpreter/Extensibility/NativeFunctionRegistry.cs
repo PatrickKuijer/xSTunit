@@ -15,19 +15,14 @@ namespace xStunit.Interpreter.Extensibility
     /// </remarks>
     public sealed class NativeFunctionRegistry
     {
-        // OrdinalIgnoreCase because IEC 61131-3 identifiers are case-insensitive: PLC
-        // source calling F_CheckSum16, F_CHECKSUM16, or f_checksum16 must all reach the
-        // same registration. This deliberately diverges from the interpreter's own
-        // ordinal POU/method dispatch - a case-sensitive plugin lookup fails in a way
-        // the user cannot diagnose from the error message alone.
         private readonly Dictionary<string, IXstunitNativeFunction> _functions =
-            new Dictionary<string, IXstunitNativeFunction>(StringComparer.OrdinalIgnoreCase);
+            new Dictionary<string, IXstunitNativeFunction>(IecIdentifier.Comparer);
 
         // Where each name came from, for the duplicate-registration message - with
         // plugins loaded from a folder, "which DLL already claimed this?" is the only
         // useful thing to say.
         private readonly Dictionary<string, string> _sources =
-            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            new Dictionary<string, string>(IecIdentifier.Comparer);
 
         public int Count => _functions.Count;
 
@@ -102,7 +97,7 @@ namespace xStunit.Interpreter.Extensibility
         /// <returns>One <c>name (source)</c> line per registration, ordered by name.</returns>
         public IReadOnlyList<string> DescribeRegistrations() =>
             _functions.Keys
-                .OrderBy(n => n, StringComparer.OrdinalIgnoreCase)
+                .OrderBy(n => n, IecIdentifier.Comparer)
                 .Select(n => $"{n} ({_sources[n]})")
                 .ToList();
     }

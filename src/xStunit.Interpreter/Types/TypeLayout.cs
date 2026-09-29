@@ -181,7 +181,7 @@ namespace xStunit.Interpreter
                 (buffer, offset, value) => BitConverter.GetBytes((double)value).CopyTo(buffer, offset),
                 (buffer, offset) => BitConverter.ToDouble(buffer, offset));
 
-            return new Dictionary<string, ScalarShape>(StringComparer.OrdinalIgnoreCase)
+            return new Dictionary<string, ScalarShape>(IecIdentifier.Comparer)
             {
                 ["BOOL"] = boolean,
                 ["SINT"] = signed8,
@@ -538,7 +538,7 @@ namespace xStunit.Interpreter
         // declares for the BIT member of TcUnit's U_ExpectedOrActual on both
         // targets. Inside a STRUCT, BIT stays unmodeled and SizeOf refuses it.
         private (int Size, int Align) SizeOfOverlaidField(string typeName) =>
-            string.Equals(_registry.ResolveAlias(typeName?.Trim()), "BIT", StringComparison.OrdinalIgnoreCase)
+            IecIdentifier.Matches(_registry.ResolveAlias(typeName?.Trim()), "BIT")
                 ? (1, 1)
                 : SizeOf(typeName);
 

@@ -7,7 +7,7 @@ namespace xStunit.Interpreter
     public sealed class FbInstance
     {
         public string ActualTypeName { get; }
-        public Dictionary<string, Cell> Fields { get; } = new Dictionary<string, Cell>(StringComparer.OrdinalIgnoreCase);
+        public Dictionary<string, Cell> Fields { get; } = new Dictionary<string, Cell>(IecIdentifier.Comparer);
 
         // Declared IEC type text (e.g. "REFERENCE TO INT") per field,
         // populated once at NewInstance time and never touched afterward. A
@@ -16,7 +16,7 @@ namespace xStunit.Interpreter
         // target rather than the field's declaration; __ISVALIDREF has to know
         // whether the *name being asked about* was declared REFERENCE TO/
         // POINTER TO, so for instance fields this table is the source of truth.
-        public Dictionary<string, string> FieldTypeNames { get; } = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        public Dictionary<string, string> FieldTypeNames { get; } = new Dictionary<string, string>(IecIdentifier.Comparer);
 
         // VAR_INST cells, one table per method. Kept apart from Fields because
         // they are private to their method: a same-named FB field, or another
@@ -103,12 +103,12 @@ namespace xStunit.Interpreter
             public static readonly MethodKeyComparer Instance = new MethodKeyComparer();
 
             public bool Equals((string DeclaringType, string Method) x, (string DeclaringType, string Method) y) =>
-                StringComparer.OrdinalIgnoreCase.Equals(x.DeclaringType, y.DeclaringType) &&
-                StringComparer.OrdinalIgnoreCase.Equals(x.Method, y.Method);
+                IecIdentifier.Comparer.Equals(x.DeclaringType, y.DeclaringType) &&
+                IecIdentifier.Comparer.Equals(x.Method, y.Method);
 
             public int GetHashCode((string DeclaringType, string Method) key) =>
-                unchecked(StringComparer.OrdinalIgnoreCase.GetHashCode(key.DeclaringType) * 31 +
-                    StringComparer.OrdinalIgnoreCase.GetHashCode(key.Method));
+                unchecked(IecIdentifier.Comparer.GetHashCode(key.DeclaringType) * 31 +
+                    IecIdentifier.Comparer.GetHashCode(key.Method));
         }
     }
 }

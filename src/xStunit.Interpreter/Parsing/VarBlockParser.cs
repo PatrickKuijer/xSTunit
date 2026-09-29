@@ -47,8 +47,8 @@ namespace xStunit.Interpreter
 
         // IgnoreCase because IEC 61131-3 type names are case-insensitive and
         // every consumer of the type text this produces already treats them
-        // that way - AddressTypeInfo, ArrayTypeInfo, StringTypeInfo,
-        // IecNumericType, IecElementaryDefault and TypeRegistry. Matching
+        // that way (IecIdentifier for type names, the *TypeInfo readers for
+        // POINTER TO/ARRAY/STRING text). Matching
         // POINTER TO/REFERENCE TO/ARRAY..OF/W?STRING exactly would make the
         // parser the one layer that disagrees, and it disagrees silently: the
         // whole line fails to match and the variable never exists. The matched

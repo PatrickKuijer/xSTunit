@@ -56,7 +56,7 @@ namespace xStunit.Interpreter
             // An => target is never evaluated here: its current value is not an
             // argument, and a plugin reading it by the output's name would be
             // reading stale caller state as if it were an input.
-            var evaluatedNamed = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
+            var evaluatedNamed = new Dictionary<string, object>(IecIdentifier.Comparer);
             var boundOutputs = new List<string>();
             foreach (var arg in namedArgs)
             {
@@ -122,7 +122,7 @@ namespace xStunit.Interpreter
         private static bool DeclaresMethod(IXstunitNativeFunctionBlock functionBlock, string methodName)
         {
             foreach (var declared in functionBlock.MethodNames)
-                if (string.Equals(declared, methodName, StringComparison.OrdinalIgnoreCase))
+                if (IecIdentifier.Matches(declared, methodName))
                     return true;
 
             return false;

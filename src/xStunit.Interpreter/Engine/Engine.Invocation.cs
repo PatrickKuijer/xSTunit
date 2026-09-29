@@ -37,7 +37,7 @@ namespace xStunit.Interpreter
                 if (def == null)
                     break;
 
-                var found = def.Methods.FirstOrDefault(m => IsNamed(m.Name, methodName));
+                var found = def.Methods.FirstOrDefault(m => IecIdentifier.Matches(m.Name, methodName));
                 if (found != null)
                 {
                     // The declared name rather than the spelling the walk
@@ -54,14 +54,14 @@ namespace xStunit.Interpreter
 
             if (methodDef == null)
             {
-                if (instance != null && IsNamed(methodName, "StepCycles") && positionalArgs.Count == 1)
+                if (instance != null && IecIdentifier.Matches(methodName, "StepCycles") && positionalArgs.Count == 1)
                 {
                     var cycles = Convert.ToInt32(Evaluate(positionalArgs[0], callerFrame));
                     StepCycles(instance, cycles);
                     return null;
                 }
 
-                if ((IsNamed(methodName, "AssertConverges") || IsNamed(methodName, "AssertConvergesAndLatches")) &&
+                if ((IecIdentifier.Matches(methodName, "AssertConverges") || IecIdentifier.Matches(methodName, "AssertConvergesAndLatches")) &&
                     positionalArgs.Count == 4)
                 {
                     var master = (FbInstance)Evaluate(positionalArgs[0], callerFrame);
@@ -69,7 +69,7 @@ namespace xStunit.Interpreter
                     var fieldNames = ToStringArray(Evaluate(positionalArgs[2], callerFrame));
                     var maxCycles = Convert.ToInt32(Evaluate(positionalArgs[3], callerFrame));
 
-                    if (IsNamed(methodName, "AssertConverges"))
+                    if (IecIdentifier.Matches(methodName, "AssertConverges"))
                         AssertConverges(master, proxy, fieldNames, maxCycles);
                     else
                         AssertConvergesAndLatches(master, proxy, fieldNames, maxCycles);
@@ -175,7 +175,7 @@ namespace xStunit.Interpreter
                 // Method-name routing WITHIN the loopback host kind - a
                 // different question from the host-kind classification above, so
                 // it keeps its own switch and only its guard reads the kind.
-                var loopbackMethod = LoopbackFaultMethod(methodName);
+                var loopbackMethod = IecIdentifier.Canonical(LoopbackFaultMethods, methodName);
                 if (instance?.NativeKind == NativeHostKind.Loopback && loopbackMethod != null)
                 {
                     switch (loopbackMethod)
@@ -223,7 +223,7 @@ namespace xStunit.Interpreter
                     var evaluatedPositional = positionalArgs.Select(e => Evaluate(e, callerFrame)).ToList();
                     var evaluatedNamed = namedArgs
                         .Where(a => !a.IsUnboundOutput)
-                        .ToDictionary(a => a.Name, a => Evaluate(a.Value, callerFrame), StringComparer.OrdinalIgnoreCase);
+                        .ToDictionary(a => a.Name, a => Evaluate(a.Value, callerFrame), IecIdentifier.Comparer);
 
                     // AssertEquals(Expected: ANY, Actual: ANY, Message) needs its
                     // arguments' *declared* IEC type to pick the matching
@@ -234,7 +234,7 @@ namespace xStunit.Interpreter
                     // type has to come from the *expression*, the way SIZEOF()
                     // resolves it - and before evaluation discards it.
                     IReadOnlyDictionary<string, string> anyTypeNames = null;
-                    if (IsNamed(methodName, "AssertEquals"))
+                    if (IecIdentifier.Matches(methodName, "AssertEquals"))
                     {
                         var expectedExpr = ResolveNamedOrPositionalArg("AssertEquals", "Expected", 0, positionalArgs, namedArgs);
                         var actualExpr = ResolveNamedOrPositionalArg("AssertEquals", "Actual", 1, positionalArgs, namedArgs);
@@ -392,7 +392,7 @@ namespace xStunit.Interpreter
             var instance = frame.Instance;
             var cells = instance.GetOrCreateMethodInstanceCells(declaringType, methodName, () =>
             {
-                var created = new Dictionary<string, Cell>(StringComparer.OrdinalIgnoreCase);
+                var created = new Dictionary<string, Cell>(IecIdentifier.Comparer);
                 foreach (var decl in instanceDecls)
                     created[decl.Name] = RunWithFaultAttribution(() => CreateFieldCell(decl, instance), frame);
                 return created;
@@ -400,9 +400,6 @@ namespace xStunit.Interpreter
 
             frame.BindMethodInstanceCells(instanceDecls, cells);
         }
-
-        private static bool IsNamed(string identifier, string name) =>
-            string.Equals(identifier, name, StringComparison.OrdinalIgnoreCase);
 
         private bool TryGetGlobalFunctionDef(string name, out PouAst def)
         {
@@ -510,7 +507,7 @@ namespace xStunit.Interpreter
             WriteBackOutputArgs(namedArgs, name => IsOutputDecl(paramDecls, name), newFrame.Locals, callerFrame);
 
         private static bool IsOutputDecl(IReadOnlyList<VarDecl> decls, string name) =>
-            decls.Any(d => IsNamed(d.Name, name) && d.Section == VarSection.Output);
+            decls.Any(d => IecIdentifier.Matches(d.Name, name) && d.Section == VarSection.Output);
 
         // Name => expr call args bind a VAR_OUTPUT's value back into the
         // caller-side lvalue after the call returns. BindParams and the FB
@@ -647,7 +644,7 @@ namespace xStunit.Interpreter
                 callee.Fields[inputDecls[i].Name].Value = Evaluate(positionalArgs[i], callerFrame);
 
             foreach (var arg in namedArgs)
-                if (inputDecls.Any(d => IsNamed(d.Name, arg.Name)) && callee.Fields.TryGetValue(arg.Name, out var cell))
+                if (inputDecls.Any(d => IecIdentifier.Matches(d.Name, arg.Name)) && callee.Fields.TryGetValue(arg.Name, out var cell))
                     cell.Value = Evaluate(arg.Value, callerFrame);
 
             var def = _registry.Get(callee.ActualTypeName);

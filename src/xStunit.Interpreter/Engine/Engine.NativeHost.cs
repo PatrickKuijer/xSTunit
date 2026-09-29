@@ -52,22 +52,16 @@ namespace xStunit.Interpreter
 
     public sealed partial class Engine
     {
-        // IEC 61131-3 identifiers are case-insensitive, so these sets are keyed
-        // OrdinalIgnoreCase: a lowercase or mixed-case base type ('EXTENDS ton')
-        // must still be recognized as a native stub instead of falling through
-        // to NativeHostKind.Suite.
-        //
         // The LTIME trio (LTON/LTOF/LTP) sits in the SAME set as the TIME timers
         // rather than a parallel one - same kind, same TimerHost.Create, same
         // IN/PT inputs. The one thing that differs, the width their PT/ET Cells
         // are boxed at, is owned by TimerHost.ZeroDuration, so nothing here has
         // to know which name is which width.
-        private static readonly HashSet<string> NativeTimerTypes = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "TON", "TOF", "TP", "FB_Pulse", "LTON", "LTOF", "LTP" };
-        private static readonly HashSet<string> NativeEdgeTriggerTypes = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "R_TRIG", "F_TRIG" };
-        private static readonly HashSet<string> NativeBistableLatchTypes = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "RS", "SR" };
-        private static readonly HashSet<string> NativeCounterTypes = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "CTU", "CTD", "CTUD" };
+        private static readonly HashSet<string> NativeTimerTypes = new HashSet<string>(IecIdentifier.Comparer) { "TON", "TOF", "TP", "FB_Pulse", "LTON", "LTOF", "LTP" };
+        private static readonly HashSet<string> NativeEdgeTriggerTypes = new HashSet<string>(IecIdentifier.Comparer) { "R_TRIG", "F_TRIG" };
+        private static readonly HashSet<string> NativeBistableLatchTypes = new HashSet<string>(IecIdentifier.Comparer) { "RS", "SR" };
+        private static readonly HashSet<string> NativeCounterTypes = new HashSet<string>(IecIdentifier.Comparer) { "CTU", "CTD", "CTUD" };
 
-        // Compared OrdinalIgnoreCase for the same reason as the sets above.
         private const string NativeLoopbackType = "Loopback";
 
         // One native classification: the kind, the host instance backing it, and
@@ -143,7 +137,7 @@ namespace xStunit.Interpreter
                     Field("ET", timer.ZeroDuration));
             }
 
-            if (string.Equals(nativeBaseTypeName, NativeLoopbackType, StringComparison.OrdinalIgnoreCase))
+            if (IecIdentifier.Matches(nativeBaseTypeName, NativeLoopbackType))
                 return NativeHostBinding.Of(
                     NativeHostKind.Loopback,
                     new LoopbackHost(),
@@ -225,7 +219,7 @@ namespace xStunit.Interpreter
             || NativeEdgeTriggerTypes.Contains(typeName)
             || NativeBistableLatchTypes.Contains(typeName)
             || NativeCounterTypes.Contains(typeName)
-            || string.Equals(typeName, NativeLoopbackType, StringComparison.OrdinalIgnoreCase)
+            || IecIdentifier.Matches(typeName, NativeLoopbackType)
             || TryGetNativeFunctionBlock(typeName, out _);
 
         // A library namespace qualifier is transparent: Tc2_System.FB_FileOpen

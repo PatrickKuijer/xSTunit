@@ -28,9 +28,8 @@ namespace xStunit.Interpreter
             var current = typeName;
             while (current != null)
             {
-                // Case-insensitive, as an EXTENDS clause's type name is.
-                if (string.Equals(current, TestSuiteBaseType, StringComparison.OrdinalIgnoreCase) ||
-                    string.Equals(current, TestSuiteBaseTypeBareName, StringComparison.OrdinalIgnoreCase))
+                if (IecIdentifier.Matches(current, TestSuiteBaseType) ||
+                    IecIdentifier.Matches(current, TestSuiteBaseTypeBareName))
                     return true;
 
                 var def = registry.Get(current);

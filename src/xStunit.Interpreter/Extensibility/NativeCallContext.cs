@@ -89,20 +89,10 @@ namespace xStunit.Interpreter.Extensibility
         {
             FunctionName = functionName ?? throw new ArgumentNullException(nameof(functionName));
             PositionalArgs = positionalArgs ?? Array.Empty<object>();
-            NamedArgs = CaseInsensitiveCopy(namedArgs);
+            NamedArgs = IecIdentifier.CopyOf(namedArgs);
             _readBytes = readBytes;
             Time = time;
-            _boundOutputs = new HashSet<string>(boundOutputs ?? Array.Empty<string>(), StringComparer.OrdinalIgnoreCase);
-        }
-
-        private static IReadOnlyDictionary<string, object> CaseInsensitiveCopy(IReadOnlyDictionary<string, object> namedArgs)
-        {
-            var copy = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
-            if (namedArgs != null)
-                foreach (var arg in namedArgs)
-                    copy[arg.Key] = arg.Value;
-
-            return copy;
+            _boundOutputs = new HashSet<string>(boundOutputs ?? Array.Empty<string>(), IecIdentifier.Comparer);
         }
 
         /// <summary>
@@ -134,7 +124,7 @@ namespace xStunit.Interpreter.Extensibility
         public IReadOnlyDictionary<string, object> NamedArgs { get; }
 
         private readonly HashSet<string> _boundOutputs;
-        private readonly Dictionary<string, object> _outputs = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, object> _outputs = new Dictionary<string, object>(IecIdentifier.Comparer);
 
         // The engine's write-back validates against this same set, so "bound"
         // has one definition: whatever the plugin was told through IsOutputBound.

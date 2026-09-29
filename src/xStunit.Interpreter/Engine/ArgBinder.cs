@@ -45,7 +45,7 @@ namespace xStunit.Interpreter
         public static Expr FindNamed(IReadOnlyList<NamedArg> namedArgs, string paramName)
         {
             foreach (var arg in namedArgs)
-                if (string.Equals(arg.Name, paramName, System.StringComparison.OrdinalIgnoreCase))
+                if (IecIdentifier.Matches(arg.Name, paramName))
                     return arg.Value;
 
             return null;

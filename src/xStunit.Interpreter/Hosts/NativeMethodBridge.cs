@@ -23,7 +23,7 @@ namespace xStunit.Interpreter
             if (methodName == null)
                 return false;
 
-            if (FixedNativeMethodName(methodName) != null)
+            if (IecIdentifier.Canonical(FixedNativeMethodNames, methodName) != null)
                 return true;
 
             if (HasPrefix(methodName, "AssertArrayEquals_"))
@@ -39,19 +39,13 @@ namespace xStunit.Interpreter
         }
 
         // The non-prefixed names Invoke's switch handles, each spelled the one
-        // way its case label is.
+        // way its case label is. The suite API is a library FB's methods, so a
+        // call names one in any case, as it would any other method.
         private static readonly string[] FixedNativeMethodNames =
         {
             "TEST", "TEST_ORDERED", "TEST_FINISHED", "TEST_FINISHED_NAMED", "IS_TEST_FINISHED",
             "AssertTrue", "AssertFalse", "AssertEquals",
         };
-
-        // The suite API is a library FB's methods, so a call names one in any
-        // case, as it would any other method. These map the spelling at the
-        // call site onto the one Invoke dispatches on; null when it is none of
-        // the fixed names.
-        private static string FixedNativeMethodName(string methodName) =>
-            Array.Find(FixedNativeMethodNames, name => string.Equals(name, methodName, StringComparison.OrdinalIgnoreCase));
 
         private static bool HasPrefix(string methodName, string prefix) =>
             methodName.StartsWith(prefix, StringComparison.OrdinalIgnoreCase);
@@ -122,7 +116,7 @@ namespace xStunit.Interpreter
             IReadOnlyDictionary<string, object> named,
             IReadOnlyDictionary<string, string> anyTypeNames = null)
         {
-            switch (FixedNativeMethodName(methodName))
+            switch (IecIdentifier.Canonical(FixedNativeMethodNames, methodName))
             {
                 case "TEST":
                     host.Test((string)positional[0]);
@@ -260,14 +254,14 @@ namespace xStunit.Interpreter
         // Every scalar type in the ScalarAssertType registry except LWORD,
         // which upstream has an AssertArrayEquals_ overload for but this
         // bridge has not needed yet.
-        private static readonly HashSet<string> ArrayAssertSupportedTypes = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        private static readonly HashSet<string> ArrayAssertSupportedTypes = new HashSet<string>(IecIdentifier.Comparer)
         {
             "BOOL", "BYTE", "DINT", "DWORD", "INT", "LINT", "LREAL", "REAL", "SINT", "UDINT", "UINT", "ULINT", "USINT", "WORD",
         };
 
         // Narrower than the 1D set above because upstream declares 2D/3D array
         // asserts for the float types only.
-        private static readonly HashSet<string> MultiDimArrayAssertSupportedTypes = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        private static readonly HashSet<string> MultiDimArrayAssertSupportedTypes = new HashSet<string>(IecIdentifier.Comparer)
         {
             "LREAL", "REAL",
         };
@@ -294,7 +288,7 @@ namespace xStunit.Interpreter
             IReadOnlyList<object> positional,
             IReadOnlyDictionary<string, object> named)
         {
-            var resolved = new Dictionary<string, object>();
+            var resolved = new Dictionary<string, object>(IecIdentifier.Comparer);
             var posIndex = 0;
             foreach (var paramName in paramNamesInDeclOrder)
             {

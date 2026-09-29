@@ -9,27 +9,23 @@ namespace xStunit.Interpreter
     // are deliberately unresolved, being backed by C# hosts instead.
     public sealed class TypeRegistry
     {
-        // IEC 61131-3 type names are case-insensitive, so a lookup has to
-        // match however the referencing VAR or return-type text spelled it.
-        // _gvls keys off instance rather than type names, but GVL references
-        // are equally case-insensitive.
-        private readonly Dictionary<string, PouAst> _types = new Dictionary<string, PouAst>(StringComparer.OrdinalIgnoreCase);
-        private readonly Dictionary<string, StructAst> _structTypes = new Dictionary<string, StructAst>(StringComparer.OrdinalIgnoreCase);
-        private readonly Dictionary<string, IReadOnlyList<VarDecl>> _gvls = new Dictionary<string, IReadOnlyList<VarDecl>>(StringComparer.OrdinalIgnoreCase);
-        private readonly Dictionary<string, string> _aliases = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, PouAst> _types = new Dictionary<string, PouAst>(IecIdentifier.Comparer);
+        private readonly Dictionary<string, StructAst> _structTypes = new Dictionary<string, StructAst>(IecIdentifier.Comparer);
+        private readonly Dictionary<string, IReadOnlyList<VarDecl>> _gvls = new Dictionary<string, IReadOnlyList<VarDecl>>(IecIdentifier.Comparer);
+        private readonly Dictionary<string, string> _aliases = new Dictionary<string, string>(IecIdentifier.Comparer);
 
         // Kept out of _types on purpose. An interface is a contract, not a
         // runnable body: sharing the POU map would let NewInstance build one,
         // let DefaultValue seed a field with one, and offer it to
         // SuiteDiscovery's ancestry walk.
-        private readonly Dictionary<string, InterfaceAst> _interfaceTypes = new Dictionary<string, InterfaceAst>(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, InterfaceAst> _interfaceTypes = new Dictionary<string, InterfaceAst>(IecIdentifier.Comparer);
 
         // User-defined ENUM DUTs: enum name -> member name -> int value, the
         // source-defined counterpart to BuiltinEnums.Types. Kept apart from
         // _aliases so that resolving EnumType.Member does not disturb the
         // SIZEOF()/ResolveAlias map.
         private readonly Dictionary<string, IReadOnlyDictionary<string, int>> _enumMembers =
-            new Dictionary<string, IReadOnlyDictionary<string, int>>(StringComparer.OrdinalIgnoreCase);
+            new Dictionary<string, IReadOnlyDictionary<string, int>>(IecIdentifier.Comparer);
 
         // Parse-once caches. CallMethod and StepCycles otherwise re-parse the
         // same body text on every invocation and every cycle. Keyed on the
@@ -77,21 +73,9 @@ namespace xStunit.Interpreter
                 foreach (var alias in aliases)
                     _aliases[alias.Key] = alias.Value;
 
-            // Each member table is re-keyed rather than adopted, so member
-            // lookup is case-insensitive whatever comparer the caller built
-            // it with.
             if (enumMembers != null)
                 foreach (var enumMember in enumMembers)
-                    _enumMembers[enumMember.Key] = CaseInsensitiveCopy(enumMember.Value);
-        }
-
-        private static IReadOnlyDictionary<string, int> CaseInsensitiveCopy(IReadOnlyDictionary<string, int> members)
-        {
-            var copy = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-            foreach (var member in members)
-                copy[member.Key] = member.Value;
-
-            return copy;
+                    _enumMembers[enumMember.Key] = IecIdentifier.CopyOf(enumMember.Value);
         }
 
         // A library qualifier is transparent, same as it is for a native

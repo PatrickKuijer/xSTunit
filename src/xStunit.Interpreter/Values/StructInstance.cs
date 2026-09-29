@@ -8,7 +8,7 @@ namespace xStunit.Interpreter
     public sealed class StructInstance
     {
         public string TypeName { get; }
-        public Dictionary<string, Cell> Fields { get; } = new Dictionary<string, Cell>(StringComparer.OrdinalIgnoreCase);
+        public Dictionary<string, Cell> Fields { get; } = new Dictionary<string, Cell>(IecIdentifier.Comparer);
 
         // Declared IEC type text per field, populated once in
         // BuildStructDefault and never touched afterward. Same rationale as
@@ -17,7 +17,7 @@ namespace xStunit.Interpreter
         // Fields wholesale, so Cell.DeclaredTypeName afterwards describes the
         // target, not the member's own declaration. __ISVALIDREF needs the
         // latter.
-        public Dictionary<string, string> FieldTypeNames { get; } = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        public Dictionary<string, string> FieldTypeNames { get; } = new Dictionary<string, string>(IecIdentifier.Comparer);
 
         // Non-null exactly for a UNION instance, whose members are views onto
         // one buffer rather than the independent Cells a STRUCT's fields are.

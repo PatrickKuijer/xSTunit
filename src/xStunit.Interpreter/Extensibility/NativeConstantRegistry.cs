@@ -77,13 +77,11 @@ namespace xStunit.Interpreter.Extensibility
     /// </remarks>
     public sealed class NativeConstantRegistry
     {
-        // OrdinalIgnoreCase because IEC 61131-3 identifiers are, and real source is
-        // inconsistent about how it spells a vendor constant.
         private readonly Dictionary<string, NativeConstant> _constants =
-            new Dictionary<string, NativeConstant>(StringComparer.OrdinalIgnoreCase);
+            new Dictionary<string, NativeConstant>(IecIdentifier.Comparer);
 
         private readonly Dictionary<string, string> _sources =
-            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            new Dictionary<string, string>(IecIdentifier.Comparer);
 
         public int Count => _constants.Count;
 
@@ -152,7 +150,7 @@ namespace xStunit.Interpreter.Extensibility
         /// <returns>One <c>name (source)</c> line per registration, ordered by name.</returns>
         public IReadOnlyList<string> DescribeRegistrations() =>
             _constants.Keys
-                .OrderBy(n => n, StringComparer.OrdinalIgnoreCase)
+                .OrderBy(n => n, IecIdentifier.Comparer)
                 .Select(n => $"{n} ({_sources[n]})")
                 .ToList();
 

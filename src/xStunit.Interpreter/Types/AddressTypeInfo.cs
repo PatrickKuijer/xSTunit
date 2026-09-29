@@ -20,8 +20,7 @@ namespace xStunit.Interpreter
 
         // IEC 61131-3 type names are case-insensitive ('pointer to BYTE' is as
         // valid as 'POINTER TO BYTE'), hence OrdinalIgnoreCase - the same
-        // decision as IecNumericType, IecElementaryDefault, StringTypeInfo,
-        // ArrayTypeInfo and TypeRegistry. The alternative, an ordinal compare,
+        // decision IecIdentifier makes for every type-name lookup. The alternative, an ordinal compare,
         // would make the answer depend on how the declaring DUT happened to be
         // typed; the culture-sensitive default overload is worse still, since
         // it would also make it depend on the machine's current culture.

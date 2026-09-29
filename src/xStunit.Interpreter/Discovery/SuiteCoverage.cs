@@ -24,7 +24,7 @@ namespace xStunit.Interpreter
         public static IReadOnlyList<PouCoverage> Analyze(
             IReadOnlyList<PouAst> types, IReadOnlyCollection<string> suiteTypeNames)
         {
-            var suiteNameSet = new HashSet<string>(suiteTypeNames, StringComparer.OrdinalIgnoreCase);
+            var suiteNameSet = new HashSet<string>(suiteTypeNames, IecIdentifier.Comparer);
 
             // Concatenating each suite's declaration and every body it owns
             // is enough: the reference that matters is a VAR declaration of

@@ -464,7 +464,7 @@ namespace xStunit.Interpreter
             IReadOnlyList<Expr> positionalArgs,
             IReadOnlyList<NamedArg> namedArgs)
         {
-            var resolved = new Dictionary<string, Expr>();
+            var resolved = new Dictionary<string, Expr>(IecIdentifier.Comparer);
             var posIndex = 0;
             foreach (var paramName in paramNamesInDeclOrder)
             {
@@ -819,67 +819,72 @@ namespace xStunit.Interpreter
         {
             if (call.Receiver == null)
             {
-                if (IsNamed(call.MethodName, "ADR"))
-                    return new Pointer(ResolveCellForAdr(call.PositionalArgs[0], frame));
-
-                if (IsNamed(call.MethodName, "__ISVALIDREF"))
-                    return IsValidRef(call.PositionalArgs[0], frame);
-
-                if (IsNamed(call.MethodName, "MEMCPY") || IsNamed(call.MethodName, "MEMMOVE"))
+                var intrinsic = IecIdentifier.Canonical(IntrinsicFunctionNames, call.MethodName);
+                switch (intrinsic)
                 {
-                    var args = ResolveIntrinsicArgs(new[] { "destAddr", "srcAddr", "n" }, call.PositionalArgs, call.NamedArgs);
-                    return MemCopy(
-                        RequirePointerArg(call.MethodName, "destAddr", args, frame),
-                        RequirePointerArg(call.MethodName, "srcAddr", args, frame),
-                        Convert.ToInt32(Evaluate(RequireIntrinsicArg(call.MethodName, "n", args), frame)),
-                        overlapSafe: IsNamed(call.MethodName, "MEMMOVE"),
-                        frame);
-                }
+                    case "ADR":
+                        return new Pointer(ResolveCellForAdr(call.PositionalArgs[0], frame));
 
-                if (IsNamed(call.MethodName, "MEMSET"))
-                {
-                    var args = ResolveIntrinsicArgs(new[] { "destAddr", "value", "n" }, call.PositionalArgs, call.NamedArgs);
-                    return MemSet(
-                        RequirePointerArg(call.MethodName, "destAddr", args, frame),
-                        Evaluate(RequireIntrinsicArg(call.MethodName, "value", args), frame),
-                        Convert.ToInt32(Evaluate(RequireIntrinsicArg(call.MethodName, "n", args), frame)),
-                        frame);
-                }
+                    case "__ISVALIDREF":
+                        return IsValidRef(call.PositionalArgs[0], frame);
 
-                if (IsNamed(call.MethodName, "TestAndSet"))
-                {
-                    var args = ResolveIntrinsicArgs(TestAndSetParamNames, call.PositionalArgs, call.NamedArgs);
-                    return TestAndSet(RequireIntrinsicArg("TestAndSet", "Lock", args), frame);
-                }
+                    case "MEMCPY":
+                    case "MEMMOVE":
+                    {
+                        var args = ResolveIntrinsicArgs(new[] { "destAddr", "srcAddr", "n" }, call.PositionalArgs, call.NamedArgs);
+                        return MemCopy(
+                            RequirePointerArg(call.MethodName, "destAddr", args, frame),
+                            RequirePointerArg(call.MethodName, "srcAddr", args, frame),
+                            Convert.ToInt32(Evaluate(RequireIntrinsicArg(call.MethodName, "n", args), frame)),
+                            overlapSafe: intrinsic == "MEMMOVE",
+                            frame);
+                    }
 
-                if (IsNamed(call.MethodName, "AdvanceClock"))
-                {
-                    var args = ResolveIntrinsicArgs(AdvanceClockParamNames, call.PositionalArgs, call.NamedArgs);
-                    var duration = Evaluate(RequireIntrinsicArg("AdvanceClock", "Duration", args), frame);
-                    AdvanceClock(duration);
-                    return null;
-                }
+                    case "MEMSET":
+                    {
+                        var args = ResolveIntrinsicArgs(new[] { "destAddr", "value", "n" }, call.PositionalArgs, call.NamedArgs);
+                        return MemSet(
+                            RequirePointerArg(call.MethodName, "destAddr", args, frame),
+                            Evaluate(RequireIntrinsicArg(call.MethodName, "value", args), frame),
+                            Convert.ToInt32(Evaluate(RequireIntrinsicArg(call.MethodName, "n", args), frame)),
+                            frame);
+                    }
 
-                if (IsNamed(call.MethodName, "SIZEOF"))
-                    return EvaluateSizeOf(call.PositionalArgs[0], frame);
+                    case "TestAndSet":
+                    {
+                        var args = ResolveIntrinsicArgs(TestAndSetParamNames, call.PositionalArgs, call.NamedArgs);
+                        return TestAndSet(RequireIntrinsicArg("TestAndSet", "Lock", args), frame);
+                    }
 
-                if (IsNamed(call.MethodName, "CONCAT"))
-                {
-                    var args = ResolveIntrinsicArgs(ConcatParamNames, call.PositionalArgs, call.NamedArgs);
-                    RequireIntrinsicArg("CONCAT", "STR1", args);
-                    RequireIntrinsicArg("CONCAT", "STR2", args);
+                    case "AdvanceClock":
+                    {
+                        var args = ResolveIntrinsicArgs(AdvanceClockParamNames, call.PositionalArgs, call.NamedArgs);
+                        var duration = Evaluate(RequireIntrinsicArg("AdvanceClock", "Duration", args), frame);
+                        AdvanceClock(duration);
+                        return null;
+                    }
 
-                    var sb = new System.Text.StringBuilder();
-                    foreach (var paramName in ConcatParamNames)
-                        if (args.TryGetValue(paramName, out var argExpr))
-                            sb.Append(RequireStringArg("CONCAT", paramName, argExpr, frame));
-                    return sb.ToString();
-                }
+                    case "SIZEOF":
+                        return EvaluateSizeOf(call.PositionalArgs[0], frame);
 
-                if (IsNamed(call.MethodName, "ABS"))
-                {
-                    var args = ResolveIntrinsicArgs(AbsParamNames, call.PositionalArgs, call.NamedArgs);
-                    return EvaluateAbs(Evaluate(RequireIntrinsicArg("ABS", "IN", args), frame));
+                    case "CONCAT":
+                    {
+                        var args = ResolveIntrinsicArgs(ConcatParamNames, call.PositionalArgs, call.NamedArgs);
+                        RequireIntrinsicArg("CONCAT", "STR1", args);
+                        RequireIntrinsicArg("CONCAT", "STR2", args);
+
+                        var sb = new System.Text.StringBuilder();
+                        foreach (var paramName in ConcatParamNames)
+                            if (args.TryGetValue(paramName, out var argExpr))
+                                sb.Append(RequireStringArg("CONCAT", paramName, argExpr, frame));
+                        return sb.ToString();
+                    }
+
+                    case "ABS":
+                    {
+                        var args = ResolveIntrinsicArgs(AbsParamNames, call.PositionalArgs, call.NamedArgs);
+                        return EvaluateAbs(Evaluate(RequireIntrinsicArg("ABS", "IN", args), frame));
+                    }
                 }
 
                 if (TryEvaluateCast(call, frame, out var castResult))
@@ -922,7 +927,14 @@ namespace xStunit.Interpreter
             return CallMethod((FbInstance)receiver, call.MethodName, call.PositionalArgs, call.NamedArgs, frame, null);
         }
 
-        private static readonly HashSet<string> IntegerCastTargets = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        // The intrinsics EvaluateCall's switch handles, each spelled the one way
+        // its case label is.
+        private static readonly string[] IntrinsicFunctionNames =
+        {
+            "ADR", "__ISVALIDREF", "MEMCPY", "MEMMOVE", "MEMSET", "TestAndSet", "AdvanceClock", "SIZEOF", "CONCAT", "ABS",
+        };
+
+        private static readonly HashSet<string> IntegerCastTargets = new HashSet<string>(IecIdentifier.Comparer)
         {
             "SINT", "USINT", "INT", "UINT", "DINT", "UDINT", "LINT", "ULINT", "BYTE", "WORD", "DWORD", "LWORD",
         };
@@ -967,14 +979,13 @@ namespace xStunit.Interpreter
             // case-insensitively, since an ordinary method such as
             // Set_to_Default contains '_to_' too - so the prefixed form also
             // has to name an elementary source type to count.
-            if (!IsNamed(toType, "REAL") && !IsNamed(toType, "LREAL") && !IsNamed(toType, "STRING") &&
-                !IntegerCastTargets.Contains(toType))
+            if (!IsNumericCastSource(toType) && !IecIdentifier.Matches(toType, "STRING"))
                 return false;
 
             if (fromType != null && !IsElementaryTypeName(fromType))
                 return false;
 
-            if (fromType != null && IsNamed(toType, "STRING") && !IsNumericCastSource(fromType))
+            if (fromType != null && IecIdentifier.Matches(toType, "STRING") && !IsNumericCastSource(fromType))
                 return false;
 
             // An interpreted POU in the user's own tree outranks the
@@ -992,9 +1003,9 @@ namespace xStunit.Interpreter
             // CurrentCulture, which under a culture using '.' as the group
             // separator (e.g. de-DE) drops the decimal point instead of
             // erroring or parsing it correctly.
-            if (IsNamed(toType, "REAL"))
+            if (IecIdentifier.Matches(toType, "REAL"))
                 result = Convert.ToSingle(value, System.Globalization.CultureInfo.InvariantCulture);
-            else if (IsNamed(toType, "LREAL"))
+            else if (IecIdentifier.Matches(toType, "LREAL"))
                 result = Convert.ToDouble(value, System.Globalization.CultureInfo.InvariantCulture);
             else if (IntegerCastTargets.Contains(toType))
                 result = Convert.ToInt32(value, System.Globalization.CultureInfo.InvariantCulture);
@@ -1006,9 +1017,9 @@ namespace xStunit.Interpreter
             // Invariant culture, for the same reason as
             // ScalarAssertType.FormatDouble: a CurrentCulture of de-DE would
             // render '.' as ','.
-            else if (IsNamed(toType, "STRING") && (IsNamed(fromType, "REAL") || IsNamed(fromType, "LREAL")))
+            else if (IecIdentifier.Matches(toType, "STRING") && IsRealTypeName(fromType))
                 result = FormatRealAsString(value);
-            else if (IsNamed(toType, "STRING") && IntegerCastTargets.Contains(fromType))
+            else if (IecIdentifier.Matches(toType, "STRING") && IntegerCastTargets.Contains(fromType))
                 result = Convert.ToString(value, System.Globalization.CultureInfo.InvariantCulture);
             else
                 return false;
@@ -1020,7 +1031,10 @@ namespace xStunit.Interpreter
             IecNumericType.TryGetDefault(typeName, out _) || IecElementaryDefault.TryGetDefault(typeName, out _);
 
         private static bool IsNumericCastSource(string typeName) =>
-            IsNamed(typeName, "REAL") || IsNamed(typeName, "LREAL") || IntegerCastTargets.Contains(typeName);
+            IsRealTypeName(typeName) || IntegerCastTargets.Contains(typeName);
+
+        private static bool IsRealTypeName(string typeName) =>
+            IecIdentifier.Matches(typeName, "REAL") || IecIdentifier.Matches(typeName, "LREAL");
 
         // The prefix-less spelling carries no source type, so it comes from the
         // evaluated operand's box. Only two questions are ever asked of the

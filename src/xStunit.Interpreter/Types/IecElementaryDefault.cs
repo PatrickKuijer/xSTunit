@@ -11,9 +11,6 @@ namespace xStunit.Interpreter
     // prefix rule rather than a type-name entry.
     internal static class IecElementaryDefault
     {
-        // IEC 61131-3 type names are case-insensitive (a VAR declared 'bool'
-        // or 'Time' is as valid as 'BOOL'/'TIME'), hence OrdinalIgnoreCase
-        // throughout.
         public static bool TryGetDefault(string typeName, out object value)
         {
             if (typeName != null)
@@ -26,19 +23,19 @@ namespace xStunit.Interpreter
                     return true;
                 }
 
-                if (typeName.Equals("BOOL", StringComparison.OrdinalIgnoreCase))
+                if (IecIdentifier.Matches(typeName, "BOOL"))
                 {
                     value = false;
                     return true;
                 }
 
-                if (typeName.Equals("TIME", StringComparison.OrdinalIgnoreCase))
+                if (IecIdentifier.Matches(typeName, "TIME"))
                 {
                     value = 0u;
                     return true;
                 }
 
-                if (typeName.Equals("LTIME", StringComparison.OrdinalIgnoreCase))
+                if (IecIdentifier.Matches(typeName, "LTIME"))
                 {
                     value = 0ul;
                     return true;
@@ -48,11 +45,11 @@ namespace xStunit.Interpreter
                 // the three disagree on unit and origin (see DateTimeLiteral).
                 // DT and TOD are IEC's own abbreviations of the last two, not
                 // types of their own.
-                if (typeName.Equals("DATE", StringComparison.OrdinalIgnoreCase)
-                    || typeName.Equals("DATE_AND_TIME", StringComparison.OrdinalIgnoreCase)
-                    || typeName.Equals("DT", StringComparison.OrdinalIgnoreCase)
-                    || typeName.Equals("TIME_OF_DAY", StringComparison.OrdinalIgnoreCase)
-                    || typeName.Equals("TOD", StringComparison.OrdinalIgnoreCase))
+                if (IecIdentifier.Matches(typeName, "DATE")
+                    || IecIdentifier.Matches(typeName, "DATE_AND_TIME")
+                    || IecIdentifier.Matches(typeName, "DT")
+                    || IecIdentifier.Matches(typeName, "TIME_OF_DAY")
+                    || IecIdentifier.Matches(typeName, "TOD"))
                 {
                     value = 0u;
                     return true;

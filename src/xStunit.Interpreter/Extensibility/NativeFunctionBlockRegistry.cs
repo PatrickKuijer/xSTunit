@@ -21,14 +21,11 @@ namespace xStunit.Interpreter.Extensibility
     /// </remarks>
     public sealed class NativeFunctionBlockRegistry
     {
-        // OrdinalIgnoreCase for the same reason as NativeFunctionRegistry: IEC 61131-3
-        // type names are case-insensitive, and PLC source is inconsistent about how it
-        // spells a vendor FB.
         private readonly Dictionary<string, IXstunitNativeFunctionBlock> _blocks =
-            new Dictionary<string, IXstunitNativeFunctionBlock>(StringComparer.OrdinalIgnoreCase);
+            new Dictionary<string, IXstunitNativeFunctionBlock>(IecIdentifier.Comparer);
 
         private readonly Dictionary<string, string> _sources =
-            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            new Dictionary<string, string>(IecIdentifier.Comparer);
 
         public int Count => _blocks.Count;
 
@@ -138,7 +135,7 @@ namespace xStunit.Interpreter.Extensibility
         /// <returns>One <c>name (source)</c> line per registration, ordered by name.</returns>
         public IReadOnlyList<string> DescribeRegistrations() =>
             _blocks.Keys
-                .OrderBy(n => n, StringComparer.OrdinalIgnoreCase)
+                .OrderBy(n => n, IecIdentifier.Comparer)
                 .Select(n => $"{n} ({_sources[n]})")
                 .ToList();
     }

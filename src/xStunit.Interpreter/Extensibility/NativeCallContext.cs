@@ -46,19 +46,46 @@ namespace xStunit.Interpreter.Extensibility
         /// it defaults to a zero <see cref="SimulatedTime"/> - the caller has no clock
         /// to report.
         /// </param>
-        /// <param name="boundOutputs">
-        /// The output names the call binds with <c>name =&gt; target</c>, as written;
-        /// null is treated as none. An output listed with no target (<c>name =&gt;</c>)
-        /// binds nothing and does not belong here.
-        /// </param>
         /// <exception cref="ArgumentNullException"><paramref name="functionName"/> is null.</exception>
         public NativeCallContext(
             string functionName,
             IReadOnlyList<object> positionalArgs,
             IReadOnlyDictionary<string, object> namedArgs,
             Func<Pointer, int, byte[]> readBytes,
-            SimulatedTime time = default,
-            IEnumerable<string> boundOutputs = null)
+            SimulatedTime time = default)
+            : this(functionName, positionalArgs, namedArgs, readBytes, time, boundOutputs: null)
+        {
+        }
+
+        /// <summary>
+        /// Builds a context for a call that binds outputs with <c>name =&gt; target</c>.
+        /// </summary>
+        /// <param name="functionName">The identifier as written at the PLC call site.</param>
+        /// <param name="positionalArgs">Evaluated positional arguments in source order; null is treated as empty.</param>
+        /// <param name="namedArgs">
+        /// Evaluated <c>name := value</c> arguments, copied case-insensitively; null is
+        /// treated as empty. Must not contain the bound outputs.
+        /// </param>
+        /// <param name="readBytes">Interpreter callback resolving a pointer and byte count to the bytes behind it; null leaves <see cref="RequireBytes"/> throwing.</param>
+        /// <param name="time">The simulated clock as of this call.</param>
+        /// <param name="boundOutputs">
+        /// The output names the call binds, as written; null is treated as none. An
+        /// output listed with no target (<c>name =&gt;</c>) binds nothing and does not
+        /// belong here.
+        /// </param>
+        /// <exception cref="ArgumentNullException"><paramref name="functionName"/> is null.</exception>
+        /// <remarks>
+        /// A separate overload rather than an optional parameter on the constructor
+        /// above, so that assemblies already compiled against that signature still
+        /// bind to it.
+        /// </remarks>
+        public NativeCallContext(
+            string functionName,
+            IReadOnlyList<object> positionalArgs,
+            IReadOnlyDictionary<string, object> namedArgs,
+            Func<Pointer, int, byte[]> readBytes,
+            SimulatedTime time,
+            IEnumerable<string> boundOutputs)
         {
             FunctionName = functionName ?? throw new ArgumentNullException(nameof(functionName));
             PositionalArgs = positionalArgs ?? Array.Empty<object>();
@@ -109,18 +136,20 @@ namespace xStunit.Interpreter.Extensibility
         private readonly HashSet<string> _boundOutputs;
         private readonly Dictionary<string, object> _outputs = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
 
-        /// <summary>
-        /// The VAR_OUTPUT names this call binds with <c>name =&gt; target</c>, as the
-        /// caller wrote them. Those arguments are never evaluated and never appear in
-        /// <see cref="NamedArgs"/>: the target is where a value goes, not a value.
-        /// </summary>
-        public IReadOnlyCollection<string> BoundOutputs => _boundOutputs;
+        // The engine's write-back validates against this same set, so "bound"
+        // has one definition: whatever the plugin was told through IsOutputBound.
+        internal IReadOnlyCollection<string> BoundOutputNames => _boundOutputs;
 
         /// <summary>
-        /// Whether the caller bound <paramref name="paramName"/> to a target, matched
-        /// case-insensitively. Only worth asking when an output is expensive to compute;
-        /// <see cref="SetOutput"/> is safe to call either way.
+        /// Whether the caller bound <paramref name="paramName"/> to a target with
+        /// <c>name =&gt; target</c>, matched case-insensitively. Only worth asking when
+        /// an output is expensive to compute; <see cref="SetOutput"/> is safe to call
+        /// either way.
         /// </summary>
+        /// <remarks>
+        /// A bound output's target is never evaluated and never appears in
+        /// <see cref="NamedArgs"/>: the target is where a value goes, not a value.
+        /// </remarks>
         public bool IsOutputBound(string paramName) =>
             paramName != null && _boundOutputs.Contains(paramName);
 

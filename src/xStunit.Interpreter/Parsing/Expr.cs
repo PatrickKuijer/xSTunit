@@ -190,6 +190,10 @@ namespace xStunit.Interpreter
         // so every consumer that evaluates named args must skip it.
         public bool IsUnboundOutput => IsOutput && Value == null;
 
+        // An output with a target to write back to - the only kind of '=>'
+        // argument a write-back pass acts on.
+        public bool IsBoundOutput => IsOutput && Value != null;
+
         public NamedArg(string name, Expr value, bool isOutput = false)
         {
             Name = name;

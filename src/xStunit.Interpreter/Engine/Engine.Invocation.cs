@@ -162,11 +162,14 @@ namespace xStunit.Interpreter
                 if (instance?.NativeKind == NativeHostKind.Plugin &&
                     DeclaresMethod(instance.NativePluginFunctionBlock, methodName))
                 {
-                    var pluginArgs = NewNativeCallContext(methodName, positionalArgs, namedArgs, callerFrame);
-                    var pluginResult = instance.NativePluginFunctionBlock.Invoke(
-                        NewFunctionBlockCall(instance, methodName, pluginArgs, callerFrame));
-                    WriteBackPluginOutputs(pluginArgs, namedArgs, callerFrame);
-                    return pluginResult;
+                    return InvokePlugin(
+                        $"{instance.ActualTypeName}.{methodName}",
+                        methodName,
+                        positionalArgs,
+                        namedArgs,
+                        callerFrame,
+                        pluginArgs => instance.NativePluginFunctionBlock.Invoke(
+                            NewFunctionBlockCall(instance, methodName, pluginArgs, callerFrame)));
                 }
 
                 // Method-name routing WITHIN the loopback host kind - a
@@ -473,7 +476,7 @@ namespace xStunit.Interpreter
         {
             foreach (var arg in namedArgs)
             {
-                if (!arg.IsOutput || arg.IsUnboundOutput || !isOutput(arg.Name))
+                if (!arg.IsBoundOutput || !isOutput(arg.Name))
                     continue;
 
                 if (calleeCells.TryGetValue(arg.Name, out var outCell))

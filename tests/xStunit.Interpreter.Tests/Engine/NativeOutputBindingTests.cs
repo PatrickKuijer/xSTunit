@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using xStunit.Interpreter.Extensibility;
 using xStunit.Parser;
 using Xunit;
@@ -8,11 +7,9 @@ using Xunit;
 namespace xStunit.Interpreter.Tests
 {
     // A compiled-only library function or FB method with a VAR_OUTPUT is called
-    // as 'F(nIn := x, nOut => y)', and the caller reads y afterwards. Without an
-    // output channel on the plugin contract y silently kept its old value, and
-    // the '=>' target was handed to the plugin as if it were an input. These pin
-    // that the plugin surfaces now behave like an interpreted FUNCTION/METHOD:
-    // outputs reach their '=>' targets, and the target is never an input.
+    // as 'F(nIn := x, nOut => y)', and the caller reads y afterwards. A plugin
+    // must behave like an interpreted FUNCTION/METHOD there: every output it
+    // sets reaches its '=>' target, and the target itself is never an input.
     public class NativeOutputBindingTests
     {
         private sealed class StubFunction : IXstunitNativeFunction
@@ -30,38 +27,108 @@ namespace xStunit.Interpreter.Tests
             public object Invoke(NativeCallContext context) => _body(context);
         }
 
-        private static FbInstance RunFunctionCall(
+        // A widget whose bDoWork method runs the given body against F_Split.
+        private sealed class FunctionCallSite
+        {
+            private readonly Engine _engine;
+
+            public FunctionCallSite(string declarations, string body, Func<NativeCallContext, object> plugin)
+            {
+                var caller = new MethodAst("bDoWork", "METHOD bDoWork : BOOL", body);
+                var fb = new PouAst("FB_Widget", null, declarations, "", new List<MethodAst> { caller });
+
+                var functions = new NativeFunctionRegistry();
+                functions.Register(new StubFunction("F_Split", plugin));
+
+                _engine = new Engine(new TypeRegistry(new[] { fb }), functions);
+                Instance = _engine.NewInstance("FB_Widget");
+            }
+
+            public FbInstance Instance { get; }
+
+            public object Field(string name) => Instance.Fields[name].Value;
+
+            public void Run() =>
+                _engine.CallMethod(Instance, "bDoWork", new Expr[0], new NamedArg[0], null, null);
+        }
+
+        private static FunctionCallSite RunFunctionCall(
             string declarations,
             string body,
             Func<NativeCallContext, object> plugin)
         {
-            var caller = new MethodAst("bDoWork", "METHOD bDoWork : BOOL", body);
-            var fb = new PouAst("FB_Widget", null, declarations, "", new List<MethodAst> { caller });
+            var site = new FunctionCallSite(declarations, body, plugin);
+            site.Run();
+            return site;
+        }
 
-            var functions = new NativeFunctionRegistry();
-            functions.Register(new StubFunction("F_Split", plugin));
-
-            var engine = new Engine(new TypeRegistry(new[] { fb }), functions);
-            var instance = engine.NewInstance("FB_Widget");
-            engine.CallMethod(instance, "bDoWork", new Expr[0], new NamedArg[0], null, null);
-            return instance;
+        private static object SplitSeventeen(NativeCallContext ctx)
+        {
+            var input = ctx.RequireInt32("nIn", 0);
+            ctx.SetOutput("nRemainder", input % 5);
+            return input / 5;
         }
 
         [Fact]
         public void FunctionCall_OutputSetByThePlugin_IsWrittenToItsTarget()
         {
-            var instance = RunFunctionCall(
+            var site = RunFunctionCall(
                 "VAR\n\tnResult : INT;\n\tnRemainder : INT;\nEND_VAR",
                 "nResult := F_Split(nIn := 17, nRemainder => nRemainder);",
+                SplitSeventeen);
+
+            Assert.Equal(3, site.Field("nResult"));
+            Assert.Equal(2, site.Field("nRemainder"));
+        }
+
+        // The write-back happens inside expression evaluation, not only for a
+        // call that stands alone as a statement, and the return value still
+        // flows into the surrounding expression.
+        [Fact]
+        public void FunctionCall_InsideAnExpression_WritesItsOutputAndYieldsItsReturnValue()
+        {
+            var site = RunFunctionCall(
+                "VAR\n\tnResult : INT;\n\tnRemainder : INT;\nEND_VAR",
+                "nResult := F_Split(nIn := 17, nRemainder => nRemainder) * 10 + 1;",
+                SplitSeventeen);
+
+            Assert.Equal(31, site.Field("nResult"));
+            Assert.Equal(2, site.Field("nRemainder"));
+        }
+
+        // The target is an lvalue expression, not just a name: its index is
+        // evaluated at write-back, the way an assignment to it would be.
+        [Fact]
+        public void FunctionCall_ArrayElementTargetWithAnIndexExpression_ReceivesTheOutput()
+        {
+            var site = RunFunctionCall(
+                "VAR\n\tnResult : INT;\n\taOut : ARRAY[0..3] OF INT;\n\tnIdx : INT := 1;\nEND_VAR",
+                "nResult := F_Split(nIn := 17, nRemainder => aOut[nIdx + 1]);",
+                SplitSeventeen);
+
+            var array = Assert.IsType<ArrayValue>(site.Field("aOut"));
+            Assert.Equal(new object[] { 0, 0, 2, 0 }, array.Elements);
+        }
+
+        // Inputs are evaluated before the plugin runs and outputs written after
+        // it returns, so one variable used as both sees its pre-call value as the
+        // input and ends up holding the output.
+        [Fact]
+        public void FunctionCall_SameVariableAsInputAndOutputTarget_InputSeesThePreCallValue()
+        {
+            var seenInput = -1;
+            var site = RunFunctionCall(
+                "VAR\n\tnResult : INT;\n\tnValue : INT := 17;\nEND_VAR",
+                "nResult := F_Split(nIn := nValue, nRemainder => nValue);",
                 ctx =>
                 {
-                    var input = ctx.RequireInt32("nIn", 0);
-                    ctx.SetOutput("nRemainder", input % 5);
-                    return input / 5;
+                    seenInput = ctx.RequireInt32("nIn", 0);
+                    return SplitSeventeen(ctx);
                 });
 
-            Assert.Equal(3, instance.Fields["nResult"].Value);
-            Assert.Equal(2, instance.Fields["nRemainder"].Value);
+            Assert.Equal(17, seenInput);
+            Assert.Equal(3, site.Field("nResult"));
+            Assert.Equal(2, site.Field("nValue"));
         }
 
         // IEC identifiers are case-insensitive, and the plugin sets the name it
@@ -71,24 +138,22 @@ namespace xStunit.Interpreter.Tests
         public void FunctionCall_OutputNameSpelledInADifferentCase_StillBindsAndWritesBack()
         {
             var sawBinding = false;
-            var instance = RunFunctionCall(
+            var site = RunFunctionCall(
                 "VAR\n\tnResult : INT;\n\tnRemainder : INT;\nEND_VAR",
                 "nResult := F_Split(NIN := 17, NREMAINDER => nRemainder);",
                 ctx =>
                 {
                     sawBinding = ctx.IsOutputBound("nRemainder");
-                    ctx.SetOutput("nRemainder", ctx.RequireInt32("nIn", 0) % 5);
-                    return 0;
+                    return SplitSeventeen(ctx);
                 });
 
             Assert.True(sawBinding);
-            Assert.Equal(2, instance.Fields["nRemainder"].Value);
+            Assert.Equal(2, site.Field("nRemainder"));
         }
 
         // The '=>' target's current value is caller state, not an argument. A
         // plugin that could read it by the output's name would take a stale
-        // value for an input, which is exactly the confusion the native FB
-        // hosts had with a counter's CV.
+        // value for an input.
         [Fact]
         public void FunctionCall_OutputTarget_IsNotPassedAsANamedInput()
         {
@@ -101,8 +166,7 @@ namespace xStunit.Interpreter.Tests
                 {
                     visibleAsInput = ctx.NamedArgs.ContainsKey("nRemainder");
                     visibleByTryGetArg = ctx.TryGetArg("nRemainder", -1, out _);
-                    ctx.SetOutput("nRemainder", 0);
-                    return 0;
+                    return SplitSeventeen(ctx);
                 });
 
             Assert.False(visibleAsInput);
@@ -110,19 +174,20 @@ namespace xStunit.Interpreter.Tests
         }
 
         // A plugin declares no output types, so for an output the caller bound
-        // but the plugin forgot there is no default the interpreter could
-        // honestly write. Silently leaving the target alone is the bug this
-        // contract exists to remove.
+        // but the plugin never set there is no default the interpreter could
+        // honestly write; the call must fault rather than leave the target at
+        // whatever it held before.
         [Fact]
         public void FunctionCall_BoundOutputThePluginNeverSets_FaultsNamingFunctionAndOutput()
         {
-            var ex = Assert.ThrowsAny<Exception>(() => RunFunctionCall(
+            var site = new FunctionCallSite(
                 "VAR\n\tnResult : INT;\n\tnRemainder : INT;\nEND_VAR",
                 "nResult := F_Split(nIn := 17, nRemainder => nRemainder);",
-                _ => 3));
+                _ => 3);
 
-            Assert.Contains("F_Split", ex.ToString());
-            Assert.Contains("nRemainder", ex.ToString());
+            var ex = Assert.Throws<InvalidOperationException>(site.Run);
+
+            Assert.Contains("F_Split did not set output 'nRemainder'", ex.Message);
         }
 
         // The fault is raised before any output is written, so a failing call
@@ -130,30 +195,37 @@ namespace xStunit.Interpreter.Tests
         [Fact]
         public void FunctionCall_OneBoundOutputMissing_WritesNoneOfTheOthers()
         {
-            var caller = new MethodAst(
-                "bDoWork",
-                "METHOD bDoWork : BOOL",
-                "nResult := F_Split(nIn := 17, nQuotient => nQuotient, nRemainder => nRemainder);");
-            var fb = new PouAst(
-                "FB_Widget",
-                null,
+            var site = new FunctionCallSite(
                 "VAR\n\tnResult : INT;\n\tnQuotient : INT := -1;\n\tnRemainder : INT;\nEND_VAR",
-                "",
-                new List<MethodAst> { caller });
+                "nResult := F_Split(nIn := 17, nQuotient => nQuotient, nRemainder => nRemainder);",
+                ctx =>
+                {
+                    ctx.SetOutput("nQuotient", 3);
+                    return 0;
+                });
 
-            var functions = new NativeFunctionRegistry();
-            functions.Register(new StubFunction("F_Split", ctx =>
-            {
-                ctx.SetOutput("nQuotient", 3);
-                return 0;
-            }));
+            Assert.Throws<InvalidOperationException>(site.Run);
+            Assert.Equal(-1, site.Field("nQuotient"));
+        }
 
-            var engine = new Engine(new TypeRegistry(new[] { fb }), functions);
-            var instance = engine.NewInstance("FB_Widget");
+        // A plugin that throws has not completed the call, so outputs it set
+        // before throwing must not reach the caller.
+        [Fact]
+        public void FunctionCall_PluginThatThrows_WritesNoOutputBack()
+        {
+            var site = new FunctionCallSite(
+                "VAR\n\tnResult : INT;\n\tnRemainder : INT := 99;\nEND_VAR",
+                "nResult := F_Split(nIn := 17, nRemainder => nRemainder);",
+                ctx =>
+                {
+                    ctx.SetOutput("nRemainder", 2);
+                    throw new InvalidOperationException("F_Split rejected its input");
+                });
 
-            Assert.ThrowsAny<Exception>(() =>
-                engine.CallMethod(instance, "bDoWork", new Expr[0], new NamedArg[0], null, null));
-            Assert.Equal(-1, instance.Fields["nQuotient"].Value);
+            var ex = Assert.Throws<InvalidOperationException>(site.Run);
+
+            Assert.Equal("F_Split rejected its input", ex.Message);
+            Assert.Equal(99, site.Field("nRemainder"));
         }
 
         // TwinCAT lets a caller omit any output, so a plugin has to be free to
@@ -162,16 +234,12 @@ namespace xStunit.Interpreter.Tests
         [Fact]
         public void FunctionCall_OutputSetButNotBoundByTheCaller_IsIgnored()
         {
-            var instance = RunFunctionCall(
+            var site = RunFunctionCall(
                 "VAR\n\tnResult : INT;\nEND_VAR",
                 "nResult := F_Split(nIn := 17);",
-                ctx =>
-                {
-                    ctx.SetOutput("nRemainder", 2);
-                    return 3;
-                });
+                SplitSeventeen);
 
-            Assert.Equal(3, instance.Fields["nResult"].Value);
+            Assert.Equal(3, site.Field("nResult"));
         }
 
         // 'name =>' names an output without binding it. It must neither count as
@@ -181,7 +249,7 @@ namespace xStunit.Interpreter.Tests
         public void FunctionCall_OutputListedWithNoTarget_IsNotBoundAndDoesNotFault()
         {
             var sawBinding = true;
-            var instance = RunFunctionCall(
+            var site = RunFunctionCall(
                 "VAR\n\tnResult : INT;\nEND_VAR",
                 "nResult := F_Split(nIn := 17, nRemainder => );",
                 ctx =>
@@ -191,7 +259,7 @@ namespace xStunit.Interpreter.Tests
                 });
 
             Assert.False(sawBinding);
-            Assert.Equal(3, instance.Fields["nResult"].Value);
+            Assert.Equal(3, site.Field("nResult"));
         }
 
         // Write-back is an assignment into the target, so the target's declared
@@ -201,21 +269,17 @@ namespace xStunit.Interpreter.Tests
         [Fact]
         public void FunctionCall_OutputValue_IsCoercedToTheTargetsDeclaredType()
         {
-            var instance = RunFunctionCall(
+            var site = RunFunctionCall(
                 "VAR\n\tnResult : INT;\n\tfRemainder : LREAL;\nEND_VAR",
                 "nResult := F_Split(nIn := 17, nRemainder => fRemainder);",
-                ctx =>
-                {
-                    ctx.SetOutput("nRemainder", 2);
-                    return 3;
-                });
+                SplitSeventeen);
 
-            Assert.Equal(2.0, instance.Fields["fRemainder"].Value);
+            Assert.Equal(2.0, site.Field("fRemainder"));
         }
 
         // A method-shaped vendor FB (Enter/Leave, Read with a bytes-read output)
         // reaches the plugin through the function-block surface, not the
-        // function one, so it has to write its outputs back on its own path.
+        // function one, so its outputs must be written back on that path too.
         private sealed class MethodBlock : IXstunitNativeFunctionBlock
         {
             private readonly Func<NativeCallContext, object> _method;
@@ -238,55 +302,53 @@ namespace xStunit.Interpreter.Tests
             public object Invoke(NativeFunctionBlockCall call) => _method(call.Arguments);
         }
 
-        private static FbInstance RunMethodCall(
-            string declarations,
-            string body,
-            Func<NativeCallContext, object> method)
+        private static Engine EngineWithBlock(string declarations, string body, IXstunitNativeFunctionBlock block)
         {
             var wrapper = new PouAst("FB_Wrapper", null, declarations, body, new List<MethodAst>());
 
             var blocks = new NativeFunctionBlockRegistry();
-            blocks.Register(new MethodBlock(method));
+            blocks.Register(block);
 
-            var engine = new Engine(new TypeRegistry(new[] { wrapper }), new NativePlugins(null, blocks));
-            var instance = engine.NewInstance("FB_Wrapper");
-            engine.CallMethod(instance, "StepCycles", new Expr[] { new IntLiteralExpr(1) }, new NamedArg[0], null, null);
-            return instance;
+            return new Engine(new TypeRegistry(new[] { wrapper }), new NativePlugins(null, blocks));
         }
+
+        private static void Step(Engine engine, FbInstance instance) =>
+            engine.CallMethod(instance, "StepCycles", new Expr[] { new IntLiteralExpr(1) }, new NamedArg[0], null, null);
 
         [Fact]
         public void FunctionBlockMethodCall_OutputSetByThePlugin_IsWrittenToItsTarget()
         {
-            var instance = RunMethodCall(
+            var engine = EngineWithBlock(
                 "VAR\n\tfbSplit : FB_Splitter;\n\tnResult : INT;\n\tnRemainder : INT;\nEND_VAR",
                 "nResult := fbSplit.Split(nIn := 17, nRemainder => nRemainder);",
-                ctx =>
-                {
-                    var input = ctx.RequireInt32("nIn", 0);
-                    ctx.SetOutput("nRemainder", input % 5);
-                    return input / 5;
-                });
+                new MethodBlock(SplitSeventeen));
+            var instance = engine.NewInstance("FB_Wrapper");
+
+            Step(engine, instance);
 
             Assert.Equal(3, instance.Fields["nResult"].Value);
             Assert.Equal(2, instance.Fields["nRemainder"].Value);
         }
 
+        // A method name alone is ambiguous across FB types, so the fault names
+        // the type that owns it - the plugin whose code has to change.
         [Fact]
-        public void FunctionBlockMethodCall_BoundOutputThePluginNeverSets_Faults()
+        public void FunctionBlockMethodCall_BoundOutputThePluginNeverSets_FaultsNamingTypeAndMethod()
         {
-            var ex = Assert.ThrowsAny<Exception>(() => RunMethodCall(
+            var engine = EngineWithBlock(
                 "VAR\n\tfbSplit : FB_Splitter;\n\tnResult : INT;\n\tnRemainder : INT;\nEND_VAR",
                 "nResult := fbSplit.Split(nIn := 17, nRemainder => nRemainder);",
-                _ => 3));
+                new MethodBlock(_ => 3));
+            var instance = engine.NewInstance("FB_Wrapper");
 
-            Assert.Contains("Split", ex.ToString());
-            Assert.Contains("nRemainder", ex.ToString());
+            var ex = Assert.Throws<InvalidOperationException>(() => Step(engine, instance));
+
+            Assert.Contains("FB_Splitter.Split did not set output 'nRemainder'", ex.Message);
         }
 
         // A bare 'fb(...)' call on a plugin FB publishes its outputs through the
         // instance's fields, not the call context, and its '=>' targets are
-        // written from there. That path must keep working alongside the
-        // context-based one the method surface now uses.
+        // written from there.
         private sealed class FieldBlock : IXstunitNativeFunctionBlock
         {
             public string TypeName => "FB_SplitCycle";
@@ -313,19 +375,13 @@ namespace xStunit.Interpreter.Tests
         [Fact]
         public void FunctionBlockBareCall_OutputFieldIsWrittenToItsTarget()
         {
-            var wrapper = new PouAst(
-                "FB_Wrapper",
-                null,
+            var engine = EngineWithBlock(
                 "VAR\n\tfbSplit : FB_SplitCycle;\n\tnRemainder : INT := 99;\nEND_VAR",
                 "fbSplit(nIn := 17, nRemainder => nRemainder);",
-                new List<MethodAst>());
-
-            var blocks = new NativeFunctionBlockRegistry();
-            blocks.Register(new FieldBlock());
-
-            var engine = new Engine(new TypeRegistry(new[] { wrapper }), new NativePlugins(null, blocks));
+                new FieldBlock());
             var instance = engine.NewInstance("FB_Wrapper");
-            engine.CallMethod(instance, "StepCycles", new Expr[] { new IntLiteralExpr(1) }, new NamedArg[0], null, null);
+
+            Step(engine, instance);
 
             Assert.Equal(2, instance.Fields["nRemainder"].Value);
         }

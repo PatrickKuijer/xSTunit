@@ -15,17 +15,30 @@ namespace xStunit.Interpreter
             string methodName,
             IReadOnlyList<Expr> positionalArgs,
             IReadOnlyList<NamedArg> namedArgs,
-            Frame callerFrame)
+            Frame callerFrame) =>
+            InvokePlugin(methodName, methodName, positionalArgs, namedArgs, callerFrame, function.Invoke);
+
+        // The one way into plugin code that takes call arguments: build the
+        // context, run the plugin, write its outputs back. Owning all three
+        // steps here is what keeps a plugin surface from binding '=>' targets
+        // and then never writing them. faultLabel names the callee in the
+        // missing-output fault - a method alone is ambiguous across FB types.
+        private object InvokePlugin(
+            string faultLabel,
+            string methodName,
+            IReadOnlyList<Expr> positionalArgs,
+            IReadOnlyList<NamedArg> namedArgs,
+            Frame callerFrame,
+            Func<NativeCallContext, object> invoke)
         {
             var context = NewNativeCallContext(methodName, positionalArgs, namedArgs, callerFrame);
-            var result = function.Invoke(context);
-            WriteBackPluginOutputs(context, namedArgs, callerFrame);
+            var result = invoke(context);
+            WriteBackPluginOutputs(faultLabel, context, namedArgs, callerFrame);
             return result;
         }
 
         // Evaluates a call's arguments in the caller's scope and wraps them in
-        // the plugin-facing context. Shared by the function surface above and
-        // the method half of the function-block surface, so both see arguments
+        // the plugin-facing context, so every plugin surface sees arguments
         // bound by the same rules.
         private NativeCallContext NewNativeCallContext(
             string methodName,
@@ -49,7 +62,7 @@ namespace xStunit.Interpreter
             {
                 if (!arg.IsOutput)
                     evaluatedNamed[arg.Name] = Evaluate(arg.Value, callerFrame);
-                else if (!arg.IsUnboundOutput)
+                else if (arg.IsBoundOutput)
                     boundOutputs.Add(arg.Name);
             }
 
@@ -69,25 +82,30 @@ namespace xStunit.Interpreter
         // The plugin counterpart of WriteBackOutputArgs: the outputs live in the
         // context rather than in callee cells, but the assignment into each =>
         // target is the same SetLValue, so coercion matches an interpreted
-        // FUNCTION's outputs exactly.
+        // FUNCTION's outputs exactly. "Bound" is the context's own set, the one
+        // the plugin itself was shown; namedArgs supplies only the target lvalues.
         //
         // Every bound output is checked before any is written, so a plugin that
         // forgot one faults the call without leaving the caller half-updated.
-        private void WriteBackPluginOutputs(NativeCallContext context, IReadOnlyList<NamedArg> namedArgs, Frame callerFrame)
+        private void WriteBackPluginOutputs(
+            string faultLabel,
+            NativeCallContext context,
+            IReadOnlyList<NamedArg> namedArgs,
+            Frame callerFrame)
         {
-            foreach (var arg in namedArgs)
+            foreach (var name in context.BoundOutputNames)
             {
-                if (arg.IsOutput && !arg.IsUnboundOutput && !context.Outputs.ContainsKey(arg.Name))
+                if (!context.Outputs.ContainsKey(name))
                 {
                     throw new InvalidOperationException(
-                        $"{context.FunctionName} did not set output '{arg.Name}', which the call binds with " +
-                        $"'{arg.Name} =>' - a native plugin must call {nameof(NativeCallContext.SetOutput)} " +
+                        $"{faultLabel} did not set output '{name}', which the call binds with " +
+                        $"'{name} =>' - a native plugin must call {nameof(NativeCallContext.SetOutput)} " +
                         "for every output a caller can bind, since it declares no default to write");
                 }
             }
 
             foreach (var arg in namedArgs)
-                if (arg.IsOutput && !arg.IsUnboundOutput)
+                if (arg.IsBoundOutput)
                     SetLValue(arg.Value, context.Outputs[arg.Name], callerFrame);
         }
 

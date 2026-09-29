@@ -199,6 +199,7 @@ namespace xStunit.Cli
                 writer.PluginsLoaded(pluginsLoaded);
 
             var engine = new Engine(registry, plugins, target);
+            warnings = MergeGlobalInitWarnings(warnings, engine.GlobalInitWarnings, workspace.GvlFilePathsByName);
 
             writer.Discovery(suiteNames, suiteFilePaths);
 
@@ -244,6 +245,34 @@ namespace xStunit.Cli
             }
 
             return writer.Summary(skipped, warnings, coverage);
+        }
+
+        // The engine knows a global only by its GVL's name; the report is keyed
+        // by file. A file already warned about absorbs the new entries, so it
+        // counts once in "N files with warnings".
+        private static List<DeclarationWarning> MergeGlobalInitWarnings(
+            IReadOnlyList<DeclarationWarning> loadWarnings,
+            IReadOnlyList<DeclarationWarning> globalInitWarnings,
+            IReadOnlyDictionary<string, string> gvlFilePathsByName)
+        {
+            var merged = loadWarnings.ToList();
+            foreach (var warning in globalInitWarnings)
+            {
+                var fileKey = gvlFilePathsByName.TryGetValue(warning.FileKey, out var path) ? path : warning.FileKey;
+                var existing = merged.FindIndex(w => w.FileKey == fileKey);
+                if (existing < 0)
+                {
+                    merged.Add(new DeclarationWarning(fileKey, warning.Lines, warning.Rejections));
+                    continue;
+                }
+
+                merged[existing] = new DeclarationWarning(
+                    fileKey,
+                    merged[existing].Lines.Concat(warning.Lines).ToList(),
+                    merged[existing].Rejections.Concat(warning.Rejections).ToList());
+            }
+
+            return merged;
         }
 
         // The single description of every flag, and so the one that must be

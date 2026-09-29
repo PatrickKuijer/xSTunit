@@ -19,8 +19,16 @@ namespace xStunit.Interpreter
         public static IReadOnlyList<GvlAst> Load(
             IReadOnlyList<string> pouDirectories,
             out List<SkippedFile> skipped,
-            out List<DeclarationWarning> warnings)
+            out List<DeclarationWarning> warnings) =>
+            Load(pouDirectories, out skipped, out warnings, out _);
+
+        public static IReadOnlyList<GvlAst> Load(
+            IReadOnlyList<string> pouDirectories,
+            out List<SkippedFile> skipped,
+            out List<DeclarationWarning> warnings,
+            out IReadOnlyDictionary<string, string> filePathsByGvlName)
         {
+            filePathsByGvlName = new Dictionary<string, string>(IecIdentifier.Comparer);
             skipped = new List<SkippedFile>();
             warnings = new List<DeclarationWarning>();
             var gvlsWithFiles = new List<(string FilePath, GvlAst Gvl)>();
@@ -51,6 +59,7 @@ namespace xStunit.Interpreter
                 x => x.FilePath,
                 (name, filePaths) => new DuplicateGvlNameException(name, filePaths));
 
+            filePathsByGvlName = gvlsWithFiles.ToDictionary(x => x.Gvl.Name, x => x.FilePath, IecIdentifier.Comparer);
             return gvlsWithFiles.Select(x => x.Gvl).ToList();
         }
     }

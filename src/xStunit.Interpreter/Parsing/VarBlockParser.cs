@@ -44,6 +44,14 @@ namespace xStunit.Interpreter
         // the same way an unmatched element type does.
         private const string AddressTargetPattern = @"(?:" + ArrayPattern + "|" + SizedStringPattern + "|" + QualifiedNamePattern + ")";
 
+        // FB_init arguments belong only to a bare or library-qualified type
+        // name. The parenthesised text is captured up to its MATCHING close, so
+        // a struct-literal initialiser after it (:= (a := 1)) is not swallowed.
+        // Sized strings are excluded by lookahead because STRING(80) is a type,
+        // not an argument list.
+        private const string InitializedInstancePattern =
+            @"(?!W?STRING\b)(?<type>" + QualifiedNamePattern + @")\s*\((?<initargs>(?:[^()'""]|'(?:\$.|[^'$])*'|""(?:\$.|[^""$])*""|(?<open>\()|(?<-open>\)))*)(?(open)(?!))\)";
+
         // IgnoreCase because IEC 61131-3 type names are case-insensitive and
         // every consumer of the type text this produces already treats them
         // that way (IecIdentifier for type names, the *TypeInfo readers for
@@ -54,9 +62,10 @@ namespace xStunit.Interpreter
         // text is still passed through verbatim, since the declared spelling is
         // what FbInstance and Cell record.
         private static readonly Regex VarLinePattern = new Regex(
-            @"^(?<name>\w+)\s*:\s*(?<type>POINTER TO " + AddressTargetPattern
+            @"^(?<name>\w+)\s*:\s*(?:(?<type>POINTER TO " + AddressTargetPattern
             + @"|REFERENCE TO " + AddressTargetPattern + @"|" + ArrayPattern + @"|"
-            + SizedStringPattern + @"|" + QualifiedNamePattern + @")\s*(:=\s*(?<default>.+?))?;$",
+            + SizedStringPattern + @"|" + QualifiedNamePattern + @")|" + InitializedInstancePattern
+            + @")\s*(:=\s*(?<default>.+?))?;$",
             RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
         // Whole word, so an alias to a type named STRUCTURED_x opens nothing.
@@ -151,7 +160,9 @@ namespace xStunit.Interpreter
                     match.Groups["name"].Value,
                     match.Groups["type"].Value,
                     defaultGroup.Success ? defaultGroup.Value : null,
-                    currentSection.Value));
+                    currentSection.Value,
+                    match.Groups["initargs"].Success ? match.Groups["initargs"].Value : null,
+                    line));
             }
 
             return result;

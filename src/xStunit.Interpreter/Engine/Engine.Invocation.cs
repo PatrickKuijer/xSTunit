@@ -540,8 +540,7 @@ namespace xStunit.Interpreter
         // Resolves a bare-invocation callee cell by name, checking the caller
         // frame's Locals (METHOD-local VARs) before the instance's persisted
         // Fields (top-level VARs), mirroring Frame.ResolveCell's precedence.
-        // callerFrame is null for a few top-level entry points such as FB_init,
-        // where only instance.Fields applies.
+        // A null callerFrame means only instance.Fields applies.
         //
         // That Locals-before-Fields precedence is valid ONLY for a genuine
         // bare/self invocation, i.e. when instance is the same FbInstance as
@@ -742,7 +741,7 @@ namespace xStunit.Interpreter
                     // fault there is legitimately the caller's and is already
                     // covered by the caller's own ExecuteBody.
                     value = RunWithFaultAttribution(
-                        () => DefaultValue(decl, newFrame.Instance),
+                        () => DefaultValue(decl, newFrame.Instance, newFrame),
                         newFrame);
                 }
 

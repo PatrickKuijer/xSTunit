@@ -24,6 +24,17 @@ namespace xStunit.Interpreter
         private readonly Dictionary<string, Dictionary<string, Cell>> _globals =
             new Dictionary<string, Dictionary<string, Cell>>(IecIdentifier.Comparer);
 
+        private readonly List<xStunit.Parser.DeclarationWarning> _globalInitWarnings = new List<xStunit.Parser.DeclarationWarning>();
+
+        // Faults already reported, by identity: a global that faults only
+        // because it read an already-faulted one wraps the same originating exception
+        // and must not be reported a second time under its own name.
+        private readonly HashSet<Exception> _reportedInitFaults = new HashSet<Exception>();
+
+        // One entry per global whose own FB_init arguments cannot be bound,
+        // keyed by GVL name because the engine never sees file paths.
+        public IReadOnlyList<xStunit.Parser.DeclarationWarning> GlobalInitWarnings => _globalInitWarnings;
+
         // Global Cells whose own default value is not settled yet. Membership
         // is reference identity, Cell declaring no value equality of its own.
         // Populated during construction and emptied when it finishes, so it
@@ -155,6 +166,24 @@ namespace xStunit.Interpreter
                             cell.StringCapacity = ResolveStringCapacity(entry.Decl.TypeName, null);
                             cell.Value = DefaultValue(entry.Decl, null);
                         }
+                        catch (FbInitArgumentException initFault)
+                        {
+                            // Structural, so retrying cannot help: the global
+                            // stays faulted rather than settling to a value.
+                            var root = OriginatingFault(initFault);
+                            _globals[entry.GvlName][entry.Decl.Name] = new FaultedCell(root, entry.Decl.TypeName);
+                            _unsettledGlobals.Remove(cell);
+                            if (_reportedInitFaults.Add(root))
+                            {
+                                var declarationLine = entry.Decl.SourceText;
+                                _globalInitWarnings.Add(new xStunit.Parser.DeclarationWarning(
+                                    entry.GvlName,
+                                    new[] { declarationLine },
+                                    new[] { new xStunit.Parser.DeclarationRejection(declarationLine, root.Message) }));
+                            }
+
+                            continue;
+                        }
                         catch (Exception)
                         {
                             unsettled.Add(entry);
@@ -188,6 +217,13 @@ namespace xStunit.Interpreter
                 _settlingGlobals = false;
                 _unsettledGlobals.Clear();
             }
+        }
+
+        private static FbInitArgumentException OriginatingFault(FbInitArgumentException fault)
+        {
+            while (fault.InnerException is FbInitArgumentException inner)
+                fault = inner;
+            return fault;
         }
 
         // Records that a global Cell read while construction was seeding
@@ -280,7 +316,9 @@ namespace xStunit.Interpreter
             }
         }
 
-        public FbInstance NewInstance(string typeName)
+        public FbInstance NewInstance(string typeName) => NewInstance(typeName, null, null, null);
+
+        private FbInstance NewInstance(string typeName, CallExpr initArguments, Frame argumentFrame, string instanceName)
         {
             var instance = new FbInstance(typeName);
 
@@ -329,9 +367,78 @@ namespace xStunit.Interpreter
                 }
             }
 
-            CallMethod(instance, "FB_init", Array.Empty<Expr>(), Array.Empty<NamedArg>(), null, null, optionalIfMissing: true);
+            if (initArguments == null)
+            {
+                CallMethod(instance, "FB_init", Array.Empty<Expr>(), Array.Empty<NamedArg>(), null, null, optionalIfMissing: true);
+                return instance;
+            }
+
+            var initPositional = ValidateInitArguments(instanceName, typeName, chain, initArguments);
+            CallMethod(instance, "FB_init", initPositional, initArguments.NamedArgs, argumentFrame, null);
 
             return instance;
+        }
+
+        private static readonly string[] RuntimeSuppliedInitInputs = { "bInitRetains", "bInCopyCode" };
+
+        private List<Expr> ValidateInitArguments(string instanceName, string typeName, List<string> chain, CallExpr initArguments)
+        {
+            string Reject(string reason) =>
+                $"Instance '{instanceName}' of '{typeName}' passes FB_init arguments, but {reason}.";
+
+            if (chain.Count == 0)
+                throw new FbInitArgumentException(Reject("a native or plugin FUNCTION_BLOCK has no interpreted FB_init to receive them"));
+
+            var initMethod = chain
+                .SelectMany(type => _registry.Get(type).Methods)
+                .FirstOrDefault(m => IecIdentifier.Matches(m.Name, "FB_init"));
+            if (initMethod == null)
+                throw new FbInitArgumentException(Reject($"neither '{typeName}' nor its bases declare an FB_init"));
+
+            var inputs = _registry.GetDecls(initMethod.DeclarationText)
+                .Where(d => d.Section == VarSection.Input || d.Section == VarSection.InOut)
+                .ToList();
+
+            foreach (var arg in initArguments.NamedArgs)
+                if (!inputs.Any(d => IecIdentifier.Matches(d.Name, arg.Name)))
+                    throw new FbInitArgumentException(Reject($"FB_init has no input named '{arg.Name}'"));
+
+            if (initArguments.PositionalArgs.Count > 0 && initArguments.NamedArgs.Count > 0)
+                throw new FbInitArgumentException(Reject("positional and named arguments cannot be mixed"));
+
+            if (initArguments.PositionalArgs.Count == 0)
+                return new List<Expr>();
+
+            var leadsWithRuntimeInputs = inputs.Count >= RuntimeSuppliedInitInputs.Length
+                && RuntimeSuppliedInitInputs.Select((name, i) => IecIdentifier.Matches(inputs[i].Name, name)).All(matches => matches);
+            if (!leadsWithRuntimeInputs)
+                throw new FbInitArgumentException(Reject("FB_init does not start with the bInitRetains and bInCopyCode inputs positional arguments bind after"));
+
+            if (initArguments.PositionalArgs.Count > inputs.Count - RuntimeSuppliedInitInputs.Length)
+                throw new FbInitArgumentException(Reject($"FB_init takes {inputs.Count - RuntimeSuppliedInitInputs.Length} argument(s) but {initArguments.PositionalArgs.Count} were given"));
+
+            var positional = RuntimeSuppliedInitInputs.Select(_ => (Expr)new BoolLiteralExpr(false)).ToList();
+            positional.AddRange(initArguments.PositionalArgs);
+            return positional;
+        }
+
+        private static CallExpr ParseInitArguments(VarDecl decl, string typeName)
+        {
+            if (decl.InitArgumentsText == null)
+                return null;
+
+            CallExpr call;
+            try
+            {
+                call = (CallExpr)Parser.ParseCompleteExpression("FB_init(" + decl.InitArgumentsText + ")");
+            }
+            catch (ParseException ex)
+            {
+                throw new FbInitArgumentException(
+                    $"Instance '{decl.Name}' of '{typeName}' has FB_init arguments that cannot be read: {ex.Message}", ex);
+            }
+
+            return call.PositionalArgs.Count == 0 && call.NamedArgs.Count == 0 ? null : call;
         }
 
         // Fills chain with typeName and its registry-known ancestors, derived

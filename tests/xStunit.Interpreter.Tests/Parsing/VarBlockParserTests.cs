@@ -656,5 +656,64 @@ END_VAR";
 
             Assert.Equal("x", value.Name);
         }
+
+        // A line dropped here leaves no trace until the name is used, so the
+        // FB_init argument list must survive as declaration data.
+        [Theory]
+        [InlineData("fbSetting : FB_GadgetSetting(1.5, 'Speed');", "FB_GadgetSetting", "1.5, 'Speed'")]
+        [InlineData("fbNamed : FB_GadgetSetting(ifDefault := 2.5, isLabel := 'Force');", "FB_GadgetSetting", "ifDefault := 2.5, isLabel := 'Force'")]
+        [InlineData("fbLib : Lib.FB_Gadget(1);", "Lib.FB_Gadget", "1")]
+        [InlineData("fbNested : FB_Gadget(F((1+2)), ')');", "FB_Gadget", "F((1+2)), ')'")]
+        [InlineData("fbEmpty : FB_Gadget();", "FB_Gadget", "")]
+        [InlineData("fbWide : FB_Gadget(1.0, \"a)b\");", "FB_Gadget", "1.0, \"a)b\"")]
+        public void Parse_FbInstanceWithInitArguments_KeepsTypeAndArgumentText(string line, string type, string args)
+        {
+            var vars = VarBlockParser.Parse("VAR\n\t" + line + "\nEND_VAR", out var unreadable);
+
+            var setting = Assert.Single(vars);
+            Assert.Equal(type, setting.TypeName);
+            Assert.Equal(args, setting.InitArgumentsText);
+            Assert.Empty(unreadable);
+        }
+
+        // The argument list must end at its own closing parenthesis, or the
+        // struct-literal initialiser after it would be parsed as part of it.
+        [Fact]
+        public void Parse_InitArgumentsFollowedByInitializer_StopsAtMatchingParenthesis()
+        {
+            var vars = VarBlockParser.Parse("VAR\n\tfb : FB_X(1) := (fValue := 3.0);\nEND_VAR", out var unreadable);
+
+            var fb = Assert.Single(vars);
+            Assert.Equal("1", fb.InitArgumentsText);
+            Assert.Equal("(fValue := 3.0)", fb.DefaultValueText);
+            Assert.Empty(unreadable);
+        }
+
+        // Parentheses belonging to other types must not be read as FB_init
+        // arguments: the line stays unreadable, as before init arguments
+        // existed, rather than being accepted with wrong meaning.
+        [Theory]
+        [InlineData("aGadgets : ARRAY[0..1] OF FB_X(1.5,'a');")]
+        [InlineData("s : STRING((4+1));")]
+        [InlineData("p : POINTER TO FB_X(1);")]
+        [InlineData("r : REFERENCE TO FB_X(1);")]
+        public void Parse_ParenthesesOnNonInstanceType_StaysUnreadable(string line)
+        {
+            var vars = VarBlockParser.Parse("VAR\n\t" + line + "\nEND_VAR", out var unreadable);
+
+            Assert.Empty(vars);
+            Assert.Equal(new[] { line }, unreadable);
+        }
+
+        [Fact]
+        public void Parse_SizedString_IsNotTakenForInitArguments()
+        {
+            var vars = VarBlockParser.Parse("VAR\n\ts : STRING(80);\nEND_VAR", out var unreadable);
+
+            var s = Assert.Single(vars);
+            Assert.Equal("STRING(80)", s.TypeName);
+            Assert.Null(s.InitArgumentsText);
+            Assert.Empty(unreadable);
+        }
     }
 }

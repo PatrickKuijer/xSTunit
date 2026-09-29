@@ -83,6 +83,19 @@ namespace xStunit.Vsix.TestRunner
         /// nothing to report carries no warning entry at all.
         /// </summary>
         public List<string> Lines { get; set; } = new List<string>();
+
+        /// <summary>
+        /// The declarations among <see cref="Lines"/> that were readable but refused, with the
+        /// reason. Absent from the wire when nothing was refused.
+        /// </summary>
+        public List<XstunitDeclarationRejection> Rejections { get; set; } = new List<XstunitDeclarationRejection>();
+    }
+
+    internal sealed class XstunitDeclarationRejection
+    {
+        public string Line { get; set; }
+
+        public string Reason { get; set; }
     }
 
     internal class XstunitSuiteResult

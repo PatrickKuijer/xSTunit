@@ -165,7 +165,10 @@ namespace xStunit.Cli
             coverage?.Select(c => new CoverageReport(c.PouTypeName, c.SuiteTypeNames)).ToList();
 
         private static IReadOnlyList<WarningReport> ToWarningReports(IReadOnlyList<DeclarationWarning> warnings) =>
-            warnings.Select(w => new WarningReport(w.FileKey, w.Lines)).ToArray();
+            warnings.Select(w => new WarningReport(
+                w.FileKey,
+                w.Lines,
+                w.Rejections.Count == 0 ? null : w.Rejections.Select(r => new RejectionReport(r.Line, r.Reason)).ToArray())).ToArray();
 
         private static IReadOnlyList<SkipReport> ToSkipReports(IReadOnlyList<SkippedFile> skipped) =>
             skipped.Select(s => new SkipReport(s.FileKey, s.Message)).ToList();

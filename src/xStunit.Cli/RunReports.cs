@@ -105,17 +105,37 @@ namespace xStunit.Cli
     // reduced coverage does not start counting these too.
     internal sealed class WarningReport
     {
-        public WarningReport(string filePath, IReadOnlyList<string> lines)
+        public WarningReport(string filePath, IReadOnlyList<string> lines, IReadOnlyList<RejectionReport> rejections = null)
         {
             FilePath = filePath;
             Lines = lines;
+            Rejections = rejections;
         }
 
         public string FilePath { get; }
 
-        // The declaration lines that could not be read. Never empty: a file
-        // with nothing to report produces no WarningReport at all.
+        // The declaration lines that could not be read, plus the declarations
+        // the runtime refused. Never empty: a file with nothing to report
+        // produces no WarningReport at all.
         public IReadOnlyList<string> Lines { get; }
+
+        // The refused declarations among Lines, each with its reason. Omitted
+        // from the wire when nothing was refused, so a consumer written before
+        // it existed sees the same shape as before.
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public IReadOnlyList<RejectionReport> Rejections { get; }
+    }
+
+    internal sealed class RejectionReport
+    {
+        public RejectionReport(string line, string reason)
+        {
+            Line = line;
+            Reason = reason;
+        }
+
+        public string Line { get; }
+        public string Reason { get; }
     }
 
     // Root of the `--format json` output, and with it the *Report family

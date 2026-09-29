@@ -34,6 +34,16 @@ namespace xStunit.Interpreter
             return parser.ParseExpr();
         }
 
+        public static Expr ParseCompleteExpression(string text)
+        {
+            var parser = new Parser(Lexer.Tokenize(text));
+            var expr = parser.ParseExpr();
+            if (parser.Current.Type != TokenType.Eof)
+                throw new ParseException(
+                    $"Unexpected {parser.Current} after expression at token index {parser._pos}", parser.CurrentToken, parser.Current.Line);
+            return expr;
+        }
+
         private Token Current => _tokens[_pos];
 
         private Token Advance()

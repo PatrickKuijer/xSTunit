@@ -278,12 +278,31 @@ namespace xStunit.Cli
         {
             foreach (var warning in warnings)
             {
-                Output.WriteLine(
-                    $"warning: {warning.FileKey} - {warning.Lines.Count} declaration "
-                    + (warning.Lines.Count == 1 ? "line" : "lines") + " not understood");
+                var rejectedLines = new HashSet<string>(warning.Rejections.Select(r => r.Line));
+                var unreadable = warning.Lines.Where(line => !rejectedLines.Contains(line)).ToList();
 
-                foreach (var line in warning.Lines)
-                    Output.WriteLine($"    {line}");
+                if (unreadable.Count > 0)
+                {
+                    Output.WriteLine(
+                        $"warning: {warning.FileKey} - {unreadable.Count} declaration "
+                        + (unreadable.Count == 1 ? "line" : "lines") + " not understood");
+
+                    foreach (var line in unreadable)
+                        Output.WriteLine($"    {line}");
+                }
+
+                if (warning.Rejections.Count > 0)
+                {
+                    Output.WriteLine(
+                        $"warning: {warning.FileKey} - FB_init arguments rejected on {warning.Rejections.Count} declaration "
+                        + (warning.Rejections.Count == 1 ? "line" : "lines"));
+
+                    foreach (var rejection in warning.Rejections)
+                    {
+                        Output.WriteLine($"    {rejection.Line}");
+                        Output.WriteLine($"      {rejection.Reason}");
+                    }
+                }
             }
         }
     }

@@ -4,7 +4,7 @@ namespace xStunit.Interpreter
 {
     public sealed partial class Engine
     {
-        private object DefaultValue(VarDecl decl, FbInstance owningInstance)
+        private object DefaultValue(VarDecl decl, FbInstance owningInstance, Frame argumentScope = null)
         {
             // Resolve any ALIAS DUT (e.g. T_MaxString -> STRING(255)) once up
             // front, so no check below needs an alias-aware branch of its own.
@@ -24,7 +24,7 @@ namespace xStunit.Interpreter
                 return new UnassignedInterfaceReference(typeName);
 
             if (_registry.Get(typeName) != null || IsNativeFbTypeName(typeName))
-                return NewInstance(typeName);
+                return NewInstance(typeName, ParseInitArguments(decl, typeName), argumentScope ?? new Frame(owningInstance, typeName), decl.Name);
 
             // A bare, unsuffixed decimal literal like 2.5 lexes as a REAL, so
             // 'lrGain : LREAL := 2.5;' would otherwise box a float into a Cell

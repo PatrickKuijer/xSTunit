@@ -101,9 +101,10 @@ namespace xStunit.Interpreter
             IReadOnlyList<GvlAst> gvls;
             var gvlSkipped = new List<SkippedFile>();
             var gvlWarnings = new List<DeclarationWarning>();
+            IReadOnlyDictionary<string, string> gvlPaths;
             try
             {
-                gvls = GvlLoader.Load(directories, out gvlSkipped, out gvlWarnings);
+                gvls = GvlLoader.Load(directories, out gvlSkipped, out gvlWarnings, out gvlPaths);
                 skipped.AddRange(gvlSkipped);
                 warnings.AddRange(gvlWarnings);
             }
@@ -132,7 +133,8 @@ namespace xStunit.Interpreter
                 // this would merge.
                 loaded.ToDictionary(l => l.Pou.Name, l => l.FilePath, IecIdentifier.Comparer),
                 skipped,
-                warnings);
+                warnings,
+                gvlPaths);
         }
 
         // Declarations are re-parsed here, at load time, purely to attribute
@@ -176,13 +178,15 @@ namespace xStunit.Interpreter
             IReadOnlyDictionary<string, string> filePathsByTypeName,
             IReadOnlyList<SkippedFile> skipped,
             IReadOnlyList<DeclarationWarning> warnings,
-            string error)
+            string error,
+            IReadOnlyDictionary<string, string> gvlFilePathsByName)
         {
             Registry = registry;
             PouTypes = pouTypes;
             FilePathsByTypeName = filePathsByTypeName;
             Skipped = skipped;
             Warnings = warnings;
+            GvlFilePathsByName = gvlFilePathsByName;
             Error = error;
         }
 
@@ -205,6 +209,8 @@ namespace xStunit.Interpreter
         // pointing at the use rather than here.
         public IReadOnlyList<DeclarationWarning> Warnings { get; }
 
+        public IReadOnlyDictionary<string, string> GvlFilePathsByName { get; }
+
         // Non-null only for a load that produced no registry at all - a
         // directory that does not exist, or a type name defined twice across
         // the merged set. Both are usage errors the caller reports and exits
@@ -217,8 +223,9 @@ namespace xStunit.Interpreter
             IReadOnlyList<PouAst> pouTypes,
             IReadOnlyDictionary<string, string> filePathsByTypeName,
             IReadOnlyList<SkippedFile> skipped,
-            IReadOnlyList<DeclarationWarning> warnings) =>
-            new LoadedWorkspace(registry, pouTypes, filePathsByTypeName, skipped, warnings, null);
+            IReadOnlyList<DeclarationWarning> warnings,
+            IReadOnlyDictionary<string, string> gvlFilePathsByName) =>
+            new LoadedWorkspace(registry, pouTypes, filePathsByTypeName, skipped, warnings, null, gvlFilePathsByName);
 
         // A load that failed outright still reports what it had already lost,
         // the same way it still reports what it had already skipped. Both lists
@@ -234,6 +241,7 @@ namespace xStunit.Interpreter
                 new Dictionary<string, string>(IecIdentifier.Comparer),
                 skipped,
                 warnings,
-                error);
+                error,
+                new Dictionary<string, string>(IecIdentifier.Comparer));
     }
 }

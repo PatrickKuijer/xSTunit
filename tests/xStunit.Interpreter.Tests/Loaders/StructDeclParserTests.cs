@@ -120,5 +120,25 @@ END_TYPE");
 
             Assert.False(structAst.IsUnion);
         }
+
+        // DeclaredBody already recognises STRUCT on the header line, so Parse
+        // must deliver its fields too rather than an empty struct.
+        [Fact]
+        public void Parse_StructOnTypeHeaderLine_ReadsFields()
+        {
+            var structAst = StructDeclParser.Parse("TYPE ST_Point : STRUCT\n\tx : DINT;\n\ty : DINT;\nEND_STRUCT\nEND_TYPE");
+
+            Assert.Equal("ST_Point", structAst.Name);
+            Assert.Equal(new[] { "x", "y" }, structAst.Fields.Select(f => f.Name));
+        }
+
+        [Fact]
+        public void Parse_UnionOnTypeHeaderLine_ReadsFieldsAsUnion()
+        {
+            var structAst = StructDeclParser.Parse("TYPE U_Word : union\n\tw : WORD;\n\tb : BYTE;\nEND_UNION\nEND_TYPE");
+
+            Assert.True(structAst.IsUnion);
+            Assert.Equal(new[] { "w", "b" }, structAst.Fields.Select(f => f.Name));
+        }
     }
 }

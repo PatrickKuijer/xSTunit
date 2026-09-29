@@ -587,5 +587,74 @@ END_VAR";
             Assert.Equal("label", value.Name);
             Assert.Equal("WSTRING(cScratchConstants.BASE_SIZE * 2)", value.TypeName);
         }
+
+        // TwinCAT accepts STRUCT/UNION on the TYPE header line as well as on a
+        // line of its own. If the header-line spelling opened no field section,
+        // every field would vanish without a word.
+        [Theory]
+        [InlineData("TYPE ST_Point : STRUCT")]
+        [InlineData("TYPE ST_Point : UNION")]
+        [InlineData("TYPE ST_Point : struct")]
+        [InlineData("type ST_Point : Union")]
+        [InlineData("TYPE ST_Point:STRUCT")]
+        [InlineData("TYPE ST_Point EXTENDS ST_Base : STRUCT")]
+        [InlineData("TYPE ST_Point : STRUCT // the point")]
+        public void Parse_StructOrUnionOnTypeHeaderLine_ReadsFields(string header)
+        {
+            var declaration = $"{header}\n\tx : REAL;\n\ty : REAL;\nEND_STRUCT\nEND_TYPE";
+
+            var vars = VarBlockParser.Parse(declaration);
+
+            Assert.Equal(new[] { "x", "y" }, vars.Select(v => v.Name));
+            Assert.All(vars, v => Assert.Equal(VarSection.Local, v.Section));
+        }
+
+        // The header-line form must close at END_STRUCT like the multi-line
+        // form, or a declaration after the TYPE would be read as a field.
+        [Fact]
+        public void Parse_StructOnTypeHeaderLine_StopsReadingAtEndStruct()
+        {
+            const string declaration = "TYPE ST_Point : STRUCT\n\tx : REAL;\nEND_STRUCT\nEND_TYPE\n\tnOutside : INT;";
+
+            var value = Assert.Single(VarBlockParser.Parse(declaration));
+
+            Assert.Equal("x", value.Name);
+        }
+
+        // Only a STRUCT/UNION body opens a field section from a TYPE header.
+        // An ENUM or alias header must not, or the lines after it would be
+        // misread as fields.
+        [Fact]
+        public void Parse_TypeHeaderWithoutStructBody_OpensNoSection()
+        {
+            const string declaration = "TYPE E_Mode : (Idle, Run);\n\tnOutside : INT;\nEND_TYPE";
+
+            Assert.Empty(VarBlockParser.Parse(declaration));
+        }
+
+        // A header that is a whole-word STRUCT/UNION only. An alias to a type
+        // whose name merely starts with those letters must not open a section.
+        [Theory]
+        [InlineData("TYPE T_Alias : STRUCTURED_T;")]
+        [InlineData("TYPE T_Alias : UNIONIZED_T;")]
+        public void Parse_TypeHeaderNamingTypeThatStartsWithBodyKeyword_OpensNoSection(string header)
+        {
+            var vars = VarBlockParser.Parse($"{header}\n\tnOutside : INT;\nEND_TYPE");
+
+            Assert.Empty(vars);
+        }
+
+        // DutDeclarationPreamble.Strip lets StructDeclParser.DeclaredBody see
+        // through a pragma sharing the header's line; the field reader has to
+        // agree, or the type is classified a struct and then loses every field.
+        [Fact]
+        public void Parse_PragmaOnTheTypeHeaderLine_ReadsFields()
+        {
+            const string declaration = "{attribute 'pack_mode' := '1'} TYPE ST_Point : STRUCT\n\tx : INT;\nEND_STRUCT\nEND_TYPE";
+
+            var value = Assert.Single(VarBlockParser.Parse(declaration));
+
+            Assert.Equal("x", value.Name);
+        }
     }
 }

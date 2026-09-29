@@ -6,8 +6,7 @@ namespace xStunit.Interpreter
 {
     // Turns the VAR_* sections a FUNCTION_BLOCK or METHOD carries in its
     // Declaration CDATA into typed VarDecl entries. Also doubles as
-    // StructDeclParser's field-list parser: STRUCT/UNION and their END_
-    // keywords toggle the same section state as VAR/END_VAR.
+    // StructDeclParser's field-list parser.
     // Scoped to the fixtures' grammar - one name per line, no comma lists.
     public static class VarBlockParser
     {
@@ -60,6 +59,14 @@ namespace xStunit.Interpreter
             + SizedStringPattern + @"|" + QualifiedNamePattern + @")\s*(:=\s*(?<default>.+?))?;$",
             RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
+        // Whole word, so an alias to a type named STRUCTURED_x opens nothing.
+        private static readonly Regex TypeHeaderOpeningBodyPattern = new Regex(
+            @"^TYPE\s+\w+(\s+EXTENDS\s+\w+)?\s*:\s*(STRUCT|UNION)\b",
+            RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+        private static readonly Regex LeadingPragmasPattern = new Regex(
+            @"^(\{[^}\n]*\}\s*)+", RegexOptions.Compiled);
+
         // Reports the lines inside an open section that the pattern could not
         // match, which are the variables this parse lost. Pragmas, comment text
         // and anything outside a section are not reported: they were never
@@ -89,6 +96,12 @@ namespace xStunit.Interpreter
                 var line = StripComments(rawLine.Trim(), ref inBlockComment).Trim();
                 if (line.Length == 0)
                     continue;
+
+                if (TypeHeaderOpeningBodyPattern.IsMatch(LeadingPragmasPattern.Replace(line, "")))
+                {
+                    currentSection = VarSection.Local;
+                    continue;
+                }
 
                 // A pragma carries no declaration, so it costs no variable and
                 // is not a loss to report. It also may not close the section it

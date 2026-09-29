@@ -266,10 +266,7 @@ namespace xStunit.Cli
                     continue;
                 }
 
-                merged[existing] = new DeclarationWarning(
-                    fileKey,
-                    merged[existing].Lines.Concat(warning.Lines).ToList(),
-                    merged[existing].Rejections.Concat(warning.Rejections).ToList());
+                merged[existing] = merged[existing].MergedWith(warning);
             }
 
             return merged;

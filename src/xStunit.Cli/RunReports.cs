@@ -119,9 +119,8 @@ namespace xStunit.Cli
         // produces no WarningReport at all.
         public IReadOnlyList<string> Lines { get; }
 
-        // The refused declarations among Lines, each with its reason. Omitted
-        // from the wire when nothing was refused, so a consumer written before
-        // it existed sees the same shape as before.
+        // The refused declarations among Lines, each with its reason; null, and
+        // so absent from the wire, when nothing was refused.
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public IReadOnlyList<RejectionReport> Rejections { get; }
     }

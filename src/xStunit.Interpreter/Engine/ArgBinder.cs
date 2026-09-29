@@ -14,8 +14,7 @@ namespace xStunit.Interpreter
     {
         // tryGetNamed returns null when paramName has no explicit named arg;
         // T is a reference type here, so null is a safe "not found" sentinel.
-        // An empty positional slot consumes its position but supplies
-        // nothing: it returns false with emptySlot set.
+        // An empty positional slot consumes its position but supplies nothing.
         public static bool TryResolveArg<T>(
             string paramName,
             System.Func<string, T> tryGetNamed,

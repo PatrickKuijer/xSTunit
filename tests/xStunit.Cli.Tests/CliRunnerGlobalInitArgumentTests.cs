@@ -45,7 +45,7 @@ namespace xStunit.Cli.Tests
 
         // The wire shape is additive: filePath and lines keep their meaning
         // (an on-disk path and the declaration line), and the reason travels
-        // in an extra rejections array an older consumer simply ignores.
+        // only in the separate rejections array.
         [Fact]
         public void Run_JsonFormat_CarriesTheGlobalFaultUnderTheGvlPathWithLineAndReason()
         {

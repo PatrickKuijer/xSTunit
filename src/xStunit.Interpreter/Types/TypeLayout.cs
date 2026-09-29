@@ -581,8 +581,7 @@ namespace xStunit.Interpreter
 
         // Instance data only: the hidden vtable pointer, one more hidden pointer
         // when a single interface is implemented, then every inherited and own
-        // member in declaration order, base type first. The rules are documented in
-        // wiki/10-function-block-layout.md.
+        // member in declaration order, base type first.
         private (int Size, int Align) SizeOfFunctionBlock(PouAst functionBlock)
         {
             if (functionBlock.Kind != PouKind.FunctionBlock)
@@ -590,8 +589,7 @@ namespace xStunit.Interpreter
                     $"SIZEOF() only sizes a FUNCTION_BLOCK; '{functionBlock.Name}' is a PROGRAM or FUNCTION");
 
             if (!_functionBlocksBeingSized.Add(functionBlock.Name))
-                throw new NotSupportedException(
-                    $"SIZEOF() can't size FUNCTION_BLOCK '{functionBlock.Name}': it contains itself");
+                throw CannotSize(functionBlock, "it contains itself");
 
             try
             {
@@ -641,9 +639,9 @@ namespace xStunit.Interpreter
                 var method = pou.Methods.FirstOrDefault(m =>
                     _registry.GetDecls(m.DeclarationText).Any(d => d.Section == VarSection.MethodInstance));
                 if (method != null)
-                    throw new NotSupportedException(
-                        $"SIZEOF() can't size FUNCTION_BLOCK '{functionBlock.Name}': method '{method.Name}' " +
-                        $"of '{pou.Name}' declares VAR_INST, which is stored in the instance and not modelled");
+                    throw CannotSize(functionBlock,
+                        $"method '{method.Name}' of '{pou.Name}' declares VAR_INST, " +
+                        "which is stored in the instance and not modelled");
             }
         }
 
@@ -651,9 +649,8 @@ namespace xStunit.Interpreter
         {
             var interfaceCount = ExtendsChain(functionBlock).Sum(pou => pou.ImplementedInterfaces.Count);
             if (interfaceCount > 1)
-                throw new NotSupportedException(
-                    $"SIZEOF() can't size FUNCTION_BLOCK '{functionBlock.Name}': the layout of a block " +
-                    $"implementing {interfaceCount} interfaces is not verified");
+                throw CannotSize(functionBlock,
+                    $"the layout of a block implementing {interfaceCount} interfaces is not verified");
 
             return _target.AddressSize * (1 + interfaceCount);
         }
@@ -666,9 +663,7 @@ namespace xStunit.Interpreter
             while (current != null)
             {
                 if (!visited.Add(current.Name))
-                    throw new NotSupportedException(
-                        $"SIZEOF() can't size FUNCTION_BLOCK '{functionBlock.Name}': " +
-                        $"its EXTENDS chain loops back to '{current.Name}'");
+                    throw CannotSize(functionBlock, $"its EXTENDS chain loops back to '{current.Name}'");
 
                 chain.Add(current);
                 if (current.BaseTypeName == null)
@@ -676,10 +671,9 @@ namespace xStunit.Interpreter
 
                 var baseType = _registry.Get(current.BaseTypeName);
                 if (baseType == null)
-                    throw new NotSupportedException(
-                        $"SIZEOF() can't size FUNCTION_BLOCK '{functionBlock.Name}': its base type " +
-                        $"'{current.BaseTypeName}' is not a loaded FUNCTION_BLOCK, and native library " +
-                        "function blocks are not modelled");
+                    throw CannotSize(functionBlock,
+                        $"its base type '{current.BaseTypeName}' is not a loaded FUNCTION_BLOCK, " +
+                        "and native library function blocks are not modelled");
 
                 current = baseType;
             }
@@ -692,9 +686,8 @@ namespace xStunit.Interpreter
         {
             var resolved = _registry.ResolveAlias(member.TypeName?.Trim());
             if (resolved != null && _registry.GetInterface(resolved) != null)
-                throw new NotSupportedException(
-                    $"SIZEOF() can't size FUNCTION_BLOCK '{functionBlock.Name}': member '{member.Name}' " +
-                    $"has interface type '{member.TypeName}', which is not modelled");
+                throw CannotSize(functionBlock,
+                    $"member '{member.Name}' has interface type '{member.TypeName}', which is not modelled");
 
             (int Size, int Align)? sized;
             try
@@ -703,16 +696,19 @@ namespace xStunit.Interpreter
             }
             catch (NotSupportedException ex)
             {
-                throw new NotSupportedException(
-                    $"SIZEOF() can't size FUNCTION_BLOCK '{functionBlock.Name}': member '{member.Name}' " +
-                    $"of type '{member.TypeName}': {ex.Message}", ex);
+                throw CannotSize(functionBlock,
+                    $"member '{member.Name}' of type '{member.TypeName}': {ex.Message}", ex);
             }
 
-            return sized ?? throw new NotSupportedException(
-                $"SIZEOF() can't size FUNCTION_BLOCK '{functionBlock.Name}': member '{member.Name}' " +
-                $"of type '{member.TypeName}' has no modelled layout; native library function " +
-                "blocks are not modelled");
+            return sized ?? throw CannotSize(functionBlock,
+                $"member '{member.Name}' of type '{member.TypeName}' has no modelled layout; " +
+                "native library function blocks are not modelled");
         }
+
+        private static NotSupportedException CannotSize(
+            PouAst functionBlock, string reason, Exception inner = null) =>
+            new NotSupportedException(
+                $"SIZEOF() can't size FUNCTION_BLOCK '{functionBlock.Name}': {reason}", inner);
 
         private static bool IsInstanceSection(VarSection section) =>
             section == VarSection.Local ||

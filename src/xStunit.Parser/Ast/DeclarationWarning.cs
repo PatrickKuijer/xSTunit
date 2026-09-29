@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 
 namespace xStunit.Parser
 {
@@ -52,5 +53,15 @@ namespace xStunit.Parser
         /// all rather than one carrying an empty list.
         /// </summary>
         public IReadOnlyList<string> Lines { get; }
+
+        /// <summary>
+        /// This warning's lines and rejections followed by <paramref name="other"/>'s, under this
+        /// warning's <see cref="FileKey"/>.
+        /// </summary>
+        public DeclarationWarning MergedWith(DeclarationWarning other) =>
+            new DeclarationWarning(
+                FileKey,
+                Lines.Concat(other.Lines).ToList(),
+                Rejections.Concat(other.Rejections).ToList());
     }
 }

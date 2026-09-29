@@ -71,6 +71,26 @@ namespace xStunit.Interpreter.Tests.Conformance
             Assert.Equal(Normalize(expected), Normalize(Compare(module).ToText()));
         }
 
+        // These two blocks carry a method VAR_INST cell the compiler names but
+        // does not flag with a property. Scoring them would compare a size that
+        // includes a cell xStunit does not model, agreeing only by the padding
+        // it happens to leave.
+        [Theory]
+        [InlineData(X86Module)]
+        [InlineData(X64Module)]
+        public void Compare_BlocksWithAnUnflaggedMethodInstanceCell_AreNotCompared(string module)
+        {
+            var report = Compare(module);
+
+            foreach (var name in new[] { "FB_AssertResultStatic", "FB_AssertArrayResultStatic" })
+            {
+                var finding = Assert.Single(report.Findings, f => f.TypeName == name);
+                Assert.Equal(LayoutFindingKind.NotCompared, finding.Kind);
+                Assert.Contains("method VAR_INST", finding.Detail);
+                Assert.DoesNotContain(name, report.ComparedTypeNames);
+            }
+        }
+
         // The conformance claim itself, now over source written to exercise the
         // rules rather than over whatever a borrowed project happened to
         // contain: on a 32-bit target xStunit agrees with the compiler about

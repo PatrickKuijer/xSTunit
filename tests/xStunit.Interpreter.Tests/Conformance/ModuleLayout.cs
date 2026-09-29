@@ -40,8 +40,10 @@ namespace xStunit.Interpreter.Tests.Conformance
             IReadOnlyList<DeclaredArrayDimension> arrayDimensions,
             int? bitSize,
             int? bitSizeX64,
-            int? bitOffset)
+            int? bitOffset,
+            bool isMethodInstance = false)
         {
+            IsMethodInstance = isMethodInstance;
             Name = name;
             TypeName = typeName;
             IsPointer = isPointer;
@@ -54,6 +56,16 @@ namespace xStunit.Interpreter.Tests.Conformance
         }
 
         public string Name { get; }
+
+        /// <summary>
+        /// True for a cell the compiler adds for a method's <c>VAR_INST</c>
+        /// variable: stored in the function block instance, but not a member
+        /// its ST declares. Recognised by either signal, since the compiler
+        /// does not always set both: an <c>implicit_inst_var</c> property on
+        /// the item, or the upper-case name
+        /// <c>__&lt;OWNER&gt;__&lt;METHOD&gt;__&lt;VAR&gt;</c>.
+        /// </summary>
+        public bool IsMethodInstance { get; }
 
         /// <summary>
         /// The member's type as the file spells it - an elementary type, a
@@ -118,8 +130,12 @@ namespace xStunit.Interpreter.Tests.Conformance
             IReadOnlyList<DeclaredArrayDimension> arrayDimensions,
             bool isFunctionBlock,
             int? packMode,
-            IReadOnlyList<DeclaredMemberLayout> members)
+            IReadOnlyList<DeclaredMemberLayout> members,
+            IReadOnlyList<string> implementedInterfaces = null,
+            bool isInterface = false)
         {
+            ImplementedInterfaces = implementedInterfaces ?? new string[0];
+            IsInterface = isInterface;
             Name = name;
             BitSize = bitSize;
             BaseTypeName = baseTypeName;
@@ -158,8 +174,8 @@ namespace xStunit.Interpreter.Tests.Conformance
 
         /// <summary>
         /// True when the type is a function block instance rather than a plain
-        /// struct. Its members start past whatever instance header the compiler
-        /// puts at offset 0, which is not modeled anywhere in xStunit.
+        /// struct. Its members start past the instance header the compiler puts
+        /// at offset 0.
         /// </summary>
         public bool IsFunctionBlock { get; }
 
@@ -178,6 +194,14 @@ namespace xStunit.Interpreter.Tests.Conformance
         public int? PackMode { get; }
 
         public IReadOnlyList<DeclaredMemberLayout> Members { get; }
+
+        /// <summary>
+        /// The interfaces the type implements, in declared order.
+        /// </summary>
+        public IReadOnlyList<string> ImplementedInterfaces { get; }
+
+        /// <summary>True when the type is an interface rather than a data or function block type.</summary>
+        public bool IsInterface { get; }
     }
 
     /// <summary>

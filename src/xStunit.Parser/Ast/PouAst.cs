@@ -16,6 +16,18 @@ namespace xStunit.Parser
         /// </summary>
         public string BaseTypeName { get; }
 
+        /// <summary>
+        /// The interfaces named in the POU's IMPLEMENTS clause, in declared
+        /// order; empty when it declares none.
+        /// </summary>
+        public IReadOnlyList<string> ImplementedInterfaces { get; }
+
+        /// <summary>
+        /// What the declaration header names. A declaration with no
+        /// recognisable header is taken to be a <see cref="PouKind.FunctionBlock"/>.
+        /// </summary>
+        public PouKind Kind { get; }
+
         public string DeclarationText { get; }
 
         public string ImplementationText { get; }
@@ -36,8 +48,12 @@ namespace xStunit.Parser
             string declarationText,
             string implementationText,
             IReadOnlyList<MethodAst> methods,
-            IReadOnlyList<PropertyAst> properties = null, int bodyStartLine = 1)
+            IReadOnlyList<PropertyAst> properties = null, int bodyStartLine = 1,
+            IReadOnlyList<string> implementedInterfaces = null,
+            PouKind kind = PouKind.FunctionBlock)
         {
+            Kind = kind;
+            ImplementedInterfaces = implementedInterfaces ?? new List<string>();
             Name = name;
             BaseTypeName = baseTypeName;
             DeclarationText = declarationText;

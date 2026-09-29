@@ -1,30 +1,13 @@
 module PLC1Tests target TwinCAT RT (x86)
-compared 40 of 71 declared types, 137 members
+compared 57 of 71 declared types, 260 members
 sizes and offsets in bits
-NotCompared TOF function block instance layout is not modeled
 NotCompared I_TestResults neither members nor a base type declared
-NotCompared R_TRIG function block instance layout is not modeled
-NotCompared FB_TestResults function block instance layout is not modeled
 NotCompared I_TestResultLogger neither members nor a base type declared
-NotCompared FB_AdsTestResultLogger function block instance layout is not modeled
-NotCompared FB_FileControl function block instance layout is not modeled
-NotCompared FB_StreamBuffer function block instance layout is not modeled
-NotCompared FB_XmlControl function block instance layout is not modeled
-NotCompared FB_xUnitXmlPublisher function block instance layout is not modeled
-NotCompared FB_TcUnitRunner function block instance layout is not modeled
-NotCompared FB_Test function block instance layout is not modeled
-NotCompared FW_GetCurTaskIndex function block instance layout is not modeled
-NotCompared GETCURTASKINDEX function block instance layout is not modeled
-NotCompared FB_FormatString function block instance layout is not modeled
-NotCompared FB_AssertResultStatic function block instance layout is not modeled
-NotCompared FB_AssertArrayResultStatic function block instance layout is not modeled
+NotCompared FB_AdsTestResultLogger interface-typed member - interface references are not modeled
+NotCompared FB_xUnitXmlPublisher interface-typed member - interface references are not modeled
+NotCompared FB_TcUnitRunner method VAR_INST cells sit in the instance and are not modeled
 NotCompared I_AssertMessageFormatter neither members nor a base type declared
-NotCompared FB_AdjustAssertFailureMessageToMax253CharLength function block instance layout is not modeled
-NotCompared FB_AdsAssertMessageFormatter function block instance layout is not modeled
-NotCompared FB_TestSuite function block instance layout is not modeled
-NotCompared FB_MemRingBuffer function block instance layout is not modeled
-NotCompared TON function block instance layout is not modeled
-NotCompared FB_AdsLogStringMessageFifoQueue function block instance layout is not modeled
+NotCompared FB_TestSuite interface-typed member - interface references are not modeled
 Unsupported PlcAppSystemInfo.TComSrvPtr SIZEOF() doesn't know the byte size of type 'ITComObjectServer'
 NotCompared PlcTaskSystemInfo.TaskName displaced by a gap the .tmc does not describe
 NotCompared Global_Variables static members - a program or global variable list, not an instance layout

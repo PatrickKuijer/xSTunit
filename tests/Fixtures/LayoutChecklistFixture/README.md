@@ -99,8 +99,13 @@ type is added here, add it to that list too — a test enforces this.
 
 ## What the compiler settled
 
-Every rule above came back as xStunit already had it, over 60 types and 212
-members with zero disagreements, on the x64 module as much as the x86 one.
+Every rule above came back as xStunit already had it, over 78 types and 332
+members with zero disagreements, on the x64 module as much as the x86 one. The
+count includes the library function blocks in the module, scored by the
+function block layout rules in `wiki/10-function-block-layout.md`; those with
+interface-typed members, method `VAR_INST` cells or several implemented
+interfaces are skipped, each
+with its reason in the committed diff.
 Addresses are sized from the target rather than hardcoded, `POINTER TO` and
 `REFERENCE TO` alike, so the 64-bit module's wider addresses and everything they
 displace land where the compiler put them.

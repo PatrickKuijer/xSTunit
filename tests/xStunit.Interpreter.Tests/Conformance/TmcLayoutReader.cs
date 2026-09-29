@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text.RegularExpressions;
 using System.Xml.Linq;
 
 namespace xStunit.Interpreter.Tests.Conformance
@@ -67,10 +68,13 @@ namespace xStunit.Interpreter.Tests.Conformance
                 dataType.Elements("ArrayInfo").Select(ParseDimension).ToList(),
                 HasProperty(dataType, "PouType", "FunctionBlock"),
                 ParseInt(PropertyValue(dataType, "pack_mode")),
-                dataType.Elements("SubItem").Select(ParseMember).ToList());
+                dataType.Elements("SubItem").Select(s => ParseMember(s, dataType.Element("Name")?.Value)).ToList(),
+                dataType.Elements("Implements").Select(i => i.Value).ToList(),
+                dataType.Element("ExtendsType")?.Value == "PVOID"
+                    || Properties(dataType).Any(p => p.Element("Name")?.Value == "TcPlcInterfaceType"));
         }
 
-        private static DeclaredMemberLayout ParseMember(XElement subItem)
+        private static DeclaredMemberLayout ParseMember(XElement subItem, string ownerName)
         {
             var name = subItem.Element("Name");
             var type = subItem.Element("Type");
@@ -85,7 +89,23 @@ namespace xStunit.Interpreter.Tests.Conformance
                 subItem.Elements("ArrayInfo").Select(ParseDimension).ToList(),
                 ParseInt(bitSize),
                 ParseInt(bitSize?.Attribute("X64")?.Value),
-                ParseInt(subItem.Element("BitOffs")));
+                ParseInt(subItem.Element("BitOffs")),
+                IsMethodInstance(subItem, name?.Value, ownerName));
+        }
+
+        // Either signal alone is enough: the compiler flags some of these cells
+        // with an implicit_inst_var property and leaves others bare, but names
+        // them all __<OWNER>__<METHOD>__<VAR> in upper case.
+        private static bool IsMethodInstance(XElement subItem, string memberName, string ownerName)
+        {
+            if (subItem.Element("Properties")?.Elements("Property")
+                    .Any(p => p.Element("Name")?.Value == "implicit_inst_var") == true)
+                return true;
+
+            return memberName != null && ownerName != null
+                && Regex.IsMatch(
+                    memberName,
+                    "^__" + Regex.Escape(ownerName.ToUpperInvariant()) + "__.+__.+$");
         }
 
         private static DeclaredArrayDimension ParseDimension(XElement arrayInfo) =>

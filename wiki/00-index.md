@@ -19,6 +19,7 @@ ticket still open, API may shift.
 | [07-struct-array-and-builders.md](07-struct-array-and-builders.md) | `STRUCT`/`ARRAY` types, struct boundary `Build()` | built |
 | [08-array-indexing-pointers-and-memcpy.md](08-array-indexing-pointers-and-memcpy.md) | `arr[i]`/`arr[i,j]`, `ADR(x) +/- offset`, `MEMCPY`/`MEMSET`/`MEMMOVE` | built |
 | [09-control-flow-statements.md](09-control-flow-statements.md) | `FOR`/`WHILE`/`REPEAT`/`CASE`/`EXIT`, unary minus | built |
+| [10-function-block-layout.md](10-function-block-layout.md) | `SIZEOF(FB_Type)` / `SIZEOF(fbInstance)` byte-size rules | built |
 
 ## Quick orientation
 

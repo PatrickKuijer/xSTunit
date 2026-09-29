@@ -183,6 +183,122 @@ END_VAR]]></Declaration>
             Assert.Equal("FB_Counter", ast.BaseTypeName);
         }
 
+        private static PouAst ParseHeader(string header, string pouName = "FB_X")
+        {
+            var xml = $@"<?xml version=""1.0"" encoding=""utf-8""?>
+<TcPlcObject Version=""1.1.0.1"">
+  <POU Name=""{pouName}"" Id=""{{a1b2c3d4-0010-4a1a-8b1b-000000000001}}"" SpecialFunc=""None"">
+    <Declaration><![CDATA[{header}
+VAR
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>";
+            return TcPouParser.Parse(xml);
+        }
+
+        [Fact]
+        public void Parse_ImplementsOnTheLineAfterTheHeader_ReadsTheInterface()
+        {
+            var ast = ParseHeader("FUNCTION_BLOCK FB_X\nIMPLEMENTS I_A");
+
+            Assert.Equal(new[] { "I_A" }, ast.ImplementedInterfaces);
+        }
+
+        [Fact]
+        public void Parse_ExtendsAndImplementsAcrossLines_ReadsBoth()
+        {
+            var ast = ParseHeader("FUNCTION_BLOCK FB_X\r\n  EXTENDS FB_B\r\n  IMPLEMENTS I_A,\r\n    I_B");
+
+            Assert.Equal("FB_B", ast.BaseTypeName);
+            Assert.Equal(new[] { "I_A", "I_B" }, ast.ImplementedInterfaces);
+        }
+
+        [Theory]
+        [InlineData("FUNCTION_BLOCK FB_X // was: IMPLEMENTS I_Old")]
+        [InlineData("FUNCTION_BLOCK FB_X (* IMPLEMENTS I_Old *)")]
+        [InlineData("(* IMPLEMENTS I_Old *)\nFUNCTION_BLOCK FB_X")]
+        [InlineData("FUNCTION_BLOCK FB_X // EXTENDS FB_Old\nIMPLEMENTS I_A // , I_Old")]
+        public void Parse_HeaderComments_NeverCreateInterfacesOrBaseTypes(string header)
+        {
+            var ast = ParseHeader(header);
+
+            Assert.DoesNotContain("I_Old", ast.ImplementedInterfaces);
+            Assert.Null(ast.BaseTypeName);
+        }
+
+        // A comment or pragma sitting between header tokens is what actually
+        // needs stripping: left in, it separates the name from its clause and
+        // the clause is silently missed.
+        [Theory]
+        [InlineData("FUNCTION_BLOCK FB_X (* doc *) EXTENDS FB_B", "FB_B", "")]
+        [InlineData("FUNCTION_BLOCK FB_X // doc\nIMPLEMENTS I_A", null, "I_A")]
+        [InlineData("FUNCTION_BLOCK FB_X {attribute 'foo'} EXTENDS FB_B", "FB_B", "")]
+        [InlineData("FUNCTION_BLOCK FB_X EXTENDS FB_B (* doc *) IMPLEMENTS I_A", "FB_B", "I_A")]
+        [InlineData("FUNCTION_BLOCK FB_X EXTENDS FB_B // doc\nIMPLEMENTS I_A", "FB_B", "I_A")]
+        public void Parse_CommentOrPragmaBetweenHeaderTokens_StillReadsTheClauses(
+            string header, string expectedBase, string expectedInterfaces)
+        {
+            var ast = ParseHeader(header);
+
+            Assert.Equal(expectedBase, ast.BaseTypeName);
+            Assert.Equal(expectedInterfaces, string.Join("|", ast.ImplementedInterfaces));
+        }
+
+        [Theory]
+        [InlineData("PUBLIC")]
+        [InlineData("PRIVATE")]
+        [InlineData("PROTECTED")]
+        [InlineData("INTERNAL")]
+        [InlineData("ABSTRACT")]
+        [InlineData("FINAL")]
+        [InlineData("INTERNAL FINAL")]
+        public void Parse_AccessOrInheritanceModifier_StillReadsTheBaseType(string modifiers)
+        {
+            var ast = ParseHeader($"FUNCTION_BLOCK {modifiers} FB_X EXTENDS FB_B IMPLEMENTS I_A");
+
+            Assert.Equal("FB_B", ast.BaseTypeName);
+            Assert.Equal(new[] { "I_A" }, ast.ImplementedInterfaces);
+        }
+
+        [Theory]
+        [InlineData("FUNCTION_BLOCK FB_X", PouKind.FunctionBlock)]
+        [InlineData("PROGRAM Prg_X", PouKind.Program)]
+        [InlineData("FUNCTION F_X : INT", PouKind.Function)]
+        [InlineData("{attribute 'hide'}\nFUNCTION F_X : INT", PouKind.Function)]
+        [InlineData("{attribute 'hide'}\n(* note *)\nPROGRAM Prg_X", PouKind.Program)]
+        [InlineData("{attribute 'hide'}\nFUNCTION_BLOCK FB_X", PouKind.FunctionBlock)]
+        public void Parse_Header_ReadsThePouKind(string header, PouKind expected)
+        {
+            Assert.Equal(expected, ParseHeader(header).Kind);
+        }
+
+        [Theory]
+        [InlineData("FUNCTION_BLOCK FB_Logger IMPLEMENTS I_Logger", "I_Logger")]
+        [InlineData("FUNCTION_BLOCK FB_Logger EXTENDS FB_Base IMPLEMENTS I_A, TcUnit.I_B", "I_A|TcUnit.I_B")]
+        [InlineData("function_block FB_Logger implements I_Logger", "I_Logger")]
+        [InlineData("FUNCTION_BLOCK FB_Logger", "")]
+        public void Parse_ImplementsClause_ReadsTheInterfaceNames(string header, string expected)
+        {
+            var xml = $@"<?xml version=""1.0"" encoding=""utf-8""?>
+<TcPlcObject Version=""1.1.0.1"">
+  <POU Name=""FB_Logger"" Id=""{{a1b2c3d4-0009-4a1a-8b1b-000000000001}}"" SpecialFunc=""None"">
+    <Declaration><![CDATA[{header}
+VAR
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>";
+
+            var ast = TcPouParser.Parse(xml);
+
+            Assert.Equal(expected, string.Join("|", ast.ImplementedInterfaces));
+        }
+
         [Fact]
         public void Parse_ExtendsLibraryQualifiedFunctionBlock_ReadsQualifiedBaseTypeName()
         {

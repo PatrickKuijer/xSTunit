@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using xStunit.Parser;
 
 namespace xStunit.Interpreter
 {
@@ -211,6 +212,7 @@ namespace xStunit.Interpreter
         private readonly TypeRegistry _registry;
         private readonly TargetPlatform _target;
         private readonly Func<string, int> _resolveBound;
+        private readonly HashSet<string> _functionBlocksBeingSized = new HashSet<string>();
 
         // target settles the one width that is not the same on every machine -
         // an address - and is required rather than defaulted, so no layout is
@@ -228,7 +230,13 @@ namespace xStunit.Interpreter
             _resolveBound = resolveBound;
         }
 
-        public (int Size, int Align) SizeOf(string typeName)
+        public (int Size, int Align) SizeOf(string typeName) =>
+            TrySizeOf(typeName)
+            ?? throw new NotSupportedException($"SIZEOF() doesn't know the byte size of type '{typeName}'");
+
+        // Null means the type name is one this class has no rule for at all; a
+        // type it recognises but cannot size still throws.
+        private (int Size, int Align)? TrySizeOf(string typeName)
         {
             var resolved = _registry.ResolveAlias(typeName?.Trim());
             if (resolved == null)
@@ -247,6 +255,10 @@ namespace xStunit.Interpreter
             if (structAst != null)
                 return SizeOfStruct(structAst);
 
+            var functionBlockAst = _registry.Get(resolved);
+            if (functionBlockAst != null)
+                return SizeOfFunctionBlock(functionBlockAst);
+
             if (StringTypeInfo.IsStringType(resolved))
             {
                 // A string's characters are CharWidth-aligned, so a WSTRING
@@ -258,7 +270,7 @@ namespace xStunit.Interpreter
             if (Scalars.TryGetValue(resolved, out var scalar))
                 return (scalar.Size, scalar.Size);
 
-            throw new NotSupportedException($"SIZEOF() doesn't know the byte size of type '{typeName}'");
+            return null;
         }
 
         // Writes value, already known to be of IEC type typeName, into buffer at
@@ -566,6 +578,147 @@ namespace xStunit.Interpreter
 
             return (RoundUp(end, maxAlign), maxAlign);
         }
+
+        // Instance data only: the hidden vtable pointer, one more hidden pointer
+        // when a single interface is implemented, then every inherited and own
+        // member in declaration order, base type first. The rules are documented in
+        // wiki/10-function-block-layout.md.
+        private (int Size, int Align) SizeOfFunctionBlock(PouAst functionBlock)
+        {
+            if (functionBlock.Kind != PouKind.FunctionBlock)
+                throw new NotSupportedException(
+                    $"SIZEOF() only sizes a FUNCTION_BLOCK; '{functionBlock.Name}' is a PROGRAM or FUNCTION");
+
+            if (!_functionBlocksBeingSized.Add(functionBlock.Name))
+                throw new NotSupportedException(
+                    $"SIZEOF() can't size FUNCTION_BLOCK '{functionBlock.Name}': it contains itself");
+
+            try
+            {
+                var address = _target.AddressSize;
+                var end = FunctionBlockHeaderSize(functionBlock);
+                var maxAlign = address;
+                foreach (var placement in FunctionBlockFields(functionBlock))
+                {
+                    end = placement.Offset + placement.Size;
+                    maxAlign = Math.Max(maxAlign, placement.Align);
+                }
+
+                return (RoundUp(end, maxAlign), maxAlign);
+            }
+            finally
+            {
+                _functionBlocksBeingSized.Remove(functionBlock.Name);
+            }
+        }
+
+        // Each declared instance member's placement, past the hidden header.
+        // The header's pointers are not members, so they are not yielded.
+        internal IEnumerable<FieldPlacement> FunctionBlockFields(PouAst functionBlock)
+        {
+            var chain = ExtendsChain(functionBlock);
+            RejectMethodInstanceVariables(functionBlock, chain);
+            var address = _target.AddressSize;
+            var offset = FunctionBlockHeaderSize(functionBlock);
+            var members = chain
+                .SelectMany(pou => _registry.GetDecls(pou.DeclarationText))
+                .Where(decl => IsInstanceSection(decl.Section));
+            foreach (var member in members)
+            {
+                var (size, align) = member.Section == VarSection.InOut
+                    ? (address, address)
+                    : SizeOfMember(functionBlock, member);
+                offset = RoundUp(offset, align);
+                yield return new FieldPlacement(member, offset, size, align);
+                offset += size;
+            }
+        }
+
+        private void RejectMethodInstanceVariables(PouAst functionBlock, IEnumerable<PouAst> chain)
+        {
+            foreach (var pou in chain)
+            {
+                var method = pou.Methods.FirstOrDefault(m =>
+                    _registry.GetDecls(m.DeclarationText).Any(d => d.Section == VarSection.MethodInstance));
+                if (method != null)
+                    throw new NotSupportedException(
+                        $"SIZEOF() can't size FUNCTION_BLOCK '{functionBlock.Name}': method '{method.Name}' " +
+                        $"of '{pou.Name}' declares VAR_INST, which is stored in the instance and not modelled");
+            }
+        }
+
+        private int FunctionBlockHeaderSize(PouAst functionBlock)
+        {
+            var interfaceCount = ExtendsChain(functionBlock).Sum(pou => pou.ImplementedInterfaces.Count);
+            if (interfaceCount > 1)
+                throw new NotSupportedException(
+                    $"SIZEOF() can't size FUNCTION_BLOCK '{functionBlock.Name}': the layout of a block " +
+                    $"implementing {interfaceCount} interfaces is not verified");
+
+            return _target.AddressSize * (1 + interfaceCount);
+        }
+
+        private List<PouAst> ExtendsChain(PouAst functionBlock)
+        {
+            var chain = new List<PouAst>();
+            var visited = new HashSet<string>();
+            var current = functionBlock;
+            while (current != null)
+            {
+                if (!visited.Add(current.Name))
+                    throw new NotSupportedException(
+                        $"SIZEOF() can't size FUNCTION_BLOCK '{functionBlock.Name}': " +
+                        $"its EXTENDS chain loops back to '{current.Name}'");
+
+                chain.Add(current);
+                if (current.BaseTypeName == null)
+                    break;
+
+                var baseType = _registry.Get(current.BaseTypeName);
+                if (baseType == null)
+                    throw new NotSupportedException(
+                        $"SIZEOF() can't size FUNCTION_BLOCK '{functionBlock.Name}': its base type " +
+                        $"'{current.BaseTypeName}' is not a loaded FUNCTION_BLOCK, and native library " +
+                        "function blocks are not modelled");
+
+                current = baseType;
+            }
+
+            chain.Reverse();
+            return chain;
+        }
+
+        private (int Size, int Align) SizeOfMember(PouAst functionBlock, VarDecl member)
+        {
+            var resolved = _registry.ResolveAlias(member.TypeName?.Trim());
+            if (resolved != null && _registry.GetInterface(resolved) != null)
+                throw new NotSupportedException(
+                    $"SIZEOF() can't size FUNCTION_BLOCK '{functionBlock.Name}': member '{member.Name}' " +
+                    $"has interface type '{member.TypeName}', which is not modelled");
+
+            (int Size, int Align)? sized;
+            try
+            {
+                sized = TrySizeOf(member.TypeName);
+            }
+            catch (NotSupportedException ex)
+            {
+                throw new NotSupportedException(
+                    $"SIZEOF() can't size FUNCTION_BLOCK '{functionBlock.Name}': member '{member.Name}' " +
+                    $"of type '{member.TypeName}': {ex.Message}", ex);
+            }
+
+            return sized ?? throw new NotSupportedException(
+                $"SIZEOF() can't size FUNCTION_BLOCK '{functionBlock.Name}': member '{member.Name}' " +
+                $"of type '{member.TypeName}' has no modelled layout; native library function " +
+                "blocks are not modelled");
+        }
+
+        private static bool IsInstanceSection(VarSection section) =>
+            section == VarSection.Local ||
+            section == VarSection.Input ||
+            section == VarSection.Output ||
+            section == VarSection.InOut;
 
         // An absent pack_mode means no cap, i.e. natural alignment. A present
         // one caps every field's alignment at that many bytes; 1 is fully

@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.RegularExpressions;
 using xStunit.Parser;
 
 namespace xStunit.Interpreter.Tests.Conformance
@@ -47,13 +48,15 @@ namespace xStunit.Interpreter.Tests.Conformance
             var registry = BuildRegistry(module, sourceDeclarations);
             var layout = new TypeLayout(registry, target);
 
+            var interfaces = InterfaceNames(module);
             var findings = new List<LayoutFinding>();
             var comparedTypes = 0;
+            var comparedTypeNames = new List<string>();
             var comparedMembers = 0;
 
             foreach (var type in module.Types)
             {
-                var skipReason = SkipReason(type);
+                var skipReason = SkipReason(type, interfaces);
                 if (skipReason != null)
                 {
                     findings.Add(LayoutFinding.NotCompared(type.Name, null, skipReason));
@@ -64,12 +67,16 @@ namespace xStunit.Interpreter.Tests.Conformance
                     ? CompareTypeSize(layout, type, findings)
                     : CompareStruct(layout, registry, type, target, findings);
                 if (compared.Reached)
+                {
                     comparedTypes++;
+                    comparedTypeNames.Add(type.Name);
+                }
                 comparedMembers += compared.Members;
             }
 
             return new LayoutReport(
-                module.ModuleName, module.TargetPlatform, module.Types.Count, comparedTypes, comparedMembers, findings);
+                module.ModuleName, module.TargetPlatform, module.Types.Count, comparedTypes, comparedMembers, findings,
+                comparedTypeNames);
         }
 
         // Enums and aliases carry no members of their own, so all there is to
@@ -101,8 +108,10 @@ namespace xStunit.Interpreter.Tests.Conformance
             TargetPlatform target,
             List<LayoutFinding> findings)
         {
-            var structAst = registry.GetStruct(type.Name);
-            var (placements, failedIndex, failureDetail) = PlaceFields(layout, structAst);
+            var declared = type.IsFunctionBlock
+                ? layout.FunctionBlockFields(registry.Get(type.Name))
+                : layout.Fields(registry.GetStruct(type.Name));
+            var (placements, failedIndex, failureDetail) = PlaceFields(declared);
 
             var gapIndex = FirstMemberBehindAnUndescribedGap(type, target);
             var stoppedByAGap = gapIndex >= 0 && (failedIndex < 0 || gapIndex < failedIndex);
@@ -200,10 +209,10 @@ namespace xStunit.Interpreter.Tests.Conformance
         // point of the run, so the walk is driven by hand rather than through a
         // ToList() that would attribute the failure to the whole type.
         private static (IReadOnlyList<FieldPlacement> Placements, int FailedIndex, string FailureDetail) PlaceFields(
-            TypeLayout layout, StructAst structAst)
+            IEnumerable<FieldPlacement> declared)
         {
             var placements = new List<FieldPlacement>();
-            using (var fields = layout.Fields(structAst).GetEnumerator())
+            using (var fields = declared.GetEnumerator())
             {
                 while (true)
                 {
@@ -225,8 +234,12 @@ namespace xStunit.Interpreter.Tests.Conformance
         private static TypeRegistry BuildRegistry(
             ModuleLayout module, IReadOnlyDictionary<string, string> sourceDeclarations)
         {
-            var structs = module.Types
-                .Where(type => SkipReason(type) == null && type.Members.Count > 0)
+            var interfaces = InterfaceNames(module);
+            var comparable = module.Types
+                .Where(type => SkipReason(type, interfaces) == null && (type.Members.Count > 0 || type.IsFunctionBlock))
+                .ToList();
+            var structs = comparable
+                .Where(type => !type.IsFunctionBlock)
                 .Select(type => ToStructAst(type, sourceDeclarations));
 
             // Enums and aliases go in as ALIAS entries, which is how the
@@ -236,8 +249,48 @@ namespace xStunit.Interpreter.Tests.Conformance
             foreach (var type in module.Types.Where(t => t.Name != null && t.Members.Count == 0 && t.BaseTypeName != null))
                 aliases[type.Name] = AliasTarget(type);
 
-            return new TypeRegistry(Array.Empty<PouAst>(), structs, null, aliases);
+            var functionBlocks = comparable
+                .Where(type => type.IsFunctionBlock)
+                .Select(type => ToPouAst(type, aliases))
+                .ToList();
+
+            return new TypeRegistry(functionBlocks, structs, null, aliases);
         }
+
+        private static IReadOnlySet<string> InterfaceNames(ModuleLayout module) =>
+            new HashSet<string>(
+                module.Types.Where(t => t.IsInterface && t.Name != null).Select(t => t.Name),
+                StringComparer.OrdinalIgnoreCase);
+
+        // A block's declaration text is what the layout math reads its members
+        // from, so the .tmc's members are written back out as ST lines. A type
+        // the declaration grammar cannot spell - a subrange, an array of
+        // pointers - goes in under a synthetic alias instead, which resolves
+        // to exactly the type text the .tmc gave.
+        private static PouAst ToPouAst(DeclaredTypeLayout type, Dictionary<string, string> aliases)
+        {
+            var lines = new List<string> { "VAR" };
+            foreach (var member in type.Members)
+            {
+                var typeText = IecTypeName(member.TypeName, member.IsPointer, member.IsReference, member.ArrayDimensions);
+                if (!DeclarableTypeText.IsMatch(typeText))
+                {
+                    var alias = $"__member_type_{aliases.Count}";
+                    aliases[alias] = typeText;
+                    typeText = alias;
+                }
+
+                lines.Add($"{member.Name} : {typeText};");
+            }
+
+            lines.Add("END_VAR");
+            return new PouAst(
+                type.Name, null, string.Join("\n", lines), string.Empty, new List<MethodAst>(),
+                implementedInterfaces: type.ImplementedInterfaces);
+        }
+
+        private static readonly Regex DeclarableTypeText = new Regex(
+            @"^(?:\w+|POINTER TO \w+|REFERENCE TO \w+|W?STRING\(\d+\))$", RegexOptions.Compiled);
 
         // TwinCAT's handle types (RTS_IEC_HANDLE and friends) alias a pointer,
         // not the pointed-to type, so the pointer has to survive into the alias
@@ -292,14 +345,18 @@ namespace xStunit.Interpreter.Tests.Conformance
 
         // Why a declared type is outside what this comparison can say anything
         // about; null when it is fair game.
-        private static string SkipReason(DeclaredTypeLayout type)
+        private static string SkipReason(DeclaredTypeLayout type, IReadOnlySet<string> interfaces)
         {
             if (type.Name == null)
                 return "unnamed declared type";
-            if (type.IsFunctionBlock)
-                return "function block instance layout is not modeled";
-            if (type.Members.Count == 0)
+            if (type.Members.Count == 0 && !type.IsFunctionBlock)
                 return type.BaseTypeName == null ? "neither members nor a base type declared" : null;
+            if (type.ImplementedInterfaces.Count > 1)
+                return $"implements {type.ImplementedInterfaces.Count} interfaces - no compiler output to verify their pointer layout";
+            if (type.Members.Any(m => m.IsMethodInstance))
+                return "method VAR_INST cells sit in the instance and are not modeled";
+            if (type.IsFunctionBlock && type.Members.Any(m => m.TypeName != null && interfaces.Contains(m.TypeName)))
+                return "interface-typed member - interface references are not modeled";
             if (type.Members.Any(m => m.IsStatic))
                 return "static members - a program or global variable list, not an instance layout";
             if (type.Members.Any(m => m.BitOffset == null))

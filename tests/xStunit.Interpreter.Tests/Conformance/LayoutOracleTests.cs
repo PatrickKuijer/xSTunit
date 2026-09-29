@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.IO;
 using Xunit;
 
@@ -83,17 +84,135 @@ namespace xStunit.Interpreter.Tests.Conformance
             Assert.DoesNotContain(Compare(X86Module).Findings, f => f.TypeName == "U_ExpectedOrActual");
         }
 
-        // A function block's members start past an instance header the compiler
-        // adds and xStunit does not model, so comparing one would report a
-        // constant offset shift that says nothing about any layout rule.
+        // A function block's members start past the hidden vtable pointer, and
+        // past one more pointer per implemented interface. Scoring a block
+        // therefore pins both header rules against the compiler's own offsets:
+        // a model that dropped either would shift every member behind it.
         [Fact]
-        public void Compare_FunctionBlock_IsReportedAsNotCompared()
+        public void Compare_FunctionBlock_IsScoredAgainstTheCompilersOffsets()
         {
-            var finding = Assert.Single(
-                Compare(X64Module).Findings, f => f.TypeName == "FB_AddLrealInt");
+            var report = Compare(X64Module);
 
+            Assert.DoesNotContain(report.Findings, f => f.TypeName == "FB_AddLrealInt");
+            Assert.Contains("FB_AddLrealInt", report.ComparedTypeNames);
+        }
+
+        // FB_TestResults implements I_TestResults, so its first member sits
+        // behind two pointers: the compiler declares it at byte 8 on this
+        // 32-bit module.
+        [Fact]
+        public void Compare_X86FunctionBlockImplementingAnInterface_AgreesWithTheCompiler()
+        {
+            var report = Compare(X86Module);
+
+            Assert.DoesNotContain(report.Findings, f => f.TypeName == "FB_TestResults");
+            Assert.Contains("FB_TestResults", report.ComparedTypeNames);
+        }
+
+        // A method's VAR_INST cell is stored in the instance behind the
+        // declared members. Sizing only the declared members would agree with
+        // the compiler about the offsets and disagree about the size, or agree
+        // with both by padding coincidence, so a block carrying one is not
+        // scored at all.
+        [Fact]
+        public void Compare_FunctionBlockWithMethodInstanceCells_IsReportedAsNotCompared()
+        {
+            var report = Compare(X86Module);
+
+            var finding = Assert.Single(report.Findings, f => f.TypeName == "FB_TcUnitRunner");
             Assert.Equal(LayoutFindingKind.NotCompared, finding.Kind);
-            Assert.Contains("function block", finding.Detail);
+            Assert.Contains("method VAR_INST", finding.Detail);
+            Assert.DoesNotContain("FB_TcUnitRunner", report.ComparedTypeNames);
+        }
+
+        [Theory]
+        [InlineData("TwinCAT RT (x64)", 16, 192)]
+        [InlineData("TwinCAT RT (x86)", 8, 96)]
+        public void Compare_FunctionBlockImplementingAnInterface_ExpectsTheFirstMemberBehindTwoPointers(
+            string targetPlatform, int firstMemberByte, int typeBits)
+        {
+            var report = CompareFunctionBlock(
+                targetPlatform, firstMemberByte * 8, typeBits, new[] { "I_Logger" }, memberTypeName: "DINT");
+
+            Assert.Empty(report.Mismatches);
+            Assert.Equal(1, report.ComparedMemberCount);
+        }
+
+        [Fact]
+        public void Compare_FunctionBlockWithTheWrongHeader_ReportsTheShiftedMember()
+        {
+            var report = CompareFunctionBlock(
+                "TwinCAT RT (x64)", 8 * 8, 192, new[] { "I_Logger" }, memberTypeName: "DINT");
+
+            Assert.Contains(report.Mismatches, f => f.Subject == "FB_Synthetic.n");
+        }
+
+        [Fact]
+        public void Compare_FunctionBlockImplementingSeveralInterfaces_IsReportedAsNotCompared()
+        {
+            var report = CompareFunctionBlock(
+                "TwinCAT RT (x64)", 24 * 8, 224, new[] { "I_A", "I_B" }, memberTypeName: "DINT");
+
+            var finding = Assert.Single(report.Findings, f => f.TypeName == "FB_Synthetic");
+            Assert.Equal(LayoutFindingKind.NotCompared, finding.Kind);
+            Assert.Contains("interfaces", finding.Detail);
+        }
+
+        [Fact]
+        public void Compare_FunctionBlockWithAnInterfaceMember_IsReportedAsNotCompared()
+        {
+            var report = CompareFunctionBlock(
+                "TwinCAT RT (x64)", 8 * 8, 192, new string[0], memberTypeName: "I_Logger", declareInterface: true);
+
+            var finding = Assert.Single(report.Findings, f => f.TypeName == "FB_Synthetic");
+            Assert.Equal(LayoutFindingKind.NotCompared, finding.Kind);
+            Assert.Contains("interface-typed member", finding.Detail);
+        }
+
+        private static LayoutReport CompareFunctionBlock(
+            string targetPlatform,
+            int declaredMemberBitOffset,
+            int typeBits,
+            string[] implementedInterfaces,
+            string memberTypeName,
+            bool declareInterface = false)
+        {
+            var member = new DeclaredMemberLayout(
+                "n",
+                memberTypeName,
+                isPointer: false,
+                isReference: false,
+                isStatic: false,
+                arrayDimensions: new DeclaredArrayDimension[0],
+                bitSize: 32,
+                bitSizeX64: null,
+                bitOffset: declaredMemberBitOffset);
+            var functionBlock = new DeclaredTypeLayout(
+                "FB_Synthetic",
+                bitSize: typeBits,
+                baseTypeName: null,
+                baseTypeIsPointer: false,
+                arrayDimensions: new DeclaredArrayDimension[0],
+                isFunctionBlock: true,
+                packMode: null,
+                members: new[] { member },
+                implementedInterfaces: implementedInterfaces);
+            var types = new List<DeclaredTypeLayout> { functionBlock };
+            if (declareInterface)
+            {
+                types.Add(new DeclaredTypeLayout(
+                    memberTypeName,
+                    bitSize: 32,
+                    baseTypeName: "PVOID",
+                    baseTypeIsPointer: false,
+                    arrayDimensions: new DeclaredArrayDimension[0],
+                    isFunctionBlock: false,
+                    packMode: null,
+                    members: new DeclaredMemberLayout[0],
+                    isInterface: true));
+            }
+
+            return LayoutOracle.Compare(new ModuleLayout("Synthetic", targetPlatform, types));
         }
 
         // A type name xStunit has no size rule for is a gap in the interpreter,

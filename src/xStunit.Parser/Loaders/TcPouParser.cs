@@ -8,8 +8,16 @@ namespace xStunit.Parser
 {
     public static class TcPouParser
     {
-        private static readonly Regex ExtendsPattern = new Regex(
-            @"FUNCTION_BLOCK(?:\s+(?:ABSTRACT|FINAL))*\s+\S+\s+EXTENDS\s+(?<baseType>[\w.]+)",
+        private static readonly Regex HeaderComments = new Regex(
+            @"\(\*.*?\*\)|//[^\r\n]*|\{[^}]*\}", RegexOptions.Compiled | RegexOptions.Singleline);
+
+        private static readonly Regex KindPattern = new Regex(
+            @"^\s*(?<kind>FUNCTION_BLOCK|PROGRAM|FUNCTION)\b", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+        private static readonly Regex FunctionBlockHeaderPattern = new Regex(
+            @"FUNCTION_BLOCK(?:\s+(?:PUBLIC|PRIVATE|PROTECTED|INTERNAL|ABSTRACT|FINAL))*\s+\S+" +
+            @"(?:\s+EXTENDS\s+(?<baseType>[\w.]+))?" +
+            @"(?:\s+IMPLEMENTS\s+(?<interface>[\w.]+)(?:\s*,\s*(?<interface>[\w.]+))*)?",
             RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
         private static readonly (Regex Pattern, string ConstructName)[] RejectedConstructs =
@@ -42,13 +50,35 @@ namespace xStunit.Parser
             var implementationText = st.Value;
             RejectIfUnsupported(name, implementationText);
 
-            var extendsMatch = ExtendsPattern.Match(declarationText);
-            var baseTypeName = extendsMatch.Success ? extendsMatch.Groups["baseType"].Value : null;
+            var header = HeaderComments.Replace(declarationText, " ");
+            var headerMatch = FunctionBlockHeaderPattern.Match(header);
+            var baseTypeName = headerMatch.Groups["baseType"].Success ? headerMatch.Groups["baseType"].Value : null;
+            var implementedInterfaces = headerMatch.Groups["interface"].Captures
+                .Cast<Capture>().Select(c => c.Value).ToList();
 
             var methods = pou.Elements("Method").Select(ParseMethod).ToList();
             var properties = pou.Elements("Property").Select(ParseProperty).ToList();
 
-            return new PouAst(name, baseTypeName, declarationText, implementationText, methods, properties, BodyStartLine(st));
+            return new PouAst(
+                name, baseTypeName, declarationText, implementationText, methods, properties, BodyStartLine(st),
+                implementedInterfaces, KindOf(header));
+        }
+
+        private static PouKind KindOf(string commentFreeHeader)
+        {
+            var match = KindPattern.Match(commentFreeHeader);
+            if (!match.Success)
+                return PouKind.FunctionBlock;
+
+            switch (match.Groups["kind"].Value.ToUpperInvariant())
+            {
+                case "PROGRAM":
+                    return PouKind.Program;
+                case "FUNCTION":
+                    return PouKind.Function;
+                default:
+                    return PouKind.FunctionBlock;
+            }
         }
 
         private static MethodAst ParseMethod(XElement method)

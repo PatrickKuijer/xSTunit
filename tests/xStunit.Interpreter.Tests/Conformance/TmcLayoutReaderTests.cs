@@ -207,6 +207,47 @@ namespace xStunit.Interpreter.Tests.Conformance
             Assert.False(types[1].IsFunctionBlock);
         }
 
+        // A method's VAR_INST cell is stored in the instance but flagged, so a
+        // consumer can tell it from a declared member.
+        [Fact]
+        public void Parse_MethodInstanceCell_IsFlaggedFromTheItemsOwnProperties()
+        {
+            const string xml = @"<?xml version=""1.0"" encoding=""utf-8""?>
+<TcModuleClass><DataTypes>
+<DataType><Name>FB_Holder</Name><BitSize>128</BitSize>
+<SubItem><Name>n</Name><Type>DINT</Type><BitSize>32</BitSize><BitOffs>64</BitOffs></SubItem>
+<SubItem><Name>__FB_HOLDER__RUN__TICKS</Name><Type>DINT</Type><BitSize>32</BitSize><BitOffs>96</BitOffs><Properties><Property><Name>implicit_inst_var</Name></Property></Properties></SubItem>
+<Properties><Property><Name>PouType</Name><Value>FunctionBlock</Value></Property></Properties></DataType>
+</DataTypes></TcModuleClass>";
+
+            var members = TmcLayoutReader.Parse(xml).Types[0].Members;
+
+            Assert.False(members[0].IsMethodInstance);
+            Assert.True(members[1].IsMethodInstance);
+        }
+
+        // The compiler does not always flag a VAR_INST cell with a property, so
+        // the __<OWNER>__<METHOD>__<VAR> name is the signal that has to hold on
+        // its own. A member merely starting with underscores is not one.
+        [Fact]
+        public void Parse_MethodInstanceCellWithoutProperty_IsFlaggedFromItsName()
+        {
+            const string xml = @"<?xml version=""1.0"" encoding=""utf-8""?>
+<TcModuleClass><DataTypes>
+<DataType><Name Namespace=""TcUnit"">FB_Holder</Name><BitSize>192</BitSize>
+<SubItem><Name>__private</Name><Type>DINT</Type><BitSize>32</BitSize><BitOffs>64</BitOffs></SubItem>
+<SubItem><Name>__FB_OTHER__RUN__TICKS</Name><Type>DINT</Type><BitSize>32</BitSize><BitOffs>96</BitOffs></SubItem>
+<SubItem><Name>__FB_HOLDER__RUN__TICKS</Name><Type>DINT</Type><BitSize>32</BitSize><BitOffs>128</BitOffs></SubItem>
+<Properties><Property><Name>PouType</Name><Value>FunctionBlock</Value></Property></Properties></DataType>
+</DataTypes></TcModuleClass>";
+
+            var members = TmcLayoutReader.Parse(xml).Types[0].Members;
+
+            Assert.False(members[0].IsMethodInstance);
+            Assert.False(members[1].IsMethodInstance);
+            Assert.True(members[2].IsMethodInstance);
+        }
+
         // A .tmc for a project declaring nothing of its own is still a valid
         // file; a consumer should get an empty list rather than a null one.
         [Fact]

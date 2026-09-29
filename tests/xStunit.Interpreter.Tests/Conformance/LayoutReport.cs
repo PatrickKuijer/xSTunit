@@ -15,8 +15,10 @@ namespace xStunit.Interpreter.Tests.Conformance
             int declaredTypeCount,
             int comparedTypeCount,
             int comparedMemberCount,
-            IReadOnlyList<LayoutFinding> findings)
+            IReadOnlyList<LayoutFinding> findings,
+            IReadOnlyList<string> comparedTypeNames = null)
         {
+            ComparedTypeNames = comparedTypeNames ?? new string[0];
             ModuleName = moduleName;
             TargetPlatform = targetPlatform;
             DeclaredTypeCount = declaredTypeCount;
@@ -33,6 +35,10 @@ namespace xStunit.Interpreter.Tests.Conformance
 
         // How many of them xStunit's layout math was actually run against.
         public int ComparedTypeCount { get; }
+
+        // Which types those were, so a test can require that a type was scored
+        // rather than merely absent from the findings.
+        public IReadOnlyList<string> ComparedTypeNames { get; }
 
         // How many members were placed against a compiler-declared offset - the
         // denominator any conformance claim from this report has to quote. The

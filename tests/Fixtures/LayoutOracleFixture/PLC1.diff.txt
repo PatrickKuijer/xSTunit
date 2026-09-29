@@ -1,7 +1,6 @@
 module PLC1 target TwinCAT RT (x64)
-compared 5 of 10 declared types, 64 members
+compared 6 of 10 declared types, 67 members
 sizes and offsets in bits
-NotCompared FB_AddLrealInt function block instance layout is not modeled
 Unsupported PlcAppSystemInfo.TComSrvPtr SIZEOF() doesn't know the byte size of type 'ITComObjectServer'
 NotCompared PlcTaskSystemInfo.TaskName displaced by a gap the .tmc does not describe
 NotCompared MAIN static members - a program or global variable list, not an instance layout

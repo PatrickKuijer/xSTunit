@@ -169,13 +169,12 @@ namespace xStunit.Interpreter
         }
 
         // Reads a VAR_* section header and the section it opens, ignoring any
-        // CONSTANT/RETAIN/PERSISTENT modifiers trailing it. The modifiers
-        // change nothing but the section a field lands in - no write-
-        // protection, retain or persistence semantics are modelled - but the
-        // header they sit on has to be recognized anyway. Unrecognized, it leaves no section open, and
-        // every declaration under it is dropped without a word: each later use
-        // reports "Unknown variable", pointing at the use rather than at the
-        // block that never opened.
+        // CONSTANT/RETAIN/PERSISTENT modifiers trailing it. No write-
+        // protection, retain or persistence semantics are modelled, but the
+        // header they sit on has to be recognized anyway. Unrecognized, it
+        // leaves no section open, and every declaration under it is dropped
+        // without a word: each later use reports "Unknown variable", pointing
+        // at the use rather than at the block that never opened.
         private static bool TryReadSectionHeader(string line, out VarSection section)
         {
             var space = line.IndexOfAny(new[] { ' ', '\t' });

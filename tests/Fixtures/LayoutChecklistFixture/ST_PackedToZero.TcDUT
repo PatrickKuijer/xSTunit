@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4026.18">
+  <DUT Name="ST_PackedToZero" Id="{c0de1a70-0000-4000-8000-000000000012}">
+    <Declaration><![CDATA[// Layout checklist: an explicit pack_mode '0' packs without gaps, like '1'.
+// The DINT lands at 1 - at 4 the pragma is being read as though it were absent.
+{attribute 'pack_mode' := '0'}
+TYPE ST_PackedToZero :
+STRUCT
+	leadIn : BYTE;
+	wide : DINT;
+	tail : BYTE;
+END_STRUCT
+END_TYPE
+]]></Declaration>
+  </DUT>
+</TcPlcObject>

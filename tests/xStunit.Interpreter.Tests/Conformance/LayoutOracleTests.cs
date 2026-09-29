@@ -169,7 +169,7 @@ namespace xStunit.Interpreter.Tests.Conformance
                 baseTypeIsPointer: false,
                 arrayDimensions: new DeclaredArrayDimension[0],
                 isFunctionBlock: false,
-                packMode: 0,
+                packMode: null,
                 members: new[]
                 {
                     DeclaredDint("leadIn", declaredLeadInBits, bitOffset: 0),
@@ -221,7 +221,7 @@ namespace xStunit.Interpreter.Tests.Conformance
                 baseTypeIsPointer: false,
                 arrayDimensions: new DeclaredArrayDimension[0],
                 isFunctionBlock: false,
-                packMode: 0,
+                packMode: null,
                 members: new[] { member });
 
             var report = LayoutOracle.Compare(new ModuleLayout("Synthetic", targetPlatform, new[] { type }));

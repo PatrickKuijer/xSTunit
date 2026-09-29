@@ -10,11 +10,27 @@ namespace xStunit.Interpreter.Tests
     public class StructDeclParserTests
     {
         [Fact]
-        public void Parse_NoPackModeAttribute_DefaultsToZero()
+        public void Parse_NoPackModeAttribute_LeavesPackModeUnset()
         {
             var structAst = StructDeclParser.Parse(@"TYPE ST_Point :
 STRUCT
 	x : DINT;
+END_STRUCT
+END_TYPE");
+
+            Assert.Null(structAst.PackMode);
+        }
+
+        // An explicit '0' is a pragma TwinCAT honours as "no gaps", so it must
+        // stay distinguishable from no pragma at all, which means natural
+        // alignment.
+        [Fact]
+        public void Parse_ExplicitPackModeZero_IsCapturedRatherThanReadAsAbsent()
+        {
+            var structAst = StructDeclParser.Parse(@"{attribute 'pack_mode' := '0'}
+TYPE ST_Packed0 :
+STRUCT
+	bFlag : BOOL;
 END_STRUCT
 END_TYPE");
 

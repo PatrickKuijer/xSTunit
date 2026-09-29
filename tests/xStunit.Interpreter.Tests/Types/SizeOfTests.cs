@@ -355,6 +355,26 @@ END_TYPE");
             Assert.Equal(16, result);
         }
 
+        // TwinCAT reads an explicit pack_mode '0' as "aligned without gaps",
+        // the same as '1' - measured at 3 on a 3.1.4026 target. Conflating it
+        // with an absent pragma pads the INT out to offset 2 and gives 4.
+        [Fact]
+        public void SizeOf_ExplicitPackModeZero_PacksLikePackModeOne()
+        {
+            var structType = StructDeclParser.Parse(@"{attribute 'pack_mode' := '0'}
+TYPE ST_Packed0 :
+STRUCT
+	bFlag : BOOL;
+	nValue : INT;
+END_STRUCT
+END_TYPE");
+            var (engine, _, frame) = NewHolder("VAR\n\tm : ST_Packed0;\nEND_VAR", new[] { structType });
+
+            var result = engine.Evaluate(Parser.ParseExpression("SIZEOF(m)"), frame);
+
+            Assert.Equal(3, result);
+        }
+
         [Fact]
         public void SizeOf_StructFieldOfEnumType_ComputesRecursively()
         {

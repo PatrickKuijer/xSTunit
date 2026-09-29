@@ -117,7 +117,7 @@ namespace xStunit.Interpreter.Tests.Conformance
             bool baseTypeIsPointer,
             IReadOnlyList<DeclaredArrayDimension> arrayDimensions,
             bool isFunctionBlock,
-            int packMode,
+            int? packMode,
             IReadOnlyList<DeclaredMemberLayout> members)
         {
             Name = name;
@@ -165,8 +165,9 @@ namespace xStunit.Interpreter.Tests.Conformance
 
         /// <summary>
         /// The <c>{attribute 'pack_mode' := 'N'}</c> cap the type was compiled
-        /// with, in bytes; 0 when the type carries no pragma and every member
-        /// keeps its natural alignment.
+        /// with, in bytes; null when the type carries no pragma and every member
+        /// keeps its natural alignment. An explicit 0 is a pragma in its own
+        /// right, packing without gaps like 1.
         /// </summary>
         /// <remarks>
         /// The compiler writes the pragma into the file alongside the layout it
@@ -174,7 +175,7 @@ namespace xStunit.Interpreter.Tests.Conformance
         /// was packed. Without it, a packed type read back as naturally aligned
         /// disagrees with its own declared offsets.
         /// </remarks>
-        public int PackMode { get; }
+        public int? PackMode { get; }
 
         public IReadOnlyList<DeclaredMemberLayout> Members { get; }
     }

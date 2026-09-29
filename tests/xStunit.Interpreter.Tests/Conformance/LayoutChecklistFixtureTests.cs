@@ -130,15 +130,28 @@ namespace xStunit.Interpreter.Tests.Conformance
                 ("tail", 6, 1));
         }
 
+        // An explicit pack_mode '0' means "aligned without gaps", the same as
+        // '1': the DINT sits at 1 and the type is 6 bytes. Read as an absent
+        // pragma, the DINT would sit at 4 and the type would be 12.
+        [Fact]
+        public void PackedToZero_PacksWithoutGapsRatherThanAligningNaturally()
+        {
+            AssertLayout("ST_PackedToZero", 6,
+                ("leadIn", 0, 1),
+                ("wide", 1, 4),
+                ("tail", 5, 1));
+        }
+
         // The pragma has to survive from the ST source into the AST, because
         // a .tmc records the layout a struct ended up with and never the
         // pragma that produced it - the source is the only place the oracle
         // can learn a struct was packed at all.
         [Fact]
-        public void PackedOuter_CarriesItsPackModeOutOfTheSource()
+        public void PackedFixtures_CarryTheirPackModeOutOfTheSource()
         {
             Assert.Equal(1, Registry.GetStruct("ST_PackedOuter").PackMode);
-            Assert.Equal(0, Registry.GetStruct("ST_NestedNatural").PackMode);
+            Assert.Equal(0, Registry.GetStruct("ST_PackedToZero").PackMode);
+            Assert.Null(Registry.GetStruct("ST_NestedNatural").PackMode);
         }
 
         // Array stride is the element size rounded up to the element's own

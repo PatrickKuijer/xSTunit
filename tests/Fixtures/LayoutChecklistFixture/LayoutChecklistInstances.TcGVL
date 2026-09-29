@@ -14,6 +14,7 @@ VAR_GLOBAL
 	nestedNatural : ST_NestedNatural;
 	packedOuter : ST_PackedOuter;
 	packedToTwo : ST_PackedToTwo;
+	packedToZero : ST_PackedToZero;
 	trailingPadding : ST_TrailingPadding;
 	arrayStride : ST_ArrayStride;
 	stringSizes : ST_StringSizes;

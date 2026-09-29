@@ -119,7 +119,22 @@ namespace xStunit.Interpreter.Tests.Conformance
             var types = TmcLayoutReader.Parse(xml).Types;
 
             Assert.Equal(2, types[0].PackMode);
-            Assert.Equal(0, types[1].PackMode);
+            Assert.Null(types[1].PackMode);
+        }
+
+        // An explicit pack_mode 0 packs without gaps, so reading the property
+        // back as "absent" would score a correctly packed type as a mismatch.
+        [Fact]
+        public void Parse_ExplicitPackModeZero_IsReadAsAPragmaRatherThanAsAbsent()
+        {
+            const string xml = @"<?xml version=""1.0"" encoding=""utf-8""?>
+<TcModuleClass><DataTypes>
+<DataType><Name>ST_PackedToZero</Name><BitSize>48</BitSize>
+<SubItem><Name>wide</Name><Type>DINT</Type><BitSize>32</BitSize><BitOffs>8</BitOffs></SubItem>
+<Properties><Property><Name>pack_mode</Name><Value>0</Value></Property></Properties></DataType>
+</DataTypes></TcModuleClass>";
+
+            Assert.Equal(0, Assert.Single(TmcLayoutReader.Parse(xml).Types).PackMode);
         }
 
         // A handle type aliases a POINTER TO its base type, so dropping the

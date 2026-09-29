@@ -12,10 +12,11 @@ namespace xStunit.Interpreter
 
         // From the {attribute 'pack_mode' := 'N'} pragma preceding the TYPE
         // header: a cap, in bytes, on the alignment any field may impose, so
-        // pack_mode 1 byte-packs the struct entirely. 0 means no pragma was
-        // present and each field keeps its natural alignment. Consumed by
-        // TypeLayout.PackBound.
-        public int PackMode { get; }
+        // pack_mode 1 byte-packs the struct entirely - and so does an explicit
+        // 0, which TwinCAT reads as "aligned without gaps". Null means no
+        // pragma was present and each field keeps its natural alignment.
+        // Consumed by TypeLayout.PackBound.
+        public int? PackMode { get; }
 
         // A UNION overlays its fields: every one starts at offset 0, and the
         // type is as wide as its widest field and imposes that field's
@@ -23,7 +24,7 @@ namespace xStunit.Interpreter
         // says so - the field list alone reads as a struct.
         public bool IsUnion { get; }
 
-        public StructAst(string name, IReadOnlyList<VarDecl> fields, int packMode = 0, bool isUnion = false)
+        public StructAst(string name, IReadOnlyList<VarDecl> fields, int? packMode = null, bool isUnion = false)
         {
             Name = name;
             Fields = fields;

@@ -253,7 +253,7 @@ namespace xStunit.Interpreter.Tests.Conformance
         {
             Assert.Equal(1, DeclaredType(X86Module, "ST_PackedOuter").PackMode);
             Assert.Equal(2, DeclaredType(X86Module, "ST_PackedToTwo").PackMode);
-            Assert.Equal(0, DeclaredType(X86Module, "ST_NestedNatural").PackMode);
+            Assert.Null(DeclaredType(X86Module, "ST_NestedNatural").PackMode);
         }
 
         // BIT members carry sub-byte offsets - the one place in the checklist

@@ -567,11 +567,12 @@ namespace xStunit.Interpreter
             return (RoundUp(end, maxAlign), maxAlign);
         }
 
-        // pack_mode 0 (absent) means no cap, i.e. natural alignment. A positive
-        // pack_mode caps every field's alignment at that many bytes; pack_mode 1
-        // is fully byte-packed, with no padding anywhere.
+        // An absent pack_mode means no cap, i.e. natural alignment. A present
+        // one caps every field's alignment at that many bytes; 1 is fully
+        // byte-packed, and TwinCAT reads an explicit 0 the same way rather
+        // than as "no cap".
         private static int PackBound(StructAst structAst) =>
-            structAst.PackMode > 0 ? structAst.PackMode : int.MaxValue;
+            structAst.PackMode.HasValue ? Math.Max(structAst.PackMode.Value, 1) : int.MaxValue;
 
         private static int RoundUp(int value, int align) => (value + align - 1) / align * align;
     }

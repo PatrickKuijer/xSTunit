@@ -238,6 +238,38 @@ END_TYPE");
             Assert.Equal(3.5, m.Fields["rValue"].Value);
         }
 
+        // An explicit pack_mode '0' packs without gaps like '1', so the INT
+        // lands at the odd offset 1 straight behind the BOOL. Read as "no
+        // pragma", it would be padded out to offset 2 and byte 1 left zero.
+        [Fact]
+        public void Memcpy_WholeStructUnderExplicitPackModeZero_PlacesAnIntAtAnOddOffset()
+        {
+            var structType = StructDeclParser.Parse(@"{attribute 'pack_mode' := '0'}
+TYPE ST_Packed0 :
+STRUCT
+	bFlag : BOOL;
+	nValue : INT;
+END_STRUCT
+END_TYPE");
+            var fb = new PouAst(
+                "FB_Holder", null,
+                "VAR\n\tm : ST_Packed0;\n\tout : ARRAY[0..3] OF BYTE;\nEND_VAR",
+                "", new List<MethodAst>());
+            var engine = new Engine(new TypeRegistry(new[] { fb }, new[] { structType }));
+            var instance = engine.NewInstance("FB_Holder");
+            var frame = new Frame(instance, "FB_Holder");
+            var m = (StructInstance)instance.Fields["m"].Value;
+            m.Fields["bFlag"].Value = true;
+            m.Fields["nValue"].Value = 0x0302;
+
+            engine.Evaluate(Parser.ParseExpression("MEMCPY(ADR(out), ADR(m), SIZEOF(m))"), frame);
+
+            Assert.Equal(1, engine.Evaluate(Parser.ParseExpression("out[0]"), frame));
+            Assert.Equal(2, engine.Evaluate(Parser.ParseExpression("out[1]"), frame));
+            Assert.Equal(3, engine.Evaluate(Parser.ParseExpression("out[2]"), frame));
+            Assert.Equal(0, engine.Evaluate(Parser.ParseExpression("out[3]"), frame));
+        }
+
         // A STRING(n) field packs as ASCII bytes padded out with nulls, so a
         // wire record carrying a name can round-trip through a byte buffer.
         [Fact]

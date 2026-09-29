@@ -66,7 +66,7 @@ namespace xStunit.Interpreter.Tests.Conformance
                 baseType?.Attribute("PointerTo") != null,
                 dataType.Elements("ArrayInfo").Select(ParseDimension).ToList(),
                 HasProperty(dataType, "PouType", "FunctionBlock"),
-                ParseInt(PropertyValue(dataType, "pack_mode")) ?? 0,
+                ParseInt(PropertyValue(dataType, "pack_mode")),
                 dataType.Elements("SubItem").Select(ParseMember).ToList());
         }
 

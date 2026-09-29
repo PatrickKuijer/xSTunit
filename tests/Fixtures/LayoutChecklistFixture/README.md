@@ -20,6 +20,7 @@ and diffed against those numbers by `LayoutOracle`.
 | 8-byte scalar alignment | `ST_WideAlignment` | `wideFloat` at 8, not 4 |
 | Trailing padding in a type's size | `ST_WideAlignment`, `ST_TrailingPadding` | sizes 32 and 8, not 25 and 5 |
 | `pack_mode` caps alignment | `ST_PackedToTwo` | `wide` at 2 — not 4 (pragma ignored), not 1 (read as byte-packing) |
+| Explicit `pack_mode` `'0'` packs like `'1'` | `ST_PackedToZero` | `wide` at 1 — not 4 (read as no pragma) |
 | `pack_mode` does not inherit into a nested type | `ST_NestedNatural` + `ST_PackedOuter` | `trailer` at 9, not 6 |
 | Array-of-struct stride | `ST_ArrayStride` | `sentinel` at 24, not 15 |
 | `STRING(n)` / `WSTRING(n)` size and alignment | `ST_StringSizes` | `guard` at 6, `wide` at 8 |
@@ -94,6 +95,11 @@ set, which would quietly remove a checklist rule from the comparison. If a
 type is added here, add it to that list too — a test enforces this.
 
 ## What the compiler settled
+
+`ST_PackedToZero` is absent from the committed `.tmc` files, so the oracle does
+not score it and the agreement below does not cover it. The rule it pins was
+measured by hand instead: a `BOOL` + `INT` struct under an explicit `'0'` is 3
+bytes on a TwinCAT 3.1.4026 target.
 
 Every rule above came back as xStunit already had it, over 59 types and 208
 members with zero disagreements, on the x64 module as much as the x86 one.

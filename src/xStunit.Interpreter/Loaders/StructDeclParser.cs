@@ -92,7 +92,7 @@ namespace xStunit.Interpreter
             return null;
         }
 
-        private static int PackMode(string declarationText)
+        private static int? PackMode(string declarationText)
         {
             foreach (var rawLine in DutDeclarationPreamble.LeadingText(declarationText).Split('\n'))
             {
@@ -101,7 +101,7 @@ namespace xStunit.Interpreter
                     return int.Parse(match.Groups["value"].Value);
             }
 
-            return 0;
+            return null;
         }
     }
 }

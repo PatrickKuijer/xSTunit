@@ -338,8 +338,8 @@ namespace xStunit.Interpreter
         // that, crossing STRUCT field and array-of-struct boundaries the way
         // SIZEOF's layout math does. That snapshot is good only for
         // dereferencing: ptr^ := is not a supported assignment target
-        // (Parser.RequireLValue), so there is no live backing store to write
-        // through.
+        // (Parser.RequireLValue), and ResolveWritableByteTarget refuses it as a
+        // MEMCPY/MEMSET/MEMMOVE destination, since nothing writes it back.
         private object EvaluatePointerArithmetic(string op, object leftVal, object rightVal, Frame frame)
         {
             if (op == "-" && leftVal is Pointer && rightVal is Pointer)
@@ -367,7 +367,7 @@ namespace xStunit.Interpreter
 
             var typeName = _registry.ResolveAlias(ptr.Target.DeclaredTypeName);
             var (view, _) = PackCellToByteView(ptr.Target, typeName, frame);
-            return PointerInto(view, delta);
+            return PointerInto(AsSnapshotByteView(view), delta);
         }
 
         private Pointer StepArrayElementPointer(ArrayElementCell element, int byteDelta, Frame frame)
@@ -377,7 +377,7 @@ namespace xStunit.Interpreter
                 return PointerInto(element.Array, element.Index + byteDelta / elementSize);
 
             var (view, byteIndex, _) = ResolveArrayByteTarget(element, frame);
-            return PointerInto(view, byteIndex + byteDelta);
+            return PointerInto(AsSnapshotByteView(view), byteIndex + byteDelta);
         }
 
         private static Pointer PointerInto(ArrayValue array, int index)
@@ -611,7 +611,7 @@ namespace xStunit.Interpreter
                 throw new ArgumentOutOfRangeException(nameof(count), "MEMCPY/MEMMOVE count must be >= 0");
 
             var methodName = overlapSafe ? "MEMMOVE" : "MEMCPY";
-            var (destArray, destIndex, destCommit) = ResolveByteTarget(dest, methodName, "destAddr", frame);
+            var (destArray, destIndex, destCommit) = ResolveWritableByteTarget(dest, methodName, "destAddr", frame);
             var (srcArray, srcIndex, _) = ResolveByteTarget(src, methodName, "srcAddr", frame);
 
             var backward = overlapSafe
@@ -640,7 +640,7 @@ namespace xStunit.Interpreter
             if (count < 0)
                 throw new ArgumentOutOfRangeException(nameof(count), "MEMSET count must be >= 0");
 
-            var (destArray, destIndex, destCommit) = ResolveByteTarget(dest, "MEMSET", "destAddr", frame);
+            var (destArray, destIndex, destCommit) = ResolveWritableByteTarget(dest, "MEMSET", "destAddr", frame);
             var lowByte = Convert.ToInt32(value) & 0xFF;
 
             for (var i = 0; i < count; i++)

@@ -1,9 +1,37 @@
 using System;
+using System.Runtime.CompilerServices;
 
 namespace xStunit.Interpreter
 {
     public sealed partial class Engine
     {
+        // Byte views that pointer arithmetic packed from a Cell's current value
+        // rather than stepping a real array. A pointer into one looks exactly
+        // like a pointer into a genuine BYTE array, but nothing unpacks it back,
+        // so a write through it would vanish silently.
+        private readonly ConditionalWeakTable<ArrayValue, object> _snapshotByteViews =
+            new ConditionalWeakTable<ArrayValue, object>();
+
+        private ArrayValue AsSnapshotByteView(ArrayValue view)
+        {
+            _snapshotByteViews.Add(view, null);
+            return view;
+        }
+
+        private (ArrayValue Array, int Index, Action Commit) ResolveWritableByteTarget(Pointer ptr, string methodName, string paramName, Frame frame)
+        {
+            var target = ResolveByteTarget(ptr, methodName, paramName, frame);
+            if (_snapshotByteViews.TryGetValue(target.Array, out _))
+            {
+                throw new NotSupportedException(
+                    $"{methodName} '{paramName}' points into a scalar, a STRUCT, or the middle of an array element " +
+                    "via pointer arithmetic; writing through such a pointer isn't modeled. Point at a whole array " +
+                    "element (ADR(buf[i]), or an offset that is a multiple of SIZEOF(buf[0])) or ADR() the target directly.");
+            }
+
+            return target;
+        }
+
         // Presents whatever a MEMCPY/MEMSET/MEMMOVE pointer targets as an
         // ArrayValue of bytes plus a byte offset into it, so those intrinsics
         // have one indexable shape to copy through.

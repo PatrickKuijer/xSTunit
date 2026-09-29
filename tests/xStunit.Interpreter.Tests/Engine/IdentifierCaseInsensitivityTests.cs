@@ -25,9 +25,9 @@ namespace xStunit.Interpreter.Tests
         private static object Call(Engine engine, FbInstance instance, string methodName) =>
             engine.CallMethod(instance, methodName, new Expr[0], new NamedArg[0], null, null);
 
-        // The reported repro, verbatim: a VAR_INPUT struct and a VAR_OUTPUT
-        // both referenced in a spelling their declaration does not use, and
-        // the struct's field reached the same way.
+        // A VAR_INPUT struct and a VAR_OUTPUT both referenced in a spelling
+        // their declaration does not use, and the struct's field reached the
+        // same way.
         [Fact]
         public void VarInputStructAndVarOutput_ReferencedInOtherCase_PassTheValueThrough()
         {
@@ -131,6 +131,54 @@ namespace xStunit.Interpreter.Tests
             StepOnce(engine, instance);
 
             Assert.Equal(7, instance.Fields["nHalf"].Value);
+        }
+
+        // A bare FB-instance call writes its => outputs back through a
+        // different path from a METHOD call (the instance's persisted Fields,
+        // not a call frame), so it needs its own mixed-case pin.
+        [Fact]
+        public void FbInstanceOutput_BoundWithArrowInOtherCase_IsWrittenBackToTheCaller()
+        {
+            var doubler = new PouAst(
+                "FB_Doubler",
+                null,
+                "FUNCTION_BLOCK FB_Doubler\nVAR_INPUT\n\tinValue : INT;\nEND_VAR\nVAR_OUTPUT\n\tonResult : INT;\nEND_VAR",
+                "onResult := inValue * 2;",
+                new List<MethodAst>());
+            var host = new PouAst(
+                "FB_Host",
+                null,
+                "VAR\n\tfbDoubler : FB_Doubler;\n\tnOut : INT;\nEND_VAR",
+                "FBDOUBLER(INVALUE := 5, ONRESULT => NOUT);",
+                new List<MethodAst>());
+
+            var engine = new Engine(new TypeRegistry(new[] { doubler, host }));
+            var instance = engine.NewInstance("FB_Host");
+
+            StepOnce(engine, instance);
+
+            Assert.Equal(10, instance.Fields["nOut"].Value);
+        }
+
+        // SIZEOF sizes a dereferenced or indexed operand from its declaration
+        // alone, so the declaration lookup is the one that must ignore case.
+        [Fact]
+        public void SizeOfDereferencedPointerOperand_InOtherCase_IsSizedFromTheDeclaration()
+        {
+            var fb = new PouAst(
+                "FB_Guard",
+                null,
+                "VAR\n\tipHistory : POINTER TO ARRAY[0..20] OF INT;\n\tnElement : DINT;\n\tnWhole : DINT;\nEND_VAR",
+                "nElement := SIZEOF(IPHISTORY^[0]);\nnWhole := SIZEOF(iphistory^);",
+                new List<MethodAst>());
+
+            var engine = new Engine(new TypeRegistry(new[] { fb }));
+            var instance = engine.NewInstance("FB_Guard");
+
+            StepOnce(engine, instance);
+
+            Assert.Equal(2, Convert.ToInt32(instance.Fields["nElement"].Value));
+            Assert.Equal(42, Convert.ToInt32(instance.Fields["nWhole"].Value));
         }
 
         [Fact]
@@ -422,7 +470,7 @@ namespace xStunit.Interpreter.Tests
         // body like any other method - so its names, its named parameters and
         // the root type a suite EXTENDS are all identifiers too.
         [Fact]
-        public void TcUnitSuite_RootAssertsAndParametersInOtherCase_DiscoverAndRun()
+        public void TestSuiteApi_RootAssertsAndParametersInOtherCase_DiscoverAndRun()
         {
             var suite = new PouAst(
                 "FB_WidgetTests",

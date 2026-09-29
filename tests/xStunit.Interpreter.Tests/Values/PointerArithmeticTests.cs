@@ -127,6 +127,23 @@ namespace xStunit.Interpreter.Tests
                 engine.Evaluate(Parser.ParseExpression("ADR(words) + 8"), frame));
         }
 
+        // The mid-element and scalar/struct views are snapshots, so a write
+        // through one would vanish. It must fail loudly instead: a test whose
+        // MEMSET/MEMCPY silently did nothing would pass or fail for the wrong
+        // reason.
+        [Theory]
+        [InlineData("MEMSET(destAddr := ADR(words) + 1, value := 0, n := 1)")]
+        [InlineData("MEMCPY(destAddr := ADR(words) + 1, srcAddr := ADR(src), n := 1)")]
+        [InlineData("MEMCPY(destAddr := ADR(count) + 1, srcAddr := ADR(src), n := 1)")]
+        public void MemWrite_ThroughAPointerIntoASnapshotByteView_Throws(string call)
+        {
+            var (engine, instance, frame) = NewHolder(
+                "VAR\n\twords : ARRAY[0..1] OF INT := [258, 20];\n\tcount : INT := 258;\n\tsrc : ARRAY[0..1] OF BYTE;\nEND_VAR");
+
+            var ex = Assert.Throws<NotSupportedException>(() => engine.Evaluate(Parser.ParseExpression(call), frame));
+            Assert.Contains("destAddr", ex.Message);
+        }
+
         [Fact]
         public void Adr_OnScalarPlusOffset_StepsThroughByteLayout()
         {

@@ -134,7 +134,7 @@ namespace xStunit.Interpreter
         // the Cell the write would land in a temporary and vanish.
         private void WritePointerBytes(Pointer ptr, byte[] bytes, string methodName, Frame frame)
         {
-            var (array, index, commit) = ResolveByteTarget(ptr, methodName, "pointer", frame);
+            var (array, index, commit) = ResolveWritableByteTarget(ptr, methodName, "pointer", frame);
 
             if (bytes.Length > array.Elements.Length - index)
             {

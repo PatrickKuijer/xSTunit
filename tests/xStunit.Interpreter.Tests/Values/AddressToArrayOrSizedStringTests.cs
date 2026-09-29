@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using xStunit.Interpreter;
 using xStunit.Parser;
 using Xunit;
@@ -42,6 +43,44 @@ namespace xStunit.Interpreter.Tests
             var buf = (ArrayValue)instance.Fields["buf"].Value;
             Assert.Equal(99, buf.Elements[0]);
             Assert.Equal(99, engine.Evaluate(Parser.ParseExpression("ipHistory^[0]"), frame));
+        }
+
+        // The standard history-buffer shift: MEMMOVE everything one element
+        // towards the end, sized with SIZEOF off the pointer's own declaration,
+        // then write the newest entry at the front. If either SIZEOF is wrong
+        // the shift lands off-element and the history reads back scrambled.
+        [Fact]
+        public void PointerToArray_MemmoveShiftSizedBySizeOf_KeepsTheNewestStepFirst()
+        {
+            var guard = new PouAst(
+                "FB_ProcessGuard",
+                null,
+                "FUNCTION_BLOCK FB_ProcessGuard\nVAR_INPUT\n\tinStep : INT;\n" +
+                "\tipHistory : POINTER TO ARRAY[0..20] OF INT;\nEND_VAR",
+                "IF ipHistory <> 0 THEN\n" +
+                "\tMEMMOVE( destAddr := ipHistory + SIZEOF(ipHistory^[0]),\n" +
+                "\t\tsrcAddr := ipHistory,\n" +
+                "\t\tn := SIZEOF(ipHistory^) - SIZEOF(ipHistory^[0]) );\n" +
+                "\tipHistory^[0] := inStep;\n" +
+                "END_IF",
+                new List<MethodAst>());
+            var caller = new PouAst(
+                "FB_Caller",
+                null,
+                "VAR\n\tsaHistory : ARRAY[0..20] OF INT;\n\tfbGuard : FB_ProcessGuard;\nEND_VAR",
+                "",
+                new List<MethodAst>());
+            var engine = new Engine(new TypeRegistry(new[] { caller, guard }));
+            var instance = engine.NewInstance("FB_Caller");
+            var frame = new Frame(instance, "FB_Caller");
+
+            engine.ExecuteStatements(Parser.ParseStatements(
+                "fbGuard(inStep := 1, ipHistory := ADR(saHistory));\n" +
+                "fbGuard(inStep := 2, ipHistory := ADR(saHistory));\n" +
+                "fbGuard(inStep := 3, ipHistory := ADR(saHistory));"), frame);
+
+            var history = (ArrayValue)instance.Fields["saHistory"].Value;
+            Assert.Equal(new object[] { 3, 2, 1, 0 }, history.Elements.Take(4).ToArray());
         }
 
         [Fact]

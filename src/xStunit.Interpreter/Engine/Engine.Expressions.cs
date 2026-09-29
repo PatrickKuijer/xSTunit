@@ -326,19 +326,20 @@ namespace xStunit.Interpreter
             };
         }
 
-        // ADR(x) +/- offset. The offset moves in whole array elements, not raw
-        // bytes: exact byte arithmetic when the pointee is a BYTE/SINT/USINT
-        // array - the buffer-packing case MEMCPY/MEMSET/MEMMOVE exist for - and
-        // an approximation for wider element types.
+        // ADR(x) +/- offset, with the offset in bytes whatever x's type, as
+        // TwinCAT counts it.
         //
         // A pointer at an array element (including ADR(arr), which decays to
-        // element 0) steps on the real backing ArrayValue. A pointer to a scalar
-        // or whole STRUCT has no element to step through, so its Cell is packed
-        // into a synthetic BYTE-array view and stepped through that, crossing
-        // STRUCT field and array-of-struct boundaries the way SIZEOF's layout
-        // math does. That snapshot is good only for dereferencing: ptr^ := is
-        // not a supported assignment target (Parser.RequireLValue), so there is
-        // no live backing store to write through.
+        // element 0) moved by a whole number of elements steps on the real
+        // backing ArrayValue, so writes through it - a MEMMOVE dest among them -
+        // land in the array. Anything else has no element to land on: a scalar,
+        // a whole STRUCT, or an array offset that stops inside an element. Its
+        // Cell is packed into a synthetic BYTE-array view and stepped through
+        // that, crossing STRUCT field and array-of-struct boundaries the way
+        // SIZEOF's layout math does. That snapshot is good only for
+        // dereferencing: ptr^ := is not a supported assignment target
+        // (Parser.RequireLValue), so there is no live backing store to write
+        // through.
         private object EvaluatePointerArithmetic(string op, object leftVal, object rightVal, Frame frame)
         {
             if (op == "-" && leftVal is Pointer && rightVal is Pointer)
@@ -355,25 +356,37 @@ namespace xStunit.Interpreter
             if (op == "-")
                 delta = -delta;
 
-            if (!(ptr.Target is ArrayElementCell aec))
-            {
-                if (ptr.Target.DeclaredTypeName == null)
-                    throw new NotSupportedException(
-                        "Pointer arithmetic (ADR(x) +/- offset) is only supported when the pointer targets an " +
-                        "array element (e.g. ADR(byteBuf) or ADR(byteBuf[i])) or a variable/field with a known " +
-                        "declared type; byte-offset into an untyped Cell isn't modeled.");
+            if (ptr.Target is ArrayElementCell element)
+                return StepArrayElementPointer(element, delta, frame);
 
-                var typeName = _registry.ResolveAlias(ptr.Target.DeclaredTypeName);
-                var (view, _) = PackCellToByteView(ptr.Target, typeName, frame);
-                aec = new ArrayElementCell(view, 0);
-            }
+            if (ptr.Target.DeclaredTypeName == null)
+                throw new NotSupportedException(
+                    "Pointer arithmetic (ADR(x) +/- offset) is only supported when the pointer targets an " +
+                    "array element (e.g. ADR(byteBuf) or ADR(byteBuf[i])) or a variable/field with a known " +
+                    "declared type; byte-offset into an untyped Cell isn't modeled.");
 
-            var newIndex = aec.Index + delta;
-            if (newIndex < 0 || newIndex >= aec.Array.Elements.Length)
+            var typeName = _registry.ResolveAlias(ptr.Target.DeclaredTypeName);
+            var (view, _) = PackCellToByteView(ptr.Target, typeName, frame);
+            return PointerInto(view, delta);
+        }
+
+        private Pointer StepArrayElementPointer(ArrayElementCell element, int byteDelta, Frame frame)
+        {
+            var (elementSize, _) = LayoutFor(frame).SizeOf(element.Array.ElementTypeName);
+            if (byteDelta % elementSize == 0)
+                return PointerInto(element.Array, element.Index + byteDelta / elementSize);
+
+            var (view, byteIndex, _) = ResolveArrayByteTarget(element, frame);
+            return PointerInto(view, byteIndex + byteDelta);
+        }
+
+        private static Pointer PointerInto(ArrayValue array, int index)
+        {
+            if (index < 0 || index >= array.Elements.Length)
                 throw new IndexOutOfRangeException(
-                    $"Pointer arithmetic moved index to {newIndex}, out of bounds [0..{aec.Array.Elements.Length - 1}]");
+                    $"Pointer arithmetic moved index to {index}, out of bounds [0..{array.Elements.Length - 1}]");
 
-            return new Pointer(new ArrayElementCell(aec.Array, newIndex));
+            return new Pointer(new ArrayElementCell(array, index));
         }
 
         // The IEC 61131-3 null-pointer-check idiom is 'IF ipSrc = 0 THEN', which

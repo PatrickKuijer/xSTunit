@@ -411,6 +411,131 @@ END_TYPE");
             Assert.Equal(24, result);
         }
 
+        // TwinCAT sizes a dereferenced or indexed operand from the declared
+        // pointer type at compile time, so the answer cannot depend on where
+        // the pointer points. Leaving it at 0 pins that: reading the size off
+        // the pointee at runtime would fault on the null dereference instead.
+        [Theory]
+        [InlineData("SIZEOF(ipHistory^[0])", 2)]
+        [InlineData("SIZEOF(ipHistory^)", 42)]
+        [InlineData("SIZEOF(ipHistory^) - SIZEOF(ipHistory^[0])", 40)]
+        public void SizeOf_DereferencedPointerToArrayOfElementary_IsSizedFromTheDeclarationEvenWhenUnbound(
+            string expression, int expectedBytes)
+        {
+            var (engine, _, frame) = NewHolder("VAR\n\tipHistory : POINTER TO ARRAY[0..20] OF INT;\nEND_VAR");
+
+            var result = engine.Evaluate(Parser.ParseExpression(expression), frame);
+
+            Assert.Equal(expectedBytes, result);
+        }
+
+        [Theory]
+        [InlineData("SIZEOF(ipItems^[1])", 8)]
+        [InlineData("SIZEOF(ipItems^)", 24)]
+        public void SizeOf_DereferencedPointerToArrayOfStruct_UsesTheStructLayout(string expression, int expectedBytes)
+        {
+            var structType = StructDeclParser.Parse(@"TYPE ST_Msg :
+STRUCT
+	flag : BYTE;
+	count : INT;
+	total : DINT;
+END_STRUCT
+END_TYPE");
+            var (engine, _, frame) = NewHolder(
+                "VAR\n\tipItems : POINTER TO ARRAY[1..3] OF ST_Msg;\nEND_VAR", new[] { structType });
+
+            var result = engine.Evaluate(Parser.ParseExpression(expression), frame);
+
+            Assert.Equal(expectedBytes, result);
+        }
+
+        // The index says which element, never how big one is, so it is not
+        // evaluated at all: an index well outside the bounds - of an array
+        // that is not even there - must still size as one element. Evaluating
+        // it would turn a static size into an out-of-range fault.
+        [Theory]
+        [InlineData("SIZEOF(ipHistory^[idx])", 4)]
+        [InlineData("SIZEOF(buf[idx])", 4)]
+        [InlineData("SIZEOF(iaValues[idx])", 8)]
+        public void SizeOf_IndexedOperand_IsTheElementSizeWithoutEvaluatingTheIndex(string expression, int expectedBytes)
+        {
+            var (engine, _, frame) = NewHolder(
+                "VAR\n\tidx : INT := 500;\n\tbuf : ARRAY[0..3] OF DINT;\n" +
+                "\tipHistory : POINTER TO ARRAY[0..3] OF DINT;\n" +
+                "\tiaValues : REFERENCE TO ARRAY[0..3] OF LREAL;\nEND_VAR");
+
+            var result = engine.Evaluate(Parser.ParseExpression(expression), frame);
+
+            Assert.Equal(expectedBytes, result);
+        }
+
+        [Fact]
+        public void SizeOf_IndexedArrayOfStruct_IsTheStructSize()
+        {
+            var structType = StructDeclParser.Parse(@"TYPE ST_Point :
+STRUCT
+	x : DINT;
+	y : DINT;
+END_STRUCT
+END_TYPE");
+            var (engine, _, frame) = NewHolder("VAR\n\tpoints : ARRAY[0..9] OF ST_Point;\nEND_VAR", new[] { structType });
+
+            var result = engine.Evaluate(Parser.ParseExpression("SIZEOF(points[3])"), frame);
+
+            Assert.Equal(8, result);
+        }
+
+        // A pointer declared through an ALIAS DUT is still a pointer: the
+        // dereference has to see through the alias to find what it points at,
+        // the same as TypeLayout already does to size the pointer itself.
+        [Fact]
+        public void SizeOf_DereferencedAliasOfPointerToArray_IsThePointeeSize()
+        {
+            var aliases = new[] { new KeyValuePair<string, string>("PT_Samples", "POINTER TO ARRAY[0..3] OF WORD") };
+            var (engine, _, frame) = NewHolder("VAR\n\tipSamples : PT_Samples;\nEND_VAR", aliases: aliases);
+
+            Assert.Equal(8, engine.Evaluate(Parser.ParseExpression("SIZEOF(ipSamples^)"), frame));
+            Assert.Equal(2, engine.Evaluate(Parser.ParseExpression("SIZEOF(ipSamples^[0])"), frame));
+        }
+
+        // Only a POINTER TO can be dereferenced and only an ARRAY indexed; an
+        // operand that is neither has no declared type to size, and guessing
+        // one would hand MEMCPY a plausible wrong byte count.
+        [Theory]
+        [InlineData("SIZEOF(n^)")]
+        [InlineData("SIZEOF(n[0])")]
+        [InlineData("SIZEOF(n + 1)")]
+        public void SizeOf_OperandWithNoDeclaredType_IsRefused(string expression)
+        {
+            var (engine, _, frame) = NewHolder("VAR\n\tn : INT;\nEND_VAR");
+
+            var ex = Assert.Throws<NotSupportedException>(
+                () => engine.Evaluate(Parser.ParseExpression(expression), frame));
+
+            Assert.Contains("SIZEOF()", ex.Message);
+        }
+
+        // A refused operand is a fault in the PLC code under test, so it has
+        // to name the body line holding it - otherwise the author is left
+        // searching every SIZEOF in the POU for the one that was rejected.
+        [Fact]
+        public void SizeOf_UnsupportedOperandInASuiteBody_ReportsItsBodyLine()
+        {
+            var suite = new PouAst(
+                "FB_SizeOfSuite",
+                "TcUnit.FB_TestSuite",
+                "VAR\n\tn : INT;\nEND_VAR",
+                "n := 1;\nn := SIZEOF(n + 1);",
+                new List<MethodAst>());
+            var engine = new Engine(new TypeRegistry(new[] { suite }));
+
+            var ex = Assert.Throws<PlcSourceLocationException>(() => engine.RunSuite("FB_SizeOfSuite"));
+
+            Assert.Equal(2, ex.BodyLine);
+            var inner = Assert.IsType<NotSupportedException>(ex.InnerException);
+            Assert.Contains("SIZEOF()", inner.Message);
+        }
+
         // Three deliberately different widths: all-same-width members would
         // leave "widest member" indistinguishable from "first" or "last".
         private const string UnionDeclaration = @"TYPE U_Overlaid :

@@ -15,6 +15,8 @@ namespace xStunit.Interpreter
     internal static class AddressTypeInfo
     {
         private const string VoidPointer = "PVOID";
+        private const string PointerPrefix = "POINTER TO";
+        private const string ReferencePrefix = "REFERENCE TO";
 
         // IEC 61131-3 type names are case-insensitive ('pointer to BYTE' is as
         // valid as 'POINTER TO BYTE'), hence OrdinalIgnoreCase - the same
@@ -29,9 +31,30 @@ namespace xStunit.Interpreter
                 return false;
 
             var trimmed = typeName.Trim();
-            return trimmed.StartsWith("POINTER TO", StringComparison.OrdinalIgnoreCase)
-                || trimmed.StartsWith("REFERENCE TO", StringComparison.OrdinalIgnoreCase)
+            return trimmed.StartsWith(PointerPrefix, StringComparison.OrdinalIgnoreCase)
+                || trimmed.StartsWith(ReferencePrefix, StringComparison.OrdinalIgnoreCase)
                 || string.Equals(trimmed, VoidPointer, StringComparison.OrdinalIgnoreCase);
+        }
+
+        // PVOID names no pointee, so it has none to report: there is nothing
+        // a dereference of it could be sized as.
+        public static bool TryGetPointeeTypeName(string typeName, out string pointeeTypeName) =>
+            TryStripPrefix(typeName, PointerPrefix, out pointeeTypeName);
+
+        public static bool TryGetReferentTypeName(string typeName, out string referentTypeName) =>
+            TryStripPrefix(typeName, ReferencePrefix, out referentTypeName);
+
+        private static bool TryStripPrefix(string typeName, string prefix, out string remainder)
+        {
+            var trimmed = typeName?.Trim();
+            if (trimmed == null || !trimmed.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            {
+                remainder = null;
+                return false;
+            }
+
+            remainder = trimmed.Substring(prefix.Length).Trim();
+            return true;
         }
     }
 }

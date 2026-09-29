@@ -7,10 +7,10 @@ using Xunit;
 namespace xStunit.Interpreter.Tests
 {
     // Pointer arithmetic on an array element steps the real backing
-    // ArrayValue, so writes through it land in the array. A scalar or whole
-    // STRUCT has no elements to step, so it is packed into a synthetic
-    // BYTE-array view of its current value instead - re-packed on each call,
-    // and readable only.
+    // ArrayValue, so writes through it land in the array. A scalar, a whole
+    // STRUCT, or an offset that stops inside an array element has no element
+    // to land on, so it is packed into a synthetic BYTE-array view of its
+    // current value instead - re-packed on each call, and readable only.
     public class PointerArithmeticTests
     {
         private static (Engine Engine, FbInstance Instance, Frame Frame) NewHolder(
@@ -85,6 +85,46 @@ namespace xStunit.Interpreter.Tests
 
             var ptr = Assert.IsType<Pointer>(result);
             Assert.Equal(30, ptr.Target.Value);
+        }
+
+        // The offset is in bytes whatever the element type, so on a two-byte
+        // INT array +4 is two elements on. Stepping whole elements instead
+        // would land on words[4] - past the end - and a SIZEOF-sized MEMMOVE
+        // shift through such a pointer would overrun the array.
+        [Fact]
+        public void Adr_OnWideElementArrayPlusWholeElementOffset_StepsByteSizedAndWritesThrough()
+        {
+            var (engine, instance, frame) = NewHolder("VAR\n\twords : ARRAY[0..3] OF INT := [10, 20, 30, 40];\nEND_VAR");
+            frame.Locals["p"] = new Cell { Value = engine.Evaluate(Parser.ParseExpression("ADR(words) + 4"), frame) };
+
+            Assert.Equal(30, engine.Evaluate(Parser.ParseExpression("p^"), frame));
+
+            ((Pointer)frame.Locals["p"].Value).Target.Value = 99;
+
+            var words = (ArrayValue)instance.Fields["words"].Value;
+            Assert.Equal(new object[] { 10, 20, 99, 40 }, words.Elements);
+        }
+
+        // An offset that is not a whole number of elements lands inside one,
+        // where the only thing to read is a single byte of it - here the high
+        // byte of 258 (0x0102), the same little-endian layout MEMCPY packs.
+        [Fact]
+        public void Adr_OnWideElementArrayPlusMidElementOffset_ReadsThatByteOfTheElement()
+        {
+            var (engine, instance, frame) = NewHolder("VAR\n\twords : ARRAY[0..1] OF INT := [258, 20];\nEND_VAR");
+
+            var highByte = engine.Evaluate(Parser.ParseExpression("(ADR(words) + 1)^"), frame);
+
+            Assert.Equal(1, highByte);
+        }
+
+        [Fact]
+        public void Adr_OnWideElementArrayPlusOffset_PastTheLastByteThrows()
+        {
+            var (engine, instance, frame) = NewHolder("VAR\n\twords : ARRAY[0..3] OF INT;\nEND_VAR");
+
+            Assert.Throws<IndexOutOfRangeException>(() =>
+                engine.Evaluate(Parser.ParseExpression("ADR(words) + 8"), frame));
         }
 
         [Fact]

@@ -928,7 +928,30 @@ namespace xStunit.Interpreter
             if (receiver is UnassignedInterfaceReference unassignedReceiver)
                 throw unassignedReceiver.Fault(call.MethodName);
 
+            if (receiver is StructInstance structReceiver)
+                return CallStructMemberFb(structReceiver, call, frame);
+
             return CallMethod((FbInstance)receiver, call.MethodName, call.PositionalArgs, call.NamedArgs, frame, null);
+        }
+
+        private object CallStructMemberFb(StructInstance owner, CallExpr call, Frame frame)
+        {
+            if (!owner.Fields.TryGetValue(call.MethodName, out var memberCell) ||
+                !(memberCell.Value is FbInstance member))
+            {
+                throw new InvalidOperationException(
+                    $"'{call.MethodName}' is not a function block member of struct '{owner.TypeName}' and cannot be called");
+            }
+
+            if (!TryInvokeFbCallee(member, call.PositionalArgs, call.NamedArgs, frame))
+            {
+                throw new InvalidOperationException(
+                    $"Cannot call '{call.MethodName}' of struct '{owner.TypeName}': type '{member.ActualTypeName}' has no callable body. " +
+                    "No FUNCTION_BLOCK source was loaded for it, or its native stub is not directly invocable. " +
+                    "If it comes from a compiled-only TwinCAT library, supply it via a native-function plugin.");
+            }
+
+            return null;
         }
 
         // The intrinsics EvaluateCall's switch handles, each spelled the one way

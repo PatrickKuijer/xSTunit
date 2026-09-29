@@ -95,65 +95,10 @@ namespace xStunit.Interpreter
                 // falls through to the loopback-fault and TcUnit-stub routing
                 // below.
                 if (TryResolveCalleeCell(callerFrame, instance, methodName, out var calleeCell) &&
-                    calleeCell.Value is FbInstance callee)
+                    calleeCell.Value is FbInstance callee &&
+                    TryInvokeFbCallee(callee, positionalArgs, namedArgs, callerFrame))
                 {
-                    switch (callee.NativeKind)
-                    {
-                        case NativeHostKind.Timer:
-                            BindNativeInputs(callee, TimerPositionalParams, positionalArgs, namedArgs, callerFrame);
-                            // Nanoseconds, not TotalMs: the LTIME timers
-                            // (LTON/LTOF/LTP) count in ns, and the host scales
-                            // back to its own PT/ET width.
-                            callee.NativeTimerHost.Update(callee, Clock.TotalNs);
-                            WriteBackNativeOutputArgs(callee, namedArgs, callerFrame);
-                            return null;
-
-                        // Like the timer above, but the host only tracks CLK->Q:
-                        // no PT/ET, and no clock dependency.
-                        case NativeHostKind.Edge:
-                            BindNativeInputs(callee, EdgeTriggerPositionalParams, positionalArgs, namedArgs, callerFrame);
-                            callee.NativeEdgeTriggerHost.Update(callee);
-                            WriteBackNativeOutputArgs(callee, namedArgs, callerFrame);
-                            return null;
-
-                        // RS and SR disagree on their two input names, so the
-                        // host supplies them.
-                        case NativeHostKind.BistableLatch:
-                            BindNativeInputs(callee, callee.NativeBistableLatchHost.PositionalInputNames, positionalArgs, namedArgs, callerFrame);
-                            callee.NativeBistableLatchHost.Update(callee);
-                            WriteBackNativeOutputArgs(callee, namedArgs, callerFrame);
-                            return null;
-
-                        // CTU/CTD/CTUD disagree on both the number and the names
-                        // of their inputs, so again the host supplies them.
-                        case NativeHostKind.Counter:
-                            BindNativeInputs(callee, callee.NativeCounterHost.PositionalInputNames, positionalArgs, namedArgs, callerFrame);
-                            callee.NativeCounterHost.Update(callee);
-                            WriteBackNativeOutputArgs(callee, namedArgs, callerFrame);
-                            return null;
-
-                        // A stateful library FB supplied from outside this
-                        // assembly. Its inputs bind exactly as an in-tree
-                        // stub's do, off the names the plugin declares;
-                        // everything the call then means is the plugin's own
-                        // business.
-                        case NativeHostKind.Plugin:
-                            var pluginCallee = callee.NativePluginFunctionBlock;
-                            BindNativeInputs(callee, pluginCallee.PositionalInputNames, positionalArgs, namedArgs, callerFrame);
-                            pluginCallee.Invoke(NewFunctionBlockCall(callee, null, null, callerFrame));
-                            WriteBackNativeOutputArgs(callee, namedArgs, callerFrame);
-                            return null;
-
-                        // Ordinary interpreted FB field or method-local var:
-                        // bind VAR_INPUT/VAR_IN_OUT args into the callee's
-                        // persisted Fields, then run its top-level body once.
-                        // The registry guard is required - None only says "no
-                        // native stub", and an FbInstance whose type the
-                        // registry doesn't know has no body to run.
-                        case NativeHostKind.None when _registry.Get(callee.ActualTypeName) != null:
-                            InvokeFbInstance(callee, positionalArgs, namedArgs, callerFrame);
-                            return null;
-                    }
+                    return null;
                 }
 
                 // Method-name routing WITHIN a plugin function block, the same
@@ -627,6 +572,72 @@ namespace xStunit.Interpreter
                     .Where(d => sections.Contains(d.Section)));
             }
             return result;
+        }
+
+        private bool TryInvokeFbCallee(
+            FbInstance callee,
+            IReadOnlyList<Expr> positionalArgs,
+            IReadOnlyList<NamedArg> namedArgs,
+            Frame callerFrame)
+        {
+            switch (callee.NativeKind)
+            {
+                case NativeHostKind.Timer:
+                    BindNativeInputs(callee, TimerPositionalParams, positionalArgs, namedArgs, callerFrame);
+                    // Nanoseconds, not TotalMs: the LTIME timers
+                    // (LTON/LTOF/LTP) count in ns, and the host scales
+                    // back to its own PT/ET width.
+                    callee.NativeTimerHost.Update(callee, Clock.TotalNs);
+                    WriteBackNativeOutputArgs(callee, namedArgs, callerFrame);
+                    return true;
+
+                // Like the timer above, but the host only tracks CLK->Q:
+                // no PT/ET, and no clock dependency.
+                case NativeHostKind.Edge:
+                    BindNativeInputs(callee, EdgeTriggerPositionalParams, positionalArgs, namedArgs, callerFrame);
+                    callee.NativeEdgeTriggerHost.Update(callee);
+                    WriteBackNativeOutputArgs(callee, namedArgs, callerFrame);
+                    return true;
+
+                // RS and SR disagree on their two input names, so the
+                // host supplies them.
+                case NativeHostKind.BistableLatch:
+                    BindNativeInputs(callee, callee.NativeBistableLatchHost.PositionalInputNames, positionalArgs, namedArgs, callerFrame);
+                    callee.NativeBistableLatchHost.Update(callee);
+                    WriteBackNativeOutputArgs(callee, namedArgs, callerFrame);
+                    return true;
+
+                // CTU/CTD/CTUD disagree on both the number and the names
+                // of their inputs, so again the host supplies them.
+                case NativeHostKind.Counter:
+                    BindNativeInputs(callee, callee.NativeCounterHost.PositionalInputNames, positionalArgs, namedArgs, callerFrame);
+                    callee.NativeCounterHost.Update(callee);
+                    WriteBackNativeOutputArgs(callee, namedArgs, callerFrame);
+                    return true;
+
+                // A stateful library FB supplied from outside this
+                // assembly. Its inputs bind exactly as an in-tree
+                // stub's do, off the names the plugin declares;
+                // everything the call then means is the plugin's own
+                // business.
+                case NativeHostKind.Plugin:
+                    var pluginCallee = callee.NativePluginFunctionBlock;
+                    BindNativeInputs(callee, pluginCallee.PositionalInputNames, positionalArgs, namedArgs, callerFrame);
+                    pluginCallee.Invoke(NewFunctionBlockCall(callee, null, null, callerFrame));
+                    WriteBackNativeOutputArgs(callee, namedArgs, callerFrame);
+                    return true;
+
+                // Ordinary interpreted FB:
+                // bind VAR_INPUT/VAR_IN_OUT args into the callee's
+                // persisted Fields, then run its top-level body once.
+                // The registry guard is required - None only says "no
+                // native stub", and an FbInstance whose type the
+                // registry doesn't know has no body to run.
+                case NativeHostKind.None when _registry.Get(callee.ActualTypeName) != null:
+                    InvokeFbInstance(callee, positionalArgs, namedArgs, callerFrame);
+                    return true;
+            }
+            return false;
         }
 
         // BindNativeInputs' interpreted counterpart: binds bare-invocation args

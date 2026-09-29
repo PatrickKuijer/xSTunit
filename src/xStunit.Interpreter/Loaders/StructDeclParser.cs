@@ -13,7 +13,7 @@ namespace xStunit.Interpreter
         public const string UnionBody = "UNION";
 
         private static readonly Regex TypeNamePattern = new Regex(
-            @"^TYPE\s+(?<name>\w+)\s*:", RegexOptions.Compiled);
+            @"^TYPE\s+(?<name>\w+)\s*:", RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
         // TwinCAT emits "{attribute 'pack_mode' := 'N'}" before the
         // "TYPE Name :" header, so it is read out of the preamble - past that
@@ -22,14 +22,15 @@ namespace xStunit.Interpreter
             @"^\{attribute\s+'pack_mode'\s*:=\s*'(?<value>\d+)'\}$", RegexOptions.Compiled);
 
         private static readonly Regex TypeHeaderPattern = new Regex(
-            @"^TYPE\s+\w+(\s+EXTENDS\s+\w+)?\s*:", RegexOptions.Compiled);
+            @"^TYPE\s+\w+(\s+EXTENDS\s+\w+)?\s*:", RegexOptions.Compiled | RegexOptions.IgnoreCase);
         private static readonly Regex BodyOnHeaderLinePattern = new Regex(
-            @":\s*(?<body>STRUCT|UNION)\b", RegexOptions.Compiled);
+            @":\s*(?<body>STRUCT|UNION)\b", RegexOptions.Compiled | RegexOptions.IgnoreCase);
         private static readonly Regex BodyOnItsOwnLinePattern = new Regex(
-            @"^(?<body>STRUCT|UNION)\b", RegexOptions.Compiled);
+            @"^(?<body>STRUCT|UNION)\b", RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
         // Which body the TYPE header opens - StructBody, UnionBody, or null for
-        // an ENUM or alias DUT.
+        // an ENUM or alias DUT. Returned in the constants' spelling however the
+        // source wrote the keyword, so callers can compare with ==.
         //
         // Line-anchored on purpose: only the "TYPE Name :" header line and the
         // next non-blank line are examined. A Contains("STRUCT") over the whole
@@ -47,7 +48,7 @@ namespace xStunit.Interpreter
 
                 var onHeaderLine = BodyOnHeaderLinePattern.Match(trimmed);
                 if (onHeaderLine.Success)
-                    return onHeaderLine.Groups["body"].Value;
+                    return onHeaderLine.Groups["body"].Value.ToUpperInvariant();
 
                 for (var j = i + 1; j < lines.Length; j++)
                 {
@@ -56,7 +57,7 @@ namespace xStunit.Interpreter
                         continue;
 
                     var onItsOwnLine = BodyOnItsOwnLinePattern.Match(next);
-                    return onItsOwnLine.Success ? onItsOwnLine.Groups["body"].Value : null;
+                    return onItsOwnLine.Success ? onItsOwnLine.Groups["body"].Value.ToUpperInvariant() : null;
                 }
 
                 return null;

@@ -20,13 +20,13 @@ namespace xStunit.Interpreter
     public static class DutAliasLoader
     {
         private static readonly Regex TypeHeaderPattern = new Regex(
-            @"^TYPE\s+(?<name>\w+)\s*:\s*(?<rest>.*)$", RegexOptions.Compiled);
+            @"^TYPE\s+(?<name>\w+)\s*:\s*(?<rest>.*)$", RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
         // Text that starts a STRUCT or ENUM body, not an alias's
         // underlying-type text.
         private static bool LooksLikeStructOrEnumBody(string text) =>
             text.Length == 0
-            || text.StartsWith("STRUCT", StringComparison.Ordinal)
+            || text.StartsWith("STRUCT", StringComparison.OrdinalIgnoreCase)
             || text.StartsWith("(", StringComparison.Ordinal);
 
         // Extracts (name, underlyingTypeName) from an ALIAS DUT's declaration

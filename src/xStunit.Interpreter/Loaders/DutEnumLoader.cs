@@ -27,7 +27,7 @@ namespace xStunit.Interpreter
 
         private static readonly Regex EnumPattern = new Regex(
             @"^TYPE\s+(?<name>\w+)\s*:\s*\((?<body>[^)]*)\)\s*(?<base>[A-Za-z_]\w*)?\s*;",
-            RegexOptions.Compiled);
+            RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
         // Extracts (name, underlyingTypeName, members) from an ENUM DUT's
         // declaration text - e.g. "E_Color" / "INT" from "TYPE E_Color :

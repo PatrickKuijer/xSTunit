@@ -10,11 +10,11 @@ namespace xStunit.Parser
     {
         private static readonly Regex ExtendsPattern = new Regex(
             @"FUNCTION_BLOCK(?:\s+(?:ABSTRACT|FINAL))*\s+\S+\s+EXTENDS\s+(?<baseType>[\w.]+)",
-            RegexOptions.Compiled);
+            RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
         private static readonly (Regex Pattern, string ConstructName)[] RejectedConstructs =
         {
-            (new Regex(@"\b__NEW\b", RegexOptions.Compiled), "__NEW"),
+            (new Regex(@"\b__NEW\b", RegexOptions.Compiled | RegexOptions.IgnoreCase), "__NEW"),
             (new Regex(@"\bTc2_System\.", RegexOptions.Compiled), "Tc2_System"),
             (new Regex(@"\bTc2_Utilities\.", RegexOptions.Compiled), "Tc2_Utilities"),
             (new Regex(@"\bcall_after_init\b", RegexOptions.Compiled), "call_after_init"),

@@ -280,6 +280,31 @@ END_VAR";
             Assert.Equal("1800", capacity.DefaultValueText);
         }
 
+        // Section keywords are IEC 61131-3 keywords, so TwinCAT accepts them in
+        // any case. A header or closer read only in upper case drops the
+        // declarations under it, or - for a lower-case closer - leaves the
+        // section open so the next header's lines land in the wrong section.
+        [Theory]
+        [InlineData("var", "end_var", VarSection.Local)]
+        [InlineData("var_input", "end_var", VarSection.Input)]
+        [InlineData("Var_Output", "End_Var", VarSection.Output)]
+        [InlineData("var_in_out", "END_VAR", VarSection.InOut)]
+        [InlineData("var_temp", "end_var", VarSection.Temp)]
+        [InlineData("var_global constant", "end_var", VarSection.Global)]
+        [InlineData("var_input Retain persistent", "end_var", VarSection.Input)]
+        [InlineData("struct", "end_struct", VarSection.Local)]
+        [InlineData("Union", "End_Union", VarSection.Local)]
+        public void Parse_SectionKeywordsInAnyCase_OpenAndCloseTheirSection(string header, string closer, VarSection expected)
+        {
+            var declaration = $"{header}\n\tnValue : INT;\n{closer}\n\tnOutside : INT;";
+
+            var vars = VarBlockParser.Parse(declaration);
+
+            var value = Assert.Single(vars);
+            Assert.Equal("nValue", value.Name);
+            Assert.Equal(expected, value.Section);
+        }
+
         // A STRING/WSTRING size may be any IEC 61131-3 constant expression, not
         // just an integer literal. A size this parser cannot match costs more
         // than the size itself: the whole declaration line fails to match and

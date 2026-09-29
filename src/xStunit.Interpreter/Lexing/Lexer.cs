@@ -10,6 +10,25 @@ namespace xStunit.Interpreter
     // recognize is a gap, not necessarily a bug.
     public static class Lexer
     {
+        // The reserved words the parser dispatches on, in the one spelling it
+        // compares against. IEC 61131-3 keywords are case-insensitive, so a
+        // word matching one of these in any case is emitted upper-case and
+        // every parser check holds for 'if', 'If' and 'IF' alike. Any other
+        // word keeps its written spelling: identifiers resolve
+        // case-insensitively downstream, and diagnostics echo the name as the
+        // source wrote it.
+        private static readonly HashSet<string> Keywords = new HashSet<string>(StringComparer.Ordinal)
+        {
+            "IF", "THEN", "ELSIF", "ELSE", "END_IF",
+            "CASE", "OF", "END_CASE",
+            "FOR", "TO", "BY", "DO", "END_FOR",
+            "WHILE", "END_WHILE",
+            "REPEAT", "UNTIL", "END_REPEAT",
+            "EXIT", "RETURN",
+            "AND", "AND_THEN", "OR", "OR_ELSE", "XOR", "NOT", "MOD",
+            "THIS", "SUPER",
+        };
+
         // Strips (* ... *) and // ... comments, leaving everything else -
         // including string literal contents - untouched.
         //
@@ -127,15 +146,16 @@ namespace xStunit.Interpreter
                     while (i < text.Length && (char.IsLetterOrDigit(text[i]) || text[i] == '_'))
                         i++;
                     var word = text.Substring(start, i - start);
+                    var upper = word.ToUpperInvariant();
 
-                    if (word == "REF" && i < text.Length && text[i] == '=')
+                    if (upper == "REF" && i < text.Length && text[i] == '=')
                     {
                         i++;
                         tokens.Add(new Token(TokenType.RefAssign, "REF=", tokenLine));
                         continue;
                     }
 
-                    if ((word == "REAL" || word == "LREAL") && i < text.Length && text[i] == '#')
+                    if ((upper == "REAL" || upper == "LREAL") && i < text.Length && text[i] == '#')
                     {
                         i++; // '#'
                         var numStart = i;
@@ -143,11 +163,11 @@ namespace xStunit.Interpreter
                             i++;
                         ConsumeFraction(text, ref i);
                         var numText = text.Substring(numStart, i - numStart);
-                        tokens.Add(new Token(word == "REAL" ? TokenType.RealLiteral : TokenType.LrealLiteral, numText, tokenLine));
+                        tokens.Add(new Token(upper == "REAL" ? TokenType.RealLiteral : TokenType.LrealLiteral, numText, tokenLine));
                         continue;
                     }
 
-                    if ((word == "LTIME" || word == "LT") && i < text.Length && text[i] == '#')
+                    if ((upper == "LTIME" || upper == "LT") && i < text.Length && text[i] == '#')
                     {
                         i++; // '#'
                         var durStart = i;
@@ -157,7 +177,7 @@ namespace xStunit.Interpreter
                         continue;
                     }
 
-                    if ((word == "TIME" || word == "T") && i < text.Length && text[i] == '#')
+                    if ((upper == "TIME" || upper == "T") && i < text.Length && text[i] == '#')
                     {
                         i++; // '#'
                         var durStart = i;
@@ -171,7 +191,7 @@ namespace xStunit.Interpreter
                     // literals, not TIME's duration-segment grammar, so their
                     // body is a run of digits/'-'/':'/'.' rather than
                     // digits+unit-letters.
-                    if ((word == "DATE_AND_TIME" || word == "DT") && i < text.Length && text[i] == '#')
+                    if ((upper == "DATE_AND_TIME" || upper == "DT") && i < text.Length && text[i] == '#')
                     {
                         i++; // '#'
                         var litStart = i;
@@ -181,7 +201,7 @@ namespace xStunit.Interpreter
                         continue;
                     }
 
-                    if ((word == "TIME_OF_DAY" || word == "TOD") && i < text.Length && text[i] == '#')
+                    if ((upper == "TIME_OF_DAY" || upper == "TOD") && i < text.Length && text[i] == '#')
                     {
                         i++; // '#'
                         var litStart = i;
@@ -191,7 +211,7 @@ namespace xStunit.Interpreter
                         continue;
                     }
 
-                    if ((word == "DATE" || word == "D") && i < text.Length && text[i] == '#')
+                    if ((upper == "DATE" || upper == "D") && i < text.Length && text[i] == '#')
                     {
                         i++; // '#'
                         var litStart = i;
@@ -201,7 +221,7 @@ namespace xStunit.Interpreter
                         continue;
                     }
 
-                    tokens.Add(new Token(TokenType.Identifier, word, tokenLine));
+                    tokens.Add(new Token(TokenType.Identifier, Keywords.Contains(upper) ? upper : word, tokenLine));
                     continue;
                 }
 

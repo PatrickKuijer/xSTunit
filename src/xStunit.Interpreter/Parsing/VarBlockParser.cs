@@ -97,16 +97,12 @@ namespace xStunit.Interpreter
                 if (line[0] == '{')
                     continue;
 
-                // Section keywords are read case-sensitively, here and in
-                // TryReadSectionHeader, unlike the type names VarLinePattern
-                // accepts in any case. STRUCT/UNION are also read
-                // case-sensitively upstream by StructDeclParser.DeclaredBody,
-                // which is what decides whether a DUT reaches DutStructLoader
-                // or DutAliasLoader in the first place. Widening only this copy
-                // would open a body here for a declaration those two already
-                // routed elsewhere, so the accepted spelling is a pipeline-wide
-                // decision rather than this parser's to make alone.
-                switch (line)
+                // Section keywords match in any case, as IEC 61131-3 keywords
+                // do. StructDeclParser.DeclaredBody reads STRUCT/UNION the same
+                // way when it routes a DUT here rather than to DutAliasLoader,
+                // and the two have to agree: a spelling only one side accepts
+                // opens a body here for a declaration the other routed away.
+                switch (line.ToUpperInvariant())
                 {
                     case "END_VAR":
                         currentSection = null;
@@ -161,7 +157,7 @@ namespace xStunit.Interpreter
             var space = line.IndexOfAny(new[] { ' ', '\t' });
             var keyword = space < 0 ? line : line.Substring(0, space);
 
-            switch (keyword)
+            switch (keyword.ToUpperInvariant())
             {
                 case "VAR":
                     section = VarSection.Local;

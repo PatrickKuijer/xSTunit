@@ -90,6 +90,25 @@ END_TYPE");
             Assert.Equal(new[] { "asWord", "asLong" }, unionAst.Fields.Select(f => f.Name).ToArray());
         }
 
+        // TYPE/STRUCT/UNION are IEC 61131-3 keywords and TwinCAT accepts them
+        // in any case. Read only in upper case, a lower-case STRUCT DUT is
+        // never routed to DutStructLoader, and every field access on it fails
+        // as though the type did not exist.
+        [Theory]
+        [InlineData("type ST_Point :\nstruct\n\tx : DINT;\n\ty : DINT;\nend_struct\nend_type", false)]
+        [InlineData("Type ST_Point :\nStruct\n\tx : DINT;\n\ty : DINT;\nEnd_Struct\nEnd_Type", false)]
+        [InlineData("type ST_Point :\nunion\n\tx : DINT;\n\ty : DINT;\nend_union\nend_type", true)]
+        public void Parse_TypeAndBodyKeywordsInAnyCase_ReadsNameFieldsAndBody(string declaration, bool isUnion)
+        {
+            var structAst = StructDeclParser.Parse(declaration);
+
+            Assert.Equal(isUnion ? StructDeclParser.UnionBody : StructDeclParser.StructBody, StructDeclParser.DeclaredBody(declaration));
+            Assert.Equal(!isUnion, DutStructLoader.IsStructDeclaration(declaration));
+            Assert.Equal("ST_Point", structAst.Name);
+            Assert.Equal(isUnion, structAst.IsUnion);
+            Assert.Equal(new[] { "x", "y" }, structAst.Fields.Select(f => f.Name).ToArray());
+        }
+
         [Fact]
         public void Parse_StructDeclaration_IsNotMarkedAUnion()
         {

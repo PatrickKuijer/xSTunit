@@ -38,6 +38,14 @@ END_TYPE";
         }
 
         [Fact]
+        public void IsStructDeclaration_LowerCaseStructOnSameLineAsHeader_ReturnsTrue()
+        {
+            const string declaration = "type ST_Point : struct\n\tx : REAL;\nend_struct\nend_type";
+
+            Assert.True(DutStructLoader.IsStructDeclaration(declaration));
+        }
+
+        [Fact]
         public void IsStructDeclaration_EnumWithStructInCommentText_ReturnsFalse()
         {
             const string declaration = @"(* replaces the old STRUCT-based version *)

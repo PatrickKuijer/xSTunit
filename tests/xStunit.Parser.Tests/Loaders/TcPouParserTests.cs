@@ -219,6 +219,34 @@ END_VAR]]></Declaration>
             Assert.Equal("FB_ModuleBase", ast.BaseTypeName);
         }
 
+        // The header keywords are IEC 61131-3 keywords, which TwinCAT accepts
+        // in any case. A missed EXTENDS leaves the POU with no base type, so a
+        // suite written this way is never discovered as a TcUnit suite and an
+        // inherited member is reported as unknown.
+        [Theory]
+        [InlineData("function_block FB_ClampedCounter extends FB_Counter")]
+        [InlineData("Function_Block Abstract FB_ClampedCounter Extends FB_Counter")]
+        [InlineData("FUNCTION_BLOCK final FB_ClampedCounter EXTENDS FB_Counter")]
+        public void Parse_ExtendsHeaderInAnyCase_ReadsBaseTypeName(string header)
+        {
+            var xml = $@"<?xml version=""1.0"" encoding=""utf-8""?>
+<TcPlcObject Version=""1.1.0.1"">
+  <POU Name=""FB_ClampedCounter"" Id=""{{a1b2c3d4-0002-4a1a-8b1b-000000000002}}"" SpecialFunc=""None"">
+    <Declaration><![CDATA[{header}
+var
+	ceiling : INT;
+end_var]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>";
+
+            var ast = TcPouParser.Parse(xml);
+
+            Assert.Equal("FB_Counter", ast.BaseTypeName);
+        }
+
         [Fact]
         public void Parse_ExtendsWithFinalQualifier_ReadsBaseTypeName()
         {
@@ -255,6 +283,35 @@ END_VAR]]></Declaration>
 ]]></Declaration>
       <Implementation>
         <ST><![CDATA[pCounter := __NEW(FB_Counter);]]></ST>
+      </Implementation>
+    </Method>
+  </POU>
+</TcPlcObject>";
+
+            var ex = Assert.Throws<TcPouRejectedException>(() => TcPouParser.Parse(xml));
+
+            Assert.Contains("__NEW", ex.Message);
+            Assert.Contains("CreateCounter", ex.Message);
+        }
+
+        // __NEW is an operator keyword, so a lower-case spelling is the same
+        // unsupported construct and has to be rejected with the same message
+        // rather than reaching the interpreter as a call to an unknown function.
+        [Fact]
+        public void Parse_MethodUsingLowerCaseNew_ThrowsRejectedConstructWithDiagnostic()
+        {
+            const string xml = @"<?xml version=""1.0"" encoding=""utf-8""?>
+<TcPlcObject Version=""1.1.0.1"">
+  <POU Name=""FB_Factory"" Id=""{00000000-0000-0000-0000-000000000004}"" SpecialFunc=""None"">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_Factory]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[]]></ST>
+    </Implementation>
+    <Method Name=""CreateCounter"" Id=""{00000000-0000-0000-0000-000000000005}"">
+      <Declaration><![CDATA[METHOD PUBLIC CreateCounter
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[pCounter := __new(FB_Counter);]]></ST>
       </Implementation>
     </Method>
   </POU>

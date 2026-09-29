@@ -49,6 +49,28 @@ namespace xStunit.Interpreter.Tests
         }
 
         [Fact]
+        public void TryParseAlias_LowerCaseTypeKeyword_ExtractsUnderlyingType()
+        {
+            const string declaration = "type T_Label : STRING(20);\nend_type";
+
+            var parsed = DutAliasLoader.TryParseAlias(declaration, out var name, out var underlying);
+
+            Assert.True(parsed);
+            Assert.Equal("T_Label", name);
+            Assert.Equal("STRING(20)", underlying);
+        }
+
+        // A lower-case STRUCT body must still be recognized as one: taken for
+        // an alias, the type name would map to the text "struct".
+        [Fact]
+        public void TryParseAlias_LowerCaseStructDeclaration_ReturnsFalse()
+        {
+            const string declaration = "type ST_Point :\nstruct\n\tx : REAL;\nend_struct\nend_type";
+
+            Assert.False(DutAliasLoader.TryParseAlias(declaration, out _, out _));
+        }
+
+        [Fact]
         public void TryParseAlias_StructDeclaration_ReturnsFalse()
         {
             const string declaration = "TYPE ST_Point :\nSTRUCT\n\tx : REAL;\nEND_STRUCT\nEND_TYPE";

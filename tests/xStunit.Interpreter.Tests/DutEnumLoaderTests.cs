@@ -20,6 +20,19 @@ namespace xStunit.Interpreter.Tests
         }
 
         [Fact]
+        public void TryParseEnum_LowerCaseTypeKeyword_ExtractsNameAndMembers()
+        {
+            const string declaration = "type E_Color : (Red, Green := 5, Blue) dint;\nend_type";
+
+            var parsed = DutEnumLoader.TryParseEnum(declaration, out var name, out var underlying, out var members);
+
+            Assert.True(parsed);
+            Assert.Equal("E_Color", name);
+            Assert.Equal("dint", underlying);
+            Assert.Equal(6, members["Blue"]);
+        }
+
+        [Fact]
         public void TryParseEnum_ExplicitBaseType_ExtractsBaseType()
         {
             const string declaration =

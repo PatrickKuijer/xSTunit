@@ -55,9 +55,10 @@ namespace xStunit.Runner.TcUnitStub
             Convert.ToDouble(value).ToString(System.Globalization.CultureInfo.InvariantCulture);
 
         // Keyed by the IEC type name suffix from AssertEquals_<TYPE>
-        // (e.g. "INT", "BOOL", "STRING", "REAL").
+        // (e.g. "INT", "BOOL", "STRING", "REAL"), in any case, as IEC type
+        // names are; Name is the canonical spelling of the entry matched.
         public static readonly IReadOnlyDictionary<string, ScalarAssertType> Registry =
-            new Dictionary<string, ScalarAssertType>
+            new Dictionary<string, ScalarAssertType>(StringComparer.OrdinalIgnoreCase)
             {
                 // IEC INT is signed 16-bit, so a real INT variable is already
                 // truncated to that range by the time an assert sees it.

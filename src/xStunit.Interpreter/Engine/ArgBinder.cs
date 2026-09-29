@@ -38,5 +38,17 @@ namespace xStunit.Interpreter
             value = null;
             return false;
         }
+
+        // The tryGetNamed half for unevaluated call args. Matched
+        // case-insensitively, as IEC identifiers are: a miss here does not
+        // fail, it silently falls back to positional binding.
+        public static Expr FindNamed(IReadOnlyList<NamedArg> namedArgs, string paramName)
+        {
+            foreach (var arg in namedArgs)
+                if (string.Equals(arg.Name, paramName, System.StringComparison.OrdinalIgnoreCase))
+                    return arg.Value;
+
+            return null;
+        }
     }
 }

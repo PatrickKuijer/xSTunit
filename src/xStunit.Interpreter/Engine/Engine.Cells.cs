@@ -23,7 +23,7 @@ namespace xStunit.Interpreter
             // safe: the increment lands on this local copy and is discarded.
             if (ArgBinder.TryResolveArg(
                 paramName,
-                name => namedArgs.FirstOrDefault(a => a.Name == name)?.Value,
+                name => ArgBinder.FindNamed(namedArgs, name),
                 positionalArgs,
                 ref posIndex,
                 out var argExpr))
@@ -42,7 +42,7 @@ namespace xStunit.Interpreter
             // Same fixed-position usage as ResolveNamedOrPositionalCell above.
             if (ArgBinder.TryResolveArg(
                 paramName,
-                name => namedArgs.FirstOrDefault(a => a.Name == name)?.Value,
+                name => ArgBinder.FindNamed(namedArgs, name),
                 positionalArgs,
                 ref posIndex,
                 out var argExpr))
@@ -292,9 +292,8 @@ namespace xStunit.Interpreter
             "DINT", "DWORD", "UDINT", "LINT", "LWORD", "ULINT",
         };
 
-        // The class is handed back exactly as the other side spelled it: the
-        // runner compares the two type names ordinally, so normalising only the
-        // literal side would invent a mismatch out of a var declared 'int'.
+        // The class is handed back exactly as the other side spelled it, so a
+        // failure names the type the way its declaration does.
         //
         // The two real literals take one width each, and are not
         // interchangeable. An unsuffixed decimal lexes as a 32-bit float, so it

@@ -20,8 +20,10 @@ namespace xStunit.Interpreter
         // because default-value construction can itself recurse into
         // NewInstance and other GVLs' struct types through _registry. No
         // TwinCAT GVL init-cycle/task-binding semantics are modeled, just
-        // zero-initialized storage per declared type.
-        private readonly Dictionary<string, Dictionary<string, Cell>> _globals = new Dictionary<string, Dictionary<string, Cell>>();
+        // zero-initialized storage per declared type. Both levels match
+        // case-insensitively, as IEC identifiers do.
+        private readonly Dictionary<string, Dictionary<string, Cell>> _globals =
+            new Dictionary<string, Dictionary<string, Cell>>(StringComparer.OrdinalIgnoreCase);
 
         // Global Cells whose own default value is not settled yet. Membership
         // is reference identity, Cell declaring no value equality of its own.
@@ -102,7 +104,7 @@ namespace xStunit.Interpreter
             // against, regardless of GvlNames iteration order.
             foreach (var gvlName in _registry.GvlNames)
             {
-                var fields = new Dictionary<string, Cell>();
+                var fields = new Dictionary<string, Cell>(StringComparer.OrdinalIgnoreCase);
                 foreach (var decl in _registry.GetGvlDecls(gvlName))
                 {
                     var cell = new Cell { DeclaredTypeName = decl.TypeName };
@@ -253,7 +255,7 @@ namespace xStunit.Interpreter
                 // fails that test and lets the rest of the suite run.
                 ExecuteSuiteBody(
                     () => _registry.GetStatements(def.ImplementationText),
-                    new Frame(instance, suiteTypeName, null, def.BodyStartLine),
+                    new Frame(instance, def.Name, null, def.BodyStartLine),
                     host);
                 stopwatch.Stop();
                 elapsedMilliseconds = stopwatch.ElapsedMilliseconds;
@@ -424,12 +426,15 @@ namespace xStunit.Interpreter
             _ => Convert.ToInt32(value),
         };
 
-        private static readonly HashSet<string> LoopbackFaultMethods = new HashSet<string>
+        private static readonly string[] LoopbackFaultMethods =
         {
             "Transmit", "Drop", "Restore", "Freeze", "SetDelay", "Duplicate", "Corrupt",
         };
 
-        private static bool IsLoopbackFaultMethod(string methodName) => LoopbackFaultMethods.Contains(methodName);
+        // The declared spelling methodName matches, so the dispatch switch has
+        // one spelling to name per method; null when it names none of them.
+        private static string LoopbackFaultMethod(string methodName) =>
+            Array.Find(LoopbackFaultMethods, m => string.Equals(m, methodName, StringComparison.OrdinalIgnoreCase));
 
         // Whether a FieldAccessExpr's receiver is a bare GVL name (e.g.
         // gScratchGlobals.stWidget) rather than a variable/field in scope.

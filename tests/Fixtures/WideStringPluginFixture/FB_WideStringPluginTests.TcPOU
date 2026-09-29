@@ -19,38 +19,38 @@
 *)
 FUNCTION_BLOCK FB_WideStringPluginTests EXTENDS TcUnit.FB_TestSuite]]></Declaration>
     <Implementation>
-      <ST><![CDATA[WLen();
+      <ST><![CDATA[WLenReturnsTheCharacterCount();
 WLenCountsWideCharactersNotBytes();
 WLenOfEmptyIsZero();
-WLeft();
+WLeftReturnsTheLeftmostCharacters();
 WLeftClampsWhenSizeExceedsLength();
 WLeftReturnsEmptyForNonPositiveSize();
-WRight();
+WRightReturnsTheRightmostCharacters();
 WRightClampsWhenSizeExceedsLength();
-WMid();
+WMidReturnsLenCharactersFromPos();
 WMidClampsWhenPosPlusLenExceedsLength();
 WMidReturnsEmptyWhenPosPastEnd();
-WDelete();
+WDeleteRemovesLenCharactersAtPos();
 WDeleteClampsWhenPosPlusLenExceedsLength();
-WInsert();
+WInsertPlacesStr2AfterPos();
 WInsertClampsPosBeyondEnd();
-WReplace();
+WReplaceSwapsCharactersForStr2();
 WReplaceLeavesStringUnchangedWhenPosPastEnd();
-WFind();
+WFindReturnsThePositionOfTheFirstMatch();
 WFindReturnsZeroWhenNotFound();
 WFindReturnsZeroForEmptyNeedle();
-WConcat();
+WConcatAppendsStr2ToStr1();
 WConcatAppendsOptionalTrailingArgs();]]></ST>
     </Implementation>
-    <Method Name="WLen" Id="{93190000-0000-4a1a-8b1b-000000000001}">
-      <Declaration><![CDATA[METHOD PRIVATE WLen
+    <Method Name="WLenReturnsTheCharacterCount" Id="{93190000-0000-4a1a-8b1b-000000000001}">
+      <Declaration><![CDATA[METHOD PRIVATE WLenReturnsTheCharacterCount
 VAR
 	wsFullPath	: WSTRING(80) := "Root.Child.Leaf";
 	nLength		: INT;
 END_VAR
 ]]></Declaration>
       <Implementation>
-        <ST><![CDATA[TEST('WLen');
+        <ST><![CDATA[TEST('WLenReturnsTheCharacterCount');
 
 nLength := WLEN(wsFullPath);
 
@@ -100,8 +100,8 @@ AssertEquals_INT(Expected := 0,
 TEST_FINISHED();]]></ST>
       </Implementation>
     </Method>
-    <Method Name="WLeft" Id="{93190000-0000-4a1a-8b1b-000000000004}">
-      <Declaration><![CDATA[METHOD PRIVATE WLeft
+    <Method Name="WLeftReturnsTheLeftmostCharacters" Id="{93190000-0000-4a1a-8b1b-000000000004}">
+      <Declaration><![CDATA[METHOD PRIVATE WLeftReturnsTheLeftmostCharacters
 VAR
 	wsFullPath	: WSTRING(80) := "Root.Child.Leaf.Extra";
 	nIndex		: INT := 16;
@@ -109,7 +109,7 @@ VAR
 END_VAR
 ]]></Declaration>
       <Implementation>
-        <ST><![CDATA[TEST('WLeft');
+        <ST><![CDATA[TEST('WLeftReturnsTheLeftmostCharacters');
 
 wsResult := WLEFT(wsFullPath, nIndex - 1);
 
@@ -156,8 +156,8 @@ AssertEquals_WSTRING(Expected := "",
 TEST_FINISHED();]]></ST>
       </Implementation>
     </Method>
-    <Method Name="WRight" Id="{93190000-0000-4a1a-8b1b-000000000007}">
-      <Declaration><![CDATA[METHOD PRIVATE WRight
+    <Method Name="WRightReturnsTheRightmostCharacters" Id="{93190000-0000-4a1a-8b1b-000000000007}">
+      <Declaration><![CDATA[METHOD PRIVATE WRightReturnsTheRightmostCharacters
 VAR
 	wsFullPath	: WSTRING(80) := "Root.Child.Leaf";
 	nPos		: INT := 5;
@@ -165,7 +165,7 @@ VAR
 END_VAR
 ]]></Declaration>
       <Implementation>
-        <ST><![CDATA[TEST('WRight');
+        <ST><![CDATA[TEST('WRightReturnsTheRightmostCharacters');
 
 wsResult := WRIGHT(wsFullPath, WLEN(wsFullPath) - nPos);
 
@@ -194,8 +194,8 @@ AssertEquals_WSTRING(Expected := "abc",
 TEST_FINISHED();]]></ST>
       </Implementation>
     </Method>
-    <Method Name="WMid" Id="{93190000-0000-4a1a-8b1b-000000000009}">
-      <Declaration><![CDATA[METHOD PRIVATE WMid
+    <Method Name="WMidReturnsLenCharactersFromPos" Id="{93190000-0000-4a1a-8b1b-000000000009}">
+      <Declaration><![CDATA[METHOD PRIVATE WMidReturnsLenCharactersFromPos
 VAR
 	wsFullPath	: WSTRING(80) := "Root.Child.Leaf";
 	nLen		: INT := 5;
@@ -204,7 +204,7 @@ VAR
 END_VAR
 ]]></Declaration>
       <Implementation>
-        <ST><![CDATA[TEST('WMid');
+        <ST><![CDATA[TEST('WMidReturnsLenCharactersFromPos');
 
 wsResult := WMID(wsFullPath, nLen, nPos);
 
@@ -252,8 +252,8 @@ AssertEquals_WSTRING(Expected := "",
 TEST_FINISHED();]]></ST>
       </Implementation>
     </Method>
-    <Method Name="WDelete" Id="{93190000-0000-4a1a-8b1b-00000000000c}">
-      <Declaration><![CDATA[METHOD PRIVATE WDelete
+    <Method Name="WDeleteRemovesLenCharactersAtPos" Id="{93190000-0000-4a1a-8b1b-00000000000c}">
+      <Declaration><![CDATA[METHOD PRIVATE WDeleteRemovesLenCharactersAtPos
 VAR
 	wsFullPath	: WSTRING(80) := "Root.Child]";
 	nPos		: INT := 11;
@@ -261,7 +261,7 @@ VAR
 END_VAR
 ]]></Declaration>
       <Implementation>
-        <ST><![CDATA[TEST('WDelete');
+        <ST><![CDATA[TEST('WDeleteRemovesLenCharactersAtPos');
 
 wsResult := WDELETE(wsFullPath, 1, nPos);
 
@@ -291,8 +291,8 @@ AssertEquals_WSTRING(Expected := "ab",
 TEST_FINISHED();]]></ST>
       </Implementation>
     </Method>
-    <Method Name="WInsert" Id="{93190000-0000-4a1a-8b1b-00000000000e}">
-      <Declaration><![CDATA[METHOD PRIVATE WInsert
+    <Method Name="WInsertPlacesStr2AfterPos" Id="{93190000-0000-4a1a-8b1b-00000000000e}">
+      <Declaration><![CDATA[METHOD PRIVATE WInsertPlacesStr2AfterPos
 VAR
 	wsBase		: WSTRING(80) := "Root.Leaf";
 	wsInsert	: WSTRING(80) := "Child.";
@@ -301,7 +301,7 @@ VAR
 END_VAR
 ]]></Declaration>
       <Implementation>
-        <ST><![CDATA[TEST('WInsert');
+        <ST><![CDATA[TEST('WInsertPlacesStr2AfterPos');
 
 wsResult := WINSERT(wsBase, wsInsert, nPos);
 
@@ -330,8 +330,8 @@ AssertEquals_WSTRING(Expected := "abcXY",
 TEST_FINISHED();]]></ST>
       </Implementation>
     </Method>
-    <Method Name="WReplace" Id="{93190000-0000-4a1a-8b1b-000000000010}">
-      <Declaration><![CDATA[METHOD PRIVATE WReplace
+    <Method Name="WReplaceSwapsCharactersForStr2" Id="{93190000-0000-4a1a-8b1b-000000000010}">
+      <Declaration><![CDATA[METHOD PRIVATE WReplaceSwapsCharactersForStr2
 VAR
 	wsFullPath	: WSTRING(80) := "Root[0].Leaf";
 	nPos		: INT := 5;
@@ -339,7 +339,7 @@ VAR
 END_VAR
 ]]></Declaration>
       <Implementation>
-        <ST><![CDATA[TEST('WReplace');
+        <ST><![CDATA[TEST('WReplaceSwapsCharactersForStr2');
 
 wsResult := WREPLACE(wsFullPath, "_", 1, nPos);
 
@@ -368,15 +368,15 @@ AssertEquals_WSTRING(Expected := "abcde",
 TEST_FINISHED();]]></ST>
       </Implementation>
     </Method>
-    <Method Name="WFind" Id="{93190000-0000-4a1a-8b1b-000000000012}">
-      <Declaration><![CDATA[METHOD PRIVATE WFind
+    <Method Name="WFindReturnsThePositionOfTheFirstMatch" Id="{93190000-0000-4a1a-8b1b-000000000012}">
+      <Declaration><![CDATA[METHOD PRIVATE WFindReturnsThePositionOfTheFirstMatch
 VAR
 	wsFullPath	: WSTRING(80) := "Root.Child.Leaf";
 	nSeparator	: INT;
 END_VAR
 ]]></Declaration>
       <Implementation>
-        <ST><![CDATA[TEST('WFind');
+        <ST><![CDATA[TEST('WFindReturnsThePositionOfTheFirstMatch');
 
 nSeparator := WFIND(wsFullPath, ".");
 
@@ -423,15 +423,15 @@ AssertEquals_INT(Expected := 0,
 TEST_FINISHED();]]></ST>
       </Implementation>
     </Method>
-    <Method Name="WConcat" Id="{93190000-0000-4a1a-8b1b-000000000015}">
-      <Declaration><![CDATA[METHOD PRIVATE WConcat
+    <Method Name="WConcatAppendsStr2ToStr1" Id="{93190000-0000-4a1a-8b1b-000000000015}">
+      <Declaration><![CDATA[METHOD PRIVATE WConcatAppendsStr2ToStr1
 VAR
 	wsLeft		: WSTRING(80) := "Root.";
 	wsResult	: WSTRING(80);
 END_VAR
 ]]></Declaration>
       <Implementation>
-        <ST><![CDATA[TEST('WConcat');
+        <ST><![CDATA[TEST('WConcatAppendsStr2ToStr1');
 
 (* Unlike CONCAT (an interpreter intrinsic), WCONCAT is
    not intercepted before native-function dispatch - the intrinsic matches

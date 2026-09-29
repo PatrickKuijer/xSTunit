@@ -470,7 +470,7 @@ namespace xStunit.Interpreter
             {
                 if (ArgBinder.TryResolveArg(
                     paramName,
-                    name => namedArgs.FirstOrDefault(a => a.Name == name)?.Value,
+                    name => ArgBinder.FindNamed(namedArgs, name),
                     positionalArgs,
                     ref posIndex,
                     out var value))
@@ -819,24 +819,24 @@ namespace xStunit.Interpreter
         {
             if (call.Receiver == null)
             {
-                if (call.MethodName == "ADR")
+                if (IsNamed(call.MethodName, "ADR"))
                     return new Pointer(ResolveCellForAdr(call.PositionalArgs[0], frame));
 
-                if (call.MethodName == "__ISVALIDREF")
+                if (IsNamed(call.MethodName, "__ISVALIDREF"))
                     return IsValidRef(call.PositionalArgs[0], frame);
 
-                if (call.MethodName == "MEMCPY" || call.MethodName == "MEMMOVE")
+                if (IsNamed(call.MethodName, "MEMCPY") || IsNamed(call.MethodName, "MEMMOVE"))
                 {
                     var args = ResolveIntrinsicArgs(new[] { "destAddr", "srcAddr", "n" }, call.PositionalArgs, call.NamedArgs);
                     return MemCopy(
                         RequirePointerArg(call.MethodName, "destAddr", args, frame),
                         RequirePointerArg(call.MethodName, "srcAddr", args, frame),
                         Convert.ToInt32(Evaluate(RequireIntrinsicArg(call.MethodName, "n", args), frame)),
-                        overlapSafe: call.MethodName == "MEMMOVE",
+                        overlapSafe: IsNamed(call.MethodName, "MEMMOVE"),
                         frame);
                 }
 
-                if (call.MethodName == "MEMSET")
+                if (IsNamed(call.MethodName, "MEMSET"))
                 {
                     var args = ResolveIntrinsicArgs(new[] { "destAddr", "value", "n" }, call.PositionalArgs, call.NamedArgs);
                     return MemSet(
@@ -846,13 +846,13 @@ namespace xStunit.Interpreter
                         frame);
                 }
 
-                if (call.MethodName == "TestAndSet")
+                if (IsNamed(call.MethodName, "TestAndSet"))
                 {
                     var args = ResolveIntrinsicArgs(TestAndSetParamNames, call.PositionalArgs, call.NamedArgs);
                     return TestAndSet(RequireIntrinsicArg("TestAndSet", "Lock", args), frame);
                 }
 
-                if (call.MethodName == "AdvanceClock")
+                if (IsNamed(call.MethodName, "AdvanceClock"))
                 {
                     var args = ResolveIntrinsicArgs(AdvanceClockParamNames, call.PositionalArgs, call.NamedArgs);
                     var duration = Evaluate(RequireIntrinsicArg("AdvanceClock", "Duration", args), frame);
@@ -860,10 +860,10 @@ namespace xStunit.Interpreter
                     return null;
                 }
 
-                if (call.MethodName == "SIZEOF")
+                if (IsNamed(call.MethodName, "SIZEOF"))
                     return EvaluateSizeOf(call.PositionalArgs[0], frame);
 
-                if (call.MethodName == "CONCAT")
+                if (IsNamed(call.MethodName, "CONCAT"))
                 {
                     var args = ResolveIntrinsicArgs(ConcatParamNames, call.PositionalArgs, call.NamedArgs);
                     RequireIntrinsicArg("CONCAT", "STR1", args);
@@ -876,7 +876,7 @@ namespace xStunit.Interpreter
                     return sb.ToString();
                 }
 
-                if (call.MethodName == "ABS")
+                if (IsNamed(call.MethodName, "ABS"))
                 {
                     var args = ResolveIntrinsicArgs(AbsParamNames, call.PositionalArgs, call.NamedArgs);
                     return EvaluateAbs(Evaluate(RequireIntrinsicArg("ABS", "IN", args), frame));
@@ -922,7 +922,7 @@ namespace xStunit.Interpreter
             return CallMethod((FbInstance)receiver, call.MethodName, call.PositionalArgs, call.NamedArgs, frame, null);
         }
 
-        private static readonly HashSet<string> IntegerCastTargets = new HashSet<string>
+        private static readonly HashSet<string> IntegerCastTargets = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
             "SINT", "USINT", "INT", "UINT", "DINT", "UDINT", "LINT", "ULINT", "BYTE", "WORD", "DWORD", "LWORD",
         };
@@ -941,13 +941,13 @@ namespace xStunit.Interpreter
 
             // Prefixed first, so a pathological TO_INT_TO_STRING still resolves
             // the long way round.
-            var separator = call.MethodName.IndexOf("_TO_", StringComparison.Ordinal);
+            var separator = call.MethodName.IndexOf("_TO_", StringComparison.OrdinalIgnoreCase);
             if (separator >= 0)
             {
                 fromType = call.MethodName.Substring(0, separator);
                 toType = call.MethodName.Substring(separator + 4);
             }
-            else if (call.MethodName.StartsWith("TO_", StringComparison.Ordinal))
+            else if (call.MethodName.StartsWith("TO_", StringComparison.OrdinalIgnoreCase))
             {
                 fromType = null;
                 toType = call.MethodName.Substring(3);
@@ -960,24 +960,29 @@ namespace xStunit.Interpreter
             if (call.PositionalArgs.Count != 1)
                 return false;
 
-            if (fromType == null)
-            {
-                // Whether a prefix-less name is a cast at all has to be settled
-                // from the NAME, before the operand is touched: every TO_* call
-                // in the tree reaches here, and one rejected after evaluation
-                // would have its argument evaluated a second time by the
-                // dispatch it then falls through to.
-                if (toType != "REAL" && toType != "LREAL" && toType != "STRING" &&
-                    !IntegerCastTargets.Contains(toType))
-                    return false;
+            // Whether a name is a cast at all has to be settled from the NAME,
+            // before the operand is touched: one rejected after evaluation
+            // would have its argument evaluated a second time by the dispatch
+            // it then falls through to. That matters more for being matched
+            // case-insensitively, since an ordinary method such as
+            // Set_to_Default contains '_to_' too - so the prefixed form also
+            // has to name an elementary source type to count.
+            if (!IsNamed(toType, "REAL") && !IsNamed(toType, "LREAL") && !IsNamed(toType, "STRING") &&
+                !IntegerCastTargets.Contains(toType))
+                return false;
 
-                // An interpreted POU in the user's own tree outranks the
-                // intrinsic, the same precedence a native-function plugin is
-                // held to. Only the prefix-less form needs the guard: TO_INT is
-                // a name a FUNCTION can plausibly carry, INT_TO_UINT is not.
-                if (TryGetGlobalFunctionDef(call.MethodName, out _))
-                    return false;
-            }
+            if (fromType != null && !IsElementaryTypeName(fromType))
+                return false;
+
+            if (fromType != null && IsNamed(toType, "STRING") && !IsNumericCastSource(fromType))
+                return false;
+
+            // An interpreted POU in the user's own tree outranks the
+            // intrinsic, the same precedence a native-function plugin is held
+            // to. Only the prefix-less form needs the guard: TO_INT is a name a
+            // FUNCTION can plausibly carry, INT_TO_UINT is not.
+            if (fromType == null && TryGetGlobalFunctionDef(call.MethodName, out _))
+                return false;
 
             var value = Evaluate(call.PositionalArgs[0], frame);
             fromType = fromType ?? SourceTypeOf(value);
@@ -987,9 +992,9 @@ namespace xStunit.Interpreter
             // CurrentCulture, which under a culture using '.' as the group
             // separator (e.g. de-DE) drops the decimal point instead of
             // erroring or parsing it correctly.
-            if (toType == "REAL")
+            if (IsNamed(toType, "REAL"))
                 result = Convert.ToSingle(value, System.Globalization.CultureInfo.InvariantCulture);
-            else if (toType == "LREAL")
+            else if (IsNamed(toType, "LREAL"))
                 result = Convert.ToDouble(value, System.Globalization.CultureInfo.InvariantCulture);
             else if (IntegerCastTargets.Contains(toType))
                 result = Convert.ToInt32(value, System.Globalization.CultureInfo.InvariantCulture);
@@ -1001,15 +1006,21 @@ namespace xStunit.Interpreter
             // Invariant culture, for the same reason as
             // ScalarAssertType.FormatDouble: a CurrentCulture of de-DE would
             // render '.' as ','.
-            else if (toType == "STRING" && (fromType == "REAL" || fromType == "LREAL"))
+            else if (IsNamed(toType, "STRING") && (IsNamed(fromType, "REAL") || IsNamed(fromType, "LREAL")))
                 result = FormatRealAsString(value);
-            else if (toType == "STRING" && IntegerCastTargets.Contains(fromType))
+            else if (IsNamed(toType, "STRING") && IntegerCastTargets.Contains(fromType))
                 result = Convert.ToString(value, System.Globalization.CultureInfo.InvariantCulture);
             else
                 return false;
 
             return true;
         }
+
+        private static bool IsElementaryTypeName(string typeName) =>
+            IecNumericType.TryGetDefault(typeName, out _) || IecElementaryDefault.TryGetDefault(typeName, out _);
+
+        private static bool IsNumericCastSource(string typeName) =>
+            IsNamed(typeName, "REAL") || IsNamed(typeName, "LREAL") || IntegerCastTargets.Contains(typeName);
 
         // The prefix-less spelling carries no source type, so it comes from the
         // evaluated operand's box. Only two questions are ever asked of the

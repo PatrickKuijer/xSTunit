@@ -51,8 +51,8 @@ namespace xStunit.Cli.Tests
             Assert.Contains("isn't supported yet (grow-on-demand", text);
         }
 
-        // The interpreter's CONCAT intrinsic is dispatched on an exact name
-        // match, which "WCONCAT" never hits - so the plugin's WCONCAT is the
+        // The interpreter's CONCAT intrinsic is dispatched on its whole name,
+        // which "WCONCAT" never matches - so the plugin's WCONCAT is the
         // only thing that can resolve it. Were an intrinsic to start shadowing
         // that name, this call would quietly succeed here and the plugin
         // function would become dead code.
@@ -65,7 +65,7 @@ namespace xStunit.Cli.Tests
 
             var text = output.ToString();
             Assert.Equal(1, exitCode);
-            Assert.Contains("WConcat: FAIL", text);
+            Assert.Contains("WConcatAppendsStr2ToStr1: FAIL", text);
             Assert.Contains("'WCONCAT' isn't supported yet", text);
         }
 

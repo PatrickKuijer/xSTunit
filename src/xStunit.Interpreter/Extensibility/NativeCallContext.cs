@@ -24,7 +24,12 @@ namespace xStunit.Interpreter.Extensibility
 
         /// <param name="functionName">The identifier as written at the PLC call site.</param>
         /// <param name="positionalArgs">Evaluated positional arguments in source order; null is treated as empty.</param>
-        /// <param name="namedArgs">Evaluated <c>name := value</c> arguments keyed by the name as written; null is treated as empty.</param>
+        /// <param name="namedArgs">
+        /// Evaluated <c>name := value</c> arguments keyed by the name as written; null is
+        /// treated as empty. Copied rather than held, so that <see cref="NamedArgs"/> is
+        /// case-insensitive whatever comparer this dictionary was built with; of two keys
+        /// differing only in case, the later one wins.
+        /// </param>
         /// <param name="readBytes">
         /// Interpreter callback resolving a pointer and byte count to the bytes behind
         /// it. Null leaves the context unable to serve
@@ -45,9 +50,19 @@ namespace xStunit.Interpreter.Extensibility
         {
             FunctionName = functionName ?? throw new ArgumentNullException(nameof(functionName));
             PositionalArgs = positionalArgs ?? Array.Empty<object>();
-            NamedArgs = namedArgs ?? new Dictionary<string, object>();
+            NamedArgs = CaseInsensitiveCopy(namedArgs);
             _readBytes = readBytes;
             Time = time;
+        }
+
+        private static IReadOnlyDictionary<string, object> CaseInsensitiveCopy(IReadOnlyDictionary<string, object> namedArgs)
+        {
+            var copy = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
+            if (namedArgs != null)
+                foreach (var arg in namedArgs)
+                    copy[arg.Key] = arg.Value;
+
+            return copy;
         }
 
         /// <summary>
@@ -71,6 +86,11 @@ namespace xStunit.Interpreter.Extensibility
         /// <summary>
         /// Arguments passed as <c>name := value</c>, keyed by the name as written.
         /// </summary>
+        /// <remarks>
+        /// Looked up case-insensitively, as IEC 61131-3 identifiers are: a plugin asks
+        /// for the parameter name it declares, and the caller may have spelled it in
+        /// any case.
+        /// </remarks>
         public IReadOnlyDictionary<string, object> NamedArgs { get; }
 
         // Accumulated as the plugin queries them: a named argument can occupy any

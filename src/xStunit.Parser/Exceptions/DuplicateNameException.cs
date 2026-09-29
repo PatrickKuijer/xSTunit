@@ -40,6 +40,12 @@ namespace xStunit.Parser
         /// first name shared by more than one item; returns silently when
         /// every name is unique.
         /// </summary>
+        /// <remarks>
+        /// Names are compared case-insensitively, as IEC 61131-3 identifiers
+        /// are: FB_Motor and FB_MOTOR are one type defined twice, and every
+        /// lookup downstream would otherwise let one silently replace the
+        /// other. The name handed to the factory is the first item's spelling.
+        /// </remarks>
         public static void ThrowIfDuplicate<T>(
             IEnumerable<T> items,
             Func<T, string> nameSelector,
@@ -47,7 +53,7 @@ namespace xStunit.Parser
             Func<string, IReadOnlyList<string>, Exception> exceptionFactory)
         {
             var duplicate = items
-                .GroupBy(nameSelector)
+                .GroupBy(nameSelector, StringComparer.OrdinalIgnoreCase)
                 .FirstOrDefault(g => g.Count() > 1);
 
             if (duplicate != null)

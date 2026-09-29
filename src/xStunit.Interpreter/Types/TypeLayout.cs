@@ -181,7 +181,7 @@ namespace xStunit.Interpreter
                 (buffer, offset, value) => BitConverter.GetBytes((double)value).CopyTo(buffer, offset),
                 (buffer, offset) => BitConverter.ToDouble(buffer, offset));
 
-            return new Dictionary<string, ScalarShape>
+            return new Dictionary<string, ScalarShape>(StringComparer.OrdinalIgnoreCase)
             {
                 ["BOOL"] = boolean,
                 ["SINT"] = signed8,

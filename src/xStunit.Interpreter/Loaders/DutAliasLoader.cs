@@ -95,7 +95,9 @@ namespace xStunit.Interpreter
             IReadOnlyList<string> pouDirectories, out List<SkippedFile> skipped)
         {
             skipped = new List<SkippedFile>();
-            var aliases = new Dictionary<string, string>();
+            // Case-insensitive so a project DUT overwrites the well-known entry
+            // it shadows however it spells the name, instead of sitting beside it.
+            var aliases = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             foreach (var wellKnown in WellKnownLibraryAliases)
                 aliases[wellKnown.Key] = wellKnown.Value;
 

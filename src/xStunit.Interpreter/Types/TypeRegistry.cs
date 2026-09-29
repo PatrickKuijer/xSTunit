@@ -77,9 +77,21 @@ namespace xStunit.Interpreter
                 foreach (var alias in aliases)
                     _aliases[alias.Key] = alias.Value;
 
+            // Each member table is re-keyed rather than adopted, so member
+            // lookup is case-insensitive whatever comparer the caller built
+            // it with.
             if (enumMembers != null)
                 foreach (var enumMember in enumMembers)
-                    _enumMembers[enumMember.Key] = enumMember.Value;
+                    _enumMembers[enumMember.Key] = CaseInsensitiveCopy(enumMember.Value);
+        }
+
+        private static IReadOnlyDictionary<string, int> CaseInsensitiveCopy(IReadOnlyDictionary<string, int> members)
+        {
+            var copy = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            foreach (var member in members)
+                copy[member.Key] = member.Value;
+
+            return copy;
         }
 
         // A library qualifier is transparent, same as it is for a native

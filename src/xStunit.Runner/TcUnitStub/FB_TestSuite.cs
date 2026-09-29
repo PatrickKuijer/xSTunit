@@ -408,7 +408,8 @@ namespace xStunit.Runner.TcUnitStub
             string actualTypeName, object actualValue,
             string message)
         {
-            if (expectedTypeName != actualTypeName)
+            // A type class is an IEC type name, so 'int' and 'INT' are one class.
+            if (!string.Equals(expectedTypeName, actualTypeName, StringComparison.OrdinalIgnoreCase))
             {
                 Fail(
                     $"(Type class = {expectedTypeName ?? "UNKNOWN"})",

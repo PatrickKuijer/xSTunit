@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -27,7 +28,9 @@ namespace xStunit.Interpreter
             var current = typeName;
             while (current != null)
             {
-                if (current == TestSuiteBaseType || current == TestSuiteBaseTypeBareName)
+                // Case-insensitive, as an EXTENDS clause's type name is.
+                if (string.Equals(current, TestSuiteBaseType, StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(current, TestSuiteBaseTypeBareName, StringComparison.OrdinalIgnoreCase))
                     return true;
 
                 var def = registry.Get(current);

@@ -23,28 +23,38 @@ namespace xStunit.Interpreter
             if (methodName == null)
                 return false;
 
-            if (FixedNativeMethodNames.Contains(methodName))
+            if (FixedNativeMethodName(methodName) != null)
                 return true;
 
-            if (methodName.StartsWith("AssertArrayEquals_", StringComparison.Ordinal))
+            if (HasPrefix(methodName, "AssertArrayEquals_"))
                 return ArrayAssertSupportedTypes.Contains(methodName.Substring("AssertArrayEquals_".Length));
 
-            if (methodName.StartsWith("AssertArray2dEquals_", StringComparison.Ordinal) ||
-                methodName.StartsWith("AssertArray3dEquals_", StringComparison.Ordinal))
+            if (HasPrefix(methodName, "AssertArray2dEquals_") || HasPrefix(methodName, "AssertArray3dEquals_"))
                 return MultiDimArrayAssertSupportedTypes.Contains(methodName.Substring(methodName.IndexOf('_') + 1));
 
-            if (methodName.StartsWith("AssertEquals_", StringComparison.Ordinal))
+            if (HasPrefix(methodName, "AssertEquals_"))
                 return ScalarAssertType.Registry.ContainsKey(methodName.Substring("AssertEquals_".Length));
 
             return false;
         }
 
-        // The non-prefixed names Invoke's switch handles by exact match.
-        private static readonly HashSet<string> FixedNativeMethodNames = new HashSet<string>(StringComparer.Ordinal)
+        // The non-prefixed names Invoke's switch handles, each spelled the one
+        // way its case label is.
+        private static readonly string[] FixedNativeMethodNames =
         {
             "TEST", "TEST_ORDERED", "TEST_FINISHED", "TEST_FINISHED_NAMED", "IS_TEST_FINISHED",
             "AssertTrue", "AssertFalse", "AssertEquals",
         };
+
+        // The suite API is a library FB's methods, so a call names one in any
+        // case, as it would any other method. These map the spelling at the
+        // call site onto the one Invoke dispatches on; null when it is none of
+        // the fixed names.
+        private static string FixedNativeMethodName(string methodName) =>
+            Array.Find(FixedNativeMethodNames, name => string.Equals(name, methodName, StringComparison.OrdinalIgnoreCase));
+
+        private static bool HasPrefix(string methodName, string prefix) =>
+            methodName.StartsWith(prefix, StringComparison.OrdinalIgnoreCase);
 
         // Whether an unresolved call from a suite body is worth blaming on an
         // unwired external API (reported as unsupported-construct: an
@@ -112,7 +122,7 @@ namespace xStunit.Interpreter
             IReadOnlyDictionary<string, object> named,
             IReadOnlyDictionary<string, string> anyTypeNames = null)
         {
-            switch (methodName)
+            switch (FixedNativeMethodName(methodName))
             {
                 case "TEST":
                     host.Test((string)positional[0]);
@@ -162,7 +172,7 @@ namespace xStunit.Interpreter
                     // every scalar type upstream has an array assert. REAL and
                     // LREAL take a Delta VAR_INPUT just as their scalar
                     // counterparts do, so HasDelta picks the param list.
-                    if (methodName.StartsWith("AssertArrayEquals_", StringComparison.Ordinal))
+                    if (HasPrefix(methodName, "AssertArrayEquals_"))
                     {
                         var typeName = methodName.Substring("AssertArrayEquals_".Length);
                         if (ArrayAssertSupportedTypes.Contains(typeName))
@@ -171,7 +181,7 @@ namespace xStunit.Interpreter
                             var paramNames = scalarType.HasDelta ? ArrayAssertWithDeltaParamNames : ArrayAssertParamNames;
                             var args = ResolveArgs(paramNames, positional, named);
                             var delta = scalarType.HasDelta ? args["Delta"] : null;
-                            host.AssertArrayEqualsCall(typeName, (ArrayValue)args["Expecteds"], (ArrayValue)args["Actuals"], delta, (string)args["Message"]);
+                            host.AssertArrayEqualsCall(scalarType.Name, (ArrayValue)args["Expecteds"], (ArrayValue)args["Actuals"], delta, (string)args["Message"]);
                             return null;
                         }
                     }
@@ -193,8 +203,7 @@ namespace xStunit.Interpreter
                     // reports a flat "SIZE = WxH"; kept flat for consistency
                     // with the 1D dispatcher rather than special-cased per
                     // dimension count.
-                    if (methodName.StartsWith("AssertArray2dEquals_", StringComparison.Ordinal) ||
-                        methodName.StartsWith("AssertArray3dEquals_", StringComparison.Ordinal))
+                    if (HasPrefix(methodName, "AssertArray2dEquals_") || HasPrefix(methodName, "AssertArray3dEquals_"))
                     {
                         var typeName = methodName.Substring(methodName.IndexOf('_') + 1);
                         if (MultiDimArrayAssertSupportedTypes.Contains(typeName))
@@ -203,7 +212,7 @@ namespace xStunit.Interpreter
                             var paramNames = scalarType.HasDelta ? ArrayAssertWithDeltaParamNames : ArrayAssertParamNames;
                             var args = ResolveArgs(paramNames, positional, named);
                             var delta = scalarType.HasDelta ? args["Delta"] : null;
-                            host.AssertArrayEqualsCall(typeName, (ArrayValue)args["Expecteds"], (ArrayValue)args["Actuals"], delta, (string)args["Message"]);
+                            host.AssertArrayEqualsCall(scalarType.Name, (ArrayValue)args["Expecteds"], (ArrayValue)args["Actuals"], delta, (string)args["Message"]);
                             return null;
                         }
                     }
@@ -211,7 +220,7 @@ namespace xStunit.Interpreter
                     // Scalar dispatch, driven by the ScalarAssertType registry
                     // rather than a case per type: adding a scalar type means
                     // adding a registry entry, not editing this switch.
-                    if (methodName.StartsWith("AssertEquals_", StringComparison.Ordinal))
+                    if (HasPrefix(methodName, "AssertEquals_"))
                     {
                         var typeName = methodName.Substring("AssertEquals_".Length);
                         if (ScalarAssertType.Registry.TryGetValue(typeName, out var scalarType))
@@ -219,7 +228,7 @@ namespace xStunit.Interpreter
                             var paramNames = scalarType.HasDelta ? ScalarAssertWithDeltaParamNames : ScalarAssertParamNames;
                             var args = ResolveArgs(paramNames, positional, named);
                             var delta = scalarType.HasDelta ? args["Delta"] : null;
-                            host.AssertEqualsScalar(typeName, args["Expected"], args["Actual"], delta, (string)args["Message"]);
+                            host.AssertEqualsScalar(scalarType.Name, args["Expected"], args["Actual"], delta, (string)args["Message"]);
                             return null;
                         }
                     }
@@ -251,14 +260,14 @@ namespace xStunit.Interpreter
         // Every scalar type in the ScalarAssertType registry except LWORD,
         // which upstream has an AssertArrayEquals_ overload for but this
         // bridge has not needed yet.
-        private static readonly HashSet<string> ArrayAssertSupportedTypes = new HashSet<string>
+        private static readonly HashSet<string> ArrayAssertSupportedTypes = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
             "BOOL", "BYTE", "DINT", "DWORD", "INT", "LINT", "LREAL", "REAL", "SINT", "UDINT", "UINT", "ULINT", "USINT", "WORD",
         };
 
         // Narrower than the 1D set above because upstream declares 2D/3D array
         // asserts for the float types only.
-        private static readonly HashSet<string> MultiDimArrayAssertSupportedTypes = new HashSet<string>
+        private static readonly HashSet<string> MultiDimArrayAssertSupportedTypes = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
             "LREAL", "REAL",
         };

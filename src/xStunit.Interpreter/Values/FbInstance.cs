@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using xStunit.Interpreter.Extensibility;
 
@@ -6,7 +7,7 @@ namespace xStunit.Interpreter
     public sealed class FbInstance
     {
         public string ActualTypeName { get; }
-        public Dictionary<string, Cell> Fields { get; } = new Dictionary<string, Cell>();
+        public Dictionary<string, Cell> Fields { get; } = new Dictionary<string, Cell>(StringComparer.OrdinalIgnoreCase);
 
         // Declared IEC type text (e.g. "REFERENCE TO INT") per field,
         // populated once at NewInstance time and never touched afterward. A
@@ -15,7 +16,7 @@ namespace xStunit.Interpreter
         // target rather than the field's declaration; __ISVALIDREF has to know
         // whether the *name being asked about* was declared REFERENCE TO/
         // POINTER TO, so for instance fields this table is the source of truth.
-        public Dictionary<string, string> FieldTypeNames { get; } = new Dictionary<string, string>();
+        public Dictionary<string, string> FieldTypeNames { get; } = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
         // Which native (compiled-only) stub backs this instance, and the host
         // object itself - assigned as a pair by the native-host classifier in

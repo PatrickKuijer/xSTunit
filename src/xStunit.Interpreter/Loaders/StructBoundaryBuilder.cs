@@ -24,10 +24,10 @@ namespace xStunit.Interpreter
             var structAst = _registry.GetStruct(_registry.ResolveAlias(structTypeName))
                 ?? throw new InvalidOperationException($"Unknown struct type '{structTypeName}'");
 
-            var overrideMap = new Dictionary<string, Boundary>();
+            var overrideMap = new Dictionary<string, Boundary>(StringComparer.OrdinalIgnoreCase);
             foreach (var (field, boundary) in overrides)
             {
-                if (structAst.Fields.All(f => f.Name != field))
+                if (!structAst.Fields.Any(f => string.Equals(f.Name, field, StringComparison.OrdinalIgnoreCase)))
                     throw new InvalidOperationException($"Unknown field '{field}' on struct '{structTypeName}'");
                 overrideMap[field] = boundary;
             }
@@ -127,7 +127,7 @@ namespace xStunit.Interpreter
                 case FieldAccessExpr fieldAccess when fieldAccess.Receiver is IdentifierExpr gvlIdent:
                     var gvlDecls = _registry.GetGvlDecls(gvlIdent.Name)
                         ?? throw new InvalidOperationException($"Unknown GVL '{gvlIdent.Name}' referenced in array bound");
-                    var constDecl = gvlDecls.FirstOrDefault(d => d.Name == fieldAccess.FieldName)
+                    var constDecl = gvlDecls.FirstOrDefault(d => string.Equals(d.Name, fieldAccess.FieldName, StringComparison.OrdinalIgnoreCase))
                         ?? throw new InvalidOperationException($"Unknown constant '{fieldAccess.FieldName}' in GVL '{gvlIdent.Name}'");
                     if (constDecl.DefaultValueText == null)
                         throw new InvalidOperationException($"GVL constant '{gvlIdent.Name}.{fieldAccess.FieldName}' has no default value");

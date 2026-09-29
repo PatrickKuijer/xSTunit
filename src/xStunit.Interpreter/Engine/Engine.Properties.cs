@@ -26,10 +26,12 @@ namespace xStunit.Interpreter
                 if (def == null)
                     break;
 
-                var found = def.Properties.FirstOrDefault(p => p.Name == propertyName);
+                var found = def.Properties.FirstOrDefault(p => IsNamed(p.Name, propertyName));
                 if (found != null)
                 {
-                    definingType = type;
+                    // Declared rather than as-walked, for the reason CallMethod
+                    // gives.
+                    definingType = def.Name;
                     property = found;
                     return true;
                 }

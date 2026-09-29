@@ -112,8 +112,8 @@ VAR_OUTPUT
 END_VAR
 VAR
 	order : E_MoveOrder;
-	barcode : STRING(32);
-	storedAt : DATE_AND_TIME;
+	orderBarcode : STRING(32);
+	orderStoredAt : DATE_AND_TIME;
 	railDemand : LREAL;
 	liftDemand : LREAL;
 	railRemaining : LREAL;
@@ -377,8 +377,8 @@ END_VAR
         <ST><![CDATA[StoreContainer := AcceptOrder(Kind := E_MoveOrder.STORE, Index := Index);
 
 IF StoreContainer THEN
-	barcode := Barcode;
-	storedAt := StoredAt;
+	orderBarcode := Barcode;
+	orderStoredAt := StoredAt;
 END_IF]]></ST>
       </Implementation>
     </Method>
@@ -502,7 +502,7 @@ AcceptOrder := TRUE;]]></ST>
 METHOD PRIVATE CompleteOrder]]></Declaration>
       <Implementation>
         <ST><![CDATA[IF order = E_MoveOrder.STORE THEN
-	locationMap.Store(Index := TargetIndex, Barcode := barcode, StoredAt := storedAt);
+	locationMap.Store(Index := TargetIndex, Barcode := orderBarcode, StoredAt := orderStoredAt);
 ELSIF order = E_MoveOrder.RETRIEVE THEN
 	// A retrieved container is on the deck and out of the warehouse's
 	// inventory, so the location goes back to the free pool with the

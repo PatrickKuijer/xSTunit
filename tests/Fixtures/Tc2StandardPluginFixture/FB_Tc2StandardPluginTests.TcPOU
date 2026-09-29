@@ -14,23 +14,23 @@
 *)
 FUNCTION_BLOCK FB_Tc2StandardPluginTests EXTENDS TcUnit.FB_TestSuite]]></Declaration>
     <Implementation>
-      <ST><![CDATA[Delete();
+      <ST><![CDATA[DeleteRemovesLenCharactersAtPos();
 DeleteClampsWhenPosPlusLenExceedsLength();
-Find();
+FindReturnsThePositionOfTheFirstMatch();
 FindReturnsZeroWhenNotFound();
-Insert();
-Left();
+InsertPlacesStr2AfterPos();
+LeftReturnsTheLeftmostCharacters();
 LeftClampsWhenSizeExceedsLength();
-Len();
-Mid();
+LenReturnsTheCharacterCount();
+MidReturnsLenCharactersFromPos();
 MidClampsWhenPosPlusLenExceedsLength();
-Replace();
-Right();
+ReplaceSwapsCharactersForStr2();
+RightReturnsTheRightmostCharacters();
 RightClampsWhenSizeExceedsLength();
 Latin1Operands();]]></ST>
     </Implementation>
-    <Method Name="Delete" Id="{a1b2c3d4-8po0-4a1a-8b1b-000000000012}">
-      <Declaration><![CDATA[METHOD PRIVATE Delete
+    <Method Name="DeleteRemovesLenCharactersAtPos" Id="{a1b2c3d4-8po0-4a1a-8b1b-000000000012}">
+      <Declaration><![CDATA[METHOD PRIVATE DeleteRemovesLenCharactersAtPos
 VAR
 	sFullPath	: STRING(80) := 'Root.Child]';
 	nPos		: INT := 11;
@@ -38,7 +38,7 @@ VAR
 END_VAR
 ]]></Declaration>
       <Implementation>
-        <ST><![CDATA[TEST('Delete');
+        <ST><![CDATA[TEST('DeleteRemovesLenCharactersAtPos');
 
 sResult := DELETE(sFullPath, 1, nPos);
 
@@ -68,15 +68,15 @@ AssertEquals_STRING(Expected := 'ab',
 TEST_FINISHED();]]></ST>
       </Implementation>
     </Method>
-    <Method Name="Find" Id="{a1b2c3d4-8po0-4a1a-8b1b-000000000013}">
-      <Declaration><![CDATA[METHOD PRIVATE Find
+    <Method Name="FindReturnsThePositionOfTheFirstMatch" Id="{a1b2c3d4-8po0-4a1a-8b1b-000000000013}">
+      <Declaration><![CDATA[METHOD PRIVATE FindReturnsThePositionOfTheFirstMatch
 VAR
 	sFullPath	: STRING(80) := 'Root.Child.Leaf';
 	nSeparator	: INT;
 END_VAR
 ]]></Declaration>
       <Implementation>
-        <ST><![CDATA[TEST('Find');
+        <ST><![CDATA[TEST('FindReturnsThePositionOfTheFirstMatch');
 
 nSeparator := FIND(sFullPath, '.');
 
@@ -105,8 +105,8 @@ AssertEquals_INT(Expected := 0,
 TEST_FINISHED();]]></ST>
       </Implementation>
     </Method>
-    <Method Name="Insert" Id="{a1b2c3d4-8po0-4a1a-8b1b-000000000014}">
-      <Declaration><![CDATA[METHOD PRIVATE Insert
+    <Method Name="InsertPlacesStr2AfterPos" Id="{a1b2c3d4-8po0-4a1a-8b1b-000000000014}">
+      <Declaration><![CDATA[METHOD PRIVATE InsertPlacesStr2AfterPos
 VAR
 	sBase		: STRING(80) := 'Root.Leaf';
 	sInsert		: STRING(80) := 'Child.';
@@ -115,7 +115,7 @@ VAR
 END_VAR
 ]]></Declaration>
       <Implementation>
-        <ST><![CDATA[TEST('Insert');
+        <ST><![CDATA[TEST('InsertPlacesStr2AfterPos');
 
 sResult := INSERT(sBase, sInsert, nPos);
 
@@ -126,8 +126,8 @@ AssertEquals_STRING(Expected := 'Root.Child.Leaf',
 TEST_FINISHED();]]></ST>
       </Implementation>
     </Method>
-    <Method Name="Left" Id="{a1b2c3d4-8po0-4a1a-8b1b-000000000015}">
-      <Declaration><![CDATA[METHOD PRIVATE Left
+    <Method Name="LeftReturnsTheLeftmostCharacters" Id="{a1b2c3d4-8po0-4a1a-8b1b-000000000015}">
+      <Declaration><![CDATA[METHOD PRIVATE LeftReturnsTheLeftmostCharacters
 VAR
 	sFullPath	: STRING(80) := 'Root.Child.Leaf.Extra';
 	nIndex		: INT := 16;
@@ -135,7 +135,7 @@ VAR
 END_VAR
 ]]></Declaration>
       <Implementation>
-        <ST><![CDATA[TEST('Left');
+        <ST><![CDATA[TEST('LeftReturnsTheLeftmostCharacters');
 
 sResult := LEFT(sFullPath, nIndex - 1);
 
@@ -164,15 +164,15 @@ AssertEquals_STRING(Expected := 'abc',
 TEST_FINISHED();]]></ST>
       </Implementation>
     </Method>
-    <Method Name="Len" Id="{a1b2c3d4-8po0-4a1a-8b1b-000000000016}">
-      <Declaration><![CDATA[METHOD PRIVATE Len
+    <Method Name="LenReturnsTheCharacterCount" Id="{a1b2c3d4-8po0-4a1a-8b1b-000000000016}">
+      <Declaration><![CDATA[METHOD PRIVATE LenReturnsTheCharacterCount
 VAR
 	sFullPath	: STRING(80) := 'Root.Child.Leaf';
 	nLength		: INT;
 END_VAR
 ]]></Declaration>
       <Implementation>
-        <ST><![CDATA[TEST('Len');
+        <ST><![CDATA[TEST('LenReturnsTheCharacterCount');
 
 nLength := LEN(sFullPath);
 
@@ -183,8 +183,8 @@ AssertEquals_INT(Expected := 15,
 TEST_FINISHED();]]></ST>
       </Implementation>
     </Method>
-    <Method Name="Mid" Id="{a1b2c3d4-8po0-4a1a-8b1b-000000000017}">
-      <Declaration><![CDATA[METHOD PRIVATE Mid
+    <Method Name="MidReturnsLenCharactersFromPos" Id="{a1b2c3d4-8po0-4a1a-8b1b-000000000017}">
+      <Declaration><![CDATA[METHOD PRIVATE MidReturnsLenCharactersFromPos
 VAR
 	sFullPath	: STRING(80) := 'Root.Child.Leaf';
 	nLen		: INT := 5;
@@ -193,7 +193,7 @@ VAR
 END_VAR
 ]]></Declaration>
       <Implementation>
-        <ST><![CDATA[TEST('Mid');
+        <ST><![CDATA[TEST('MidReturnsLenCharactersFromPos');
 
 sResult := MID(sFullPath, nLen, nPos);
 
@@ -223,8 +223,8 @@ AssertEquals_STRING(Expected := 'cde',
 TEST_FINISHED();]]></ST>
       </Implementation>
     </Method>
-    <Method Name="Replace" Id="{a1b2c3d4-8po0-4a1a-8b1b-000000000018}">
-      <Declaration><![CDATA[METHOD PRIVATE Replace
+    <Method Name="ReplaceSwapsCharactersForStr2" Id="{a1b2c3d4-8po0-4a1a-8b1b-000000000018}">
+      <Declaration><![CDATA[METHOD PRIVATE ReplaceSwapsCharactersForStr2
 VAR
 	sFullPath	: STRING(80) := 'Root[0].Leaf';
 	nPos		: INT := 5;
@@ -232,7 +232,7 @@ VAR
 END_VAR
 ]]></Declaration>
       <Implementation>
-        <ST><![CDATA[TEST('Replace');
+        <ST><![CDATA[TEST('ReplaceSwapsCharactersForStr2');
 
 sResult := REPLACE(sFullPath, '_', 1, nPos);
 
@@ -243,8 +243,8 @@ AssertEquals_STRING(Expected := 'Root_0].Leaf',
 TEST_FINISHED();]]></ST>
       </Implementation>
     </Method>
-    <Method Name="Right" Id="{a1b2c3d4-8po0-4a1a-8b1b-000000000019}">
-      <Declaration><![CDATA[METHOD PRIVATE Right
+    <Method Name="RightReturnsTheRightmostCharacters" Id="{a1b2c3d4-8po0-4a1a-8b1b-000000000019}">
+      <Declaration><![CDATA[METHOD PRIVATE RightReturnsTheRightmostCharacters
 VAR
 	sFullPath	: STRING(80) := 'Root.Child.Leaf';
 	nPos		: INT := 5;
@@ -252,7 +252,7 @@ VAR
 END_VAR
 ]]></Declaration>
       <Implementation>
-        <ST><![CDATA[TEST('Right');
+        <ST><![CDATA[TEST('RightReturnsTheRightmostCharacters');
 
 sResult := RIGHT(sFullPath, LEN(sFullPath) - nPos);
 

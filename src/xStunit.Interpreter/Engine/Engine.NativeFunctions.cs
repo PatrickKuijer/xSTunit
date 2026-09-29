@@ -36,7 +36,7 @@ namespace xStunit.Interpreter
             // how the suite-host bridge builds its own named-arg dictionary,
             // and a duplicate named argument is a source-level mistake the
             // parser is the right place to reject, not this call site.
-            var evaluatedNamed = new Dictionary<string, object>(StringComparer.Ordinal);
+            var evaluatedNamed = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
             foreach (var arg in namedArgs)
                 if (!arg.IsUnboundOutput)
                     evaluatedNamed[arg.Name] = Evaluate(arg.Value, callerFrame);

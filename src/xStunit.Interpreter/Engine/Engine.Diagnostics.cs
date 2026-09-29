@@ -165,7 +165,7 @@ namespace xStunit.Interpreter
         private static bool OpensTestBracket(Stmt stmt) =>
             stmt is ExprStmt exprStmt &&
             exprStmt.Call.Receiver == null &&
-            (exprStmt.Call.MethodName == "TEST" || exprStmt.Call.MethodName == "TEST_ORDERED");
+            (IsNamed(exprStmt.Call.MethodName, "TEST") || IsNamed(exprStmt.Call.MethodName, "TEST_ORDERED"));
 
         // Keys on Exception.Data rather than an Engine field: the annotation
         // then travels with the exception itself, so nothing has to be reset

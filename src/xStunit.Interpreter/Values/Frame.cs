@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 
 namespace xStunit.Interpreter
@@ -10,7 +11,14 @@ namespace xStunit.Interpreter
     public sealed class Frame
     {
         public FbInstance Instance { get; }
-        public Dictionary<string, Cell> Locals { get; } = new Dictionary<string, Cell>();
+
+        // IEC 61131-3 identifiers are case-insensitive, so a name has to
+        // resolve however the body spells it. The comparer lives on the
+        // dictionary rather than in a normalised key so the key keeps the
+        // declared spelling, which is what diagnostics echo back. The same
+        // holds for every name-keyed table in Frame, FbInstance and
+        // StructInstance.
+        public Dictionary<string, Cell> Locals { get; } = new Dictionary<string, Cell>(StringComparer.OrdinalIgnoreCase);
         public string DeclaringTypeName { get; }
 
         // Null when the frame runs a POU's own top-level body (suite body,
@@ -24,7 +32,7 @@ namespace xStunit.Interpreter
         // FbInstance.FieldTypeNames: a REF= binding replaces the Locals entry
         // wholesale with the target's own Cell, so Cell.DeclaredTypeName
         // afterwards describes the target, not the local's declaration.
-        public Dictionary<string, string> LocalTypeNames { get; } = new Dictionary<string, string>();
+        public Dictionary<string, string> LocalTypeNames { get; } = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
         // Where this frame's body starts in its source file, copied from the
         // MethodAst/PouAst it came from, so CurrentFileLine can turn an

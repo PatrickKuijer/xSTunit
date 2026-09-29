@@ -22,7 +22,7 @@ namespace xStunit.Interpreter
                 // directly byte-indexable and Index is already a byte offset,
                 // so returning it as-is (no repacking) is correct and cheap.
                 var elementTypeName = _registry.ResolveAlias(aec.Array.ElementTypeName);
-                if (elementTypeName == "BYTE")
+                if (IsNamed(elementTypeName, "BYTE"))
                     return (aec.Array, aec.Index, null);
 
                 // For any other element type Elements.Length is an element

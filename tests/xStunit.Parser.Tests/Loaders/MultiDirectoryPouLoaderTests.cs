@@ -50,6 +50,23 @@ namespace xStunit.Parser.Tests
             Assert.Contains(pathB, ex.Message);
         }
 
+        // POU names are case-insensitive, so two files declaring FB_Dup and
+        // FB_DUP define one type twice - TwinCAT rejects that - and every
+        // name lookup downstream would otherwise let one silently shadow the
+        // other.
+        [Fact]
+        public void Load_TypeNamesDifferingOnlyInCase_ThrowsAsADuplicate()
+        {
+            var pathA = WritePou(_dirA, "FB_Dup.TcPOU", "FB_Dup");
+            var pathB = WritePou(_dirB, "FB_DUP.TcPOU", "FB_DUP");
+
+            var ex = Assert.Throws<DuplicatePouTypeException>(
+                () => MultiDirectoryPouLoader.Load(new[] { _dirA, _dirB }));
+
+            Assert.Contains(pathA, ex.FilePaths);
+            Assert.Contains(pathB, ex.FilePaths);
+        }
+
         [Fact]
         public void Load_DuplicateTwiceWithinSameDirectoryTree_Throws()
         {

@@ -881,18 +881,31 @@ namespace xStunit.Interpreter.Tests
             Assert.Contains("'TO_UINT' not found", ex.Message);
         }
 
-        // INT_TO_UINT is case-sensitive, so to_uint must be too: a short
-        // spelling that accepted lower case would be a second, wider cast
-        // path than the prefixed form it shadows.
+        // Conversion names are identifiers, so both spellings accept any case
+        // - and they have to agree, or the short one becomes a second, wider
+        // cast path than the prefixed form it shadows.
+        [Theory]
+        [InlineData("to_uint(7)")]
+        [InlineData("int_to_uint(7)")]
+        public void Evaluate_LowerCaseCastInEitherForm_Converts(string expression)
+        {
+            var engine = NewEngine();
+
+            Assert.Equal(7, engine.Evaluate(Parser.ParseExpression(expression), NewFrame()));
+        }
+
+        // Matching '_to_' in any case would otherwise claim an ordinary name
+        // that merely contains it, and evaluate its argument once as a cast
+        // and again as the call it really is.
         [Fact]
-        public void Evaluate_LowerCasePrefixLessCast_StillThrowsUnresolvedCall()
+        public void Evaluate_NameContainingToButNamingNoSourceType_IsNotACast()
         {
             var engine = NewEngine();
 
             var ex = Assert.Throws<InvalidOperationException>(
-                () => engine.Evaluate(Parser.ParseExpression("to_uint(7)"), NewFrame()));
+                () => engine.Evaluate(Parser.ParseExpression("Speed_to_Real(7)"), NewFrame()));
 
-            Assert.Contains("'to_uint' not found", ex.Message);
+            Assert.Contains("'Speed_to_Real' not found", ex.Message);
         }
     }
 }

@@ -37,10 +37,14 @@ namespace xStunit.Interpreter
                 if (def == null)
                     break;
 
-                var found = def.Methods.FirstOrDefault(m => m.Name == methodName);
+                var found = def.Methods.FirstOrDefault(m => IsNamed(m.Name, methodName));
                 if (found != null)
                 {
-                    definingType = type;
+                    // The declared name rather than the spelling the walk
+                    // arrived by, which is whatever an EXTENDS clause or a VAR
+                    // line happened to write: the frame reports it as the fault
+                    // location, which the reader looks up in the project tree.
+                    definingType = def.Name;
                     methodDef = found;
                     break;
                 }
@@ -50,21 +54,22 @@ namespace xStunit.Interpreter
 
             if (methodDef == null)
             {
-                if (instance != null && methodName == "StepCycles" && positionalArgs.Count == 1)
+                if (instance != null && IsNamed(methodName, "StepCycles") && positionalArgs.Count == 1)
                 {
                     var cycles = Convert.ToInt32(Evaluate(positionalArgs[0], callerFrame));
                     StepCycles(instance, cycles);
                     return null;
                 }
 
-                if ((methodName == "AssertConverges" || methodName == "AssertConvergesAndLatches") && positionalArgs.Count == 4)
+                if ((IsNamed(methodName, "AssertConverges") || IsNamed(methodName, "AssertConvergesAndLatches")) &&
+                    positionalArgs.Count == 4)
                 {
                     var master = (FbInstance)Evaluate(positionalArgs[0], callerFrame);
                     var proxy = (FbInstance)Evaluate(positionalArgs[1], callerFrame);
                     var fieldNames = ToStringArray(Evaluate(positionalArgs[2], callerFrame));
                     var maxCycles = Convert.ToInt32(Evaluate(positionalArgs[3], callerFrame));
 
-                    if (methodName == "AssertConverges")
+                    if (IsNamed(methodName, "AssertConverges"))
                         AssertConverges(master, proxy, fieldNames, maxCycles);
                     else
                         AssertConvergesAndLatches(master, proxy, fieldNames, maxCycles);
@@ -165,9 +170,10 @@ namespace xStunit.Interpreter
                 // Method-name routing WITHIN the loopback host kind - a
                 // different question from the host-kind classification above, so
                 // it keeps its own switch and only its guard reads the kind.
-                if (instance?.NativeKind == NativeHostKind.Loopback && IsLoopbackFaultMethod(methodName))
+                var loopbackMethod = LoopbackFaultMethod(methodName);
+                if (instance?.NativeKind == NativeHostKind.Loopback && loopbackMethod != null)
                 {
-                    switch (methodName)
+                    switch (loopbackMethod)
                     {
                         case "Transmit":
                             var sourceCell = ResolveNamedOrPositionalCell("source", 0, positionalArgs, namedArgs, callerFrame);
@@ -212,7 +218,7 @@ namespace xStunit.Interpreter
                     var evaluatedPositional = positionalArgs.Select(e => Evaluate(e, callerFrame)).ToList();
                     var evaluatedNamed = namedArgs
                         .Where(a => !a.IsUnboundOutput)
-                        .ToDictionary(a => a.Name, a => Evaluate(a.Value, callerFrame));
+                        .ToDictionary(a => a.Name, a => Evaluate(a.Value, callerFrame), StringComparer.OrdinalIgnoreCase);
 
                     // AssertEquals(Expected: ANY, Actual: ANY, Message) needs its
                     // arguments' *declared* IEC type to pick the matching
@@ -223,7 +229,7 @@ namespace xStunit.Interpreter
                     // type has to come from the *expression*, the way SIZEOF()
                     // resolves it - and before evaluation discards it.
                     IReadOnlyDictionary<string, string> anyTypeNames = null;
-                    if (methodName == "AssertEquals")
+                    if (IsNamed(methodName, "AssertEquals"))
                     {
                         var expectedExpr = ResolveNamedOrPositionalArg("AssertEquals", "Expected", 0, positionalArgs, namedArgs);
                         var actualExpr = ResolveNamedOrPositionalArg("AssertEquals", "Actual", 1, positionalArgs, namedArgs);
@@ -327,8 +333,8 @@ namespace xStunit.Interpreter
             // share nothing but a name, and TypeRegistry caches parsed
             // statements by body TEXT, so the offset has to ride the frame
             // rather than the statement list.
-            var newFrame = new Frame(instance, definingType, methodName, methodDef.BodyStartLine);
-            SeedReturnCell(newFrame, methodName, methodDef.DeclarationText);
+            var newFrame = new Frame(instance, definingType, methodDef.Name, methodDef.BodyStartLine);
+            SeedReturnCell(newFrame, methodDef.Name, methodDef.DeclarationText);
             var paramDecls = _registry.GetDecls(methodDef.DeclarationText);
             BindParams(paramDecls, positionalArgs, namedArgs, callerFrame, newFrame);
 
@@ -336,8 +342,11 @@ namespace xStunit.Interpreter
 
             WriteBackOutputArgs(paramDecls, namedArgs, newFrame, callerFrame);
 
-            return newFrame.Locals.TryGetValue(methodName, out var returnCell) ? returnCell.Value : null;
+            return newFrame.Locals.TryGetValue(methodDef.Name, out var returnCell) ? returnCell.Value : null;
         }
+
+        private static bool IsNamed(string identifier, string name) =>
+            string.Equals(identifier, name, StringComparison.OrdinalIgnoreCase);
 
         private bool TryGetGlobalFunctionDef(string name, out PouAst def)
         {
@@ -444,7 +453,7 @@ namespace xStunit.Interpreter
             WriteBackOutputArgs(namedArgs, name => IsOutputDecl(paramDecls, name), newFrame.Locals, callerFrame);
 
         private static bool IsOutputDecl(IReadOnlyList<VarDecl> decls, string name) =>
-            decls.Any(d => d.Name == name && d.Section == VarSection.Output);
+            decls.Any(d => IsNamed(d.Name, name) && d.Section == VarSection.Output);
 
         // Name => expr call args bind a VAR_OUTPUT's value back into the
         // caller-side lvalue after the call returns. BindParams and the FB
@@ -581,12 +590,12 @@ namespace xStunit.Interpreter
                 callee.Fields[inputDecls[i].Name].Value = Evaluate(positionalArgs[i], callerFrame);
 
             foreach (var arg in namedArgs)
-                if (inputDecls.Any(d => d.Name == arg.Name) && callee.Fields.TryGetValue(arg.Name, out var cell))
+                if (inputDecls.Any(d => IsNamed(d.Name, arg.Name)) && callee.Fields.TryGetValue(arg.Name, out var cell))
                     cell.Value = Evaluate(arg.Value, callerFrame);
 
             var def = _registry.Get(callee.ActualTypeName);
             ResetTopLevelTempFields(callee);
-            var calleeFrame = new Frame(callee, callee.ActualTypeName, null, def.BodyStartLine);
+            var calleeFrame = new Frame(callee, def.Name, null, def.BodyStartLine);
             ExecuteBody(() => _registry.GetStatements(def.ImplementationText), calleeFrame);
 
             var outputDecls = GetOwnParamDecls(callee, VarSection.Output);
@@ -608,7 +617,7 @@ namespace xStunit.Interpreter
                 if ((decl.Section == VarSection.Input || decl.Section == VarSection.InOut) &&
                     ArgBinder.TryResolveArg(
                         decl.Name,
-                        name => namedArgs.FirstOrDefault(a => a.Name == name)?.Value,
+                        name => ArgBinder.FindNamed(namedArgs, name),
                         positionalArgs,
                         ref posIndex,
                         out var argExpr))

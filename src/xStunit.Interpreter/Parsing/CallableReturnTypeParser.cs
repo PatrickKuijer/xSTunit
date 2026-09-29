@@ -37,7 +37,7 @@ namespace xStunit.Interpreter
             @"^\s*(?:METHOD|FUNCTION|PROPERTY)(?!_BLOCK)\s+" +
             @"(?:(?:PRIVATE|PUBLIC|PROTECTED|INTERNAL|FINAL|ABSTRACT)\s+)*" +
             @"\w+\s*:\s*" +
-            @"(?<type>POINTER\s+TO\s+\w+|REFERENCE\s+TO\s+\w+|W?STRING\s*\(\s*[^()\n]+\s*\)|\w+)",
+            @"(?<type>ARRAY\s*\[[^\]\n]*\]\s*OF\s+(?:POINTER\s+TO\s+\w+|W?STRING\s*\(\s*[^()\n]+\s*\)|\w+)|POINTER\s+TO\s+\w+|REFERENCE\s+TO\s+\w+|W?STRING\s*\(\s*[^()\n]+\s*\)|\w+)",
             RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
         // False both for a callable declared with no return type ("METHOD

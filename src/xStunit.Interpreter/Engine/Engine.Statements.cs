@@ -161,6 +161,9 @@ namespace xStunit.Interpreter
             if (cell == null && !TryResolveGlobalCell(name, out cell))
                 throw new InvalidOperationException($"Unknown variable '{name}'");
 
+            var declaredTypeName = ShapingTypeName(ResolveDeclaredTypeOfName(name, frame) ?? cell.DeclaredTypeName, cell);
+            value = ShapeLiteral(value, declaredTypeName, frame, name);
+            RejectArrayShapeMismatch(cell, value, name);
             AssignToCell(cell, value);
         }
 
@@ -180,6 +183,11 @@ namespace xStunit.Interpreter
                     {
                         if (!gvlFields.TryGetValue(fieldAccess.FieldName, out var gvlCell))
                             throw new InvalidOperationException($"Unknown field '{fieldAccess.FieldName}'");
+                        var gvlName = ((IdentifierExpr)fieldAccess.Receiver).Name;
+                        _globalTypeNames[gvlName].TryGetValue(fieldAccess.FieldName, out var gvlType);
+                        gvlType = ShapingTypeName(gvlType ?? gvlCell.DeclaredTypeName, gvlCell);
+                        value = ShapeLiteral(value, gvlType, frame, TargetName(target));
+                        RejectArrayShapeMismatch(gvlCell, value, TargetName(target));
                         AssignToCell(gvlCell, value);
                         break;
                     }
@@ -189,6 +197,9 @@ namespace xStunit.Interpreter
                     var fields = FieldsOf(receiverValue, fieldAccess.FieldName);
                     if (fields.TryGetValue(fieldAccess.FieldName, out var cell))
                     {
+                        var fieldType = ShapingTypeName(DeclaredFieldTypeName(receiverValue, fieldAccess.FieldName, cell), cell);
+                        value = ShapeLiteral(value, fieldType, frame, TargetName(target));
+                        RejectArrayShapeMismatch(cell, value, TargetName(target));
                         AssignToCell(cell, value);
                         break;
                     }
@@ -200,6 +211,8 @@ namespace xStunit.Interpreter
                     if (receiverValue is FbInstance fbReceiver &&
                         TryFindProperty(fbReceiver.ActualTypeName, fieldAccess.FieldName, out var definingType, out var property))
                     {
+                        var propertyType = _registry.GetReturnTypeName(property.DeclarationText);
+                        value = ShapeLiteral(value, propertyType, frame, TargetName(target));
                         InvokePropertySet(fbReceiver, definingType, property, CopyValue(value));
                         break;
                     }
@@ -230,6 +243,7 @@ namespace xStunit.Interpreter
                     // declared type, so the element type is taken from the
                     // ARRAY declaration itself.
                     var existingElement = array.Elements[flat];
+                    value = ShapeLiteral(value, array.ElementTypeName, frame, TargetName(target));
                     array.SetElement(
                         flat,
                         CoerceForAssignment(
@@ -241,6 +255,142 @@ namespace xStunit.Interpreter
                 default:
                     throw new UnsupportedConstructException(
                         target.GetType().Name, $"Assignment target {target.GetType().Name} not supported");
+            }
+        }
+
+        // A struct/array literal evaluates to an untyped value (StructInstance
+        // with no TypeName, ArrayValue with no ElementTypeName) because the
+        // expression alone knows no declared type. Assignment is where the
+        // target's declared type is known, so the literal is rebuilt here over
+        // that type's defaults, recursing through nested literals.
+        private object ShapeLiteral(object value, string declaredTypeName, Frame frame, string targetName)
+        {
+            if (declaredTypeName == null)
+                return value;
+
+            var resolved = _registry.ResolveAlias(declaredTypeName);
+            switch (value)
+            {
+                case StructInstance literal when literal.TypeName == null:
+                {
+                    var structAst = _registry.GetStruct(resolved);
+                    if (structAst == null)
+                        return value;
+
+                    var filled = BuildStructDefault(structAst, null, frame.Instance);
+                    foreach (var pair in literal.Fields)
+                    {
+                        if (!filled.Fields.TryGetValue(pair.Key, out var fieldCell))
+                            throw new InvalidOperationException($"Unknown field '{pair.Key}' on struct '{filled.TypeName}'");
+
+                        var fieldType = filled.FieldTypeNames.TryGetValue(pair.Key, out var declared) ? declared : fieldCell.DeclaredTypeName;
+                        fieldCell.Value = CoerceForAssignment(
+                            fieldCell.Value,
+                            ShapeLiteral(pair.Value.Value, fieldType, frame, targetName + "." + pair.Key),
+                            fieldType);
+                    }
+
+                    return filled;
+                }
+                case ArrayValue literal when literal.ElementTypeName == null:
+                {
+                    if (!ArrayTypeInfo.IsArrayType(resolved) || ArrayTypeInfo.IsOpenArrayType(resolved))
+                        return value;
+
+                    var filled = DeclaredDefault.NewArray(
+                        _registry,
+                        resolved,
+                        boundText => ResolveArrayBound(boundText, frame.Instance),
+                        elementDecl => DefaultValue(elementDecl, frame.Instance));
+                    if (literal.Elements.Length > filled.Elements.Length)
+                        throw new InvalidOperationException(
+                            $"Array literal of {literal.Elements.Length} elements does not fit '{targetName}' ({DescribeShape(filled)})");
+
+                    for (var i = 0; i < literal.Elements.Length; i++)
+                        filled.SetElement(
+                            i,
+                            CoerceForAssignment(
+                                filled.Elements[i],
+                                ShapeLiteral(literal.Elements[i], filled.ElementTypeName, frame, targetName + "[...]"),
+                                filled.ElementTypeName));
+                    return filled;
+                }
+                default:
+                    return value;
+            }
+        }
+
+        // The type a literal is shaped against and an array assignment is
+        // checked against: a REFERENCE TO declaration stands for its target's
+        // type, and an open-bound ARRAY[*] stands for the concrete bounds of
+        // the array currently bound to the cell.
+        private static string ShapingTypeName(string declaredTypeName, Cell cell)
+        {
+            if (declaredTypeName == null)
+                return null;
+
+            var typeName = ReferenceToPrefix.Replace(declaredTypeName, "");
+            if (!ArrayTypeInfo.IsOpenArrayType(typeName) || !(cell.Value is ArrayValue bound))
+                return typeName;
+
+            if (!ArrayTypeInfo.TryGetElementTypeName(typeName, out var elementTypeName))
+                return typeName;
+
+            var bounds = string.Join(",", bound.Dimensions.Select(d => $"{d.Lo}..{d.Hi}"));
+            return $"ARRAY[{bounds}] OF {elementTypeName}";
+        }
+
+        private static readonly System.Text.RegularExpressions.Regex ReferenceToPrefix =
+            new System.Text.RegularExpressions.Regex(
+                @"^\s*REFERENCE\s+TO\s+",
+                System.Text.RegularExpressions.RegexOptions.Compiled | System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+        private static void RejectArrayShapeMismatch(Cell cell, object value, string targetName)
+        {
+            if (!(cell.Value is ArrayValue target) || !(value is ArrayValue source))
+                return;
+
+            if (target.Dimensions.SequenceEqual(source.Dimensions))
+                return;
+
+            throw new InvalidOperationException(
+                $"Cannot assign {DescribeShape(source)} to '{targetName}' declared {DescribeShape(target)}");
+        }
+
+        private static string DescribeShape(ArrayValue array) =>
+            "ARRAY[" + string.Join(",", array.Dimensions.Select(d => $"{d.Lo}..{d.Hi}")) + "]";
+
+        private static string TargetName(Expr target)
+        {
+            switch (target)
+            {
+                case IdentifierExpr id:
+                    return id.Name;
+                case ThisRefExpr _:
+                    return "THIS^";
+                case SuperRefExpr _:
+                    return "SUPER^";
+                case DerefExpr deref:
+                    return TargetName(deref.Inner) + "^";
+                case FieldAccessExpr field:
+                    return TargetName(field.Receiver) + "." + field.FieldName;
+                case IndexExpr index:
+                    return TargetName(index.Receiver) + "[...]";
+                default:
+                    return "assignment target";
+            }
+        }
+
+        private static string DeclaredFieldTypeName(object receiver, string fieldName, Cell cell)
+        {
+            switch (receiver)
+            {
+                case FbInstance fb when fb.FieldTypeNames.TryGetValue(fieldName, out var fbType):
+                    return fbType;
+                case StructInstance st when st.FieldTypeNames.TryGetValue(fieldName, out var structType):
+                    return structType;
+                default:
+                    return cell.DeclaredTypeName;
             }
         }
 

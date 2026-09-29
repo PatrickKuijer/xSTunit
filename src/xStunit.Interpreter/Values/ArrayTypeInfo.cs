@@ -16,6 +16,12 @@ namespace xStunit.Interpreter
         private static readonly Regex Pattern = new Regex(
             @"^ARRAY\s*\[(?<dims>[^\]]+)\]\s*OF\s+(?<elementType>.+)$", RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
+        private static readonly Regex OpenBoundPattern = new Regex(
+            @"^\s*ARRAY\s*\[\s*\*\s*(,\s*\*\s*)*\]", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+        public static bool IsOpenArrayType(string typeName) =>
+            typeName != null && OpenBoundPattern.IsMatch(typeName);
+
         public static bool IsArrayType(string typeName) =>
             typeName != null && typeName.TrimStart().StartsWith("ARRAY", StringComparison.OrdinalIgnoreCase);
 

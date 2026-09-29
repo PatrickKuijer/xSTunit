@@ -137,6 +137,17 @@ namespace xStunit.Interpreter
             return cell.Value != null;
         }
 
+        private string ResolveDeclaredTypeOfName(string name, Frame frame)
+        {
+            if (frame.LocalTypeNames.TryGetValue(name, out var localType))
+                return localType;
+            if (frame.Instance != null && frame.Instance.FieldTypeNames.TryGetValue(name, out var fieldType))
+                return fieldType;
+            if (TryResolveGlobalCell(name, out _))
+                return GlobalDeclaredTypeName(name);
+            return null;
+        }
+
         // Declared IEC type text of the *name* an expression refers to, which is
         // not the same as the DeclaredTypeName on the Cell
         // ResolveCellForLValue returns: for a REF=-bound REFERENCE TO/POINTER TO
@@ -150,15 +161,7 @@ namespace xStunit.Interpreter
         private string ResolveDeclaredTypeName(Expr expr, Frame frame)
         {
             if (expr is IdentifierExpr id)
-            {
-                if (frame.LocalTypeNames.TryGetValue(id.Name, out var localType))
-                    return localType;
-                if (frame.Instance != null && frame.Instance.FieldTypeNames.TryGetValue(id.Name, out var fieldType))
-                    return fieldType;
-                if (TryResolveGlobalCell(id.Name, out _))
-                    return GlobalDeclaredTypeName(id.Name);
-                return null;
-            }
+                return ResolveDeclaredTypeOfName(id.Name, frame);
 
             if (expr is FieldAccessExpr fieldAccess)
             {

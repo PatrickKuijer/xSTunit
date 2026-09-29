@@ -21,6 +21,8 @@ namespace xStunit.Interpreter.Tests
         [InlineData("METHOD   M_Read   :   LREAL   ", "LREAL")]
         [InlineData("PROPERTY nGain : LREAL", "LREAL")]
         [InlineData("PROPERTY PUBLIC nGain : REAL", "REAL")]
+        [InlineData("METHOD M_Arr : ARRAY[1..3] OF INT", "ARRAY[1..3] OF INT")]
+        [InlineData("PROPERTY aVals : ARRAY[0..1, 1..2] OF STRING(10)", "ARRAY[0..1, 1..2] OF STRING(10)")]
         public void TryGetReturnTypeName_HeaderWithReturnType_ReturnsIt(string header, string expected)
         {
             Assert.True(CallableReturnTypeParser.TryGetReturnTypeName(header, out var typeName));

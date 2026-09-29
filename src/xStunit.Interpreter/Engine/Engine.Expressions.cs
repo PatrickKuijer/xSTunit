@@ -155,10 +155,10 @@ namespace xStunit.Interpreter
                 case StructLiteralExpr structLit:
                 {
                     // No declared struct type is known in a bare expression
-                    // context, so this builds an untyped instance straight
-                    // from the given fields (no default-merge) - the typed,
-                    // default-merging path is BuildStructDefault, used when
-                    // a VarDecl's declared type is a known StructAst.
+                    // context, so this builds an untyped instance from the
+                    // given fields only. The typed, default-merging paths are
+                    // BuildStructDefault (declarations) and ShapeLiteral
+                    // (assignment to a typed target).
                     var instance = new StructInstance(null);
                     foreach (var init in structLit.FieldInits)
                         instance.Fields[init.Name] = new Cell { Value = Evaluate(init.Value, frame) };
@@ -168,8 +168,9 @@ namespace xStunit.Interpreter
                 {
                     // No declared bounds are known in a bare expression
                     // context, so this defaults to a single 0-based
-                    // dimension sized to the literal - BuildArrayDefault is
-                    // the typed path that overlays onto declared bounds.
+                    // dimension sized to the literal. The typed paths that
+                    // fill declared bounds are BuildArrayDefault
+                    // (declarations) and ShapeLiteral (assignment).
                     var elements = arrayLit.Elements.Select(e => Evaluate(e, frame)).ToArray();
                     return new ArrayValue(
                         new List<(int, int)> { (0, elements.Length - 1) }, null, elements, Cell.Unbounded);

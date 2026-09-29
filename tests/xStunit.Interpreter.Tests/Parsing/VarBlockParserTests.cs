@@ -290,6 +290,7 @@ END_VAR";
         [InlineData("Var_Output", "End_Var", VarSection.Output)]
         [InlineData("var_in_out", "END_VAR", VarSection.InOut)]
         [InlineData("var_temp", "end_var", VarSection.Temp)]
+        [InlineData("Var_Inst", "end_var", VarSection.MethodInstance)]
         [InlineData("var_global constant", "end_var", VarSection.Global)]
         [InlineData("var_input Retain persistent", "end_var", VarSection.Input)]
         [InlineData("struct", "end_struct", VarSection.Local)]

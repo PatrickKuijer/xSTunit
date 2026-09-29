@@ -320,6 +320,27 @@ END_VAR";
             Assert.Equal(VarSection.Temp, value.Section);
         }
 
+        // VAR_INST must open a section of its own: left unrecognised, every
+        // declaration under it is dropped and each use reports an unknown
+        // variable, and aliased to Local it would be rebuilt on every call
+        // instead of persisting in the instance.
+        [Fact]
+        public void Parse_VarInstBlock_ReadsNameTypeAndDefaultAsMethodInstanceSection()
+        {
+            const string declaration = @"METHOD Tick : INT
+VAR_INST
+	nCount : INT := 10;
+END_VAR";
+
+            var vars = VarBlockParser.Parse(declaration);
+
+            var value = Assert.Single(vars);
+            Assert.Equal("nCount", value.Name);
+            Assert.Equal("INT", value.TypeName);
+            Assert.Equal("10", value.DefaultValueText);
+            Assert.Equal(VarSection.MethodInstance, value.Section);
+        }
+
         // A motion-control layer is written against library-qualified types,
         // and the registries already see through a qualifier to the bare name.
         // If these go red the whole line fails to match and the variable never

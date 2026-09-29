@@ -15,5 +15,11 @@ namespace xStunit.Interpreter
         // so Engine.ResetTopLevelTempFields can clear it every invocation
         // instead of persisting it like a VAR field.
         Temp,
+
+        // A METHOD's VAR_INST: stored in the FB instance, one copy per
+        // declaring method, so it survives from one call of that method to the
+        // next. Never an instance Field, since no other method or dot-access
+        // may reach it.
+        MethodInstance,
     }
 }

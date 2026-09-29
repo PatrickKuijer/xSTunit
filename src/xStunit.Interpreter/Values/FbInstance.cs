@@ -18,6 +18,13 @@ namespace xStunit.Interpreter
         // POINTER TO, so for instance fields this table is the source of truth.
         public Dictionary<string, string> FieldTypeNames { get; } = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
+        // VAR_INST cells, one table per method that has been called on this
+        // instance and declares any. Kept apart from Fields because they are
+        // private to their method: a same-named FB field, or another method's
+        // same-named VAR_INST, is a different variable.
+        public Dictionary<string, Dictionary<string, Cell>> MethodInstanceCells { get; } =
+            new Dictionary<string, Dictionary<string, Cell>>(StringComparer.OrdinalIgnoreCase);
+
         // Which native (compiled-only) stub backs this instance, and the host
         // object itself - assigned as a pair by the native-host classifier in
         // Engine.NativeHost.cs during NewInstance. An instance can be backed

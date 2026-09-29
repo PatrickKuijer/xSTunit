@@ -186,6 +186,10 @@ namespace xStunit.Interpreter
         // only the former.
         public bool IsOutput { get; }
 
+        // An output listed with no target ('Name =>'). Value is null for it,
+        // so every consumer that evaluates named args must skip it.
+        public bool IsUnboundOutput => IsOutput && Value == null;
+
         public NamedArg(string name, Expr value, bool isOutput = false)
         {
             Name = name;

@@ -38,7 +38,8 @@ namespace xStunit.Interpreter
             // parser is the right place to reject, not this call site.
             var evaluatedNamed = new Dictionary<string, object>(StringComparer.Ordinal);
             foreach (var arg in namedArgs)
-                evaluatedNamed[arg.Name] = Evaluate(arg.Value, callerFrame);
+                if (!arg.IsUnboundOutput)
+                    evaluatedNamed[arg.Name] = Evaluate(arg.Value, callerFrame);
 
             // methodName (as written at the call site), not the registered
             // name - lookup is case-insensitive, so the two can differ, and an

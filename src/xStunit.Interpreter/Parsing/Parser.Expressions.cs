@@ -357,10 +357,16 @@ namespace xStunit.Interpreter
                         // Name => expr binds a VAR_OUTPUT. BindParams'
                         // Input/InOut-only lookup ignores it; CallMethod's
                         // WriteBackOutputArgs writes the callee's output back
-                        // into this arg's lvalue once the call returns.
+                        // into this arg's lvalue once the call returns. IEC also
+                        // allows the target to be left out (Name => followed
+                        // directly by , or )), naming the output without
+                        // binding it; that arg carries no Value.
                         var argName = Advance().Text;
                         Advance(); // =>
-                        named.Add(new NamedArg(argName, ParseExpr(), isOutput: true));
+                        var target = Current.Type == TokenType.Comma || Current.Type == TokenType.RParen
+                            ? null
+                            : ParseExpr();
+                        named.Add(new NamedArg(argName, target, isOutput: true));
                     }
                     else
                     {

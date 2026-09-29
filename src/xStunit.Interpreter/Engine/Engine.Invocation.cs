@@ -205,7 +205,9 @@ namespace xStunit.Interpreter
                 if (instance?.NativeKind == NativeHostKind.Suite && NativeMethodBridge.CanInvoke(methodName))
                 {
                     var evaluatedPositional = positionalArgs.Select(e => Evaluate(e, callerFrame)).ToList();
-                    var evaluatedNamed = namedArgs.ToDictionary(a => a.Name, a => Evaluate(a.Value, callerFrame));
+                    var evaluatedNamed = namedArgs
+                        .Where(a => !a.IsUnboundOutput)
+                        .ToDictionary(a => a.Name, a => Evaluate(a.Value, callerFrame));
 
                     // AssertEquals(Expected: ANY, Actual: ANY, Message) needs its
                     // arguments' *declared* IEC type to pick the matching
@@ -440,7 +442,7 @@ namespace xStunit.Interpreter
         {
             foreach (var arg in namedArgs)
             {
-                if (!arg.IsOutput)
+                if (!arg.IsOutput || arg.IsUnboundOutput)
                     continue;
 
                 var decl = paramDecls.FirstOrDefault(d => d.Name == arg.Name && d.Section == VarSection.Output);
@@ -508,7 +510,7 @@ namespace xStunit.Interpreter
                 callee.Fields[inputNames[i]].Value = Evaluate(positionalArgs[i], callerFrame);
 
             foreach (var arg in namedArgs)
-                if (callee.Fields.TryGetValue(arg.Name, out var cell))
+                if (!arg.IsUnboundOutput && callee.Fields.TryGetValue(arg.Name, out var cell))
                     cell.Value = Evaluate(arg.Value, callerFrame);
         }
 

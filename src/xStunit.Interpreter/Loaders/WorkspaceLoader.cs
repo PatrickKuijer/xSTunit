@@ -153,7 +153,11 @@ namespace xStunit.Interpreter
                 CollectUnreadLines(method.DeclarationText, unread);
 
             foreach (var property in pou.Properties)
+            {
                 CollectUnreadLines(property.DeclarationText, unread);
+                CollectUnreadLines(property.GetDeclarationText, unread);
+                CollectUnreadLines(property.SetDeclarationText, unread);
+            }
 
             if (unread.Count > 0)
                 warnings.Add(new DeclarationWarning(file, unread));

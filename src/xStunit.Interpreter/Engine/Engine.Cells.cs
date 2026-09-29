@@ -146,8 +146,7 @@ namespace xStunit.Interpreter
         // Locals and instance fields therefore consult the
         // LocalTypeNames/FieldTypeNames side tables, populated once at
         // declaration time and immune to later REF= aliasing. GVL members are
-        // never REF= targets - the parser accepts only a bare identifier there -
-        // so their Cell's DeclaredTypeName is trustworthy as it stands.
+        // REF= targets too, so they get the same treatment from _globalTypeNames.
         private string ResolveDeclaredTypeName(Expr expr, Frame frame)
         {
             if (expr is IdentifierExpr id)
@@ -156,15 +155,18 @@ namespace xStunit.Interpreter
                     return localType;
                 if (frame.Instance != null && frame.Instance.FieldTypeNames.TryGetValue(id.Name, out var fieldType))
                     return fieldType;
-                if (TryResolveGlobalCell(id.Name, out var globalCell))
-                    return globalCell.DeclaredTypeName;
+                if (TryResolveGlobalCell(id.Name, out _))
+                    return GlobalDeclaredTypeName(id.Name);
                 return null;
             }
 
             if (expr is FieldAccessExpr fieldAccess)
             {
-                if (TryGetGvlFields(fieldAccess, frame, out var gvlFields))
-                    return gvlFields.TryGetValue(fieldAccess.FieldName, out var gvlCell) ? gvlCell.DeclaredTypeName : null;
+                if (TryGetGvlFields(fieldAccess, frame, out _))
+                {
+                    var gvlName = ((IdentifierExpr)fieldAccess.Receiver).Name;
+                    return _globalTypeNames[gvlName].TryGetValue(fieldAccess.FieldName, out var gvlType) ? gvlType : null;
+                }
 
                 var receiver = Evaluate(fieldAccess.Receiver, frame);
                 if (receiver is FbInstance fb)

@@ -120,7 +120,13 @@ namespace xStunit.Parser
             if (setImplementationText != null)
                 RejectIfUnsupported($"{name}.Set", setImplementationText);
 
-            return new PropertyAst(name, declarationText, getImplementationText, setImplementationText);
+            return new PropertyAst(
+                name,
+                declarationText,
+                getImplementationText,
+                setImplementationText,
+                property.Element("Get")?.Element("Declaration")?.Value ?? string.Empty,
+                property.Element("Set")?.Element("Declaration")?.Value ?? string.Empty);
         }
 
         // Null (not an exception) for an accessor the POU never declared, so

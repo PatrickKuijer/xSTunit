@@ -20,16 +20,45 @@ namespace xStunit.Parser
 
         public string SetImplementationText { get; }
 
+        /// <summary>
+        /// The accessor's own VAR block, holding the locals its body may write.
+        /// Empty (never null) when the accessor declares none or is absent.
+        /// </summary>
+        public string GetDeclarationText { get; }
+
+        /// <inheritdoc cref="GetDeclarationText"/>
+        public string SetDeclarationText { get; }
+
         public bool HasGet => GetImplementationText != null;
 
         public bool HasSet => SetImplementationText != null;
 
+        /// <summary>
+        /// Builds a property whose accessors declare no locals of their own.
+        /// </summary>
         public PropertyAst(string name, string declarationText, string getImplementationText, string setImplementationText)
+            : this(name, declarationText, getImplementationText, setImplementationText, string.Empty, string.Empty)
+        {
+        }
+
+        /// <summary>
+        /// Builds a property with each accessor's own VAR block; pass an empty
+        /// string, not null, for an accessor that declares none.
+        /// </summary>
+        public PropertyAst(
+            string name,
+            string declarationText,
+            string getImplementationText,
+            string setImplementationText,
+            string getDeclarationText,
+            string setDeclarationText)
         {
             Name = name;
             DeclarationText = declarationText;
             GetImplementationText = getImplementationText;
             SetImplementationText = setImplementationText;
+            GetDeclarationText = getDeclarationText;
+            SetDeclarationText = setDeclarationText;
         }
     }
 }

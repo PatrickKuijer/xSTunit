@@ -441,11 +441,12 @@ namespace xStunit.Interpreter
         // come from IecElementaryDefault, the same owner Engine.DefaultValue
         // defers to.
         //
-        // DUT/FB/interface/POINTER return types are deliberately left unseeded:
-        // no cell until first assignment, null out of CallMethod when never
-        // assigned. Seeding those needs DefaultValue's full construction path -
-        // materializing a struct or FB instance - which is too much to do
-        // speculatively for a return value with no narrowing hazard of its own.
+        // DUT/FB/interface/POINTER/ARRAY return types get an empty cell: the name
+        // must resolve for assignment, but the value stays null out of CallMethod
+        // when never assigned. Seeding a real default needs DefaultValue's full
+        // construction path - materializing a struct or FB instance - which is
+        // too much to do speculatively for a return value with no narrowing
+        // hazard of its own.
         private void SeedReturnCell(Frame frame, string name, string declarationText)
         {
             if (TryGetNumericCallableType(declarationText, out var numericType, out var zero))
@@ -461,7 +462,11 @@ namespace xStunit.Interpreter
 
             var resolvedType = _registry.ResolveAlias(declaredType);
             if (!IecElementaryDefault.TryGetDefault(resolvedType, out var value))
+            {
+                frame.Locals[name] = new Cell();
+                frame.LocalTypeNames[name] = declaredType;
                 return;
+            }
 
             frame.Locals[name] = NewDeclaredCell(value, declaredType, frame.Instance);
             frame.LocalTypeNames[name] = declaredType;

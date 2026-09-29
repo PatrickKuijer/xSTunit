@@ -24,6 +24,9 @@ namespace xStunit.Interpreter
         private readonly Dictionary<string, Dictionary<string, Cell>> _globals =
             new Dictionary<string, Dictionary<string, Cell>>(IecIdentifier.Comparer);
 
+        private readonly Dictionary<string, Dictionary<string, string>> _globalTypeNames =
+            new Dictionary<string, Dictionary<string, string>>(IecIdentifier.Comparer);
+
         private readonly List<xStunit.Parser.DeclarationWarning> _globalInitWarnings = new List<xStunit.Parser.DeclarationWarning>();
 
         // Faults already reported, by identity: a global that faults only
@@ -115,14 +118,17 @@ namespace xStunit.Interpreter
             foreach (var gvlName in _registry.GvlNames)
             {
                 var fields = new Dictionary<string, Cell>(IecIdentifier.Comparer);
+                var typeNames = new Dictionary<string, string>(IecIdentifier.Comparer);
                 foreach (var decl in _registry.GetGvlDecls(gvlName))
                 {
                     var cell = new Cell { DeclaredTypeName = decl.TypeName };
                     fields[decl.Name] = cell;
+                    typeNames[decl.Name] = decl.TypeName;
                     _unsettledGlobals.Add(cell);
                 }
 
                 _globals[gvlName] = fields;
+                _globalTypeNames[gvlName] = typeNames;
             }
 
             // A decl whose default-value expression can't be resolved is
@@ -563,6 +569,17 @@ namespace xStunit.Interpreter
 
             fields = null;
             return false;
+        }
+
+        private string GlobalDeclaredTypeName(string name)
+        {
+            foreach (var typeNames in _globalTypeNames.Values)
+            {
+                if (typeNames.TryGetValue(name, out var typeName))
+                    return typeName;
+            }
+
+            return null;
         }
 
         // A bare identifier that isn't a local or instance field may still be a

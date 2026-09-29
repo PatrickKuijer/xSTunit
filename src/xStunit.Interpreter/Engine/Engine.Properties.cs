@@ -44,6 +44,9 @@ namespace xStunit.Interpreter
             return false;
         }
 
+        private void BindAccessorLocals(Frame frame, string accessorDeclarationText) =>
+            BindParams(_registry.GetDecls(accessorDeclarationText), Array.Empty<Expr>(), Array.Empty<NamedArg>(), frame, frame);
+
         private object InvokePropertyGet(FbInstance instance, string definingType, xStunit.Parser.PropertyAst property)
         {
             if (!property.HasGet)
@@ -58,6 +61,7 @@ namespace xStunit.Interpreter
             // into it is then rejected as an implicit narrowing. Same hazard
             // CallMethod/CallGlobalFunction seed against.
             SeedReturnCell(frame, property.Name, property.DeclarationText);
+            BindAccessorLocals(frame, property.GetDeclarationText);
 
             // ExecuteBody rather than a local try/catch(MethodReturnSignal), so
             // a parse failure in the Get accessor's own body is attributed to
@@ -86,6 +90,7 @@ namespace xStunit.Interpreter
                 frame.LocalTypeNames[property.Name] = declaredType;
             }
             frame.Locals[property.Name] = cell;
+            BindAccessorLocals(frame, property.SetDeclarationText);
 
             ExecuteBody(() => _registry.GetStatements(property.SetImplementationText), frame);
         }

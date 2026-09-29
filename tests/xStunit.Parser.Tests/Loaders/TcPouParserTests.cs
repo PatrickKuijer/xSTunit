@@ -128,6 +128,87 @@ END_VAR]]></Declaration>
             Assert.Equal("snCounter := nCounter;", property.SetImplementationText);
         }
 
+        // Each accessor owns its own VAR block, separate from the property-level
+        // declaration; swapping them or reading the wrong element would hand a
+        // body the other accessor's locals.
+        [Fact]
+        public void Parse_PropertyWithAccessorVarBlocks_ReadsEachAccessorsOwnDeclaration()
+        {
+            const string xml = @"<?xml version=""1.0"" encoding=""utf-8""?>
+<TcPlcObject Version=""1.1.0.1"">
+  <POU Name=""FB_Foo"" Id=""{a1b2c3d4-0008-4a1a-8b1b-000000000001}"" SpecialFunc=""None"">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_Foo
+VAR
+	snCounter : UINT;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[]]></ST>
+    </Implementation>
+    <Property Name=""nCounter"" Id=""{a1b2c3d4-0008-4a1a-8b1b-000000000002}"">
+      <Declaration><![CDATA[PROPERTY nCounter : UINT]]></Declaration>
+      <Get Name=""Get"" Id=""{a1b2c3d4-0008-4a1a-8b1b-000000000003}"">
+        <Declaration><![CDATA[VAR
+	nGetLocal : UINT;
+END_VAR]]></Declaration>
+        <Implementation>
+          <ST><![CDATA[nCounter := snCounter;]]></ST>
+        </Implementation>
+      </Get>
+      <Set Name=""Set"" Id=""{a1b2c3d4-0008-4a1a-8b1b-000000000004}"">
+        <Implementation>
+          <ST><![CDATA[snCounter := nCounter;]]></ST>
+        </Implementation>
+      </Set>
+    </Property>
+  </POU>
+</TcPlcObject>";
+
+            var property = Assert.Single(TcPouParser.Parse(xml).Properties);
+
+            Assert.Contains("nGetLocal", property.GetDeclarationText);
+            Assert.DoesNotContain("nGetLocal", property.DeclarationText);
+            Assert.Equal(string.Empty, property.SetDeclarationText);
+        }
+
+        [Fact]
+        public void Parse_PropertyWithSetAccessorVarBlock_ReadsItOnTheSetSideOnly()
+        {
+            const string xml = @"<?xml version=""1.0"" encoding=""utf-8""?>
+<TcPlcObject Version=""1.1.0.1"">
+  <POU Name=""FB_Foo"" Id=""{a1b2c3d4-0009-4a1a-8b1b-000000000001}"" SpecialFunc=""None"">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_Foo
+VAR
+	snCounter : UINT;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[]]></ST>
+    </Implementation>
+    <Property Name=""nCounter"" Id=""{a1b2c3d4-0009-4a1a-8b1b-000000000002}"">
+      <Declaration><![CDATA[PROPERTY nCounter : UINT]]></Declaration>
+      <Get Name=""Get"" Id=""{a1b2c3d4-0009-4a1a-8b1b-000000000003}"">
+        <Declaration><![CDATA[]]></Declaration>
+        <Implementation>
+          <ST><![CDATA[nCounter := snCounter;]]></ST>
+        </Implementation>
+      </Get>
+      <Set Name=""Set"" Id=""{a1b2c3d4-0009-4a1a-8b1b-000000000004}"">
+        <Declaration><![CDATA[VAR
+	nSetLocal : UINT;
+END_VAR]]></Declaration>
+        <Implementation>
+          <ST><![CDATA[snCounter := nCounter;]]></ST>
+        </Implementation>
+      </Set>
+    </Property>
+  </POU>
+</TcPlcObject>";
+
+            var property = Assert.Single(TcPouParser.Parse(xml).Properties);
+
+            Assert.Equal(string.Empty, property.GetDeclarationText);
+            Assert.Contains("nSetLocal", property.SetDeclarationText);
+        }
+
         [Fact]
         public void Parse_FunctionBlockWithGetOnlyProperty_SetAccessorIsAbsentNotEmpty()
         {

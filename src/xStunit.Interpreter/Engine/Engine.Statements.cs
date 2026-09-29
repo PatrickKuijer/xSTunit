@@ -158,16 +158,14 @@ namespace xStunit.Interpreter
         private void SetVariable(string name, object value, Frame frame)
         {
             var cell = frame.ResolveCell(name);
-            if (cell == null)
-            {
-                cell = new Cell();
-                frame.Locals[name] = cell;
-            }
+            if (cell == null && !TryResolveGlobalCell(name, out cell))
+                throw new InvalidOperationException($"Unknown variable '{name}'");
+
             AssignToCell(cell, value);
         }
 
-        // Assignment-target dispatch: identifiers go through SetVariable (may
-        // implicitly declare a local), field/index targets write directly into
+        // Assignment-target dispatch: identifiers go through SetVariable, which
+        // requires the name to resolve; field/index targets write directly into
         // the already-allocated Cell/array slot they resolve to.
         private void SetLValue(Expr target, object value, Frame frame)
         {
@@ -187,6 +185,7 @@ namespace xStunit.Interpreter
                     }
 
                     var receiverValue = Evaluate(fieldAccess.Receiver, frame);
+                    RejectAssignmentIntoEmptyVariable(fieldAccess.Receiver, receiverValue);
                     var fields = FieldsOf(receiverValue, fieldAccess.FieldName);
                     if (fields.TryGetValue(fieldAccess.FieldName, out var cell))
                     {
@@ -217,6 +216,7 @@ namespace xStunit.Interpreter
                     // below, where System.String's immutability means writing a
                     // byte replaces the parent Cell's Value wholesale.
                     var receiverValue = EvaluateIndexReceiver(index.Receiver, frame);
+                    RejectAssignmentIntoEmptyVariable(index.Receiver, receiverValue);
                     if (receiverValue is string str)
                     {
                         var receiverCell = ResolveCellForLValue(index.Receiver, frame);
@@ -244,6 +244,29 @@ namespace xStunit.Interpreter
             }
         }
 
+        private static void RejectAssignmentIntoEmptyVariable(Expr receiver, object receiverValue)
+        {
+            if (receiverValue == null && receiver is IdentifierExpr id)
+            {
+                throw new InvalidOperationException(
+                    $"Cannot assign into a member of '{id.Name}': it holds no value yet.");
+            }
+        }
+
+        private bool TryRebindGlobal(string name, Cell sourceCell)
+        {
+            foreach (var fields in _globals.Values)
+            {
+                if (fields.ContainsKey(name))
+                {
+                    fields[name] = sourceCell;
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
         // Mirrors SetLValue's target shapes (identifier / field access / array
         // index), but a REF= aliases the destination's storage onto sourceCell
         // rather than copying a value into it.
@@ -267,18 +290,16 @@ namespace xStunit.Interpreter
             switch (target)
             {
                 case IdentifierExpr id:
-                    // Method-local REFERENCE TO vars, VAR_INST included, are
-                    // pre-populated into frame.Locals before the body runs, so
-                    // a hit there means the target really is local. A name that instead belongs to an
-                    // instance field has to be written through to
-                    // instance.Fields, or the binding dies with this per-call
-                    // Frame instead of persisting across calls.
-                    if (!frame.Locals.ContainsKey(id.Name) &&
-                        frame.Instance != null &&
-                        frame.Instance.Fields.ContainsKey(id.Name))
-                        frame.Instance.Fields[id.Name] = sourceCell;
-                    else
+                    // A name that belongs to an instance field has to be written
+                    // through to instance.Fields, or the binding dies with this
+                    // per-call Frame instead of persisting across calls. A bare GVL
+                    // member rebinds the global.
+                    if (frame.Locals.ContainsKey(id.Name))
                         frame.RebindLocal(id.Name, sourceCell);
+                    else if (frame.Instance != null && frame.Instance.Fields.ContainsKey(id.Name))
+                        frame.Instance.Fields[id.Name] = sourceCell;
+                    else if (!TryRebindGlobal(id.Name, sourceCell))
+                        throw new InvalidOperationException($"Unknown variable '{id.Name}'");
                     break;
 
                 case FieldAccessExpr fieldAccess:

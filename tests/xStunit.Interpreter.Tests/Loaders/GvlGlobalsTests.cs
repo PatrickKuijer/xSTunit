@@ -7,6 +7,15 @@ namespace xStunit.Interpreter.Tests
 {
     public class GvlGlobalsTests
     {
+        // Assignment never creates a variable, so the scratch variable the
+        // statements write their observation into is declared up front.
+        private static Frame NewFrame(FbInstance instance)
+        {
+            var frame = new Frame(instance, "FB_Suite");
+            frame.Locals["result"] = new Cell();
+            return frame;
+        }
+
         private static Engine NewEngine(string implementation, IReadOnlyList<GvlAst> gvls, IReadOnlyList<StructAst> structs = null)
         {
             var suite = new PouAst(
@@ -25,7 +34,7 @@ namespace xStunit.Interpreter.Tests
             var gvl = new GvlAst("gCounters", "VAR_GLOBAL\n\tcount : INT;\nEND_VAR");
             var engine = NewEngine("result := gCounters.count;", new[] { gvl });
             var instance = engine.NewInstance("FB_Suite");
-            var frame = new Frame(instance, "FB_Suite");
+            var frame = NewFrame(instance);
 
             engine.ExecuteStatements(Parser.ParseStatements("result := gCounters.count;"), frame);
 
@@ -38,7 +47,7 @@ namespace xStunit.Interpreter.Tests
             var gvl = new GvlAst("gCounters", "VAR_GLOBAL\n\tcount : INT;\nEND_VAR");
             var engine = NewEngine("", new[] { gvl });
             var instance = engine.NewInstance("FB_Suite");
-            var frame = new Frame(instance, "FB_Suite");
+            var frame = NewFrame(instance);
 
             engine.ExecuteStatements(Parser.ParseStatements("gCounters.count := 5;\nresult := gCounters.count + 1;"), frame);
 
@@ -51,7 +60,7 @@ namespace xStunit.Interpreter.Tests
             var gvl = new GvlAst("cScratchConstants", "VAR_GLOBAL CONSTANT\n\tMAX_UNITS : UINT := 16;\nEND_VAR");
             var engine = NewEngine("", new[] { gvl });
             var instance = engine.NewInstance("FB_Suite");
-            var frame = new Frame(instance, "FB_Suite");
+            var frame = NewFrame(instance);
 
             engine.ExecuteStatements(Parser.ParseStatements("result := cScratchConstants.MAX_UNITS;"), frame);
 
@@ -68,7 +77,7 @@ namespace xStunit.Interpreter.Tests
             var gvl = new GvlAst("gScratchGlobals", "VAR_GLOBAL\n\tstWidget : uWidget;\nEND_VAR");
             var engine = NewEngine("", new[] { gvl }, new[] { structAst });
             var instance = engine.NewInstance("FB_Suite");
-            var frame = new Frame(instance, "FB_Suite");
+            var frame = NewFrame(instance);
 
             engine.ExecuteStatements(Parser.ParseStatements("result := gScratchGlobals.stWidget.state;"), frame);
 
@@ -85,8 +94,9 @@ namespace xStunit.Interpreter.Tests
             var gvl = new GvlAst("gScratchGlobals", "VAR_GLOBAL\n\tstWidget : uWidget;\nEND_VAR");
             var engine = NewEngine("", new[] { gvl }, new[] { structAst });
             var instance = engine.NewInstance("FB_Suite");
-            var frame = new Frame(instance, "FB_Suite");
+            var frame = NewFrame(instance);
 
+            frame.Locals["sstWidget"] = new Cell();
             engine.ExecuteStatements(Parser.ParseStatements(
                 "sstWidget REF= gScratchGlobals.stWidget;\ngScratchGlobals.stWidget.state := 7;\nresult := sstWidget.state;"), frame);
 
@@ -99,7 +109,7 @@ namespace xStunit.Interpreter.Tests
             var gvl = new GvlAst("cScratchConstants", "VAR_GLOBAL CONSTANT\n\tMAX_UNITS : UINT := 16;\nEND_VAR");
             var engine = NewEngine("", new[] { gvl });
             var instance = engine.NewInstance("FB_Suite");
-            var frame = new Frame(instance, "FB_Suite");
+            var frame = NewFrame(instance);
 
             engine.ExecuteStatements(Parser.ParseStatements("result := MAX_UNITS;"), frame);
 
@@ -116,7 +126,7 @@ namespace xStunit.Interpreter.Tests
             var gGvl = new GvlAst("gScratchGlobals", "VAR_GLOBAL\n\tbufferSize : UINT := TCP_MESSAGE_SIZE;\nEND_VAR");
             var engine = NewEngine("", new[] { cGvl, gGvl });
             var instance = engine.NewInstance("FB_Suite");
-            var frame = new Frame(instance, "FB_Suite");
+            var frame = NewFrame(instance);
 
             engine.ExecuteStatements(Parser.ParseStatements("result := gScratchGlobals.bufferSize;"), frame);
 
@@ -134,7 +144,7 @@ namespace xStunit.Interpreter.Tests
             var cGvl = new GvlAst("cScratchConstants", "VAR_GLOBAL CONSTANT\n\tTCP_MESSAGE_SIZE : UINT := 16;\nEND_VAR");
             var engine = NewEngine("", new[] { gGvl, cGvl });
             var instance = engine.NewInstance("FB_Suite");
-            var frame = new Frame(instance, "FB_Suite");
+            var frame = NewFrame(instance);
 
             engine.ExecuteStatements(Parser.ParseStatements("result := gScratchGlobals.bufferSize;"), frame);
 
@@ -160,7 +170,7 @@ namespace xStunit.Interpreter.Tests
             };
             var engine = NewEngine("", gvls);
             var instance = engine.NewInstance("FB_Suite");
-            var frame = new Frame(instance, "FB_Suite");
+            var frame = NewFrame(instance);
 
             engine.ExecuteStatements(Parser.ParseStatements("result := cLevel4.LEVEL_4;"), frame);
 
@@ -183,7 +193,7 @@ namespace xStunit.Interpreter.Tests
             };
             var engine = NewEngine("", gvls);
             var instance = engine.NewInstance("FB_Suite");
-            var frame = new Frame(instance, "FB_Suite");
+            var frame = NewFrame(instance);
 
             engine.ExecuteStatements(Parser.ParseStatements("result := gScratchGlobals.aUnits[12];"), frame);
 
@@ -204,7 +214,7 @@ namespace xStunit.Interpreter.Tests
             };
             var engine = NewEngine("", gvls);
             var instance = engine.NewInstance("FB_Suite");
-            var frame = new Frame(instance, "FB_Suite");
+            var frame = NewFrame(instance);
 
             engine.ExecuteStatements(Parser.ParseStatements(
                 "gScratchGlobals.sLabel := 'abcdefgh';\nresult := gScratchGlobals.sLabel;"), frame);
@@ -266,7 +276,7 @@ namespace xStunit.Interpreter.Tests
             var goodGvl = new GvlAst("gGood", "VAR_GLOBAL\n\tcount : INT := 5;\nEND_VAR");
             var engine = NewEngine("", new[] { badGvl, goodGvl });
             var instance = engine.NewInstance("FB_Suite");
-            var frame = new Frame(instance, "FB_Suite");
+            var frame = NewFrame(instance);
 
             engine.ExecuteStatements(Parser.ParseStatements("result := gGood.count;"), frame);
 

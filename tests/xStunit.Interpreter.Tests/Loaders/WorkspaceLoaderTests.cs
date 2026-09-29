@@ -243,6 +243,45 @@ namespace xStunit.Interpreter.Tests
             Assert.Equal(new[] { "cx, cy : LREAL;" }, warning.Lines);
         }
 
+        // A property accessor's VAR block is parsed apart from the property
+        // header, so a loss inside either accessor has to reach the same report.
+        [Theory]
+        [InlineData("Get")]
+        [InlineData("Set")]
+        public void Load_PropertyAccessorWithUnreadableDeclarationLine_WarnsAgainstTheOwningFile(string accessor)
+        {
+            var unreadable = "<Declaration><![CDATA[VAR\n    ax, ay : INT;\nEND_VAR]]></Declaration>";
+            var empty = "<Declaration><![CDATA[]]></Declaration>";
+            var xml = $@"<?xml version=""1.0"" encoding=""utf-8""?>
+<TcPlcObject Version=""1.1.0.1"">
+  <POU Name=""FB_Prop"" Id=""{{00000000-0000-0000-0000-0000000000e1}}"" SpecialFunc=""None"">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_Prop
+VAR
+    nStore : INT;
+END_VAR]]></Declaration>
+    <Implementation><ST><![CDATA[]]></ST></Implementation>
+    <Property Name=""nValue"" Id=""{{00000000-0000-0000-0000-0000000000e2}}"">
+      <Declaration><![CDATA[PROPERTY nValue : INT]]></Declaration>
+      <Get Name=""Get"" Id=""{{00000000-0000-0000-0000-0000000000e3}}"">
+        {(accessor == "Get" ? unreadable : empty)}
+        <Implementation><ST><![CDATA[nValue := nStore;]]></ST></Implementation>
+      </Get>
+      <Set Name=""Set"" Id=""{{00000000-0000-0000-0000-0000000000e4}}"">
+        {(accessor == "Set" ? unreadable : empty)}
+        <Implementation><ST><![CDATA[nStore := nValue;]]></ST></Implementation>
+      </Set>
+    </Property>
+  </POU>
+</TcPlcObject>";
+            File.WriteAllText(Path.Combine(_tempDir, "FB_Prop.TcPOU"), xml);
+
+            var workspace = WorkspaceLoader.Load(new[] { _tempDir });
+
+            var warning = Assert.Single(workspace.Warnings);
+            Assert.EndsWith("FB_Prop.TcPOU", warning.FileKey);
+            Assert.Equal(new[] { "ax, ay : INT;" }, warning.Lines);
+        }
+
         // GVL constants feed ARRAY bounds and STRING sizes, so a dropped line
         // costs more than its own variable and has to reach the same report
         // as a POU's.

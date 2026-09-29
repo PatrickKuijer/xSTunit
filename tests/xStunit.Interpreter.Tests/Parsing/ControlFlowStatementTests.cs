@@ -9,7 +9,18 @@ namespace xStunit.Interpreter.Tests
     {
         private static Engine NewEngine() => new Engine(new TypeRegistry(Array.Empty<PouAst>()));
 
-        private static Frame NewFrame() => new Frame(new FbInstance("Test"), "Test");
+        // Assignment never creates a variable, so the scratch variables the
+        // statement snippets write to are declared up front.
+        private static readonly string[] ScratchVariables =
+            { "result", "selector", "count", "branch", "sum", "outerCount", "i", "aRan", "bRan", "cRan", "elseRan", "o", "innerTotal", "lastValue" };
+
+        private static Frame NewFrame()
+        {
+            var frame = new Frame(new FbInstance("Test"), "Test");
+            foreach (var name in ScratchVariables)
+                frame.Locals[name] = new Cell();
+            return frame;
+        }
 
         private static int RunAndReadInt(string body, string variable)
         {

@@ -215,12 +215,15 @@ namespace xStunit.Interpreter
         // instantiable as a native FB stub?". The two questions share only the
         // list of native base-type names.
         private bool IsNativeFbTypeName(string typeName) =>
+            IsBuiltinNativeFbTypeName(typeName)
+            || TryGetNativeFunctionBlock(typeName, out _);
+
+        internal static bool IsBuiltinNativeFbTypeName(string typeName) =>
             NativeTimerTypes.Contains(typeName)
             || NativeEdgeTriggerTypes.Contains(typeName)
             || NativeBistableLatchTypes.Contains(typeName)
             || NativeCounterTypes.Contains(typeName)
-            || IecIdentifier.Matches(typeName, NativeLoopbackType)
-            || TryGetNativeFunctionBlock(typeName, out _);
+            || IecIdentifier.Matches(typeName, NativeLoopbackType);
 
         // A library namespace qualifier is transparent: Tc2_System.FB_FileOpen
         // names the same block FB_FileOpen does, and real source writes both.

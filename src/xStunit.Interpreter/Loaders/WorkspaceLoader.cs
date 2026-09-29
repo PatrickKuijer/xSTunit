@@ -68,8 +68,6 @@ namespace xStunit.Interpreter
                 return LoadedWorkspace.Failed(ex.Message, skipped, warnings);
             }
 
-            var types = loaded.Select(l => l.Pou).ToList();
-
             IReadOnlyList<StructAst> structTypes;
             var dutSkipped = new List<SkippedFile>();
             var dutWarnings = new List<DeclarationWarning>();
@@ -126,12 +124,19 @@ namespace xStunit.Interpreter
                 return LoadedWorkspace.Failed(ex.Message, skipped, warnings);
             }
 
+            var skippedBeforeConformance = skipped.Count;
+            var conformant = ImplementsConformance.Filter(loaded, interfaceTypes, skipped);
+            var nonConformantFiles = new HashSet<string>(
+                skipped.Skip(skippedBeforeConformance).Select(s => s.FileKey), StringComparer.OrdinalIgnoreCase);
+            warnings.RemoveAll(w => nonConformantFiles.Contains(w.FileKey));
+            var types = conformant.Select(l => l.Pou).ToList();
+
             return LoadedWorkspace.Succeeded(
                 new TypeRegistry(types, structTypes, gvls, aliases, enumMembers, interfaceTypes),
                 types,
                 // The duplicate check above has already ruled out two names
                 // this would merge.
-                loaded.ToDictionary(l => l.Pou.Name, l => l.FilePath, IecIdentifier.Comparer),
+                conformant.ToDictionary(l => l.Pou.Name, l => l.FilePath, IecIdentifier.Comparer),
                 skipped,
                 warnings,
                 gvlPaths);

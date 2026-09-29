@@ -22,11 +22,18 @@ namespace xStunit.Interpreter
         private static readonly Regex TypeHeaderPattern = new Regex(
             @"^TYPE\s+(?<name>\w+)\s*:\s*(?<rest>.*)$", RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
-        // Text that starts a STRUCT or ENUM body, not an alias's
+        // Whole-word, the same way StructDeclParser.DeclaredBody reads the body
+        // keyword: an alias to a type named StructuredCfg is refused by a bare
+        // prefix check here and not claimed as a struct there, so no loader
+        // reads it at all.
+        private static readonly Regex BodyKeywordPattern = new Regex(
+            @"^(?:STRUCT|UNION)\b", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+        // Text that starts a STRUCT, UNION or ENUM body, not an alias's
         // underlying-type text.
         private static bool LooksLikeStructOrEnumBody(string text) =>
             text.Length == 0
-            || text.StartsWith("STRUCT", StringComparison.OrdinalIgnoreCase)
+            || BodyKeywordPattern.IsMatch(text)
             || text.StartsWith("(", StringComparison.Ordinal);
 
         // Extracts (name, underlyingTypeName) from an ALIAS DUT's declaration

@@ -17,7 +17,7 @@ namespace xStunit.Interpreter
         // word keeps its written spelling: identifiers resolve
         // case-insensitively downstream, and diagnostics echo the name as the
         // source wrote it.
-        private static readonly HashSet<string> Keywords = new HashSet<string>(StringComparer.Ordinal)
+        private static readonly HashSet<string> ParserDispatchKeywords = new HashSet<string>(StringComparer.Ordinal)
         {
             "IF", "THEN", "ELSIF", "ELSE", "END_IF",
             "CASE", "OF", "END_CASE",
@@ -146,16 +146,16 @@ namespace xStunit.Interpreter
                     while (i < text.Length && (char.IsLetterOrDigit(text[i]) || text[i] == '_'))
                         i++;
                     var word = text.Substring(start, i - start);
-                    var upper = word.ToUpperInvariant();
+                    var foldedWord = word.ToUpperInvariant();
 
-                    if (upper == "REF" && i < text.Length && text[i] == '=')
+                    if (foldedWord == "REF" && i < text.Length && text[i] == '=')
                     {
                         i++;
                         tokens.Add(new Token(TokenType.RefAssign, "REF=", tokenLine));
                         continue;
                     }
 
-                    if ((upper == "REAL" || upper == "LREAL") && i < text.Length && text[i] == '#')
+                    if ((foldedWord == "REAL" || foldedWord == "LREAL") && i < text.Length && text[i] == '#')
                     {
                         i++; // '#'
                         var numStart = i;
@@ -163,11 +163,11 @@ namespace xStunit.Interpreter
                             i++;
                         ConsumeFraction(text, ref i);
                         var numText = text.Substring(numStart, i - numStart);
-                        tokens.Add(new Token(upper == "REAL" ? TokenType.RealLiteral : TokenType.LrealLiteral, numText, tokenLine));
+                        tokens.Add(new Token(foldedWord == "REAL" ? TokenType.RealLiteral : TokenType.LrealLiteral, numText, tokenLine));
                         continue;
                     }
 
-                    if ((upper == "LTIME" || upper == "LT") && i < text.Length && text[i] == '#')
+                    if ((foldedWord == "LTIME" || foldedWord == "LT") && i < text.Length && text[i] == '#')
                     {
                         i++; // '#'
                         var durStart = i;
@@ -177,7 +177,7 @@ namespace xStunit.Interpreter
                         continue;
                     }
 
-                    if ((upper == "TIME" || upper == "T") && i < text.Length && text[i] == '#')
+                    if ((foldedWord == "TIME" || foldedWord == "T") && i < text.Length && text[i] == '#')
                     {
                         i++; // '#'
                         var durStart = i;
@@ -191,7 +191,7 @@ namespace xStunit.Interpreter
                     // literals, not TIME's duration-segment grammar, so their
                     // body is a run of digits/'-'/':'/'.' rather than
                     // digits+unit-letters.
-                    if ((upper == "DATE_AND_TIME" || upper == "DT") && i < text.Length && text[i] == '#')
+                    if ((foldedWord == "DATE_AND_TIME" || foldedWord == "DT") && i < text.Length && text[i] == '#')
                     {
                         i++; // '#'
                         var litStart = i;
@@ -201,7 +201,7 @@ namespace xStunit.Interpreter
                         continue;
                     }
 
-                    if ((upper == "TIME_OF_DAY" || upper == "TOD") && i < text.Length && text[i] == '#')
+                    if ((foldedWord == "TIME_OF_DAY" || foldedWord == "TOD") && i < text.Length && text[i] == '#')
                     {
                         i++; // '#'
                         var litStart = i;
@@ -211,7 +211,7 @@ namespace xStunit.Interpreter
                         continue;
                     }
 
-                    if ((upper == "DATE" || upper == "D") && i < text.Length && text[i] == '#')
+                    if ((foldedWord == "DATE" || foldedWord == "D") && i < text.Length && text[i] == '#')
                     {
                         i++; // '#'
                         var litStart = i;
@@ -221,7 +221,7 @@ namespace xStunit.Interpreter
                         continue;
                     }
 
-                    tokens.Add(new Token(TokenType.Identifier, Keywords.Contains(upper) ? upper : word, tokenLine));
+                    tokens.Add(new Token(TokenType.Identifier, ParserDispatchKeywords.Contains(foldedWord) ? foldedWord : word, tokenLine));
                     continue;
                 }
 

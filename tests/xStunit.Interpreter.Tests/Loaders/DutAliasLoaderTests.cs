@@ -60,6 +60,25 @@ namespace xStunit.Interpreter.Tests
             Assert.Equal("STRING(20)", underlying);
         }
 
+        // STRUCT/UNION are recognized as whole words only. An underlying type
+        // whose name merely starts with those letters is an ordinary alias
+        // target, and refusing it loses the alias: StructDeclParser does not
+        // claim the DUT either, so no loader reads it.
+        [Theory]
+        [InlineData("TYPE T_Cfg : StructuredCfg;\nEND_TYPE", "StructuredCfg")]
+        [InlineData("type T_Cfg : Struct_Cfg;\nend_type", "Struct_Cfg")]
+        [InlineData("TYPE T_Cfg : STRUCTPOINT;\nEND_TYPE", "STRUCTPOINT")]
+        [InlineData("type T_Cfg :\nUnionData;\nend_type", "UnionData")]
+        public void TryParseAlias_UnderlyingTypeNamedLikeABodyKeyword_ExtractsUnderlyingType(string declaration, string expected)
+        {
+            var parsed = DutAliasLoader.TryParseAlias(declaration, out var name, out var underlying);
+
+            Assert.True(parsed);
+            Assert.Equal("T_Cfg", name);
+            Assert.Equal(expected, underlying);
+            Assert.Null(StructDeclParser.DeclaredBody(declaration));
+        }
+
         // A lower-case STRUCT body must still be recognized as one: taken for
         // an alias, the type name would map to the text "struct".
         [Fact]

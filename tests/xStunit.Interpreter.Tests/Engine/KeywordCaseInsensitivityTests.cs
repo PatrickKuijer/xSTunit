@@ -116,35 +116,55 @@ namespace xStunit.Interpreter.Tests
             Assert.Same(instance.Fields["nTarget"], instance.Fields["refValue"]);
         }
 
-        // Expected values are worked out by hand from the literal text, not
-        // from the upper-case spelling's parse, so a prefix that is claimed
-        // but decoded under the wrong grammar still goes red.
-        public static IEnumerable<object[]> TypedLiterals() => new[]
+        // The typed-literal tests below take their expected values from the
+        // literal text worked out by hand, not from the upper-case spelling's
+        // parse, so a prefix that is claimed but decoded under the wrong
+        // grammar or into the wrong literal type still goes red.
+        [Theory]
+        [InlineData("t#1s500ms", 1500u)]
+        [InlineData("Time#2m", 120_000u)]
+        public void TimePrefix_InLowerOrMixedCase_ParsesAsTime(string text, uint expectedMs)
         {
-            new object[] { "t#1s500ms", new TimeLiteralExpr(1500) },
-            new object[] { "Time#2m", new TimeLiteralExpr(120_000) },
-            new object[] { "lt#1ms", new LtimeLiteralExpr(1_000_000) },
-            new object[] { "ltime#3us", new LtimeLiteralExpr(3_000) },
-            new object[] { "real#1.5", new RealLiteralExpr(1.5f) },
-            new object[] { "LReal#2.25", new LrealLiteralExpr(2.25) },
-            new object[] { "d#1970-01-02", new DateLiteralExpr(86_400) },
-            new object[] { "date#1970-01-03", new DateLiteralExpr(172_800) },
-            new object[] { "dt#1970-01-01-00:01:00", new DateAndTimeLiteralExpr(60) },
-            new object[] { "date_and_time#1970-01-01-01:00:00", new DateAndTimeLiteralExpr(3_600) },
-            new object[] { "tod#00:00:01", new TimeOfDayLiteralExpr(1_000) },
-            new object[] { "Time_Of_Day#00:01:00", new TimeOfDayLiteralExpr(60_000) },
-        };
+            Assert.Equal(expectedMs, Assert.IsType<TimeLiteralExpr>(Parser.ParseExpression(text)).Value);
+        }
 
         [Theory]
-        [MemberData(nameof(TypedLiterals))]
-        public void TypedLiteralPrefix_InLowerOrMixedCase_ParsesToTheSameLiteral(string text, Expr expected)
+        [InlineData("lt#1ms", 1_000_000ul)]
+        [InlineData("ltime#3us", 3_000ul)]
+        public void LtimePrefix_InLowerOrMixedCase_ParsesAsLtime(string text, ulong expectedNs)
         {
-            var parsed = Parser.ParseExpression(text);
+            Assert.Equal(expectedNs, Assert.IsType<LtimeLiteralExpr>(Parser.ParseExpression(text)).Value);
+        }
 
-            Assert.IsType(expected.GetType(), parsed);
-            Assert.Equal(
-                expected.GetType().GetProperty("Value").GetValue(expected),
-                parsed.GetType().GetProperty("Value").GetValue(parsed));
+        [Fact]
+        public void RealAndLrealPrefixes_InLowerOrMixedCase_ParseAsTheirOwnWidth()
+        {
+            Assert.Equal(1.5f, Assert.IsType<RealLiteralExpr>(Parser.ParseExpression("real#1.5")).Value);
+            Assert.Equal(2.25, Assert.IsType<LrealLiteralExpr>(Parser.ParseExpression("LReal#2.25")).Value);
+        }
+
+        [Theory]
+        [InlineData("d#1970-01-02", 86_400u)]
+        [InlineData("date#1970-01-03", 172_800u)]
+        public void DatePrefix_InLowerOrMixedCase_ParsesAsDate(string text, uint expectedSeconds)
+        {
+            Assert.Equal(expectedSeconds, Assert.IsType<DateLiteralExpr>(Parser.ParseExpression(text)).Value);
+        }
+
+        [Theory]
+        [InlineData("dt#1970-01-01-00:01:00", 60u)]
+        [InlineData("date_and_time#1970-01-01-01:00:00", 3_600u)]
+        public void DateAndTimePrefix_InLowerOrMixedCase_ParsesAsDateAndTime(string text, uint expectedSeconds)
+        {
+            Assert.Equal(expectedSeconds, Assert.IsType<DateAndTimeLiteralExpr>(Parser.ParseExpression(text)).Value);
+        }
+
+        [Theory]
+        [InlineData("tod#00:00:01", 1_000u)]
+        [InlineData("Time_Of_Day#00:01:00", 60_000u)]
+        public void TimeOfDayPrefix_InLowerOrMixedCase_ParsesAsTimeOfDay(string text, uint expectedMs)
+        {
+            Assert.Equal(expectedMs, Assert.IsType<TimeOfDayLiteralExpr>(Parser.ParseExpression(text)).Value);
         }
 
         // Keywords normalize; identifiers must not. A diagnostic that names a
@@ -185,8 +205,10 @@ namespace xStunit.Interpreter.Tests
 
             StepOnce(engine, instance);
 
-            // The callee's own nAcc is checked, not the caller's nTotal: a bare
-            // invocation binds VAR_IN_OUT by value, so nothing flows back.
+            // The callee's own nAcc is checked, not the caller's nTotal: the
+            // interpreter currently copies a VAR_IN_OUT argument into a bare
+            // invocation without writing it back, so the caller's variable
+            // cannot show whether the section opened.
             Assert.Equal(7, instance.Fields["nResult"].Value);
             var calc = (FbInstance)instance.Fields["fbCalc"].Value;
             Assert.Equal(17, calc.Fields["nAcc"].Value);

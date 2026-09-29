@@ -24,6 +24,15 @@ namespace xStunit.Interpreter
         private readonly Dictionary<(string DeclaringType, string Method), Dictionary<string, Cell>> _methodInstanceCells =
             new Dictionary<(string DeclaringType, string Method), Dictionary<string, Cell>>(MethodKeyComparer.Instance);
 
+        // Fields whose Cell is a caller's variable bound by VAR_IN_OUT rather
+        // than storage the instance owns. A copy of this instance keeps the
+        // binding, and a later by-value argument must replace the Cell instead
+        // of writing through it.
+        internal HashSet<string> InOutBoundFieldNames { get; } = new HashSet<string>(IecIdentifier.Comparer);
+
+        internal IEnumerable<KeyValuePair<(string DeclaringType, string Method), Dictionary<string, Cell>>> MethodInstanceTables =>
+            _methodInstanceCells;
+
         // Which native (compiled-only) stub backs this instance, and the host
         // object itself - assigned as a pair by the native-host classifier in
         // Engine.NativeHost.cs during NewInstance. An instance can be backed

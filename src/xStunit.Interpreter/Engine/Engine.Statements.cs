@@ -155,7 +155,7 @@ namespace xStunit.Interpreter
             return selectorInt >= from && selectorInt <= to;
         }
 
-        private static void SetVariable(string name, object value, Frame frame)
+        private void SetVariable(string name, object value, Frame frame)
         {
             var cell = frame.ResolveCell(name);
             if (cell == null)
@@ -163,7 +163,7 @@ namespace xStunit.Interpreter
                 cell = new Cell();
                 frame.Locals[name] = cell;
             }
-            cell.Value = CoerceForAssignment(cell.Value, value, cell.DeclaredTypeName);
+            AssignToCell(cell, value);
         }
 
         // Assignment-target dispatch: identifiers go through SetVariable (may
@@ -182,7 +182,7 @@ namespace xStunit.Interpreter
                     {
                         if (!gvlFields.TryGetValue(fieldAccess.FieldName, out var gvlCell))
                             throw new InvalidOperationException($"Unknown field '{fieldAccess.FieldName}'");
-                        gvlCell.Value = CoerceForAssignment(gvlCell.Value, value, gvlCell.DeclaredTypeName);
+                        AssignToCell(gvlCell, value);
                         break;
                     }
 
@@ -190,7 +190,7 @@ namespace xStunit.Interpreter
                     var fields = FieldsOf(receiverValue, fieldAccess.FieldName);
                     if (fields.TryGetValue(fieldAccess.FieldName, out var cell))
                     {
-                        cell.Value = CoerceForAssignment(cell.Value, value, cell.DeclaredTypeName);
+                        AssignToCell(cell, value);
                         break;
                     }
 
@@ -201,7 +201,7 @@ namespace xStunit.Interpreter
                     if (receiverValue is FbInstance fbReceiver &&
                         TryFindProperty(fbReceiver.ActualTypeName, fieldAccess.FieldName, out var definingType, out var property))
                     {
-                        InvokePropertySet(fbReceiver, definingType, property, value);
+                        InvokePropertySet(fbReceiver, definingType, property, CopyValue(value));
                         break;
                     }
 
@@ -229,7 +229,13 @@ namespace xStunit.Interpreter
                     // An array element has no Cell of its own to carry a
                     // declared type, so the element type is taken from the
                     // ARRAY declaration itself.
-                    array.SetElement(flat, CoerceForAssignment(array.Elements[flat], value, array.ElementTypeName));
+                    var existingElement = array.Elements[flat];
+                    array.SetElement(
+                        flat,
+                        CoerceForAssignment(
+                            existingElement,
+                            StoredValue(existingElement, value, array.ElementTypeName),
+                            array.ElementTypeName));
                     break;
                 }
                 default:

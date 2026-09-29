@@ -20,11 +20,18 @@ namespace xStunit.Interpreter
         private bool _dropped;
         private bool _frozen;
         private int _delayDepth;
-        private readonly Queue<object> _delayQueue = new Queue<object>();
+        private Queue<object> _delayQueue = new Queue<object>();
         private bool _duplicatePending;
         private bool _corruptPending;
         private object _corruptValue;
         private object _lastTransmittedValue;
+
+        internal LoopbackHost CloneState()
+        {
+            var copy = (LoopbackHost)MemberwiseClone();
+            copy._delayQueue = new Queue<object>(_delayQueue);
+            return copy;
+        }
 
         public void Transmit(FbInstance instance, Cell source, Cell sink, long clockTotalMs)
         {

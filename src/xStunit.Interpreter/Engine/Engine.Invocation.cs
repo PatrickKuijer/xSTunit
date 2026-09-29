@@ -608,15 +608,7 @@ namespace xStunit.Interpreter
         private List<VarDecl> GetOwnParamDecls(FbInstance instance, params VarSection[] sections)
         {
             var chain = new List<string>();
-            var current = instance.ActualTypeName;
-            while (current != null)
-            {
-                var def = _registry.Get(current);
-                if (def == null)
-                    break;
-                chain.Add(current);
-                current = def.BaseTypeName;
-            }
+            WalkAncestry(instance.ActualTypeName, chain);
 
             var result = new List<VarDecl>();
             for (var i = chain.Count - 1; i >= 0; i--)
@@ -641,11 +633,14 @@ namespace xStunit.Interpreter
             var inputDecls = GetOwnParamDecls(callee, VarSection.Input, VarSection.InOut);
 
             for (var i = 0; i < positionalArgs.Count && i < inputDecls.Count; i++)
-                callee.Fields[inputDecls[i].Name].Value = Evaluate(positionalArgs[i], callerFrame);
+                BindFbArgument(callee, inputDecls[i], positionalArgs[i], callerFrame);
 
             foreach (var arg in namedArgs)
-                if (inputDecls.Any(d => IecIdentifier.Matches(d.Name, arg.Name)) && callee.Fields.TryGetValue(arg.Name, out var cell))
-                    cell.Value = Evaluate(arg.Value, callerFrame);
+            {
+                var decl = inputDecls.FirstOrDefault(d => IecIdentifier.Matches(d.Name, arg.Name));
+                if (decl != null && callee.Fields.ContainsKey(decl.Name))
+                    BindFbArgument(callee, decl, arg.Value, callerFrame);
+            }
 
             var def = _registry.Get(callee.ActualTypeName);
             ResetTopLevelTempFields(callee);
@@ -654,6 +649,22 @@ namespace xStunit.Interpreter
 
             var outputDecls = GetOwnParamDecls(callee, VarSection.Output);
             WriteBackOutputArgs(namedArgs, name => IsOutputDecl(outputDecls, name), callee.Fields, callerFrame);
+        }
+
+        private void BindFbArgument(FbInstance callee, VarDecl decl, Expr argument, Frame callerFrame)
+        {
+            if (TryResolveInOutCell(decl, argument, callerFrame, out var callerCell))
+            {
+                callee.Fields[decl.Name] = callerCell;
+                callee.InOutBoundFieldNames.Add(decl.Name);
+                return;
+            }
+
+            var value = EvaluateInputArgument(decl, argument, callerFrame);
+            if (callee.InOutBoundFieldNames.Remove(decl.Name))
+                callee.Fields[decl.Name] = NewDeclaredCell(value, decl.TypeName, callee);
+            else
+                callee.Fields[decl.Name].Value = value;
         }
 
         private void BindParams(
@@ -676,7 +687,14 @@ namespace xStunit.Interpreter
                         ref posIndex,
                         out var argExpr))
                 {
-                    value = Evaluate(argExpr, callerFrame);
+                    if (TryResolveInOutCell(decl, argExpr, callerFrame, out var callerCell))
+                    {
+                        newFrame.RebindLocal(decl.Name, callerCell);
+                        newFrame.LocalTypeNames[decl.Name] = decl.TypeName;
+                        continue;
+                    }
+
+                    value = EvaluateInputArgument(decl, argExpr, callerFrame);
                 }
                 else
                 {

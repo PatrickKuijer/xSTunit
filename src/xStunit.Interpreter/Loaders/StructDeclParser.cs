@@ -5,7 +5,7 @@ namespace xStunit.Interpreter
 {
     // Parses "TYPE Name : STRUCT ... END_STRUCT END_TYPE" declaration text -
     // or the UNION spelling of the same shape - into a StructAst. Field
-    // parsing is VarBlockParser's, unmodified.
+    // parsing is VarBlockParser's.
     public static class StructDeclParser
     {
         public const string StructBody = "STRUCT";

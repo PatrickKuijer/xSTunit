@@ -24,6 +24,8 @@ namespace xStunit.Interpreter
             _ => throw new NotSupportedException($"Unknown native edge-trigger type '{typeName}'"),
         };
 
+        internal EdgeTriggerHost CloneState() => (EdgeTriggerHost)MemberwiseClone();
+
         public void Update(FbInstance instance)
         {
             var clk = (bool)instance.Fields["CLK"].Value;

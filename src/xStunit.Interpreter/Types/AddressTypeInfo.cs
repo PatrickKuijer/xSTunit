@@ -35,6 +35,9 @@ namespace xStunit.Interpreter
                 || string.Equals(trimmed, VoidPointer, StringComparison.OrdinalIgnoreCase);
         }
 
+        public static bool IsReferenceType(string typeName) =>
+            typeName != null && typeName.Trim().StartsWith(ReferencePrefix, StringComparison.OrdinalIgnoreCase);
+
         // PVOID names no pointee, so it has none to report: there is nothing
         // a dereference of it could be sized as.
         public static bool TryGetPointeeTypeName(string typeName, out string pointeeTypeName) =>

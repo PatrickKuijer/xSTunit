@@ -199,13 +199,10 @@ namespace xStunit.Interpreter.Tests
             Assert.Contains("DoStuff", ex.Message);
         }
 
-        // Bare invocation binds a VAR_IN_OUT argument by value: the arg
-        // expression is evaluated and assigned into the callee's own Cell,
-        // never aliased to the caller's. Callee mutations therefore do not
-        // reach the caller's variable, which is a known divergence from
-        // VAR_IN_OUT's by-reference meaning.
+        // VAR_IN_OUT is by reference: a write inside the FB body lands in the
+        // caller's own variable, not in a private copy of it.
         [Fact]
-        public void BareInvocation_VarInOutParam_BindsByValue_MutationsDoNotPropagateBack()
+        public void BareInvocation_VarInOutScalar_WriteInsideBodyReachesTheCaller()
         {
             var inOutFb = new PouAst(
                 "FB_InOutFb",
@@ -228,7 +225,167 @@ namespace xStunit.Interpreter.Tests
 
             var nested = (FbInstance)instance.Fields["sfbInOut"].Value;
             Assert.Equal(105, nested.Fields["ioVal"].Value);
-            Assert.Equal(5, instance.Fields["callerVal"].Value);
+            Assert.Equal(105, instance.Fields["callerVal"].Value);
+        }
+
+        [Fact]
+        public void BareInvocation_NamedVarInOutScalar_WriteInsideBodyReachesTheCaller()
+        {
+            var inOutFb = new PouAst(
+                "FB_InOutFb",
+                null,
+                "VAR_IN_OUT\n\tioVal : INT;\nEND_VAR",
+                "ioVal := ioVal + 100;",
+                new List<MethodAst>());
+
+            var outer = new PouAst(
+                "FB_Outer",
+                null,
+                "VAR\n\tsfbInOut : FB_InOutFb;\n\tcallerVal : INT;\nEND_VAR",
+                "callerVal := 5;\nsfbInOut(ioVal := callerVal);",
+                new List<MethodAst>());
+
+            var engine = new Engine(new TypeRegistry(new[] { inOutFb, outer }));
+            var instance = engine.NewInstance("FB_Outer");
+
+            engine.CallMethod(instance, "StepCycles", new Expr[] { new IntLiteralExpr(1) }, new NamedArg[0], null, null);
+
+            Assert.Equal(105, instance.Fields["callerVal"].Value);
+        }
+
+        [Fact]
+        public void BareInvocation_VarInOutStruct_WriteInsideBodyReachesTheCaller()
+        {
+            var item = StructDeclParser.Parse("TYPE ST_Item :\nSTRUCT\n\tnValue : INT;\nEND_STRUCT\nEND_TYPE");
+            var inOutFb = new PouAst(
+                "FB_InOutFb",
+                null,
+                "VAR_IN_OUT\n\tioItem : ST_Item;\nEND_VAR",
+                "ioItem.nValue := 7;",
+                new List<MethodAst>());
+
+            var outer = new PouAst(
+                "FB_Outer",
+                null,
+                "VAR\n\tsfbInOut : FB_InOutFb;\n\tstItem : ST_Item;\nEND_VAR",
+                "sfbInOut(ioItem := stItem);",
+                new List<MethodAst>());
+
+            var engine = new Engine(new TypeRegistry(new[] { inOutFb, outer }, new[] { item }));
+            var instance = engine.NewInstance("FB_Outer");
+
+            engine.CallMethod(instance, "StepCycles", new Expr[] { new IntLiteralExpr(1) }, new NamedArg[0], null, null);
+
+            var caller = (StructInstance)instance.Fields["stItem"].Value;
+            Assert.Equal(7, caller.Fields["nValue"].Value);
+        }
+
+        [Fact]
+        public void BareInvocation_VarInOutArray_WriteInsideBodyReachesTheCaller()
+        {
+            var inOutFb = new PouAst(
+                "FB_InOutFb",
+                null,
+                "VAR_IN_OUT\n\tioValues : ARRAY[1..3] OF INT;\nEND_VAR",
+                "ioValues[2] := 9;",
+                new List<MethodAst>());
+
+            var outer = new PouAst(
+                "FB_Outer",
+                null,
+                "VAR\n\tsfbInOut : FB_InOutFb;\n\taValues : ARRAY[1..3] OF INT;\nEND_VAR",
+                "sfbInOut(ioValues := aValues);",
+                new List<MethodAst>());
+
+            var engine = new Engine(new TypeRegistry(new[] { inOutFb, outer }));
+            var instance = engine.NewInstance("FB_Outer");
+
+            engine.CallMethod(instance, "StepCycles", new Expr[] { new IntLiteralExpr(1) }, new NamedArg[0], null, null);
+
+            var caller = (ArrayValue)instance.Fields["aValues"].Value;
+            Assert.Equal(9, caller.Elements[1]);
+        }
+
+        [Fact]
+        public void BareInvocation_VarInOutBoundToArrayElement_WriteInsideBodyReachesTheCaller()
+        {
+            var inOutFb = new PouAst(
+                "FB_InOutFb",
+                null,
+                "VAR_IN_OUT\n\tioVal : INT;\nEND_VAR",
+                "ioVal := 42;",
+                new List<MethodAst>());
+
+            var outer = new PouAst(
+                "FB_Outer",
+                null,
+                "VAR\n\tsfbInOut : FB_InOutFb;\n\taValues : ARRAY[1..3] OF INT;\nEND_VAR",
+                "sfbInOut(ioVal := aValues[3]);",
+                new List<MethodAst>());
+
+            var engine = new Engine(new TypeRegistry(new[] { inOutFb, outer }));
+            var instance = engine.NewInstance("FB_Outer");
+
+            engine.CallMethod(instance, "StepCycles", new Expr[] { new IntLiteralExpr(1) }, new NamedArg[0], null, null);
+
+            var caller = (ArrayValue)instance.Fields["aValues"].Value;
+            Assert.Equal(42, caller.Elements[2]);
+        }
+
+        [Fact]
+        public void BareInvocation_WholeStructAssignedToVarInOut_ReachesTheCallerWithoutAliasingTheSource()
+        {
+            var item = StructDeclParser.Parse("TYPE ST_Item :\nSTRUCT\n\tnValue : INT;\nEND_STRUCT\nEND_TYPE");
+            var replaceFb = new PouAst(
+                "FB_Replace",
+                null,
+                "VAR_INPUT\n\tiSource : ST_Item;\nEND_VAR\nVAR_IN_OUT\n\tioItem : ST_Item;\nEND_VAR",
+                "ioItem := iSource;",
+                new List<MethodAst>());
+
+            var outer = new PouAst(
+                "FB_Outer",
+                null,
+                "VAR\n\tsfbReplace : FB_Replace;\n\tstSource : ST_Item;\n\tstItem : ST_Item;\nEND_VAR",
+                "stSource.nValue := 4;\nsfbReplace(iSource := stSource, ioItem := stItem);\nstSource.nValue := 99;",
+                new List<MethodAst>());
+
+            var engine = new Engine(new TypeRegistry(new[] { replaceFb, outer }, new[] { item }));
+            var instance = engine.NewInstance("FB_Outer");
+
+            engine.CallMethod(instance, "StepCycles", new Expr[] { new IntLiteralExpr(1) }, new NamedArg[0], null, null);
+
+            var caller = (StructInstance)instance.Fields["stItem"].Value;
+            Assert.Equal(4, caller.Fields["nValue"].Value);
+        }
+
+        // A VAR_INPUT stays a copy on the bare-invoke path: the FB body owns
+        // its input.
+        [Fact]
+        public void BareInvocation_VarInputStruct_WriteInsideBodyDoesNotReachTheCaller()
+        {
+            var item = StructDeclParser.Parse("TYPE ST_Item :\nSTRUCT\n\tnValue : INT;\nEND_STRUCT\nEND_TYPE");
+            var inputFb = new PouAst(
+                "FB_InputFb",
+                null,
+                "VAR_INPUT\n\titem : ST_Item;\nEND_VAR",
+                "item.nValue := 7;",
+                new List<MethodAst>());
+
+            var outer = new PouAst(
+                "FB_Outer",
+                null,
+                "VAR\n\tsfbInput : FB_InputFb;\n\tstItem : ST_Item;\nEND_VAR",
+                "sfbInput(item := stItem);",
+                new List<MethodAst>());
+
+            var engine = new Engine(new TypeRegistry(new[] { inputFb, outer }, new[] { item }));
+            var instance = engine.NewInstance("FB_Outer");
+
+            engine.CallMethod(instance, "StepCycles", new Expr[] { new IntLiteralExpr(1) }, new NamedArg[0], null, null);
+
+            var caller = (StructInstance)instance.Fields["stItem"].Value;
+            Assert.Equal(0, caller.Fields["nValue"].Value);
         }
 
         [Fact]

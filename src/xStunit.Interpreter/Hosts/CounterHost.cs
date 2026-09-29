@@ -88,6 +88,8 @@ namespace xStunit.Interpreter
             PublishOutputs(instance, cv);
         }
 
+        internal abstract CounterHost CloneState();
+
         // Returns the new CV. Implementations MUST sample every counting input
         // through their rising-edge memory before honoring RESET/LOAD: the
         // level was still presented to the FB on this cycle, so it has to be
@@ -120,6 +122,8 @@ namespace xStunit.Interpreter
         {
             private bool _lastLevel;
 
+            public RisingEdgeMemory Clone() => new RisingEdgeMemory { _lastLevel = _lastLevel };
+
             public bool Sample(bool level)
             {
                 var isRisingEdge = level && !_lastLevel;
@@ -140,7 +144,14 @@ namespace xStunit.Interpreter
         private static readonly string[] InputNames = { CountUpInput, ResetInput };
         private static readonly string[] OutputNames = { LimitReachedOutput };
 
-        private readonly RisingEdgeMemory _countUp = new RisingEdgeMemory();
+        private RisingEdgeMemory _countUp = new RisingEdgeMemory();
+
+        internal override CounterHost CloneState()
+        {
+            var copy = (UpCounterHost)MemberwiseClone();
+            copy._countUp = _countUp.Clone();
+            return copy;
+        }
 
         public override IReadOnlyList<string> BooleanInputNames => InputNames;
 
@@ -172,7 +183,14 @@ namespace xStunit.Interpreter
         private static readonly string[] InputNames = { CountDownInput, LoadInput };
         private static readonly string[] OutputNames = { ZeroReachedOutput };
 
-        private readonly RisingEdgeMemory _countDown = new RisingEdgeMemory();
+        private RisingEdgeMemory _countDown = new RisingEdgeMemory();
+
+        internal override CounterHost CloneState()
+        {
+            var copy = (DownCounterHost)MemberwiseClone();
+            copy._countDown = _countDown.Clone();
+            return copy;
+        }
 
         public override IReadOnlyList<string> BooleanInputNames => InputNames;
 
@@ -206,8 +224,16 @@ namespace xStunit.Interpreter
         private static readonly string[] InputNames = { CountUpInput, CountDownInput, ResetInput, LoadInput };
         private static readonly string[] OutputNames = { LimitReachedOutput, ZeroReachedOutput };
 
-        private readonly RisingEdgeMemory _countUp = new RisingEdgeMemory();
-        private readonly RisingEdgeMemory _countDown = new RisingEdgeMemory();
+        private RisingEdgeMemory _countUp = new RisingEdgeMemory();
+        private RisingEdgeMemory _countDown = new RisingEdgeMemory();
+
+        internal override CounterHost CloneState()
+        {
+            var copy = (UpDownCounterHost)MemberwiseClone();
+            copy._countUp = _countUp.Clone();
+            copy._countDown = _countDown.Clone();
+            return copy;
+        }
 
         public override IReadOnlyList<string> BooleanInputNames => InputNames;
 

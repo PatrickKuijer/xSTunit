@@ -55,6 +55,8 @@ namespace xStunit.Interpreter
         // same single-owner rule RS/SR's input names follow.
         public object ZeroDuration => _durationField.Box(0);
 
+        internal TimerHost CloneState() => (TimerHost)MemberwiseClone();
+
         public void Update(FbInstance instance, long clockTotalNs)
         {
             if (!_initialized)

@@ -285,15 +285,7 @@ namespace xStunit.Interpreter
             var instance = new FbInstance(typeName);
 
             var chain = new List<string>();
-            var current = typeName;
-            while (current != null)
-            {
-                var def = _registry.Get(current);
-                if (def == null)
-                    break;
-                chain.Add(current);
-                current = def.BaseTypeName;
-            }
+            var current = WalkAncestry(typeName, chain);
 
             // current is now the walk's unresolved tail - the base type this
             // ancestry names but the registry doesn't know - or null when the
@@ -340,6 +332,24 @@ namespace xStunit.Interpreter
             CallMethod(instance, "FB_init", Array.Empty<Expr>(), Array.Empty<NamedArg>(), null, null, optionalIfMissing: true);
 
             return instance;
+        }
+
+        // Fills chain with typeName and its registry-known ancestors, derived
+        // first, and returns the base type the walk could not resolve (null when
+        // it ended inside the registry).
+        private string WalkAncestry(string typeName, List<string> chain)
+        {
+            var current = typeName;
+            while (current != null)
+            {
+                var def = _registry.Get(current);
+                if (def == null)
+                    break;
+                chain.Add(current);
+                current = def.BaseTypeName;
+            }
+
+            return current;
         }
 
         // A field declared as another registry-known POU type (FB/PROGRAM) is

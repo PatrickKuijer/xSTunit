@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using xStunit.Parser;
+using xStunit.Runner;
 using xStunit.Runner.TcUnitStub;
 
 namespace xStunit.Interpreter
@@ -56,6 +57,7 @@ namespace xStunit.Interpreter
             {
                 if (instance != null && IecIdentifier.Matches(methodName, "StepCycles") && positionalArgs.Count == 1)
                 {
+                    RejectEmptyArguments(methodName, positionalArgs);
                     var cycles = Convert.ToInt32(Evaluate(positionalArgs[0], callerFrame));
                     StepCycles(instance, cycles);
                     return null;
@@ -64,6 +66,7 @@ namespace xStunit.Interpreter
                 if ((IecIdentifier.Matches(methodName, "AssertConverges") || IecIdentifier.Matches(methodName, "AssertConvergesAndLatches")) &&
                     positionalArgs.Count == 4)
                 {
+                    RejectEmptyArguments(methodName, positionalArgs);
                     var master = (FbInstance)Evaluate(positionalArgs[0], callerFrame);
                     var proxy = (FbInstance)Evaluate(positionalArgs[1], callerFrame);
                     var fieldNames = ToStringArray(Evaluate(positionalArgs[2], callerFrame));
@@ -220,6 +223,7 @@ namespace xStunit.Interpreter
                 // unreachable from inside a suite.
                 if (instance?.NativeKind == NativeHostKind.Suite && NativeMethodBridge.CanInvoke(methodName))
                 {
+                    RejectEmptyArguments(methodName, positionalArgs);
                     var evaluatedPositional = positionalArgs.Select(e => Evaluate(e, callerFrame)).ToList();
                     var evaluatedNamed = namedArgs
                         .Where(a => !a.IsUnboundOutput)
@@ -585,6 +589,7 @@ namespace xStunit.Interpreter
             IReadOnlyList<NamedArg> namedArgs,
             Frame callerFrame)
         {
+            RejectEmptyArguments(callee.ActualTypeName, positionalArgs);
             for (var i = 0; i < positionalArgs.Count && i < inputNames.Count; i++)
                 callee.Fields[inputNames[i]].Value = Evaluate(positionalArgs[i], callerFrame);
 
@@ -633,7 +638,16 @@ namespace xStunit.Interpreter
             var inputDecls = GetOwnParamDecls(callee, VarSection.Input, VarSection.InOut);
 
             for (var i = 0; i < positionalArgs.Count && i < inputDecls.Count; i++)
+            {
+                if (positionalArgs[i] is EmptyArgExpr)
+                {
+                    if (inputDecls[i].Section == VarSection.InOut)
+                        throw EmptyInOutArgument(inputDecls[i]);
+                    continue;
+                }
+
                 BindFbArgument(callee, inputDecls[i], positionalArgs[i], callerFrame);
+            }
 
             foreach (var arg in namedArgs)
             {
@@ -649,6 +663,17 @@ namespace xStunit.Interpreter
 
             var outputDecls = GetOwnParamDecls(callee, VarSection.Output);
             WriteBackOutputArgs(namedArgs, name => IsOutputDecl(outputDecls, name), callee.Fields, callerFrame);
+        }
+
+        private static Exception EmptyInOutArgument(VarDecl decl) =>
+            new InvalidOperationException($"VAR_IN_OUT parameter '{decl.Name}' cannot be left empty");
+
+        private static void RejectEmptyArguments(string callName, IReadOnlyList<Expr> positionalArgs)
+        {
+            foreach (var arg in positionalArgs)
+                if (arg is EmptyArgExpr)
+                    throw new UnsupportedConstructException(
+                        "empty argument", $"Empty argument not supported for {callName}");
         }
 
         private void BindFbArgument(FbInstance callee, VarDecl decl, Expr argument, Frame callerFrame)
@@ -678,6 +703,7 @@ namespace xStunit.Interpreter
             foreach (var decl in paramDecls)
             {
                 object value;
+                var emptySlot = false;
 
                 if ((decl.Section == VarSection.Input || decl.Section == VarSection.InOut) &&
                     ArgBinder.TryResolveArg(
@@ -685,7 +711,8 @@ namespace xStunit.Interpreter
                         name => ArgBinder.FindNamed(namedArgs, name),
                         positionalArgs,
                         ref posIndex,
-                        out var argExpr))
+                        out var argExpr,
+                        out emptySlot))
                 {
                     if (TryResolveInOutCell(decl, argExpr, callerFrame, out var callerCell))
                     {
@@ -698,6 +725,9 @@ namespace xStunit.Interpreter
                 }
                 else
                 {
+                    if (emptySlot && decl.Section == VarSection.InOut)
+                        throw EmptyInOutArgument(decl);
+
                     // DefaultValue runs BEFORE ExecuteBody is entered for
                     // newFrame, so ExecuteBody's own attribution cannot cover a
                     // fault raised while constructing this callee's unsupplied-

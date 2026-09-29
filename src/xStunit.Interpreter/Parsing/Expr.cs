@@ -175,6 +175,10 @@ namespace xStunit.Interpreter
         public ArrayLiteralExpr(IReadOnlyList<Expr> elements) => Elements = elements;
     }
 
+    public sealed class EmptyArgExpr : Expr
+    {
+    }
+
     public sealed class NamedArg
     {
         public string Name { get; }

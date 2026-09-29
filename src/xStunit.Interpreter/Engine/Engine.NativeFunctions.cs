@@ -46,6 +46,7 @@ namespace xStunit.Interpreter
             IReadOnlyList<NamedArg> namedArgs,
             Frame callerFrame)
         {
+            RejectEmptyArguments(methodName, positionalArgs);
             var evaluatedPositional = positionalArgs.Select(e => Evaluate(e, callerFrame)).ToList();
 
             // Last-one-wins on a duplicated name rather than throwing: matches

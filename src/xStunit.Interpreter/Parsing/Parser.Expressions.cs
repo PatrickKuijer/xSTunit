@@ -346,7 +346,11 @@ namespace xStunit.Interpreter
             {
                 do
                 {
-                    if (Current.Type == TokenType.Identifier && _tokens[_pos + 1].Type == TokenType.Assign)
+                    if (Current.Type == TokenType.Comma || Current.Type == TokenType.RParen)
+                    {
+                        positional.Add(new EmptyArgExpr { Line = Current.Line });
+                    }
+                    else if (Current.Type == TokenType.Identifier && _tokens[_pos + 1].Type == TokenType.Assign)
                     {
                         var argName = Advance().Text;
                         Advance(); // :=

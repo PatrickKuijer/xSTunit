@@ -823,9 +823,11 @@ namespace xStunit.Interpreter
                 switch (intrinsic)
                 {
                     case "ADR":
+                        RejectEmptyArguments(call.MethodName, call.PositionalArgs);
                         return new Pointer(ResolveCellForAdr(call.PositionalArgs[0], frame));
 
                     case "__ISVALIDREF":
+                        RejectEmptyArguments(call.MethodName, call.PositionalArgs);
                         return IsValidRef(call.PositionalArgs[0], frame);
 
                     case "MEMCPY":
@@ -865,6 +867,7 @@ namespace xStunit.Interpreter
                     }
 
                     case "SIZEOF":
+                        RejectEmptyArguments(call.MethodName, call.PositionalArgs);
                         return EvaluateSizeOf(call.PositionalArgs[0], frame);
 
                     case "CONCAT":
@@ -995,6 +998,7 @@ namespace xStunit.Interpreter
             if (fromType == null && TryGetGlobalFunctionDef(call.MethodName, out _))
                 return false;
 
+            RejectEmptyArguments(call.MethodName, call.PositionalArgs);
             var value = Evaluate(call.PositionalArgs[0], frame);
             fromType = fromType ?? SourceTypeOf(value);
 

@@ -14,14 +14,18 @@ namespace xStunit.Interpreter
     {
         // tryGetNamed returns null when paramName has no explicit named arg;
         // T is a reference type here, so null is a safe "not found" sentinel.
+        // An empty positional slot consumes its position but supplies
+        // nothing: it returns false with emptySlot set.
         public static bool TryResolveArg<T>(
             string paramName,
             System.Func<string, T> tryGetNamed,
             IReadOnlyList<T> positionalArgs,
             ref int posIndex,
-            out T value)
+            out T value,
+            out bool emptySlot)
             where T : class
         {
+            emptySlot = false;
             var named = tryGetNamed(paramName);
             if (named != null)
             {
@@ -31,13 +35,30 @@ namespace xStunit.Interpreter
 
             if (posIndex < positionalArgs.Count)
             {
-                value = positionalArgs[posIndex++];
+                var positional = positionalArgs[posIndex++];
+                if (positional is EmptyArgExpr)
+                {
+                    value = null;
+                    emptySlot = true;
+                    return false;
+                }
+
+                value = positional;
                 return true;
             }
 
             value = null;
             return false;
         }
+
+        public static bool TryResolveArg<T>(
+            string paramName,
+            System.Func<string, T> tryGetNamed,
+            IReadOnlyList<T> positionalArgs,
+            ref int posIndex,
+            out T value)
+            where T : class =>
+            TryResolveArg(paramName, tryGetNamed, positionalArgs, ref posIndex, out value, out _);
 
         // The tryGetNamed half for unevaluated call args. Matched
         // case-insensitively, as IEC identifiers are: a miss here does not

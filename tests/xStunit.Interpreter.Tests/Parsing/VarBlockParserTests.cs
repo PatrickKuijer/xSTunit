@@ -621,6 +621,80 @@ END_VAR";
             Assert.Equal("x", value.Name);
         }
 
+        // Fields written after the STRUCT/UNION keyword on the TYPE header line
+        // belong to the struct. Reading the header only as a section opener
+        // drops the rest of that line, and the type registers empty with no
+        // diagnostic.
+        [Theory]
+        [InlineData("TYPE ST_P : STRUCT a : INT; b : BOOL; END_STRUCT END_TYPE")]
+        [InlineData("TYPE ST_P : STRUCT a : INT; b : BOOL;\nEND_STRUCT\nEND_TYPE")]
+        [InlineData("TYPE ST_P : STRUCT a : INT;\n\tb : BOOL;\nEND_STRUCT\nEND_TYPE")]
+        [InlineData("TYPE ST_P : STRUCT // p\n\ta : INT;\n\tb : BOOL;\nEND_STRUCT\nEND_TYPE")]
+        [InlineData("TYPE ST_P : STRUCT {attribute 'hide'} a : INT; b : BOOL; END_STRUCT END_TYPE")]
+        [InlineData("TYPE ST_P : struct a : INT; b : BOOL; end_struct end_type")]
+        [InlineData("TYPE ST_P :\nSTRUCT a : INT; b : BOOL; END_STRUCT\nEND_TYPE")]
+        [InlineData("TYPE ST_P :\n\nSTRUCT a : INT;\n\tb : BOOL;\nEND_STRUCT\nEND_TYPE")]
+        public void Parse_FieldsOnTypeHeaderLine_ReadsThem(string declaration)
+        {
+            var vars = VarBlockParser.Parse(declaration, out var unreadable);
+
+            Assert.Equal(new[] { "a", "b" }, vars.Select(v => v.Name));
+            Assert.Equal(new[] { "INT", "BOOL" }, vars.Select(v => v.TypeName));
+            Assert.Empty(unreadable);
+        }
+
+        // A ';' inside a string default is not a field separator.
+        [Fact]
+        public void Parse_SemicolonInStringDefaultOnTypeHeaderLine_KeepsFieldWhole()
+        {
+            const string declaration = "TYPE ST_P : STRUCT s : STRING := 'a;b'; n : INT; END_STRUCT END_TYPE";
+
+            var vars = VarBlockParser.Parse(declaration);
+
+            Assert.Equal(new[] { "s", "n" }, vars.Select(v => v.Name));
+            Assert.Equal("'a;b'", vars[0].DefaultValueText);
+        }
+
+        [Fact]
+        public void Parse_UnionFieldsOnTypeHeaderLine_ReadsThem()
+        {
+            var vars = VarBlockParser.Parse("TYPE U : UNION a : INT; b : DINT; END_UNION END_TYPE", out var unreadable);
+
+            Assert.Equal(new[] { "a", "b" }, vars.Select(v => v.Name));
+            Assert.Empty(unreadable);
+        }
+
+        // A '$' escape inside a string default may embed the quote character;
+        // the ';' after it is still inside the literal.
+        [Fact]
+        public void Parse_EscapedQuoteAndSemicolonInStringDefaultOnTypeHeaderLine_KeepsFieldWhole()
+        {
+            var vars = VarBlockParser.Parse("TYPE ST_P : STRUCT s : STRING := 'it$'s;x'; n : INT; END_STRUCT END_TYPE", out var unreadable);
+
+            Assert.Equal(new[] { "s", "n" }, vars.Select(v => v.Name));
+            Assert.Equal("'it$'s;x'", vars[0].DefaultValueText);
+            Assert.Empty(unreadable);
+        }
+
+        // Fields sharing a STRUCT line are only read straight after a bare TYPE
+        // header; elsewhere the line must not be split into declarations.
+        [Fact]
+        public void Parse_StructLineNotFollowingBareTypeHeader_OpensNoSection()
+        {
+            Assert.Empty(VarBlockParser.Parse("TYPE T_Alias : INT;\nSTRUCT a : INT; END_STRUCT\nEND_TYPE"));
+        }
+
+        // Header-line text that is not a declaration is still reported, not
+        // swallowed.
+        [Fact]
+        public void Parse_UnreadableFieldOnTypeHeaderLine_IsReported()
+        {
+            var vars = VarBlockParser.Parse("TYPE ST_P : STRUCT a : INT; ??? ; END_STRUCT END_TYPE", out var unreadable);
+
+            Assert.Equal("a", Assert.Single(vars).Name);
+            Assert.Equal("??? ;", Assert.Single(unreadable));
+        }
+
         // Only a STRUCT/UNION body opens a field section from a TYPE header.
         // An ENUM or alias header must not, or the lines after it would be
         // misread as fields.

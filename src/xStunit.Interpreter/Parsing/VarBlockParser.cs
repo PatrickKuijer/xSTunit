@@ -7,7 +7,7 @@ namespace xStunit.Interpreter
     // Turns the VAR_* sections a FUNCTION_BLOCK or METHOD carries in its
     // Declaration CDATA into typed VarDecl entries. Also doubles as
     // StructDeclParser's field-list parser.
-    // Scoped to the fixtures' grammar - one name per line, no comma lists.
+    // Scoped to the fixtures' grammar - one name per declaration, no comma lists.
     public static class VarBlockParser
     {
         // The W?STRING(...) size may be any IEC 61131-3 constant expression
@@ -70,13 +70,23 @@ namespace xStunit.Interpreter
 
         // Whole word, so an alias to a type named STRUCTURED_x opens nothing.
         private static readonly Regex TypeHeaderOpeningBodyPattern = new Regex(
-            @"^TYPE\s+\w+(\s+EXTENDS\s+\w+)?\s*:\s*(STRUCT|UNION)\b",
+            @"^TYPE\s+\w+(\s+EXTENDS\s+\w+)?\s*:\s*(?<body>STRUCT|UNION)\b(?<rest>.*)$",
             RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+        private static readonly Regex BareTypeHeaderPattern = new Regex(
+            @"^TYPE\s+\w+(\s+EXTENDS\s+\w+)?\s*:$", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+        private static readonly Regex BodyOpeningLinePattern = new Regex(
+            @"^(?<body>STRUCT|UNION)\b(?<rest>.*)$", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+        private static readonly Regex TrailingEndTypePattern = new Regex(
+            @"\bEND_TYPE\s*$", RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
         private static readonly Regex LeadingPragmasPattern = new Regex(
             @"^(\{[^}\n]*\}\s*)+", RegexOptions.Compiled);
 
-        // Reports the lines inside an open section that the pattern could not
+        // Reports the lines (or, for a body-opening line carrying several fields, the
+        // declarations) inside an open section that the pattern could not
         // match, which are the variables this parse lost. Pragmas, comment text
         // and anything outside a section are not reported: they were never
         // declarations, they outnumber real losses several times over in a real
@@ -98,21 +108,9 @@ namespace xStunit.Interpreter
         {
             var result = new List<VarDecl>();
             var currentSection = (VarSection?)null;
-            var inBlockComment = false;
 
-            foreach (var rawLine in declarationText.Split('\n'))
+            foreach (var line in DeclarationLines(declarationText))
             {
-                var line = LeadingPragmasPattern.Replace(
-                    StripComments(rawLine.Trim(), ref inBlockComment).Trim(), "");
-                if (line.Length == 0)
-                    continue;
-
-                if (TypeHeaderOpeningBodyPattern.IsMatch(line))
-                {
-                    currentSection = VarSection.Local;
-                    continue;
-                }
-
                 // An unterminated pragma is left unstripped and must not be
                 // reported as a lost declaration.
                 if (line[0] == '{')
@@ -165,6 +163,76 @@ namespace xStunit.Interpreter
             }
 
             return result;
+        }
+
+        // Comment-free, pragma-free, non-empty lines. A STRUCT/UNION body
+        // opener - on the TYPE header line or on the line after a bare
+        // "TYPE X :" - is yielded as the bare keyword followed by the fields
+        // sharing its line, one declaration per item.
+        private static IEnumerable<string> DeclarationLines(string declarationText)
+        {
+            var inBlockComment = false;
+            var awaitingBody = false;
+
+            foreach (var rawLine in declarationText.Split('\n'))
+            {
+                var line = StripPragmas(StripComments(rawLine.Trim(), ref inBlockComment));
+                if (line.Length == 0)
+                    continue;
+
+                var opener = TypeHeaderOpeningBodyPattern.Match(line);
+                if (!opener.Success && awaitingBody)
+                    opener = BodyOpeningLinePattern.Match(line);
+                awaitingBody = BareTypeHeaderPattern.IsMatch(line);
+
+                if (!opener.Success)
+                {
+                    yield return line;
+                    continue;
+                }
+
+                yield return opener.Groups["body"].Value;
+                foreach (var declaration in SplitOnDeclarationEnds(opener.Groups["rest"].Value))
+                {
+                    var stripped = StripPragmas(declaration);
+                    if (stripped.Length > 0)
+                        yield return stripped;
+                }
+            }
+        }
+
+        private static string StripPragmas(string line) =>
+            LeadingPragmasPattern.Replace(line.Trim(), "").Trim();
+
+        // Splits on ';' outside string literals, which may carry one in a
+        // default value. A trailing END_TYPE after the last ';' is dropped.
+        private static IEnumerable<string> SplitOnDeclarationEnds(string text)
+        {
+            var start = 0;
+            char? quoteChar = null;
+
+            for (var i = 0; i < text.Length; i++)
+            {
+                var c = text[i];
+                if (quoteChar != null)
+                {
+                    if (c == '$')
+                        i++;
+                    else if (c == quoteChar)
+                        quoteChar = null;
+                }
+                else if (c == '\'' || c == '"')
+                    quoteChar = c;
+                else if (c == ';')
+                {
+                    yield return text.Substring(start, i - start + 1);
+                    start = i + 1;
+                }
+            }
+
+            var last = TrailingEndTypePattern.Replace(text.Substring(start), "").Trim();
+            if (last.Length > 0)
+                yield return last;
         }
 
         // Reads a VAR_* section header and the section it opens, ignoring any

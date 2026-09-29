@@ -56,5 +56,15 @@ namespace xStunit.Interpreter.Tests
 
             Assert.True(BodyReadsField(declaration, "ST_Point", "v.nX = 42"));
         }
+
+        [Theory]
+        [InlineData("TYPE ST_Point : STRUCT nX : DINT := 42; nY : DINT := 7; END_STRUCT END_TYPE", "v.nY = 7")]
+        [InlineData("TYPE ST_Point : STRUCT nX : DINT := 42; nY : DINT := 7;\nEND_STRUCT\nEND_TYPE", "v.nX = 42")]
+        [InlineData("TYPE ST_Point : STRUCT nX : DINT := 42;\n\tnY : DINT := 7;\nEND_STRUCT\nEND_TYPE", "v.nX = 42")]
+        [InlineData("TYPE ST_Point :\nSTRUCT nX : DINT := 42; nY : DINT := 7; END_STRUCT\nEND_TYPE", "v.nX = 42")]
+        public void RunSuite_BodyReadsFieldOfStructWhoseFieldsShareTheHeaderLine_SeesTheField(string declaration, string fieldRead)
+        {
+            Assert.True(BodyReadsField(declaration, "ST_Point", fieldRead));
+        }
     }
 }

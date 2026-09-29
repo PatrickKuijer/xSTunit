@@ -97,6 +97,7 @@ namespace xStunit.Interpreter
                             // (LTON/LTOF/LTP) count in ns, and the host scales
                             // back to its own PT/ET width.
                             callee.NativeTimerHost.Update(callee, Clock.TotalNs);
+                            WriteBackNativeOutputArgs(callee, namedArgs, callerFrame);
                             return null;
 
                         // Like the timer above, but the host only tracks CLK->Q:
@@ -104,6 +105,7 @@ namespace xStunit.Interpreter
                         case NativeHostKind.Edge:
                             BindNativeInputs(callee, EdgeTriggerPositionalParams, positionalArgs, namedArgs, callerFrame);
                             callee.NativeEdgeTriggerHost.Update(callee);
+                            WriteBackNativeOutputArgs(callee, namedArgs, callerFrame);
                             return null;
 
                         // RS and SR disagree on their two input names, so the
@@ -111,6 +113,7 @@ namespace xStunit.Interpreter
                         case NativeHostKind.BistableLatch:
                             BindNativeInputs(callee, callee.NativeBistableLatchHost.PositionalInputNames, positionalArgs, namedArgs, callerFrame);
                             callee.NativeBistableLatchHost.Update(callee);
+                            WriteBackNativeOutputArgs(callee, namedArgs, callerFrame);
                             return null;
 
                         // CTU/CTD/CTUD disagree on both the number and the names
@@ -118,6 +121,7 @@ namespace xStunit.Interpreter
                         case NativeHostKind.Counter:
                             BindNativeInputs(callee, callee.NativeCounterHost.PositionalInputNames, positionalArgs, namedArgs, callerFrame);
                             callee.NativeCounterHost.Update(callee);
+                            WriteBackNativeOutputArgs(callee, namedArgs, callerFrame);
                             return null;
 
                         // A stateful library FB supplied from outside this
@@ -129,6 +133,7 @@ namespace xStunit.Interpreter
                             var pluginCallee = callee.NativePluginFunctionBlock;
                             BindNativeInputs(callee, pluginCallee.PositionalInputNames, positionalArgs, namedArgs, callerFrame);
                             pluginCallee.Invoke(NewFunctionBlockCall(callee, null, null, callerFrame));
+                            WriteBackNativeOutputArgs(callee, namedArgs, callerFrame);
                             return null;
 
                         // Ordinary interpreted FB field or method-local var:
@@ -431,25 +436,36 @@ namespace xStunit.Interpreter
             return newFrame.Locals.TryGetValue(functionDef.Name, out var returnCell) ? returnCell.Value : null;
         }
 
-        // Name => expr call args bind a VAR_OUTPUT param's value back into the
-        // caller-side lvalue after the call returns. BindParams reads namedArgs
-        // only for Input/InOut, so this is the one place output binding happens.
         private void WriteBackOutputArgs(
             IReadOnlyList<VarDecl> paramDecls,
             IReadOnlyList<NamedArg> namedArgs,
             Frame newFrame,
+            Frame callerFrame) =>
+            WriteBackOutputArgs(namedArgs, name => IsOutputDecl(paramDecls, name), newFrame.Locals, callerFrame);
+
+        private static bool IsOutputDecl(IReadOnlyList<VarDecl> decls, string name) =>
+            decls.Any(d => d.Name == name && d.Section == VarSection.Output);
+
+        // Name => expr call args bind a VAR_OUTPUT's value back into the
+        // caller-side lvalue after the call returns. BindParams and the FB
+        // input binders read namedArgs only for inputs, so this is the one
+        // place output binding happens - for METHOD, FUNCTION and FB-instance
+        // calls alike, which is what keeps the assignment rules (SetLValue's
+        // coercion) identical across all three. calleeCells is wherever the
+        // callee keeps its outputs: a call frame's Locals, or an FB
+        // instance's persisted Fields.
+        private void WriteBackOutputArgs(
+            IReadOnlyList<NamedArg> namedArgs,
+            Func<string, bool> isOutput,
+            IReadOnlyDictionary<string, Cell> calleeCells,
             Frame callerFrame)
         {
             foreach (var arg in namedArgs)
             {
-                if (!arg.IsOutput || arg.IsUnboundOutput)
+                if (!arg.IsOutput || arg.IsUnboundOutput || !isOutput(arg.Name))
                     continue;
 
-                var decl = paramDecls.FirstOrDefault(d => d.Name == arg.Name && d.Section == VarSection.Output);
-                if (decl == null)
-                    continue;
-
-                if (newFrame.Locals.TryGetValue(decl.Name, out var outCell))
+                if (calleeCells.TryGetValue(arg.Name, out var outCell))
                     SetLValue(arg.Value, outCell.Value, callerFrame);
             }
         }
@@ -509,15 +525,24 @@ namespace xStunit.Interpreter
             for (var i = 0; i < positionalArgs.Count && i < inputNames.Count; i++)
                 callee.Fields[inputNames[i]].Value = Evaluate(positionalArgs[i], callerFrame);
 
+            // An => arg names an output, not an input: evaluating its target
+            // into the field would overwrite state the host reads back, such
+            // as a counter's CV, before the update ever ran.
             foreach (var arg in namedArgs)
-                if (!arg.IsUnboundOutput && callee.Fields.TryGetValue(arg.Name, out var cell))
+                if (!arg.IsOutput && callee.Fields.TryGetValue(arg.Name, out var cell))
                     cell.Value = Evaluate(arg.Value, callerFrame);
         }
 
-        // Declared VAR_INPUT/VAR_IN_OUT params for a bare-invoked interpreted
+        // A native host carries no VAR section metadata for its fields, so any
+        // field an => arg names is taken as the output. That is safe because
+        // => on an input is a compile error in TwinCAT, never valid source.
+        private void WriteBackNativeOutputArgs(FbInstance callee, IReadOnlyList<NamedArg> namedArgs, Frame callerFrame) =>
+            WriteBackOutputArgs(namedArgs, _ => true, callee.Fields, callerFrame);
+
+        // Declared params in the given sections for a bare-invoked interpreted
         // FB, in base-to-derived declaration order (matches IEC positional
         // arg order and the Fields-materialization loop in NewInstance).
-        private List<VarDecl> GetOwnInputDecls(FbInstance instance)
+        private List<VarDecl> GetOwnParamDecls(FbInstance instance, params VarSection[] sections)
         {
             var chain = new List<string>();
             var current = instance.ActualTypeName;
@@ -535,21 +560,22 @@ namespace xStunit.Interpreter
             {
                 var def = _registry.Get(chain[i]);
                 result.AddRange(_registry.GetDecls(def.DeclarationText)
-                    .Where(d => d.Section == VarSection.Input || d.Section == VarSection.InOut));
+                    .Where(d => sections.Contains(d.Section)));
             }
             return result;
         }
 
         // BindNativeInputs' interpreted counterpart: binds bare-invocation args
         // into the callee's persisted Fields by name or IEC positional order,
-        // then runs the callee's own top-level body once.
+        // runs the callee's own top-level body once, then copies its outputs
+        // to the call's => targets.
         private void InvokeFbInstance(
             FbInstance callee,
             IReadOnlyList<Expr> positionalArgs,
             IReadOnlyList<NamedArg> namedArgs,
             Frame callerFrame)
         {
-            var inputDecls = GetOwnInputDecls(callee);
+            var inputDecls = GetOwnParamDecls(callee, VarSection.Input, VarSection.InOut);
 
             for (var i = 0; i < positionalArgs.Count && i < inputDecls.Count; i++)
                 callee.Fields[inputDecls[i].Name].Value = Evaluate(positionalArgs[i], callerFrame);
@@ -562,6 +588,9 @@ namespace xStunit.Interpreter
             ResetTopLevelTempFields(callee);
             var calleeFrame = new Frame(callee, callee.ActualTypeName, null, def.BodyStartLine);
             ExecuteBody(() => _registry.GetStatements(def.ImplementationText), calleeFrame);
+
+            var outputDecls = GetOwnParamDecls(callee, VarSection.Output);
+            WriteBackOutputArgs(namedArgs, name => IsOutputDecl(outputDecls, name), callee.Fields, callerFrame);
         }
 
         private void BindParams(

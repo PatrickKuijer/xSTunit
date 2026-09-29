@@ -355,7 +355,7 @@ namespace xStunit.Interpreter
                     else if (Current.Type == TokenType.Identifier && _tokens[_pos + 1].Type == TokenType.Arrow)
                     {
                         // Name => expr binds a VAR_OUTPUT. BindParams'
-                        // Input/InOut-only lookup ignores it; CallMethod's
+                        // Input/InOut-only lookup ignores it; the engine's
                         // WriteBackOutputArgs writes the callee's output back
                         // into this arg's lvalue once the call returns. IEC also
                         // allows the target to be left out (Name => followed

@@ -157,6 +157,13 @@ namespace xStunit.Interpreter
                 return new RefAssignStmt(RequireLValue(target), value);
             }
 
+            if (TryTakeSetResetOperator(out var isSet))
+            {
+                var value = ParseExpr();
+                Expect(TokenType.Semicolon);
+                return new SetResetAssignStmt(RequireSetResetTarget(target), value, isSet);
+            }
+
             if (target is CallExpr call)
             {
                 Expect(TokenType.Semicolon);
@@ -173,6 +180,32 @@ namespace xStunit.Interpreter
             throw new ParseException(
                 $"Statement did not resolve to an assignment or call at token index {_pos}", CurrentToken, Current.Line);
         }
+
+        // The lexer has no S=/R= token - S and R are ordinary identifiers, and
+        // "IF S=1" must keep meaning a comparison - so the operator is only
+        // recognised here, straight after a complete assignment target, where
+        // an identifier followed by '=' has no other reading.
+        private bool TryTakeSetResetOperator(out bool isSet)
+        {
+            isSet = false;
+            if (Current.Type != TokenType.Identifier || _pos + 1 >= _tokens.Count || _tokens[_pos + 1].Type != TokenType.Eq)
+                return false;
+
+            var letter = Current.Text.ToUpperInvariant();
+            if (letter != "S" && letter != "R")
+                return false;
+
+            isSet = letter == "S";
+            Advance();
+            Advance();
+            return true;
+        }
+
+        // A dereferenced pointer is let through to the engine, which rejects it
+        // as unsupported at run time: rejecting it here would fail the whole
+        // body it sits in - for a suite body, every test in the suite.
+        private static Expr RequireSetResetTarget(Expr target) =>
+            target is DerefExpr ? target : RequireLValue(target);
 
         private static Expr RequireLValue(Expr target)
         {

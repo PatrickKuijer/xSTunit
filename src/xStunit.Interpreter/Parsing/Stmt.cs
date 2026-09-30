@@ -44,6 +44,21 @@ namespace xStunit.Interpreter
         }
     }
 
+    // x S= e / x R= e: writes TRUE (S=) or FALSE (R=) to Target when Value is
+    // TRUE, and leaves Target untouched otherwise.
+    public sealed class SetResetAssignStmt : Stmt
+    {
+        public Expr Target { get; }
+        public Expr Value { get; }
+        public bool IsSet { get; }
+        public SetResetAssignStmt(Expr target, Expr value, bool isSet)
+        {
+            Target = target;
+            Value = value;
+            IsSet = isSet;
+        }
+    }
+
     public sealed class IfStmt : Stmt
     {
         public Expr Condition { get; }

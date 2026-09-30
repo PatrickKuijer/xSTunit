@@ -35,6 +35,9 @@ namespace xStunit.Interpreter
                 case RefAssignStmt refAssign:
                     BindRef(refAssign.Target, ResolveCellForLValue(refAssign.Value, frame), frame);
                     break;
+                case SetResetAssignStmt setReset:
+                    ExecuteSetReset(setReset, frame);
+                    break;
                 case IfStmt ifStmt:
                     if ((bool)Evaluate(ifStmt.Condition, frame))
                         ExecuteStatements(ifStmt.Then, frame);
@@ -79,6 +82,24 @@ namespace xStunit.Interpreter
         // special-cased there.
         private sealed class MethodReturnSignal : Exception
         {
+        }
+
+        private void ExecuteSetReset(SetResetAssignStmt stmt, Frame frame)
+        {
+            var op = stmt.IsSet ? "S=" : "R=";
+            if (stmt.Target is DerefExpr)
+                throw new UnsupportedConstructException(op, $"Pointer dereference on the left-hand side of {op} (x^ {op} ...) is not supported in the v1 subset");
+
+            // Checked before the RHS decides anything, so a mistyped target
+            // fails on every cycle rather than only on the one that would write.
+            if (!(Evaluate(stmt.Target, frame) is bool))
+                throw new InvalidOperationException($"The target of {op} must be a BOOL");
+
+            if (!(Evaluate(stmt.Value, frame) is bool condition))
+                throw new InvalidOperationException($"The right-hand side of {op} must be a BOOL");
+
+            if (condition)
+                SetLValue(stmt.Target, stmt.IsSet, frame);
         }
 
         private void ExecuteFor(ForStmt stmt, Frame frame)

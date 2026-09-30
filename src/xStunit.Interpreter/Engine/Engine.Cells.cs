@@ -202,7 +202,8 @@ namespace xStunit.Interpreter
         // which is what makes the answer the same in either argument order.
         //
         // Pass 2, SELF-TYPED: a literal with one unambiguous class of its own
-        // (BOOL and the TIME/DATE family) takes it, and never adopts - T#1s
+        // (BOOL, the TIME/DATE family, and an integer literal with a type prefix
+        // such as INT#5) takes it, and never adopts - T#1s
         // opposite a UDINT must stay a mismatch, TIME being no kind of integer.
         // A string literal belongs here too: the only open question is which of
         // the two string keywords it takes, and since the lexer folds '...' and
@@ -268,8 +269,8 @@ namespace xStunit.Interpreter
 
             switch (UnwrapSignedLiteral(unary.Operand))
             {
-                case IntLiteralExpr i: return new IntLiteralExpr(-i.Value);
-                case LintLiteralExpr l: return new LintLiteralExpr(-l.Value);
+                case IntLiteralExpr i: return new IntLiteralExpr(-i.Value, i.IecType);
+                case LintLiteralExpr l: return new LintLiteralExpr(-l.Value, l.IecType);
                 case RealLiteralExpr r: return new RealLiteralExpr(-r.Value);
                 case LrealLiteralExpr lr: return new LrealLiteralExpr(-lr.Value);
                 default: return expr;
@@ -280,6 +281,9 @@ namespace xStunit.Interpreter
         {
             switch (expr)
             {
+                case IntLiteralExpr { IecType: { } typeName }: return typeName;
+                case LintLiteralExpr { IecType: { } typeName }: return typeName;
+                case UlintLiteralExpr { IecType: { } typeName }: return typeName;
                 case BoolLiteralExpr _: return "BOOL";
                 case TimeLiteralExpr _: return "TIME";
                 case LtimeLiteralExpr _: return "LTIME";

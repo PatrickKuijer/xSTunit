@@ -14,7 +14,12 @@ namespace xStunit.Interpreter
     public sealed class IntLiteralExpr : Expr
     {
         public int Value { get; }
-        public IntLiteralExpr(int value) => Value = value;
+        public string IecType { get; }
+        public IntLiteralExpr(int value, string iecType = null)
+        {
+            Value = value;
+            IecType = iecType;
+        }
     }
 
     // The two wider integer literals, produced only for a value that will not
@@ -24,13 +29,23 @@ namespace xStunit.Interpreter
     public sealed class LintLiteralExpr : Expr
     {
         public long Value { get; }
-        public LintLiteralExpr(long value) => Value = value;
+        public string IecType { get; }
+        public LintLiteralExpr(long value, string iecType = null)
+        {
+            Value = value;
+            IecType = iecType;
+        }
     }
 
     public sealed class UlintLiteralExpr : Expr
     {
         public ulong Value { get; }
-        public UlintLiteralExpr(ulong value) => Value = value;
+        public string IecType { get; }
+        public UlintLiteralExpr(ulong value, string iecType = null)
+        {
+            Value = value;
+            IecType = iecType;
+        }
     }
 
     public sealed class RealLiteralExpr : Expr

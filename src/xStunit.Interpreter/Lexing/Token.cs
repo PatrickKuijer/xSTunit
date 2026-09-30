@@ -43,6 +43,10 @@ namespace xStunit.Interpreter
         public TokenType Type;
         public string Text;
 
+        // The IEC type named by a typed integer literal's prefix (INT#5), in
+        // upper case; null for every other token.
+        public string IecType;
+
         // True for an identifier with '=' directly after it, no whitespace
         // between. Only the S=/R= operators care: they are one operator each,
         // so "S =" must not be read as one.

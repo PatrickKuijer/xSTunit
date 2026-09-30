@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Text;
 
 namespace xStunit.Interpreter
@@ -27,6 +28,14 @@ namespace xStunit.Interpreter
             "EXIT", "RETURN",
             "AND", "AND_THEN", "OR", "OR_ELSE", "XOR", "NOT", "MOD",
             "THIS", "SUPER",
+        };
+
+        private static readonly HashSet<string> TypedIntegerPrefixes = new HashSet<string>(StringComparer.Ordinal)
+        {
+            "SINT", "INT", "DINT", "LINT",
+            "USINT", "UINT", "UDINT", "ULINT",
+            "BYTE", "WORD", "DWORD", "LWORD",
+            "BOOL",
         };
 
         // Strips (* ... *) and // ... comments, leaving everything else -
@@ -164,6 +173,12 @@ namespace xStunit.Interpreter
                         ConsumeFraction(text, ref i);
                         var numText = text.Substring(numStart, i - numStart);
                         tokens.Add(new Token(foldedWord == "REAL" ? TokenType.RealLiteral : TokenType.LrealLiteral, numText, tokenLine));
+                        continue;
+                    }
+
+                    if (i < text.Length && text[i] == '#' && TypedIntegerPrefixes.Contains(foldedWord))
+                    {
+                        tokens.Add(LexTypedIntegerLiteral(text, start, foldedWord, ref i, tokenLine));
                         continue;
                     }
 
@@ -497,6 +512,74 @@ namespace xStunit.Interpreter
             }
 
             return value;
+        }
+
+        // Lexes <TYPE>#[sign]<value> with i on the '#', where value is decimal
+        // digits or <base>#<digits>. The token is an ordinary IntLiteral whose
+        // Text is the normalized decimal value and whose IecType names the
+        // type, so every consumer of integer-literal tokens accepts it. BOOL
+        // has no numeric form downstream and lexes to the TRUE/FALSE keyword.
+        private static Token LexTypedIntegerLiteral(string text, int wordStart, string typeName, ref int i, int line)
+        {
+            i++; // '#'
+            var bodyStart = i;
+
+            if (typeName == "BOOL")
+            {
+                while (i < text.Length && char.IsLetterOrDigit(text[i]))
+                    i++;
+                var body = text.Substring(bodyStart, i - bodyStart).ToUpperInvariant();
+                if (body == "TRUE" || body == "1")
+                    return new Token(TokenType.Identifier, "TRUE", line);
+                if (body == "FALSE" || body == "0")
+                    return new Token(TokenType.Identifier, "FALSE", line);
+                throw InvalidTypedLiteral(text, wordStart, i, "BOOL takes 0, 1, TRUE or FALSE");
+            }
+
+            var negative = false;
+            if (i < text.Length && (text[i] == '-' || text[i] == '+'))
+            {
+                negative = text[i] == '-';
+                i++;
+            }
+
+            var digitsStart = i;
+            while (i < text.Length && char.IsDigit(text[i]))
+                i++;
+            if (i == digitsStart)
+                throw InvalidTypedLiteral(text, wordStart, i, "no digits after '#'");
+
+            ulong magnitude;
+            if (i < text.Length && text[i] == '#'
+                && int.TryParse(text.Substring(digitsStart, i - digitsStart), out var numberBase))
+            {
+                var hashPos = i;
+                i++; // '#'
+                var baseDigitsStart = i;
+                while (i < text.Length && (char.IsLetterOrDigit(text[i]) || text[i] == '_'))
+                    i++;
+                var baseDigits = text.Substring(baseDigitsStart, i - baseDigitsStart).Replace("_", string.Empty);
+                magnitude = ParseBasedLiteral(baseDigits, numberBase, text, hashPos);
+            }
+            else if (!ulong.TryParse(text.Substring(digitsStart, i - digitsStart), NumberStyles.None, CultureInfo.InvariantCulture, out magnitude))
+            {
+                throw InvalidTypedLiteral(text, wordStart, i, "value does not fit in 64 bits");
+            }
+
+            var value = negative ? -(decimal)magnitude : magnitude;
+            IecNumericType.TryGetBounds(typeName, out var bounds);
+            if (value < Convert.ToDecimal(bounds.Min) || value > Convert.ToDecimal(bounds.Max))
+                throw InvalidTypedLiteral(text, wordStart, i, $"value is outside the range of {typeName}");
+
+            return new Token(TokenType.IntLiteral, value.ToString(CultureInfo.InvariantCulture), line) { IecType = typeName };
+        }
+
+        private static ParseException InvalidTypedLiteral(string text, int wordStart, int end, string reason)
+        {
+            var literal = text.Substring(wordStart, end - wordStart);
+            return new ParseException(
+                $"Invalid typed literal '{literal}': {reason}, at position {wordStart} in: {text}",
+                literal, LineAt(text, wordStart));
         }
 
         // Consumes an optional '.digits' fraction and/or '[eE][+-]digits'

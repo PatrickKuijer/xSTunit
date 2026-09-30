@@ -161,5 +161,90 @@ namespace xStunit.Interpreter.Tests
         {
             Assert.Throws<ParseException>(() => Lexer.Tokenize("10#123"));
         }
+
+        [Theory]
+        [InlineData("INT#5", "INT", "5")]
+        [InlineData("int#5", "INT", "5")]
+        [InlineData("Dint#16#FF", "DINT", "255")]
+        [InlineData("BYTE#2#1010", "BYTE", "10")]
+        [InlineData("WORD#8#17", "WORD", "15")]
+        [InlineData("DWORD#16#FFFF_FFFF", "DWORD", "4294967295")]
+        [InlineData("LWORD#16#FFFFFFFFFFFFFFFF", "LWORD", "18446744073709551615")]
+        [InlineData("ULINT#18446744073709551615", "ULINT", "18446744073709551615")]
+        [InlineData("INT#-5", "INT", "-5")]
+        [InlineData("SINT#-128", "SINT", "-128")]
+        [InlineData("LINT#-9223372036854775808", "LINT", "-9223372036854775808")]
+        [InlineData("USINT#255", "USINT", "255")]
+        [InlineData("UINT#65535", "UINT", "65535")]
+        [InlineData("UDINT#4294967295", "UDINT", "4294967295")]
+        [InlineData("SINT#127", "SINT", "127")]
+        public void Tokenize_TypedIntegerLiteral_ProducesIntLiteralTokenCarryingTheNamedType(string literal, string typeName, string expectedDecimal)
+        {
+            var tokens = Lexer.Tokenize(literal);
+
+            var token = Assert.Single(tokens, t => t.Type == TokenType.IntLiteral);
+            Assert.Equal(expectedDecimal, token.Text);
+            Assert.Equal(typeName, token.IecType);
+        }
+
+        [Fact]
+        public void Tokenize_PlainIntegerLiteral_CarriesNoType()
+        {
+            var token = Assert.Single(Lexer.Tokenize("5"), t => t.Type == TokenType.IntLiteral);
+            Assert.Null(token.IecType);
+        }
+
+        [Theory]
+        [InlineData("BOOL#1", "TRUE")]
+        [InlineData("bool#TRUE", "TRUE")]
+        [InlineData("BOOL#true", "TRUE")]
+        [InlineData("BOOL#0", "FALSE")]
+        [InlineData("Bool#FALSE", "FALSE")]
+        public void Tokenize_TypedBoolLiteral_ProducesTheBoolKeyword(string literal, string expectedKeyword)
+        {
+            var token = Assert.Single(Lexer.Tokenize(literal), t => t.Type == TokenType.Identifier);
+            Assert.Equal(expectedKeyword, token.Text);
+        }
+
+        [Fact]
+        public void Tokenize_TypedRangeOfLiterals_KeepsBothEndsAroundDotDot()
+        {
+            var tokens = Lexer.Tokenize("INT#1..INT#3");
+
+            Assert.Equal(new[] { TokenType.IntLiteral, TokenType.DotDot, TokenType.IntLiteral, TokenType.Eof },
+                tokens.ConvertAll(t => t.Type).ToArray());
+        }
+
+        // An out-of-range typed literal must fail at lex time and name the
+        // literal, so a value TwinCAT would reject at compile time is never
+        // silently truncated at run time.
+        [Theory]
+        [InlineData("SINT#200")]
+        [InlineData("SINT#-129")]
+        [InlineData("BYTE#256")]
+        [InlineData("USINT#-1")]
+        [InlineData("INT#32768")]
+        [InlineData("UINT#65536")]
+        [InlineData("DINT#2147483648")]
+        [InlineData("UDINT#4294967296")]
+        [InlineData("ULINT#-1")]
+        [InlineData("LINT#9223372036854775808")]
+        [InlineData("BYTE#16#100")]
+        [InlineData("BOOL#2")]
+        [InlineData("INT#")]
+        public void Tokenize_TypedIntegerLiteralOutOfRangeOrMalformed_ThrowsNamingTheLiteral(string literal)
+        {
+            var ex = Assert.Throws<ParseException>(() => Lexer.Tokenize(literal));
+
+            Assert.Contains(literal, ex.Message);
+        }
+
+        // E_Foo#Bar is not an integer prefix; the '#' after an arbitrary
+        // identifier keeps its old failure rather than being swallowed.
+        [Fact]
+        public void Tokenize_HashAfterNonIntegerTypeName_StillThrows()
+        {
+            Assert.Throws<ParseException>(() => Lexer.Tokenize("E_Color#Red"));
+        }
     }
 }

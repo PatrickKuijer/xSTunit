@@ -75,6 +75,9 @@ namespace xStunit.Interpreter
             if (int.TryParse(boundText, out var literal))
                 return literal;
 
+            if (boundText.Contains('#') && Parser.ParseExpression(boundText) is IntLiteralExpr typedLiteral)
+                return typedLiteral.Value;
+
             if (resolveBound != null)
                 return resolveBound(boundText);
 

@@ -229,6 +229,9 @@ namespace xStunit.Interpreter
         // and a DINT are the same box (see IecNumericType).
         private static Expr ParseIntegerLiteral(Token token)
         {
+            if (token.IecType != null)
+                return ParseTypedIntegerLiteral(token);
+
             if (int.TryParse(token.Text, out var intValue))
                 return new IntLiteralExpr(intValue);
 
@@ -245,6 +248,22 @@ namespace xStunit.Interpreter
                 $"Integer literal '{token.Text}' does not fit in 64 bits, the width of the widest IEC integer " +
                 "type (ULINT/LWORD)",
                 token.Text, token.Line);
+        }
+
+        // A typed literal boxes as a variable of its named type does, whatever
+        // its value would fit: UDINT#5 is a long, not an int.
+        private static Expr ParseTypedIntegerLiteral(Token token)
+        {
+            IecNumericType.TryGetBounds(token.IecType, out var bounds);
+            switch (bounds.Max)
+            {
+                case int _:
+                    return new IntLiteralExpr(int.Parse(token.Text, CultureInfo.InvariantCulture), token.IecType);
+                case long _:
+                    return new LintLiteralExpr(long.Parse(token.Text, CultureInfo.InvariantCulture), token.IecType);
+                default:
+                    return new UlintLiteralExpr(ulong.Parse(token.Text, CultureInfo.InvariantCulture), token.IecType);
+            }
         }
 
         // Applies postfix ^ (deref), .Member(args) and [index] operators to

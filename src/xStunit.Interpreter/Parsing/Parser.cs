@@ -195,6 +195,10 @@ namespace xStunit.Interpreter
             if (letter != "S" && letter != "R")
                 return false;
 
+            if (!Current.GluedToEquals)
+                throw new ParseException(
+                    $"'{letter} =' is not an operator; the set/reset assignment is written {letter}= with no space", CurrentToken, Current.Line);
+
             isSet = letter == "S";
             Advance();
             Advance();

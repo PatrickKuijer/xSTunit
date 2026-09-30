@@ -43,6 +43,11 @@ namespace xStunit.Interpreter
         public TokenType Type;
         public string Text;
 
+        // True for an identifier with '=' directly after it, no whitespace
+        // between. Only the S=/R= operators care: they are one operator each,
+        // so "S =" must not be read as one.
+        public bool GluedToEquals;
+
         // 1-based line WITHIN THE ST BODY STRING passed to Lexer.Tokenize -
         // the body's first line is line 1, NOT the .TcPOU file line. A token
         // spanning lines (multi-line string literal) reports where it starts.

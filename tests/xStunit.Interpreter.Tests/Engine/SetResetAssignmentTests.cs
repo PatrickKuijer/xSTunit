@@ -69,6 +69,17 @@ namespace xStunit.Interpreter.Tests
             Assert.False(stmt.IsSet);
         }
 
+        // S= and R= are single operators. Split by whitespace they are not
+        // valid ST, and accepting them would pass source a real compiler
+        // rejects, so they must fail loud rather than latch.
+        [Theory]
+        [InlineData("bLatch S = TRUE;")]
+        [InlineData("bLatch R = TRUE;")]
+        public void ParseStatements_OperatorSplitByWhitespace_ThrowsParseException(string source)
+        {
+            Assert.Throws<ParseException>(() => Parser.ParseStatements(source));
+        }
+
         // S and R are ordinary identifiers everywhere else: a variable named
         // S compared with = inside an expression must not turn into a set.
         [Fact]

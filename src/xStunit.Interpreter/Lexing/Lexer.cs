@@ -221,7 +221,10 @@ namespace xStunit.Interpreter
                         continue;
                     }
 
-                    tokens.Add(new Token(TokenType.Identifier, ParserDispatchKeywords.Contains(foldedWord) ? foldedWord : word, tokenLine));
+                    tokens.Add(new Token(TokenType.Identifier, ParserDispatchKeywords.Contains(foldedWord) ? foldedWord : word, tokenLine)
+                    {
+                        GluedToEquals = i < text.Length && text[i] == '=',
+                    });
                     continue;
                 }
 
